@@ -180,7 +180,7 @@ class ModelInfo(_PredictionContract):
     )
 
 
-class FeatureArtifactIdentityV1(_PredictionContract):
+class FeatureArtifactIdentity(_PredictionContract):
     mode: PredictionView
     artifact_sha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
     source_artifact_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
@@ -188,7 +188,7 @@ class FeatureArtifactIdentityV1(_PredictionContract):
     feature_schema_version: str | None = None
 
 
-class PredictionRowEvidenceV1(_PredictionContract):
+class PredictionRowEvidence(_PredictionContract):
     ticker: str
     view: PredictionView
     decision_time_utc: datetime
@@ -212,17 +212,17 @@ class PredictionRowEvidenceV1(_PredictionContract):
         return value.astimezone(UTC)
 
 
-class PredictionEvidenceV4(_PredictionContract):
+class PredictionEvidence(_PredictionContract):
     """Immutable identities and point-in-time evidence for one served swing response."""
 
-    contract_version: Literal["market_predictor.prediction_evidence.v4"] = (
-        "market_predictor.prediction_evidence.v4"
+    contract: Literal["market_predictor.prediction_evidence"] = (
+        "market_predictor.prediction_evidence"
     )
     request_id: str = Field(..., min_length=1, max_length=128)
     correlation_id: str = Field(..., min_length=1, max_length=128)
     prediction_cutoff_utc: datetime
-    row_feature_availability: list[PredictionRowEvidenceV1] = Field(default_factory=list)
-    feature_artifacts: dict[str, FeatureArtifactIdentityV1] = Field(default_factory=dict)
+    row_feature_availability: list[PredictionRowEvidence] = Field(default_factory=list)
+    feature_artifacts: dict[str, FeatureArtifactIdentity] = Field(default_factory=dict)
     release_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     model_release_ids: dict[str, str] = Field(default_factory=dict)
     view_serving_bundle_ids: dict[str, str] = Field(default_factory=dict)
@@ -439,7 +439,7 @@ class TickerPrediction(_PredictionContract):
 
 
 class PredictionResponse(_PredictionContract):
-    contract_version: Literal["market_predictor.prediction.v3"] = "market_predictor.prediction.v3"
+    contract: Literal["market_predictor.prediction"] = "market_predictor.prediction"
     request_id: str = Field(default_factory=lambda: str(uuid4()))
     generated_at_utc: datetime = Field(default_factory=lambda: datetime.now(UTC))
     mode: PredictionMode
@@ -449,7 +449,7 @@ class PredictionResponse(_PredictionContract):
     models: dict[str, ModelInfo] = Field(default_factory=dict)
     predictions: list[TickerPrediction] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
-    evidence: PredictionEvidenceV4 | None = None
+    evidence: PredictionEvidence | None = None
     snapshot_id: str | None = None
     snapshot_sha256: str | None = None
 

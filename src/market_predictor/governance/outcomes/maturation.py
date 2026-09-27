@@ -14,9 +14,9 @@ from market_predictor.execution_policy import (
     round_trip_cost_bps,
 )
 from market_predictor.governance.outcomes.contracts import (
-    MaturationAttemptV1,
-    MaturedOutcomeV3,
-    PredictionMaturationIntentV3,
+    MaturationAttempt,
+    MaturedOutcome,
+    PredictionMaturationIntent,
     content_sha256,
 )
 from market_predictor.modeling.maturation import MaturedPath, PendingPath
@@ -24,7 +24,7 @@ from market_predictor.swing.evaluation.outcome_maturation import (
     evaluate_swing_maturation,
 )
 
-MaturationResult: TypeAlias = MaturationAttemptV1 | MaturedOutcomeV3
+MaturationResult: TypeAlias = MaturationAttempt | MaturedOutcome
 _BAR_COLUMNS = {
     "ticker",
     "bar_start_utc",
@@ -42,7 +42,7 @@ _BAR_COLUMNS = {
 
 
 def mature_prediction(
-    intent: PredictionMaturationIntentV3,
+    intent: PredictionMaturationIntent,
     bars: pd.DataFrame,
     *,
     observed_as_of: datetime,
@@ -72,18 +72,18 @@ def mature_prediction(
 
 
 def maturation_attempt(
-    intent: PredictionMaturationIntentV3,
+    intent: PredictionMaturationIntent,
     *,
     observed_as_of: datetime,
     status: str,
     reasons: tuple[str, ...],
     missing_intervals: tuple[str, ...] = (),
-) -> MaturationAttemptV1:
+) -> MaturationAttempt:
     if status not in {"pending", "blocked"}:
         raise ValueError("maturation attempt status must be pending or blocked")
     observed = _aware_utc(observed_as_of)
     base = {
-        "contract_version": "market_predictor.maturation_attempt.v1",
+        "contract": "market_predictor.maturation_attempt",
         "maturation_key": intent.maturation_key,
         "semantic_prediction_id": intent.semantic_prediction_id,
         "observed_as_of_utc": observed,
@@ -91,15 +91,15 @@ def maturation_attempt(
         "reasons": reasons,
         "missing_intervals": missing_intervals,
     }
-    return MaturationAttemptV1.model_validate(
+    return MaturationAttempt.model_validate(
         {**base, "attempt_id": content_sha256(base)}
     )
 
 
 def _outcome_from_path(
-    intent: PredictionMaturationIntentV3,
+    intent: PredictionMaturationIntent,
     path: MaturedPath,
-) -> MaturedOutcomeV3:
+) -> MaturedOutcome:
     assert intent.decision_atr is not None
     participation = 0.0
     execution_cost_bps = round_trip_cost_bps(
@@ -110,7 +110,7 @@ def _outcome_from_path(
     )
     net_return = path.gross_return - execution_cost_bps / 10_000.0
     base = {
-        "contract_version": "market_predictor.matured_outcome.v3",
+        "contract": "market_predictor.matured_outcome",
         "maturation_key": intent.maturation_key,
         "semantic_prediction_id": intent.semantic_prediction_id,
         "snapshot_id": intent.snapshot_id,
@@ -142,7 +142,7 @@ def _outcome_from_path(
         "excess_return_vs_sector": net_return - path.sector_return,
         "evidence_sha256": content_sha256(path.evidence_rows),
     }
-    return MaturedOutcomeV3.model_validate(
+    return MaturedOutcome.model_validate(
         {**base, "outcome_id": content_sha256(base)}
     )
 

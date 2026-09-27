@@ -12,7 +12,7 @@ from market_predictor.core.prediction_contracts import (
     InvestmentReplayRequest,
     PredictionCapacityError,
     PredictionDriftBlockedError,
-    PredictionEvidenceV4,
+    PredictionEvidence,
     PredictionModelUnavailableError,
     PredictionRequest,
     PredictionResponse,
@@ -149,10 +149,10 @@ def test_superseded_response_and_evidence_versions_are_refused(
     assert PredictionResponse.model_validate(payload) == response
     for version in ("market_predictor.prediction.v1", "market_predictor.prediction.v2"):
         with pytest.raises(ValidationError):
-            PredictionResponse.model_validate({**payload, "contract_version": version})
+            PredictionResponse.model_validate({**payload, "contract": version})
     for version in ("market_predictor.prediction_evidence.v2", "market_predictor.prediction_evidence.v3"):
         with pytest.raises(ValidationError):
-            PredictionEvidenceV4.model_validate({**evidence, "contract_version": version})
+            PredictionEvidence.model_validate({**evidence, "contract": version})
 
 
 def test_unconfigured_session_horizon_is_rejected_before_loading(

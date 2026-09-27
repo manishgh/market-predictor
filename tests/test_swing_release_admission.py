@@ -125,7 +125,7 @@ def test_historical_release_cannot_change_active_pointer(
 
 
 _PRE_RETIREMENT_EVIDENCE_SCHEMAS = {
-    "canonical_swing": "swing_training_evidence.v1",
+    "canonical_swing": "swing_training_evidence",
     "canonical_intraday": "intraday_training_evidence.v1",
 }
 
@@ -354,7 +354,7 @@ def test_cli_does_not_weaken_signature_verification(tmp_path: Path, failure: str
     if failure == "untrusted_signer":
         trust = tmp_path / "untrusted.json"
         trust.write_text(json.dumps({
-            "schema": "market_predictor.attestation_trust_store.v1", "issuers": {},
+            "schema": "market_predictor.attestation_trust_store", "issuers": {},
         }), encoding="utf-8")
         args[args.index("--attestation-trust-store") + 1] = str(trust)
     else:

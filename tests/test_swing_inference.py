@@ -159,7 +159,7 @@ def _base_bundle() -> dict[str, object]:
     model_sources: tuple[str, ...] = ()
     global_sources = ("alpaca", "gdelt")
     payload: dict[str, object] = {
-        "schema_version": "edge_rebuild.promoted_bundle.v2",
+        "schema_version": "edge_rebuild.promoted_bundle",
         "mode": "swing",
         "model_id": "swing-promoted-001",
         "model_status": "promoted",

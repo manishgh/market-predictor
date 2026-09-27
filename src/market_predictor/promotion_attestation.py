@@ -25,8 +25,8 @@ from market_predictor.promotion_identity import (
     validate_promotion_principal,
 )
 
-PROMOTION_ATTESTATION_SCHEMA = "market_predictor.promotion_attestation.v2"
-ATTESTATION_TRUST_STORE_SCHEMA = "market_predictor.attestation_trust_store.v1"
+PROMOTION_ATTESTATION_SCHEMA = "market_predictor.promotion_attestation"
+ATTESTATION_TRUST_STORE_SCHEMA = "market_predictor.attestation_trust_store"
 ATTESTATION_TRUST_STORE_ENV = "MARKET_PREDICTOR_ATTESTATION_TRUST_STORE"
 SIGNATURE_ALGORITHM = "ed25519"
 COMMON_IDENTITY_FIELDS = (
@@ -81,7 +81,7 @@ def build_promotion_attestation(
 
     manifest_path = candidate_manifest_path_for(model_path)
     manifest = _load_json_object(manifest_path, "candidate manifest")
-    if manifest.get("schema") != "model_registry_manifest.v2" or manifest.get("status") != "candidate":
+    if manifest.get("schema") != "model_registry_manifest" or manifest.get("status") != "candidate":
         raise DataReadinessError("promotion attestation requires an immutable candidate manifest")
     if not model_path.is_file():
         raise DataReadinessError(f"candidate model artifact is missing: {model_path}")
@@ -599,7 +599,7 @@ def _validated_ledger_receipt(
     receipt = {str(key): value for key, value in ledger_entry.items()}
     entry_sha = str(receipt.pop("entry_sha256", ""))
     if (
-        receipt.get("schema") != "market_predictor.shadow_ledger_entry.v2"
+        receipt.get("schema") != "market_predictor.shadow_ledger_entry"
         or receipt.get("result") != "passed"
         or receipt.get("shadow_fingerprint") != shadow_fingerprint
         or receipt.get("hypothesis_id") != hypothesis_id

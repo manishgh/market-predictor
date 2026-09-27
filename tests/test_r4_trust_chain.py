@@ -282,7 +282,7 @@ class R4TrustChainTests(unittest.TestCase):
             untrusted.write_text(
                 json.dumps(
                     {
-                        "schema": "market_predictor.attestation_trust_store.v1",
+                        "schema": "market_predictor.attestation_trust_store",
                         "issuers": {},
                     }
                 ),
@@ -456,7 +456,7 @@ def _candidate(root: Path) -> tuple[Path, dict[str, object], Path]:
     evidence_manifest.write_text(
         json.dumps(
             {
-                "schema": "swing_training_evidence.v1",
+                "schema": "swing_training_evidence",
                 "model_run_id": "swing-test-run",
                 "model_artifact_sha256": manifest["artifact_sha256"],
                 "files": {},

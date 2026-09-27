@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from market_predictor.governance.outcomes.contracts import SWING_HORIZON_PATTERN, content_sha256
 from market_predictor.modeling.feature_reference import feature_reference_names_sha256
 
-FEATURE_DRIFT_REPORT_VERSION = "market_predictor.feature_drift_report.v2"
+FEATURE_DRIFT_REPORT_VERSION = "market_predictor.feature_drift_report"
 _SHA256_PATTERN = r"^[0-9a-f]{64}$"
 
 
@@ -24,7 +24,7 @@ class FeatureDriftRow(BaseModel):
     missing_rate_delta: float | None = Field(default=None, ge=0, le=1)
 
 
-class FeatureDriftReportV2(BaseModel):
+class FeatureDriftReport(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
     @model_validator(mode="before")
@@ -34,8 +34,8 @@ class FeatureDriftReportV2(BaseModel):
             raise ValueError("intraday feature-drift reports are retired; only swing routes are assessed")
         return data
 
-    contract_version: Literal["market_predictor.feature_drift_report.v2"] = (
-        "market_predictor.feature_drift_report.v2"
+    contract: Literal["market_predictor.feature_drift_report"] = (
+        "market_predictor.feature_drift_report"
     )
     report_id: str = Field(pattern=_SHA256_PATTERN)
     mode: Literal["swing"]
@@ -169,7 +169,7 @@ def audit_feature_drift(
     """Compare a live cohort with one exact model reference profile."""
 
     identity: dict[str, object] = {
-        "contract_version": FEATURE_DRIFT_REPORT_VERSION,
+        "contract": FEATURE_DRIFT_REPORT_VERSION,
         "mode": mode,
         "horizon": horizon,
         "model_release_id": model_release_id,
@@ -295,11 +295,11 @@ def audit_feature_drift(
 
 
 def validate_feature_drift_report(value: object) -> dict[str, object]:
-    return FeatureDriftReportV2.model_validate(value).model_dump(mode="json")
+    return FeatureDriftReport.model_validate(value).model_dump(mode="json")
 
 
 def _validated_report(content: dict[str, object]) -> dict[str, object]:
-    report = FeatureDriftReportV2.model_validate(
+    report = FeatureDriftReport.model_validate(
         {**content, "report_id": content_sha256(content)}
     )
     return report.model_dump(mode="json")

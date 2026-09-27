@@ -8,7 +8,7 @@ import joblib
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
-from market_predictor.governance.drift.policy import DriftPolicyV3
+from market_predictor.governance.drift.policy import DriftPolicy
 from market_predictor.governance.promotion.bundle_contracts import canonical_payload_sha256
 from market_predictor.registry import write_model_manifest
 from market_predictor.release import publish_local_release
@@ -86,7 +86,7 @@ def build_smoke_release(output: Path) -> None:
                 "[prediction_serving]",
                 'attestation_trust_store = "/smoke/attestation_trust_store.json"',
                 f'promotion_gate_policy_sha256 = "{canonical_payload_sha256(TEST_GATE_CONFIG)}"',
-                f'drift_policy_sha256 = "{DriftPolicyV3().sha256()}"',                "",
+                f'drift_policy_sha256 = "{DriftPolicy().sha256()}"',                "",
                 '[prediction_serving.routes.swing."10b"]',
                 'release_repository = "/smoke/releases"',
                 'bar_timeframe = "1Day"',

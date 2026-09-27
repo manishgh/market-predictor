@@ -1,5 +1,5 @@
 [promotion_gate_policy]
-schema = "edge_rebuild.swing_promotion_gate_policy.v1"
+schema = "edge_rebuild.swing_promotion_gate_policy"
 strategy_id = "swing"
 horizon_sessions = 10
 required_validation_scopes = ["temporal", "unseen_security"]

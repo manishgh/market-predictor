@@ -12,7 +12,7 @@ Read-only for TradingFlow (owned by Market Predictor):
 | Path | What it is |
 | --- | --- |
 | `C:\project\market-predictor\docs\contracts\prediction_api.md` | The prediction API contract: endpoints, fields, nullability, signal/action values, abstention reasons, errors, change rules, pending changes and change log. |
-| `C:\project\market-predictor\tests\fixtures\contracts\swing_prediction_response.v3.json` | A real served v3 response covering a selected setup (`T000`), a ranked candidate (`T059`), a member with incomplete inputs (`T060`) and an unknown ticker (`MISSING`). Per-call values (request and correlation IDs, generation time, server path) are fixed. |
+| `C:\project\market-predictor\tests\fixtures\contracts\swing_prediction_response.json` | A real served response covering a selected setup (`T000`), a ranked candidate (`T059`), a member with incomplete inputs (`T060`) and an unknown ticker (`MISSING`). Per-call values (request and correlation IDs, generation time, server path) are fixed. |
 | `C:\project\market-predictor\docs\contracts\tradingflow_handoff.md` | This file. |
 
 Owned by TradingFlow (create it; Market Predictor reads it):
@@ -37,21 +37,27 @@ Owned by TradingFlow (create it; Market Predictor reads it):
   code changes; verify under its Risk-Based Verification policy.
 - Do not implement anything listed under Pending changes until it moves to the
   Change log.
+- No version names (user rule, September 27). Nothing is in production, so no class,
+  type, record schema, file or identifier gets a version number (`V2`, `.v3`, `_v1`),
+  in TradingFlow as in Market Predictor. Only the public API may be versioned, and only
+  once it is in production. Names bound in already-published, hash-pinned evidence stay
+  as recorded.
 
 ## Tasks
 
 1. Contract test from the golden fixture.
    - Copy the fixture into the TradingFlow test project and record its source path and
-     SHA-256 (`e445eaac20a42c21a5d83900d3ec3f63c9354745102d9633635143f862956c95`) beside it.
+     SHA-256 (`b62f577dbd9ca1a09c9959d5da84df0db9040d8e6b3c17d26eabfcb4f369f1cf`) beside it.
    - Parse it through the production deserializer and `Validate` path of
      `MarketPredictorHttpClient` for each of the four tickers, asserting the expected
      result: `T000` and `T059` available; `T060` and `MISSING` available with swing
      evidence, `final_signal` `abstain` and their abstention reason in `Errors`.
    - Add a local check that the copy equals the source file when
      `C:\project\market-predictor` exists, so a regenerated fixture cannot drift silently.
-2. Contract version. `MarketPredictorHttpClient.cs` lines 336 and 400 hard-code
-   `market_predictor.prediction.v1`. Read `contract_version` from the response, accept
-   only `market_predictor.prediction.v3`, and treat anything else as `incompatible`.
+2. Contract name. `MarketPredictorHttpClient.cs` lines 336 and 400 hard-code
+   `market_predictor.prediction.v1`. Read the response's `contract` field, accept only
+   `market_predictor.prediction`, treat anything else as `incompatible`, and carry no
+   version in TradingFlow's own names for it.
 3. Signal vocabulary. `UniverseRankService.cs` (`SupportiveSignals`, `OpposedSignals`,
    about lines 130-150) lists retired names and the action `watch_for_entry`, so every
    current signal reads as neutral. Map the current `final_signal` values from the
@@ -63,4 +69,4 @@ Owned by TradingFlow (create it; Market Predictor reads it):
 5. Verification: `MarketPredictorHttpClientTests` plus the tests affected by tasks 2-4,
    and the affected project builds with nullable and analyzer checks. Record the tier,
    commands and results in TradingFlow's own handoff, then write an acknowledgement of the
-   2026-09-27 Change log entry in your notes file.
+   2026-09-27 Change log entries in your notes file.

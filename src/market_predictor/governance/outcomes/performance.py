@@ -17,16 +17,16 @@ from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.core.prediction_contracts import PredictionConflictError
 from market_predictor.governance.outcomes.contracts import (
     SWING_HORIZON_PATTERN,
-    MaturedOutcomeV3,
-    PredictionMaturationIntentV3,
-    PredictionMonitoringObservationV2,
+    MaturedOutcome,
+    PredictionMaturationIntent,
+    PredictionMonitoringObservation,
     content_sha256,
     refuse_retired_intraday,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
 from market_predictor.locking import file_lock
 
-PERFORMANCE_REPORT_VERSION = "market_predictor.selected_policy_performance.v3"
+PERFORMANCE_REPORT_VERSION = "market_predictor.selected_policy_performance"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
 _IDENTITY_COLUMNS = [
     "model_release_id",
@@ -39,7 +39,7 @@ _IDENTITY_COLUMNS = [
 ]
 
 
-class SelectedPolicyCohortV3(BaseModel):
+class SelectedPolicyCohort(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
     @model_validator(mode="before")
@@ -196,12 +196,12 @@ class SelectedPolicyCohortV3(BaseModel):
         return self
 
 
-class SelectedPolicyPerformanceReportV3(BaseModel):
+class SelectedPolicyPerformanceReport(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
-    contract_version: Literal[
-        "market_predictor.selected_policy_performance.v3"
-    ] = "market_predictor.selected_policy_performance.v3"
+    contract: Literal[
+        "market_predictor.selected_policy_performance"
+    ] = "market_predictor.selected_policy_performance"
     report_id: str = Field(pattern=SHA256_PATTERN)
     generated_at_utc: datetime
     lookback_days: int = Field(ge=1)
@@ -211,7 +211,7 @@ class SelectedPolicyPerformanceReportV3(BaseModel):
     source_intent_ids: tuple[str, ...]
     source_observation_ids: tuple[str, ...]
     source_outcome_ids: tuple[str, ...]
-    rows: tuple[SelectedPolicyCohortV3, ...]
+    rows: tuple[SelectedPolicyCohort, ...]
 
     @field_validator(
         "generated_at_utc",
@@ -355,7 +355,7 @@ def build_performance_cohorts(
                     window_end=generated,
                 )
                 rows.append(
-                    SelectedPolicyCohortV3.model_validate(row).model_dump(
+                    SelectedPolicyCohort.model_validate(row).model_dump(
                         mode="json"
                     )
                 )
@@ -369,7 +369,7 @@ def build_performance_cohorts(
         )
     )
     report_identity: dict[str, object] = {
-        "contract_version": PERFORMANCE_REPORT_VERSION,
+        "contract": PERFORMANCE_REPORT_VERSION,
         "generated_at_utc": generated.isoformat().replace("+00:00", "Z"),
         "lookback_days": lookback_days,
         "minimum_matured_samples": minimum_samples,
@@ -380,7 +380,7 @@ def build_performance_cohorts(
         "source_outcome_ids": sorted(source_outcome_ids),
         "rows": rows,
     }
-    report = SelectedPolicyPerformanceReportV3.model_validate(
+    report = SelectedPolicyPerformanceReport.model_validate(
         {
             **report_identity,
             "report_id": content_sha256(report_identity),
@@ -390,7 +390,7 @@ def build_performance_cohorts(
 
 
 def validate_performance_report(value: object) -> dict[str, object]:
-    report = SelectedPolicyPerformanceReportV3.model_validate(value)
+    report = SelectedPolicyPerformanceReport.model_validate(value)
     return report.model_dump(mode="json")
 
 
@@ -430,12 +430,12 @@ def write_performance_report(
 
 def _canonical_observations(
     repository: OutcomeRepository,
-    observations: list[PredictionMonitoringObservationV2],
-) -> list[PredictionMonitoringObservationV2]:
-    grouped: dict[str, list[PredictionMonitoringObservationV2]] = {}
+    observations: list[PredictionMonitoringObservation],
+) -> list[PredictionMonitoringObservation]:
+    grouped: dict[str, list[PredictionMonitoringObservation]] = {}
     for observation in observations:
         grouped.setdefault(observation.semantic_prediction_id, []).append(observation)
-    canonical: list[PredictionMonitoringObservationV2] = []
+    canonical: list[PredictionMonitoringObservation] = []
     for semantic_id, group in grouped.items():
         canonical_key = repository.semantic_canonical_key(semantic_id)
         candidates = (
@@ -498,10 +498,10 @@ def _fsync_directory(path: Path) -> None:
 
 def _matured_selected_outcome(
     repository: OutcomeRepository,
-    intent: PredictionMaturationIntentV3,
+    intent: PredictionMaturationIntent,
     *,
     generated_at: datetime,
-) -> MaturedOutcomeV3 | None:
+) -> MaturedOutcome | None:
     if not intent.actionable:
         return None
     if not repository.has_outcome(intent.maturation_key):
@@ -525,8 +525,8 @@ def _matured_selected_outcome(
 
 
 def _monitoring_record(
-    observation: PredictionMonitoringObservationV2,
-    outcome: MaturedOutcomeV3 | None,
+    observation: PredictionMonitoringObservation,
+    outcome: MaturedOutcome | None,
 ) -> dict[str, object]:
     return {
         "observation_id": observation.observation_id,

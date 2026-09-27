@@ -32,17 +32,17 @@ from market_predictor.governance.outcomes.contracts import (
 from market_predictor.governance.outcomes.performance import validate_performance_report
 from market_predictor.locking import file_lock
 
-DRIFT_ASSESSMENT_VERSION = "market_predictor.drift_assessment.v3"
+DRIFT_ASSESSMENT_VERSION = "market_predictor.drift_assessment"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
 
 
-class DriftPolicyV3(BaseModel):
+class DriftPolicy(BaseModel):
     """Selected-policy drift gates for swing routes of any session horizon."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
-    contract_version: Literal["market_predictor.drift_policy.v3"] = (
-        "market_predictor.drift_policy.v3"
+    contract: Literal["market_predictor.drift_policy"] = (
+        "market_predictor.drift_policy"
     )
     minimum_matured_samples: int = Field(default=30, ge=1)
     minimum_independent_decision_groups: int = Field(default=10, ge=1)
@@ -115,11 +115,11 @@ class DriftPolicyV3(BaseModel):
         return bool(now > deadline)
 
 
-class DriftAssessmentV3(BaseModel):
+class DriftAssessment(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
-    contract_version: Literal["market_predictor.drift_assessment.v3"] = (
-        "market_predictor.drift_assessment.v3"
+    contract: Literal["market_predictor.drift_assessment"] = (
+        "market_predictor.drift_assessment"
     )
     assessment_id: str = Field(pattern=SHA256_PATTERN)
     mode: Literal["swing"]
@@ -217,9 +217,9 @@ def evaluate_drift(
     feature_reference_names_sha256: str,
     feature_drift: dict[str, object] | None,
     performance_report: dict[str, object] | None,
-    policy: DriftPolicyV3,
+    policy: DriftPolicy,
     evaluated_at: datetime | None = None,
-) -> DriftAssessmentV3:
+) -> DriftAssessment:
     now = _utc(evaluated_at or datetime.now(UTC))
     route_identity = {
         "model_release_id": model_release_id,
@@ -363,7 +363,7 @@ def evaluate_drift(
         else None
     )
     content = {
-        "contract_version": DRIFT_ASSESSMENT_VERSION,
+        "contract": DRIFT_ASSESSMENT_VERSION,
         "mode": mode,
         "horizon": horizon,
         **route_identity,
@@ -422,7 +422,7 @@ def evaluate_drift(
             else None
         ),
     }
-    return DriftAssessmentV3.model_validate(
+    return DriftAssessment.model_validate(
         {**content, "assessment_id": content_sha256(content)}
     )
 
@@ -431,7 +431,7 @@ class DriftStateStore:
     def __init__(self, root: Path) -> None:
         self.root = root.resolve()
 
-    def publish(self, assessment: DriftAssessmentV3) -> DriftAssessmentV3:
+    def publish(self, assessment: DriftAssessment) -> DriftAssessment:
         path = self._path(
             assessment.mode,
             assessment.horizon,
@@ -454,20 +454,20 @@ class DriftStateStore:
         mode: str,
         horizon: str,
         model_release_id: str,
-    ) -> DriftAssessmentV3:
+    ) -> DriftAssessment:
         path = self._path(mode, horizon, model_release_id)
         if not path.exists():
             raise DataReadinessError("route drift assessment is unavailable")
         return self._load_path(path)
 
     @staticmethod
-    def _load_path(path: Path) -> DriftAssessmentV3:
+    def _load_path(path: Path) -> DriftAssessment:
         try:
             loaded = parse_strict_json_object(
                 path.read_bytes(),
                 label="route drift assessment",
             )
-            assessment = DriftAssessmentV3.model_validate(loaded)
+            assessment = DriftAssessment.model_validate(loaded)
         except (OSError, ValueError, ValidationError) as exc:
             raise PredictionConflictError from exc
         return assessment
@@ -523,7 +523,7 @@ def _performance_state(
     row: dict[str, object] | None,
     *,
     performance_report: dict[str, object] | None,
-    policy: DriftPolicyV3,
+    policy: DriftPolicy,
     now: datetime,
     reasons: list[str],
 ) -> tuple[str, str]:

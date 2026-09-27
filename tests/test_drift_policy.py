@@ -19,8 +19,8 @@ from market_predictor.governance.drift.features import (
     validate_feature_drift_report,
 )
 from market_predictor.governance.drift.policy import (
-    DriftAssessmentV3,
-    DriftPolicyV3,
+    DriftAssessment,
+    DriftPolicy,
     DriftStateStore,
     evaluate_drift,
 )
@@ -41,7 +41,7 @@ class DriftPolicyTests(unittest.TestCase):
         self.label_policy_sha = "d" * 64
         self.execution_policy_sha = "e" * 64
         self.feature_names_sha = feature_reference_names_sha256(["x"])
-        self.policy = DriftPolicyV3(
+        self.policy = DriftPolicy(
             minimum_matured_samples=10,
             minimum_independent_decision_groups=5,
         )
@@ -197,15 +197,15 @@ class DriftPolicyTests(unittest.TestCase):
 
     def test_policy_rejects_inverted_thresholds(self) -> None:
         with self.assertRaises(ValidationError):
-            DriftPolicyV3(warning_max_drawdown=0.3, severe_max_drawdown=0.2)
+            DriftPolicy(warning_max_drawdown=0.3, severe_max_drawdown=0.2)
         with self.assertRaises(ValidationError):
-            DriftPolicyV3.model_validate({"maximum_pending_age_minutes_swing": 30_240})
+            DriftPolicy.model_validate({"maximum_pending_age_minutes_swing": 30_240})
 
     def test_configured_policy_matches_serving_pin(self) -> None:
-        policy = load_typed_config(ROOT / "configs" / "drift_policy.toml", DriftPolicyV3)
+        policy = load_typed_config(ROOT / "configs" / "drift_policy.toml", DriftPolicy)
         default = tomllib.loads((ROOT / "configs" / "default.toml").read_text(encoding="utf-8"))
 
-        self.assertEqual(policy, DriftPolicyV3())
+        self.assertEqual(policy, DriftPolicy())
         self.assertEqual(policy.sha256(), default["prediction_serving"]["drift_policy_sha256"])
 
     def test_retired_intraday_and_day_horizons_are_refused(self) -> None:
@@ -220,7 +220,7 @@ class DriftPolicyTests(unittest.TestCase):
                 self._feature_report("stable", mode="intraday", horizon="60m")
             )
         superseded = self._feature_report("stable")
-        superseded["contract_version"] = "market_predictor.feature_drift_report.v1"
+        superseded["contract"] = "market_predictor.feature_drift_report.v1"
         superseded["report_id"] = content_sha256(
             {key: value for key, value in superseded.items() if key != "report_id"}
         )
@@ -260,10 +260,10 @@ class DriftPolicyTests(unittest.TestCase):
         ):
             content = {
                 **{key: value for key, value in current.items() if key != "assessment_id"},
-                "contract_version": version,
+                "contract": version,
             }
             with self.subTest(version=version), self.assertRaises(ValidationError):
-                DriftAssessmentV3.model_validate(
+                DriftAssessment.model_validate(
                     {**content, "assessment_id": content_sha256(content)}
                 )
 
@@ -293,7 +293,7 @@ class DriftPolicyTests(unittest.TestCase):
         valid["actionability"] = "actionable"
 
         with self.assertRaisesRegex(ValidationError, "state and actionability"):
-            DriftAssessmentV3.model_validate(
+            DriftAssessment.model_validate(
                 {**valid, "assessment_id": content_sha256(valid)}
             )
 
@@ -485,7 +485,7 @@ class DriftPolicyTests(unittest.TestCase):
     ) -> dict[str, object]:
         available = status != "unavailable"
         content: dict[str, object] = {
-            "contract_version": FEATURE_DRIFT_REPORT_VERSION,
+            "contract": FEATURE_DRIFT_REPORT_VERSION,
             "mode": mode,
             "horizon": horizon,
             "model_release_id": self.release_id,
@@ -626,8 +626,8 @@ class DriftPolicyTests(unittest.TestCase):
             "cohort_id": content_sha256(row_identity),
         }
         report_identity: dict[str, object] = {
-            "contract_version": (
-                "market_predictor.selected_policy_performance.v3"
+            "contract": (
+                "market_predictor.selected_policy_performance"
             ),
             "generated_at_utc": generated.isoformat().replace("+00:00", "Z"),
             "lookback_days": lookback_days,

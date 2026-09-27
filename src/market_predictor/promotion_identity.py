@@ -19,7 +19,7 @@ from market_predictor.jwt_verification import (
 
 BUILD_ROLE = "promotion.build"
 APPROVER_ROLE = "promotion.approve"
-PROMOTION_PRINCIPAL_SCHEMA = "market_predictor.authenticated_principal.v1"
+PROMOTION_PRINCIPAL_SCHEMA = "market_predictor.authenticated_principal"
 DEFAULT_BUILD_TOKEN_ENV = "MARKET_PREDICTOR_PROMOTION_BUILD_TOKEN"
 DEFAULT_APPROVER_TOKEN_ENV = "MARKET_PREDICTOR_PROMOTION_APPROVER_TOKEN"
 _ENVIRONMENT_NAME = re.compile(r"^[A-Z][A-Z0-9_]{0,127}$")

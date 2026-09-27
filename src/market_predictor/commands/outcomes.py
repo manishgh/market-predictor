@@ -11,7 +11,7 @@ from market_predictor.canonical.store import load_canonical_artifact
 from market_predictor.commands.configuration import load_typed_config
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.governance.drift.policy import (
-    DriftPolicyV3,
+    DriftPolicy,
     DriftStateStore,
     evaluate_drift,
 )
@@ -205,7 +205,7 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
             raise typer.BadParameter("evaluated-at must be timezone-aware")
         feature_drift = _load_json_object(feature_drift_report)
         report = load_performance_report(performance_report)
-        policy = load_typed_config(policy_config, DriftPolicyV3)
+        policy = load_typed_config(policy_config, DriftPolicy)
         assessment = evaluate_drift(
             mode="swing",
             horizon=horizon.strip().lower(),

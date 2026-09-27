@@ -11,8 +11,8 @@ from pydantic import ValidationError
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.governance.outcomes.contracts import (
     RETIRED_INTRADAY,
-    MaturedOutcomeV3,
-    PredictionMaturationIntentV3,
+    MaturedOutcome,
+    PredictionMaturationIntent,
 )
 from market_predictor.governance.outcomes.maturation import mature_prediction
 from market_predictor.governance.outcomes.repository import OutcomeRepository
@@ -67,8 +67,8 @@ class OutcomeMaturationTests(unittest.TestCase):
 
         self.assertEqual(pending.status, "pending")
         self.assertEqual(pending_evidence, [])
-        self.assertIsInstance(matured, MaturedOutcomeV3)
-        assert isinstance(matured, MaturedOutcomeV3)
+        self.assertIsInstance(matured, MaturedOutcome)
+        assert isinstance(matured, MaturedOutcome)
         self.assertEqual(matured.path_outcome, "target_first")
         self.assertAlmostEqual(matured.gross_return, 0.03)
         self.assertAlmostEqual(
@@ -108,8 +108,8 @@ class OutcomeMaturationTests(unittest.TestCase):
             source_artifact_sha256="9" * 64,
         )
 
-        self.assertIsInstance(matured, MaturedOutcomeV3)
-        assert isinstance(matured, MaturedOutcomeV3)
+        self.assertIsInstance(matured, MaturedOutcome)
+        assert isinstance(matured, MaturedOutcome)
         self.assertAlmostEqual(
             matured.gross_return,
             float(offline["exit_price"]) / 100.0 - 1.0,
@@ -147,11 +147,11 @@ class OutcomeMaturationTests(unittest.TestCase):
         for changes in (
             {"view": "intraday", "horizon": "5m"},
             {"horizon": "10d"},
-            {"contract_version": "market_predictor.maturation_intent.v2"},
+            {"contract": "market_predictor.maturation_intent.v2"},
             {"downside_probability": 0.2},
         ):
             with self.subTest(changes=changes), self.assertRaises(ValidationError) as raised:
-                PredictionMaturationIntentV3.model_validate({**payload, **changes})
+                PredictionMaturationIntent.model_validate({**payload, **changes})
             if changes.get("view") == "intraday":
                 self.assertIn(RETIRED_INTRADAY, str(raised.exception))
 

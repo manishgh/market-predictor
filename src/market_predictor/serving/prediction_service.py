@@ -15,17 +15,17 @@ from market_predictor.admission import InferenceAdmissionController
 from market_predictor.core.errors import DataReadinessError, MarketPredictorError
 from market_predictor.core.prediction_contracts import (
     CatalystConfirmationInfo,
-    FeatureArtifactIdentityV1,
+    FeatureArtifactIdentity,
     ModelInfo,
     PredictionConflictError,
     PredictionDependencyError,
     PredictionDriftBlockedError,
-    PredictionEvidenceV4,
+    PredictionEvidence,
     PredictionModelUnavailableError,
     PredictionReadinessError,
     PredictionRequest,
     PredictionResponse,
-    PredictionRowEvidenceV1,
+    PredictionRowEvidence,
     PredictionServiceError,
     PredictionValidationError,
     ReadinessInfo,
@@ -34,7 +34,7 @@ from market_predictor.core.prediction_contracts import (
     SwingPrediction,
     TickerPrediction,
 )
-from market_predictor.governance.drift.policy import DriftAssessmentV3, DriftStateStore
+from market_predictor.governance.drift.policy import DriftAssessment, DriftStateStore
 from market_predictor.governance.promotion.bundle_contracts import PromotedSwingBundle
 from market_predictor.modeling.feature_reference import (
     feature_reference_names_sha256,
@@ -64,7 +64,7 @@ from market_predictor.swing.selection import (
 )
 
 DEFAULT_MODE_HORIZONS = {"swing": "10b"}
-SERVING_POLICY_ID = "market_predictor.serving_policy_bundle.v2"
+SERVING_POLICY_ID = "market_predictor.serving_policy_bundle"
 # Serving thresholds are sourced from the canonical prediction policy so the
 # served signal semantics and the promotion-evaluated policy share one definition.
 
@@ -492,7 +492,7 @@ class PredictionService:
         horizon: str,
         model: ModelInfo,
         checked_at: datetime | None = None,
-    ) -> DriftAssessmentV3 | None:
+    ) -> DriftAssessment | None:
         if not self.enforce_drift:
             return None
         try:
@@ -515,7 +515,7 @@ class PredictionService:
         horizon: str,
         model: ModelInfo,
         checked_at: datetime,
-    ) -> DriftAssessmentV3:
+    ) -> DriftAssessment:
         if not self.enforce_drift:
             raise DataReadinessError("drift enforcement is disabled")
         route_identity = _model_drift_identity(model)
@@ -901,7 +901,7 @@ def _edge_swing_response(
     latest = context.sort_values("decision_time_utc", kind="stable").groupby("ticker", as_index=False).tail(1)
     requested = latest.loc[latest["ticker"].astype(str).str.upper().isin(request.tickers)]
     row_evidence = [
-        PredictionRowEvidenceV1(
+        PredictionRowEvidence(
             ticker=str(row["ticker"]).upper(),
             view="swing",
             decision_time_utc=_required_edge_datetime(row, "decision_time_utc"),
@@ -927,13 +927,13 @@ def _edge_swing_response(
     policy_sha256 = model.prediction_policy_sha256
     if policy_sha256 is None or model.prediction_policy is None:
         raise DataReadinessError("swing prediction policy identity is incomplete")
-    evidence = PredictionEvidenceV4(
+    evidence = PredictionEvidence(
         request_id=request_id,
         correlation_id=request.correlation_id or request_id,
         prediction_cutoff_utc=cutoff,
         row_feature_availability=row_evidence,
         feature_artifacts={
-            "swing": FeatureArtifactIdentityV1(
+            "swing": FeatureArtifactIdentity(
                 mode="swing",
                 artifact_sha256=live_input_manifest_sha256,
                 source_artifact_sha256=catalyst_authority_sha256,
@@ -950,7 +950,7 @@ def _edge_swing_response(
         resolved_horizons={"swing": "10b"},
         view_prediction_cutoffs_utc={"swing": cutoff},
         view_prediction_policy_sha256={"swing": policy_sha256},
-        serving_policy_id="market_predictor.swing_prediction_policy.v1",
+        serving_policy_id="market_predictor.swing_prediction_policy",
         serving_policy_sha256=policy_sha256,
         identity_status="complete",
     )
@@ -996,7 +996,7 @@ def _optional_edge_datetime(value: object) -> datetime | None:
 
 def _serving_bundle_set_sha256(view_bundle_ids: Mapping[str, str]) -> str:
     payload = {
-        "contract_version": "market_predictor.serving.bundle_set.v1",
+        "contract": "market_predictor.serving.bundle_set",
         "view_serving_bundle_ids": dict(sorted(view_bundle_ids.items())),
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()

@@ -5,5 +5,5 @@
       "public_key_base64": "<base64-encoded-32-byte-ed25519-public-key>"
     }
   },
-  "schema": "market_predictor.attestation_trust_store.v1"
+  "schema": "market_predictor.attestation_trust_store"
 }

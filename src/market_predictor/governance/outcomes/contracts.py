@@ -41,9 +41,9 @@ class _SwingViewContract(FrozenContract):
         return refuse_retired_intraday(data)
 
 
-class PredictionMonitoringObservationV2(_SwingViewContract):
-    contract_version: Literal["market_predictor.prediction_observation.v2"] = (
-        "market_predictor.prediction_observation.v2"
+class PredictionMonitoringObservation(_SwingViewContract):
+    contract: Literal["market_predictor.prediction_observation"] = (
+        "market_predictor.prediction_observation"
     )
     observation_id: str = Field(pattern=SHA256_PATTERN)
     semantic_prediction_id: str = Field(pattern=SHA256_PATTERN)
@@ -125,9 +125,9 @@ class PredictionMonitoringObservationV2(_SwingViewContract):
         return self
 
 
-class PredictionMaturationIntentV3(_SwingViewContract):
-    contract_version: Literal["market_predictor.maturation_intent.v3"] = (
-        "market_predictor.maturation_intent.v3"
+class PredictionMaturationIntent(_SwingViewContract):
+    contract: Literal["market_predictor.maturation_intent"] = (
+        "market_predictor.maturation_intent"
     )
     maturation_key: str = Field(pattern=SHA256_PATTERN)
     semantic_prediction_id: str = Field(pattern=SHA256_PATTERN)
@@ -178,8 +178,8 @@ class PredictionMaturationIntentV3(_SwingViewContract):
     @model_validator(mode="after")
     def validate_identity(self) -> Self:
         if (
-            self.prediction_policy.get("contract_version")
-            != "market_predictor.swing_prediction_policy.v1"
+            self.prediction_policy.get("contract")
+            != "market_predictor.swing_prediction_policy"
         ):
             raise ValueError("swing intent requires the swing prediction policy")
         prediction_policy = parse_swing_prediction_policy(
@@ -216,9 +216,9 @@ class PredictionMaturationIntentV3(_SwingViewContract):
         return self
 
 
-class MaturationAttemptV1(FrozenContract):
-    contract_version: Literal["market_predictor.maturation_attempt.v1"] = (
-        "market_predictor.maturation_attempt.v1"
+class MaturationAttempt(FrozenContract):
+    contract: Literal["market_predictor.maturation_attempt"] = (
+        "market_predictor.maturation_attempt"
     )
     attempt_id: str = Field(pattern=SHA256_PATTERN)
     maturation_key: str = Field(pattern=SHA256_PATTERN)
@@ -243,9 +243,9 @@ class MaturationAttemptV1(FrozenContract):
         return self
 
 
-class MaturedOutcomeV3(_SwingViewContract):
-    contract_version: Literal["market_predictor.matured_outcome.v3"] = (
-        "market_predictor.matured_outcome.v3"
+class MaturedOutcome(_SwingViewContract):
+    contract: Literal["market_predictor.matured_outcome"] = (
+        "market_predictor.matured_outcome"
     )
     outcome_id: str = Field(pattern=SHA256_PATTERN)
     maturation_key: str = Field(pattern=SHA256_PATTERN)
@@ -395,10 +395,10 @@ def content_sha256(value: object) -> str:
 
 
 def monitoring_observation_from_intent(
-    intent: PredictionMaturationIntentV3,
-) -> PredictionMonitoringObservationV2:
+    intent: PredictionMaturationIntent,
+) -> PredictionMonitoringObservation:
     content: dict[str, object] = {
-        "contract_version": "market_predictor.prediction_observation.v2",
+        "contract": "market_predictor.prediction_observation",
         "semantic_prediction_id": intent.semantic_prediction_id,
         "snapshot_id": intent.snapshot_id,
         "ticker": intent.ticker,
@@ -428,7 +428,7 @@ def monitoring_observation_from_intent(
         "catalyst_status": intent.catalyst_status,
         "maturation_key": intent.maturation_key,
     }
-    return PredictionMonitoringObservationV2.model_validate(
+    return PredictionMonitoringObservation.model_validate(
         {**content, "observation_id": content_sha256(content)}
     )
 

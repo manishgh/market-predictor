@@ -27,8 +27,8 @@ class SwingPredictionPolicy(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
-    contract_version: Literal["market_predictor.swing_prediction_policy.v1"] = (
-        "market_predictor.swing_prediction_policy.v1"
+    contract: Literal["market_predictor.swing_prediction_policy"] = (
+        "market_predictor.swing_prediction_policy"
     )
     horizon_sessions: int = Field(ge=1, le=100)
     minimum_probability: float = Field(gt=0.0, lt=1.0)
@@ -47,8 +47,8 @@ class SwingPredictionPolicy(BaseModel):
 
     def specification(self) -> dict[str, object]:
         return {
-            "contract_version": self.contract_version,
-            "policy_id": self.contract_version,
+            "contract": self.contract,
+            "policy_id": self.contract,
             "role": "prediction_intelligence_only_no_alerts_or_execution",
             "horizon_sessions": self.horizon_sessions,
             "decision_score": "model_probability",
@@ -76,7 +76,7 @@ def parse_swing_prediction_policy(
 ) -> SwingPredictionPolicy:
     policy = SwingPredictionPolicy.model_validate(
         {
-            "contract_version": payload.get("contract_version"),
+            "contract": payload.get("contract"),
             "horizon_sessions": payload.get("horizon_sessions"),
             "minimum_probability": payload.get("minimum_probability"),
             "maximum_predictions_per_decision": payload.get(

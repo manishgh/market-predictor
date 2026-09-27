@@ -43,9 +43,9 @@ from market_predictor.swing.features.panel import (
     swing_model_feature_columns,
 )
 
-SWING_LIVE_SCHEMA_VERSION: Final = "edge_rebuild.swing_live.v1"
-SWING_LIVE_INPUT_SCHEMA_VERSION: Final = "edge_rebuild.swing_live_inputs.v2"
-SWING_LIVE_INPUT_POINTER_SCHEMA: Final = "edge_rebuild.swing_live_input_pointer.v1"
+SWING_LIVE_SCHEMA_VERSION: Final = "edge_rebuild.swing_live"
+SWING_LIVE_INPUT_SCHEMA_VERSION: Final = "edge_rebuild.swing_live_inputs"
+SWING_LIVE_INPUT_POINTER_SCHEMA: Final = "edge_rebuild.swing_live_input_pointer"
 SWING_LIVE_INPUT_POINTER: Final = "active_generation.json"
 SWING_LIVE_INPUT_GENERATIONS: Final = "generations"
 SWING_LIVE_REQUIRED_WATERMARKS: Final = (

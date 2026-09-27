@@ -12,7 +12,7 @@ import pandas as pd
 
 from market_predictor.locking import file_lock
 
-MODEL_MANIFEST_SCHEMA = "model_registry_manifest.v2"
+MODEL_MANIFEST_SCHEMA = "model_registry_manifest"
 MODEL_STATUS_CANDIDATE = "candidate"
 MODEL_STATUS_PROMOTED = "promoted"
 MODEL_STATUS_DEPRECATED = "deprecated"

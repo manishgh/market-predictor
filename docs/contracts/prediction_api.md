@@ -1,8 +1,9 @@
 # Prediction API Contract
 
 Owner: Market Predictor (producer). Consumer: TradingFlow (`MarketPredictorHttpClient`).
-Current version: `market_predictor.prediction.v3`.
-Golden fixture: `tests/fixtures/contracts/swing_prediction_response.v3.json`, a real served
+Contract name: `market_predictor.prediction`. It carries no version: nothing is in production,
+and versions start only once the API is (a user rule, September 27).
+Golden fixture: `tests/fixtures/contracts/swing_prediction_response.json`, a real served
 response kept equal to the code by
 `tests/test_swing_prediction_api.py::test_contract_fixture_matches_the_served_response`.
 
@@ -37,7 +38,7 @@ Every field below is always present. "non-null" means TradingFlow may rely on a 
 
 | Path | Type | Notes |
 | --- | --- | --- |
-| `contract_version` | string | `market_predictor.prediction.v3` |
+| `contract` | string | `market_predictor.prediction` |
 | `request_id` | string, non-null | |
 | `generated_at_utc` | ISO-8601 UTC, non-null | |
 | `mode` | `swing`, non-null | |
@@ -121,8 +122,9 @@ Non-200 responses carry `{"error": {"code", "message", "correlation_id", "retrya
 - Every change adds a Change log entry (date, what changes, compatibility, the new
   fixture SHA-256) before the code lands, and the fixture is regenerated with
   `MARKET_PREDICTOR_WRITE_CONTRACT_FIXTURE=1`.
-- A field removal, a type or nullability change, a new enum value or a meaning change
-  bumps `contract_version`. Adding an optional field does not, but still gets an entry.
+- Until production, every change keeps the unversioned name and is announced only in the
+  Change log. Once in production, a field removal, a type or nullability change, a new
+  enum value or a meaning change will introduce versions.
 - TradingFlow acknowledges an entry in its notes file before relying on it.
 
 ## Pending changes (designed, not yet in code)
@@ -135,8 +137,13 @@ From the swing monitoring and replay correctness design, under review:
 
 ## Change log
 
+- 2026-09-27 (later): versions removed. The response field `contract_version` is renamed
+  `contract` and holds `market_predictor.prediction`; evidence carries `contract`
+  `market_predictor.prediction_evidence`. The fixture is renamed
+  `swing_prediction_response.json`, SHA-256
+  `b62f577dbd9ca1a09c9959d5da84df0db9040d8e6b3c17d26eabfcb4f369f1cf`.
 - 2026-09-27: `market_predictor.prediction.v3` published as this document with its
-  golden fixture. Relative to v1 as TradingFlow knew it: intraday and unified views,
+  golden fixture. Relative to the v1 TradingFlow knew: intraday and unified views,
   `unified_score` and `readiness.intraday_bar_count` are removed; horizons are
   exchange-session counts; unknown fields are refused; signal names are those above;
   abstention reason `live_inputs_incomplete` is new. Fixture SHA-256

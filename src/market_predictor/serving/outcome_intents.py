@@ -7,12 +7,12 @@ from zoneinfo import ZoneInfo
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.prediction_contracts import (
     PredictionResponse,
-    PredictionRowEvidenceV1,
+    PredictionRowEvidence,
     SwingPrediction,
 )
 from market_predictor.governance.outcomes.contracts import (
-    PredictionMaturationIntentV3,
-    PredictionMonitoringObservationV2,
+    PredictionMaturationIntent,
+    PredictionMonitoringObservation,
     content_sha256,
     maturation_key_sha256,
     monitoring_semantic_sha256,
@@ -28,7 +28,7 @@ UNMONITORED_ABSTENTIONS = (["out_of_universe"], ["live_inputs_incomplete"])
 
 @dataclass(frozen=True, slots=True)
 class SnapshotRegistration:
-    intents: list[PredictionMaturationIntentV3]
+    intents: list[PredictionMaturationIntent]
     # Requested tickers the model never scored, by abstention reason; they have no observation.
     unmonitored_tickers: dict[str, list[str]]
 
@@ -40,7 +40,7 @@ def register_snapshot_intents(
 ) -> SnapshotRegistration:
     _, response, _ = snapshot_store.load(snapshot_id)
     intents = maturation_intents_from_response(response, snapshot_id=snapshot_id)
-    intent_by_view: dict[tuple[str, str], PredictionMaturationIntentV3] = {
+    intent_by_view: dict[tuple[str, str], PredictionMaturationIntent] = {
         (intent.ticker, intent.view): intent for intent in intents
     }
     observations = monitoring_observations_from_response(
@@ -64,13 +64,13 @@ def maturation_intents_from_response(
     response: PredictionResponse,
     *,
     snapshot_id: str,
-) -> list[PredictionMaturationIntentV3]:
+) -> list[PredictionMaturationIntent]:
     evidence = response.evidence
     if evidence is None:
         raise DataReadinessError("prediction snapshot has no point-in-time evidence")
     if evidence.identity_status != "complete":
         raise DataReadinessError("only identity-complete live predictions can mature")
-    intents: list[PredictionMaturationIntentV3] = []
+    intents: list[PredictionMaturationIntent] = []
     for prediction in response.predictions:
         if (
             prediction.swing is not None
@@ -93,8 +93,8 @@ def monitoring_observations_from_response(
     response: PredictionResponse,
     *,
     snapshot_id: str,
-    intents: dict[tuple[str, str], PredictionMaturationIntentV3] | None = None,
-) -> list[PredictionMonitoringObservationV2]:
+    intents: dict[tuple[str, str], PredictionMaturationIntent] | None = None,
+) -> list[PredictionMonitoringObservation]:
     evidence = response.evidence
     if evidence is None or evidence.identity_status != "complete":
         raise DataReadinessError(
@@ -109,7 +109,7 @@ def monitoring_observations_from_response(
         }
     )
     scored = {(row.ticker, row.view) for row in evidence.row_feature_availability}
-    observations: list[PredictionMonitoringObservationV2] = []
+    observations: list[PredictionMonitoringObservation] = []
     for prediction in response.predictions:
         if prediction.swing is None or response.models.get("swing") is None:
             continue
@@ -140,8 +140,8 @@ def _observation(
     ticker: str,
     view: str,
     prediction: SwingPrediction,
-    intent: PredictionMaturationIntentV3 | None,
-) -> PredictionMonitoringObservationV2:
+    intent: PredictionMaturationIntent | None,
+) -> PredictionMonitoringObservation:
     evidence = response.evidence
     assert evidence is not None
     model = response.models[view]
@@ -176,7 +176,7 @@ def _observation(
         else row.decision_time_utc.astimezone(_EASTERN).date()
     )
     content: dict[str, object] = {
-        "contract_version": "market_predictor.prediction_observation.v2",
+        "contract": "market_predictor.prediction_observation",
         "snapshot_id": snapshot_id,
         "ticker": ticker,
         "view": view,
@@ -212,7 +212,7 @@ def _observation(
         if intent is not None
         else monitoring_semantic_sha256(content)
     )
-    return PredictionMonitoringObservationV2.model_validate(
+    return PredictionMonitoringObservation.model_validate(
         {**content, "observation_id": content_sha256(content)}
     )
 
@@ -224,7 +224,7 @@ def _intent(
     ticker: str,
     view: str,
     prediction: SwingPrediction,
-) -> PredictionMaturationIntentV3:
+) -> PredictionMaturationIntent:
     evidence = response.evidence
     assert evidence is not None
     model = response.models.get(view)
@@ -270,7 +270,7 @@ def _intent(
         else row.decision_time_utc.astimezone(_EASTERN).date()
     )
     base: dict[str, object] = {
-        "contract_version": "market_predictor.maturation_intent.v3",
+        "contract": "market_predictor.maturation_intent",
         "ticker": ticker,
         "canonical_security_id": str(row.canonical_security_id),
         "view": view,
@@ -305,7 +305,7 @@ def _intent(
         "decision_atr": row.decision_atr,
     }
     semantic_id = semantic_prediction_sha256(base)
-    return PredictionMaturationIntentV3.model_validate(
+    return PredictionMaturationIntent.model_validate(
         {
             **base,
             "snapshot_id": snapshot_id,
@@ -316,11 +316,11 @@ def _intent(
 
 
 def _row_evidence(
-    rows: list[PredictionRowEvidenceV1],
+    rows: list[PredictionRowEvidence],
     *,
     ticker: str,
     view: str,
-) -> PredictionRowEvidenceV1:
+) -> PredictionRowEvidence:
     matches = [row for row in rows if row.ticker == ticker and row.view == view]
     if len(matches) != 1:
         raise DataReadinessError(

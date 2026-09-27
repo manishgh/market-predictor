@@ -13,7 +13,7 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.governance.outcomes.contracts import SWING_HORIZON_PATTERN
 from market_predictor.locking import file_lock
 
-HYPOTHESIS_SCHEMA = "market_predictor.promotion_hypothesis.v1"
+HYPOTHESIS_SCHEMA = "market_predictor.promotion_hypothesis"
 TEST_CLOCK_ENV = "MARKET_PREDICTOR_ALLOW_TEST_CLOCK"
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$")
 

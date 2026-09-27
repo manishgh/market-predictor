@@ -11,9 +11,9 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.prediction_contracts import PredictionConflictError
 from market_predictor.governance.outcomes.contracts import (
     RETIRED_INTRADAY,
-    MaturedOutcomeV3,
-    PredictionMaturationIntentV3,
-    PredictionMonitoringObservationV2,
+    MaturedOutcome,
+    PredictionMaturationIntent,
+    PredictionMonitoringObservation,
     content_sha256,
     maturation_key_sha256,
     monitoring_observation_from_intent,
@@ -51,7 +51,7 @@ class PerformanceMonitoringTests(unittest.TestCase):
                 exclude={"outcome_id"},
             )
             base["entry_time_utc"] = intent.decision_time_utc
-            outcome = MaturedOutcomeV3.model_validate(
+            outcome = MaturedOutcome.model_validate(
                 {**base, "outcome_id": content_sha256(base)}
             )
             repository.record_intent(intent)
@@ -314,7 +314,7 @@ class PerformanceMonitoringTests(unittest.TestCase):
             )
             base.pop("semantic_prediction_id")
             base["semantic_prediction_id"] = monitoring_semantic_sha256(base)
-            invalid = PredictionMonitoringObservationV2.model_validate(
+            invalid = PredictionMonitoringObservation.model_validate(
                 {**base, "observation_id": content_sha256(base)}
             )
             repository.record_observation(invalid)
@@ -404,7 +404,7 @@ class PerformanceMonitoringTests(unittest.TestCase):
                 self.assertIn(RETIRED_INTRADAY, str(raised.exception))
         with self.assertRaises(ValidationError):
             validate_performance_report(
-                {**report, "contract_version": "market_predictor.selected_policy_performance.v2"}
+                {**report, "contract": "market_predictor.selected_policy_performance.v2"}
             )
 
 
@@ -415,7 +415,7 @@ def _intent_variant(
     probability: float,
     decision_time: datetime | None = None,
     selected: bool = True,
-) -> PredictionMaturationIntentV3:
+) -> PredictionMaturationIntent:
     base = _intent().model_dump(
         mode="python",
         exclude={"maturation_key", "semantic_prediction_id", "snapshot_id"},
@@ -440,7 +440,7 @@ def _intent_variant(
     )
     semantic_id = semantic_prediction_sha256(base)
     snapshot_id = snapshot_character * 64
-    return PredictionMaturationIntentV3.model_validate(
+    return PredictionMaturationIntent.model_validate(
         {
             **base,
             "semantic_prediction_id": semantic_id,
@@ -452,7 +452,7 @@ def _intent_variant(
 
 def _record(
     repository: OutcomeRepository,
-    intent: PredictionMaturationIntentV3,
+    intent: PredictionMaturationIntent,
     *,
     target: int,
     net_return: float,
@@ -482,7 +482,7 @@ def _record(
             "evidence_sha256": content_sha256(evidence),
         }
     )
-    outcome = MaturedOutcomeV3.model_validate(
+    outcome = MaturedOutcome.model_validate(
         {**base, "outcome_id": content_sha256(base)}
     )
     repository.record_intent(intent)

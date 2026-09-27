@@ -51,7 +51,7 @@ from market_predictor.modeling.strategy_contract import (
 from market_predictor.resources import assert_memory_budget, process_memory_snapshot
 from market_predictor.swing.contracts.model_artifact import SWING_CANDIDATE_MODEL_SCHEMA
 
-ACTIVE_GENERATION_SCHEMA: Final = "edge_rebuild.active_generation.v1"
+ACTIVE_GENERATION_SCHEMA: Final = "edge_rebuild.active_generation"
 ACTIVE_GENERATION_POINTER: Final = "active_generation.json"
 GENERATION_DIRECTORY: Final = "generations"
 

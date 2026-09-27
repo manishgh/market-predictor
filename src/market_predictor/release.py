@@ -22,8 +22,8 @@ from market_predictor.registry import (
     verify_model_artifact,
 )
 
-LOCAL_RELEASE_SCHEMA = "market_predictor.local_release.v1"
-ACTIVE_LOCAL_RELEASE_SCHEMA = "market_predictor.active_local_release.v1"
+LOCAL_RELEASE_SCHEMA = "market_predictor.local_release"
+ACTIVE_LOCAL_RELEASE_SCHEMA = "market_predictor.active_local_release"
 RELEASE_MANIFEST_NAME = "release.json"
 ACTIVE_POINTER_NAME = "active_release.json"
 _REQUIRED_ASSET_KINDS = {
@@ -516,7 +516,7 @@ def _validate_evidence_schema(
 ) -> None:
     if model_type == "canonical_intraday":
         raise DataReadinessError("intraday model releases are retired; only swing releases are accepted")
-    expected = {"canonical_swing": "swing_training_evidence.v1"}.get(model_type)
+    expected = {"canonical_swing": "swing_training_evidence"}.get(model_type)
     if expected is None or evidence.get("schema") != expected:
         raise DataReadinessError("release evidence schema does not match the model type")
 

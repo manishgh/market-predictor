@@ -22,8 +22,8 @@ from market_predictor.locking import file_lock
 from market_predictor.registry import file_sha256
 from market_predictor.release import verify_local_release
 
-SERVING_BUNDLE_SCHEMA = "market_predictor.serving.bundle.v1"
-ACTIVE_SERVING_BUNDLE_SCHEMA = "market_predictor.active_serving_bundle.v1"
+SERVING_BUNDLE_SCHEMA = "market_predictor.serving.bundle"
+ACTIVE_SERVING_BUNDLE_SCHEMA = "market_predictor.active_serving_bundle"
 SERVING_BUNDLE_MANIFEST = "bundle.json"
 ACTIVE_SERVING_BUNDLE_POINTER = "active_serving_bundle.json"
 _BUNDLE_DIRECTORY = "serving_bundles"

@@ -41,7 +41,7 @@ class ModelRegistryTests(unittest.TestCase):
             _write_candidate(path)
             loaded = json.loads(manifest_path_for(path).read_text(encoding="utf-8"))
 
-            self.assertEqual(loaded["schema"], "model_registry_manifest.v2")
+            self.assertEqual(loaded["schema"], "model_registry_manifest")
             self.assertEqual(loaded["status"], "candidate")
             self.assertEqual(loaded["artifact_sha256"], file_sha256(path))
             self.assertEqual(loaded["dataset"]["feature_schema_hash"], feature_schema_hash(["return_1d", "volume_z20"]))

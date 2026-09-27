@@ -18,7 +18,7 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.prediction_contracts import ModelInfo, PredictionRequest
 from market_predictor.execution_policy import EXECUTION_POLICY_SHA256
-from market_predictor.governance.drift.policy import DriftAssessmentV3, DriftPolicyV3
+from market_predictor.governance.drift.policy import DriftAssessment, DriftPolicy
 from market_predictor.governance.outcomes.contracts import content_sha256
 from market_predictor.governance.promotion.bundle_contracts import (
     canonical_payload_sha256,
@@ -49,7 +49,7 @@ ROOT = Path(__file__).resolve().parents[2]
 NOW = datetime(2026, 7, 8, 22, 5, tzinfo=UTC)
 DECISION = pd.Timestamp("2026-07-08T22:00:00Z")
 TEST_GATE_POLICY_SHA256 = canonical_payload_sha256({"test_fixture": True})
-TEST_DRIFT_POLICY_SHA256 = DriftPolicyV3().sha256()
+TEST_DRIFT_POLICY_SHA256 = DriftPolicy().sha256()
 
 
 class _Estimator:
@@ -176,7 +176,7 @@ def swing_serving(
     joblib.dump(model_payload, model_path)
     evidence_path.write_text('{"promotion":"passed"}\n', encoding="utf-8")
     bundle = {
-        "schema_version": "edge_rebuild.promoted_bundle.v2",
+        "schema_version": "edge_rebuild.promoted_bundle",
         "mode": "swing",
         "strategy_id": "swing",
         "horizon_sessions": 10,
@@ -267,10 +267,10 @@ def drift_assessment(
     state: str,
     evaluated_at: datetime,
     policy_sha256: str = TEST_DRIFT_POLICY_SHA256,
-) -> DriftAssessmentV3:
+) -> DriftAssessment:
     stamp = evaluated_at.isoformat().replace("+00:00", "Z")
     content = {
-        "contract_version": "market_predictor.drift_assessment.v3",
+        "contract": "market_predictor.drift_assessment",
         "mode": "swing",
         "horizon": "10b",
         "model_release_id": model.release_id,
@@ -296,7 +296,7 @@ def drift_assessment(
         "independent_decision_groups": 10,
         "last_matured_outcome_utc": stamp,
     }
-    return DriftAssessmentV3.model_validate({**content, "assessment_id": content_sha256(content)})
+    return DriftAssessment.model_validate({**content, "assessment_id": content_sha256(content)})
 
 
 def live_frames(

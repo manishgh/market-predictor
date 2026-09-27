@@ -15,15 +15,15 @@ import pandas as pd
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.prediction_contracts import PredictionConflictError
 from market_predictor.governance.outcomes.contracts import (
-    MaturedOutcomeV3,
-    PredictionMaturationIntentV3,
+    MaturedOutcome,
+    PredictionMaturationIntent,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
 from market_predictor.hypothesis_registry import TEST_CLOCK_ENV
 from market_predictor.locking import file_lock
 from market_predictor.modeling.ranking_economics import session_block_interval
 
-CAUSAL_SHADOW_SCHEMA = "market_predictor.causal_shadow_evidence.v2"
+CAUSAL_SHADOW_SCHEMA = "market_predictor.causal_shadow_evidence"
 
 
 def write_causal_shadow_bundle(
@@ -270,13 +270,13 @@ def _derive_source_rows(
 
 
 def _workload_intents(
-    intents: Sequence[PredictionMaturationIntentV3],
+    intents: Sequence[PredictionMaturationIntent],
     *,
     artifact_sha256: str,
     view: str,
     horizon: str,
     expected_groups: Sequence[str],
-) -> list[PredictionMaturationIntentV3]:
+) -> list[PredictionMaturationIntent]:
     selected = [
         intent
         for intent in intents
@@ -302,8 +302,8 @@ def _workload_intents(
 
 
 def _validate_intent_pair(
-    candidate: PredictionMaturationIntentV3,
-    baseline: PredictionMaturationIntentV3,
+    candidate: PredictionMaturationIntent,
+    baseline: PredictionMaturationIntent,
     *,
     hypothesis: dict[str, Any],
 ) -> None:
@@ -336,9 +336,9 @@ def _validate_intent_pair(
 
 def _side_record(
     repository: OutcomeRepository,
-    intent: PredictionMaturationIntentV3,
+    intent: PredictionMaturationIntent,
 ) -> dict[str, Any]:
-    outcome: MaturedOutcomeV3 | None = None
+    outcome: MaturedOutcome | None = None
     if intent.selected_for_policy:
         try:
             outcome = repository.load_outcome(intent.maturation_key)

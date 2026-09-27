@@ -1,4 +1,4 @@
-contract_version = "market_predictor.drift_policy.v3"
+contract = "market_predictor.drift_policy"
 minimum_matured_samples = 30
 minimum_independent_decision_groups = 10
 maximum_report_age_minutes = 1440

@@ -16,7 +16,7 @@ RETIRED_INTRADAY_EVIDENCE_SCHEMA = "intraday_training_evidence.v1"
 
 
 def promoted_swing_candidate(root: Path, marker: str) -> tuple[Path, Path]:
-    return _signed_candidate(root, marker, SWING_MODEL_TYPE, SWING_MODEL_SCHEMA_VERSION, "swing_training_evidence.v1")
+    return _signed_candidate(root, marker, SWING_MODEL_TYPE, SWING_MODEL_SCHEMA_VERSION, "swing_training_evidence")
 
 
 def retired_intraday_candidate(root: Path, marker: str) -> tuple[Path, Path]:

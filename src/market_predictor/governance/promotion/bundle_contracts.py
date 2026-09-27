@@ -35,7 +35,7 @@ from market_predictor.swing.features.panel import (
     swing_model_feature_columns,
 )
 
-SERVING_BUNDLE_SCHEMA: Final = "edge_rebuild.promoted_bundle.v2"
+SERVING_BUNDLE_SCHEMA: Final = "edge_rebuild.promoted_bundle"
 
 _SHA256_PATTERN: Final = r"^[0-9a-f]{64}$"
 _TRACKED_SOURCE_FAMILY_SET: Final = frozenset(TRACKED_SOURCE_FAMILIES)
@@ -46,7 +46,7 @@ class _FrozenModel(BaseModel):
 
 
 class _PromotedBundleBase(_FrozenModel):
-    schema_version: Literal["edge_rebuild.promoted_bundle.v2"]
+    schema_version: Literal["edge_rebuild.promoted_bundle"]
     model_id: str = Field(min_length=1, max_length=200)
     model_status: Literal["promoted"]
     promotion_permitted: Literal[True]

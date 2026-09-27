@@ -173,7 +173,7 @@ def test_serialized_swing_response_carries_every_tradingflow_field(
         assert set(fields) <= set(swing[section]), f"swing.{section} lacks {fields}"
 
 
-CONTRACT_FIXTURE = ROOT / "tests" / "fixtures" / "contracts" / "swing_prediction_response.v3.json"
+CONTRACT_FIXTURE = ROOT / "tests" / "fixtures" / "contracts" / "swing_prediction_response.json"
 _FIXED_ID = "00000000-0000-4000-8000-000000000000"
 
 

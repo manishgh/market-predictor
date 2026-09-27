@@ -24,8 +24,8 @@ from market_predictor.execution_policy import (
     round_trip_cost_bps,
 )
 from market_predictor.governance.outcomes.contracts import (
-    MaturedOutcomeV3,
-    PredictionMaturationIntentV3,
+    MaturedOutcome,
+    PredictionMaturationIntent,
     content_sha256,
     maturation_key_sha256,
     semantic_prediction_sha256,
@@ -265,9 +265,9 @@ def _synthetic_intent(
     label_policy_sha: str,
     prediction_policy: dict[str, object],
     prediction_policy_sha: str,
-) -> PredictionMaturationIntentV3:
+) -> PredictionMaturationIntent:
     base: dict[str, object] = {
-        "contract_version": "market_predictor.maturation_intent.v3",
+        "contract": "market_predictor.maturation_intent",
         "ticker": "TEST",
         "canonical_security_id": "security:TEST",
         "view": view,
@@ -300,7 +300,7 @@ def _synthetic_intent(
         "decision_atr": 1.0,
     }
     semantic = semantic_prediction_sha256(base)
-    return PredictionMaturationIntentV3.model_validate(
+    return PredictionMaturationIntent.model_validate(
         {
             **base,
             "snapshot_id": snapshot_id,
@@ -314,11 +314,11 @@ def _synthetic_intent(
 
 
 def _synthetic_outcome(
-    intent: PredictionMaturationIntentV3,
+    intent: PredictionMaturationIntent,
     *,
     net_return: float,
     evidence: list[dict[str, object]],
-) -> MaturedOutcomeV3:
+) -> MaturedOutcome:
     entry = intent.decision_time_utc + timedelta(minutes=5)
     exit_time = entry + timedelta(minutes=30)
     available = exit_time + timedelta(minutes=1)
@@ -336,7 +336,7 @@ def _synthetic_outcome(
     )
     gross_return = net_return + execution_cost_bps / 10_000.0
     base = {
-        "contract_version": "market_predictor.matured_outcome.v3",
+        "contract": "market_predictor.matured_outcome",
         "maturation_key": intent.maturation_key,
         "semantic_prediction_id": intent.semantic_prediction_id,
         "snapshot_id": intent.snapshot_id,
@@ -374,7 +374,7 @@ def _synthetic_outcome(
         "excess_return_vs_sector": net_return,
         "evidence_sha256": content_sha256(evidence),
     }
-    return MaturedOutcomeV3.model_validate(
+    return MaturedOutcome.model_validate(
         {
             **base,
             "outcome_id": content_sha256(base),
@@ -386,7 +386,7 @@ def authorize_candidate_for_test(
     model_path: Path,
     metrics: dict[str, Any],
     *,
-    evidence_schema: str = "swing_training_evidence.v1",
+    evidence_schema: str = "swing_training_evidence",
 ) -> Path:
     root = model_path.parent / f".{model_path.name}.promotion-test"
     manifest = load_model_manifest(model_path)

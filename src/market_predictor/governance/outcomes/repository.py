@@ -13,10 +13,10 @@ from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.core.prediction_contracts import PredictionConflictError
 from market_predictor.governance.outcomes.contracts import (
     RETIRED_INTRADAY,
-    MaturationAttemptV1,
-    MaturedOutcomeV3,
-    PredictionMaturationIntentV3,
-    PredictionMonitoringObservationV2,
+    MaturationAttempt,
+    MaturedOutcome,
+    PredictionMaturationIntent,
+    PredictionMonitoringObservation,
     content_sha256,
     monitoring_observation_from_intent,
 )
@@ -33,15 +33,15 @@ class OutcomeRepository:
 
     def record_intent(
         self,
-        intent: PredictionMaturationIntentV3,
-    ) -> PredictionMaturationIntentV3:
+        intent: PredictionMaturationIntent,
+    ) -> PredictionMaturationIntent:
         path = self._key_path("intents", intent.maturation_key)
         semantic_path = self._key_path(
             "semantic",
             intent.semantic_prediction_id,
         )
         semantic_record = {
-            "schema": "market_predictor.semantic_prediction.v1",
+            "schema": "market_predictor.semantic_prediction",
             "semantic_prediction_id": intent.semantic_prediction_id,
             "canonical_maturation_key": intent.maturation_key,
         }
@@ -70,8 +70,8 @@ class OutcomeRepository:
 
     def record_observation(
         self,
-        observation: PredictionMonitoringObservationV2,
-    ) -> PredictionMonitoringObservationV2:
+        observation: PredictionMonitoringObservation,
+    ) -> PredictionMonitoringObservation:
         if observation.maturation_key is not None:
             try:
                 intent = self.load_intent(observation.maturation_key)
@@ -85,8 +85,8 @@ class OutcomeRepository:
 
     def record_attempt(
         self,
-        attempt: MaturationAttemptV1,
-    ) -> MaturationAttemptV1:
+        attempt: MaturationAttempt,
+    ) -> MaturationAttempt:
         path = (
             self.root
             / "attempts"
@@ -99,10 +99,10 @@ class OutcomeRepository:
 
     def record_outcome(
         self,
-        outcome: MaturedOutcomeV3,
+        outcome: MaturedOutcome,
         *,
         evidence_rows: list[dict[str, object]],
-    ) -> MaturedOutcomeV3:
+    ) -> MaturedOutcome:
         actual_evidence_sha = content_sha256(evidence_rows)
         if actual_evidence_sha != outcome.evidence_sha256:
             raise PredictionConflictError
@@ -119,7 +119,7 @@ class OutcomeRepository:
                 if existing != outcome:
                     raise PredictionConflictError
                 expected_evidence = {
-                    "schema": "market_predictor.outcome_evidence.v1",
+                    "schema": "market_predictor.outcome_evidence",
                     "evidence_sha256": outcome.evidence_sha256,
                     "rows": evidence_rows,
                 }
@@ -132,7 +132,7 @@ class OutcomeRepository:
             self._write_plain_idempotent(
                 evidence_path,
                 {
-                    "schema": "market_predictor.outcome_evidence.v1",
+                    "schema": "market_predictor.outcome_evidence",
                     "evidence_sha256": outcome.evidence_sha256,
                     "rows": evidence_rows,
                 },
@@ -143,19 +143,19 @@ class OutcomeRepository:
             )
         return outcome
 
-    def load_intent(self, maturation_key: str) -> PredictionMaturationIntentV3:
+    def load_intent(self, maturation_key: str) -> PredictionMaturationIntent:
         intent = self._load_model(
             self._key_path("intents", maturation_key),
-            PredictionMaturationIntentV3,
+            PredictionMaturationIntent,
         )
         if intent.maturation_key != maturation_key:
             raise PredictionConflictError
         return intent
 
-    def load_outcome(self, maturation_key: str) -> MaturedOutcomeV3:
+    def load_outcome(self, maturation_key: str) -> MaturedOutcome:
         outcome = self._load_model(
             self._key_path("outcomes", maturation_key),
-            MaturedOutcomeV3,
+            MaturedOutcome,
         )
         if outcome.maturation_key != maturation_key:
             raise PredictionConflictError
@@ -183,19 +183,19 @@ class OutcomeRepository:
             raise PredictionConflictError
         return value
 
-    def intents(self) -> list[PredictionMaturationIntentV3]:
+    def intents(self) -> list[PredictionMaturationIntent]:
         root = self.root / "intents"
         if not root.exists():
             return []
         return [self.load_intent(path.stem) for path in sorted(root.glob("*/*.json"))]
 
-    def observations(self) -> list[PredictionMonitoringObservationV2]:
+    def observations(self) -> list[PredictionMonitoringObservation]:
         root = self.root / "observations"
         if not root.exists():
             return []
-        observations: list[PredictionMonitoringObservationV2] = []
+        observations: list[PredictionMonitoringObservation] = []
         for path in sorted(root.glob("*/*.json")):
-            observation = self._load_model(path, PredictionMonitoringObservationV2)
+            observation = self._load_model(path, PredictionMonitoringObservation)
             if observation.observation_id != path.stem:
                 raise PredictionConflictError
             if observation.maturation_key is not None:
@@ -211,7 +211,7 @@ class OutcomeRepository:
     def has_outcome(self, maturation_key: str) -> bool:
         return self._key_path("outcomes", maturation_key).exists()
 
-    def outcomes(self) -> list[MaturedOutcomeV3]:
+    def outcomes(self) -> list[MaturedOutcome]:
         root = self.root / "outcomes"
         if not root.exists():
             return []
@@ -271,7 +271,7 @@ def _semantic_record_key(
     loaded: dict[str, Any],
     semantic_prediction_id: str,
 ) -> str:
-    if loaded.get("schema") != "market_predictor.semantic_prediction.v1":
+    if loaded.get("schema") != "market_predictor.semantic_prediction":
         raise PredictionConflictError
     if loaded.get("semantic_prediction_id") != semantic_prediction_id:
         raise PredictionConflictError
@@ -284,8 +284,8 @@ def _semantic_record_key(
 
 
 def _assert_outcome_matches_intent(
-    outcome: MaturedOutcomeV3,
-    intent: PredictionMaturationIntentV3,
+    outcome: MaturedOutcome,
+    intent: PredictionMaturationIntent,
 ) -> None:
     try:
         label_cost_value = intent.label_policy["round_trip_cost_bps"]
@@ -315,7 +315,7 @@ def _validate_evidence_record(
 ) -> None:
     rows = record.get("rows")
     if (
-        record.get("schema") != "market_predictor.outcome_evidence.v1"
+        record.get("schema") != "market_predictor.outcome_evidence"
         or record.get("evidence_sha256") != expected_sha256
         or not isinstance(rows, list)
         or content_sha256(rows) != expected_sha256
