@@ -35,7 +35,7 @@ def evaluate_swing_maturation(
     bars: pd.DataFrame,
 ) -> PathEvaluation:
     policy = intent.label_policy
-    require_policy(policy, "policy", "market_predictor.swing_outcome_policy.v1")
+    require_policy(policy, "policy", "market_predictor.swing_outcome_policy")
     if intent.decision_atr is None:
         raise DataReadinessError("swing intent has no decision ATR")
     horizon = policy_int(policy, "horizon_sessions")

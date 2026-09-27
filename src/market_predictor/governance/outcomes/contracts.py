@@ -189,7 +189,7 @@ class PredictionMaturationIntent(_SwingViewContract):
         horizon = swing_horizon_sessions(self.horizon)
         if (
             self.label_policy.get("policy")
-            != "market_predictor.swing_outcome_policy.v1"
+            != "market_predictor.swing_outcome_policy"
             or self.label_policy.get("horizon_sessions") != horizon
             or prediction_policy.horizon_sessions != horizon
         ):

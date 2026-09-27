@@ -8,7 +8,7 @@ def swing_outcome_policy(contract: SwingContract) -> dict[str, object]:
     """Return the complete policy needed to reproduce a served swing outcome."""
 
     return {
-        "policy": "market_predictor.swing_outcome_policy.v1",
+        "policy": "market_predictor.swing_outcome_policy",
         "horizon_sessions": contract.horizon_sessions,
         "entry_reference": contract.entry_reference,
         "exit_rule": contract.exit_rule,

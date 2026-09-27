@@ -103,14 +103,14 @@
         "exit_rule": "target_stop_timeout",
         "growth_benchmark": "QQQ",
         "horizon_sessions": 10,
-        "policy": "market_predictor.swing_outcome_policy.v1",
+        "policy": "market_predictor.swing_outcome_policy",
         "round_trip_cost_bps": 20.0,
         "same_bar_barrier_resolution": "stop_first",
         "sector_benchmark": "point_in_time_sector_etf",
         "stop_atr_multiple": 1.5,
         "target_atr_multiple": 3.0
       },
-      "label_policy_sha256": "0e39d3d82c0facb2d73f5ebadf8ab724a4cd06f138c84d9b5f0cb0875630ee4b",
+      "label_policy_sha256": "92bc599f3366c5047275da29845f9f4a3d44e15ce6a844d189bd4d47ec90923a",
       "model_type": "ten_session_sector_relative_swing_classifier",
       "path": "models/swing/generations/43de6f03c79f94f7b82f226408c810b8350b61dba0d51768d2e0ebd4ef2f3d8d/model/model.joblib",
       "prediction_policy": {
