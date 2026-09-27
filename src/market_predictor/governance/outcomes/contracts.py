@@ -355,10 +355,17 @@ class MaturedOutcome(_SwingViewContract):
             raise ValueError("matured outcome holding period is inconsistent with its horizon")
         if (self.fixed_horizon_net_return is None) != (self.fixed_horizon_excess_return_vs_sector is None):
             raise ValueError("matured outcome fixed-horizon returns must be recorded together")
-        # A timeout exits at the Nth close: the fixed-horizon interval, net of the same label cost.
+        # A timeout exits at the Nth close: the fixed-horizon interval, net of the same label
+        # cost, with the sector ETF over the same entry open to Nth close.
         if self.path_outcome == "timeout" and (
             self.fixed_horizon_net_return is None
+            or self.fixed_horizon_excess_return_vs_sector is None
             or not math.isclose(self.fixed_horizon_net_return, self.label_net_return, abs_tol=1e-12)
+            or not math.isclose(
+                self.fixed_horizon_net_return - self.fixed_horizon_excess_return_vs_sector,
+                self.sector_return,
+                abs_tol=1e-12,
+            )
         ):
             raise ValueError("matured timeout must carry its fixed-horizon return")
         entry_session = self.entry_time_utc.astimezone(NEW_YORK).date()

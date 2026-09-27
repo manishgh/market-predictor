@@ -71,7 +71,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
     def test_superseded_observation_and_outcome_versions_are_refused(self) -> None:
         intent = _intent()
         observation = monitoring_observation_from_intent(intent).model_dump(mode="python", exclude={"observation_id"})
-        outcome = _outcome(intent, [{"ticker": "MSFT"}]).model_dump(mode="python", exclude={"outcome_id"})
+        outcome = _outcome(intent, _evidence(intent)).model_dump(mode="python", exclude={"outcome_id"})
         for model, content, key, version in (
             (PredictionMonitoringObservation, observation, "observation_id", "market_predictor.prediction_observation.v1"),
             (MaturedOutcome, outcome, "outcome_id", "market_predictor.matured_outcome.v2"),
@@ -114,7 +114,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
             with self.assertRaises(PredictionConflictError):
                 repository.drop_pending(first.maturation_key, session)
 
-            evidence = [{"ticker": "MSFT"}]
+            evidence = _evidence(first)
             repository.record_outcome(first, _outcome(first, evidence), evidence_rows=evidence)
             self.assertEqual(repository.pending(), [])
 
@@ -196,7 +196,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
             repository = OutcomeRepository(Path(temp_dir))
             intent = _intent()
             repository.record_intent(intent)
-            evidence = [{"ticker": "MSFT"}]
+            evidence = _evidence(intent)
             late = _outcome(intent, evidence, entry_offset=2)
 
             with self.assertRaises(PredictionConflictError):
@@ -204,7 +204,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
 
     def test_outcome_holding_period_and_timeout_bind_their_fixed_horizon_values(self) -> None:
         intent = _intent()
-        content = _outcome(intent, [{"ticker": "MSFT"}]).model_dump(mode="python", exclude={"outcome_id"})
+        content = _outcome(intent, _evidence(intent)).model_dump(mode="python", exclude={"outcome_id"})
         cases = {
             "exit before its holding period": {"exit_time_utc": content["exit_time_utc"] - timedelta(days=1)},
             "timeout without the fixed horizon": {
@@ -212,18 +212,33 @@ class OutcomeRepositoryTests(unittest.TestCase):
                 "fixed_horizon_excess_return_vs_sector": None,
             },
             "timeout with another fixed-horizon return": {"fixed_horizon_net_return": 0.01},
+            "timeout with another sector interval": {
+                "fixed_horizon_excess_return_vs_sector": content["fixed_horizon_net_return"] - 0.5,
+            },
         }
         for name, changes in cases.items():
             changed = {**content, **changes}
             with self.subTest(name), self.assertRaises(ValidationError):
                 MaturedOutcome.model_validate({**changed, "outcome_id": content_sha256(changed)})
 
+    def test_outcome_decision_close_must_be_its_evidence_decision_bar(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent()
+            repository.record_intent(intent)
+            for name, evidence in (
+                ("another close", [{**_evidence(intent)[0], "close": 99.0}]),
+                ("no decision bar", [{"ticker": intent.ticker, "session_date_et": "2026-07-27", "close": 100.25}]),
+            ):
+                with self.subTest(name), self.assertRaises(PredictionConflictError):
+                    repository.record_outcome(intent, _outcome(intent, evidence), evidence_rows=evidence)
+
     def test_pending_index_holds_only_current_entries(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repository = OutcomeRepository(Path(temp_dir))
             intent = _intent()
             repository.record_intent(intent)
-            evidence = [{"ticker": "MSFT"}]
+            evidence = _evidence(intent)
             repository.record_outcome(intent, _outcome(intent, evidence), evidence_rows=evidence)
 
             self.assertEqual(list((Path(temp_dir) / "pending").iterdir()), [])
@@ -310,7 +325,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
 
     def test_swing_outcome_rejects_legacy_path_and_calibration_target(self) -> None:
         intent = _intent()
-        evidence = [{"ticker": "MSFT"}]
+        evidence = _evidence(intent)
         valid = _outcome(intent, evidence).model_dump(
             mode="python",
             exclude={"outcome_id"},
@@ -346,7 +361,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
 
     def test_outcome_rejects_availability_before_exit(self) -> None:
         intent = _intent()
-        valid = _outcome(intent, [{"ticker": "MSFT"}]).model_dump(
+        valid = _outcome(intent, _evidence(intent)).model_dump(
             mode="python",
             exclude={"outcome_id"},
         )
@@ -361,7 +376,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
 
     def test_outcome_rejects_inconsistent_return_arithmetic(self) -> None:
         intent = _intent()
-        evidence = [{"ticker": "MSFT"}]
+        evidence = _evidence(intent)
         valid = _outcome(intent, evidence).model_dump(
             mode="python",
             exclude={"outcome_id"},
@@ -378,7 +393,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
             repository = OutcomeRepository(Path(temp_dir))
             intent = _intent()
             attempt = _attempt(intent)
-            evidence = [{"ticker": "MSFT", "bar_start_utc": "2026-07-27T13:30:00+00:00"}]
+            evidence = _evidence(intent, bar_start_utc="2026-07-27T13:30:00+00:00")
             outcome = _outcome(intent, evidence)
 
             repository.record_intent(intent)
@@ -399,7 +414,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
             repository = OutcomeRepository(Path(temp_dir))
             intent = _intent()
             repository.record_intent(intent)
-            evidence = [{"ticker": "MSFT", "bar_start_utc": "2026-07-27T13:30:00+00:00"}]
+            evidence = _evidence(intent, bar_start_utc="2026-07-27T13:30:00+00:00")
             outcome = _outcome(intent, evidence)
 
             with ThreadPoolExecutor(max_workers=8) as executor:
@@ -420,7 +435,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             repository = OutcomeRepository(Path(temp_dir))
             intent = _intent()
-            evidence = [{"ticker": "MSFT"}]
+            evidence = _evidence(intent)
             outcome = _outcome(intent, evidence)
             repository.record_intent(intent)
             repository.record_outcome(intent, outcome, evidence_rows=evidence)
@@ -444,7 +459,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             repository = OutcomeRepository(Path(temp_dir))
             intent = _intent()
-            evidence = [{"ticker": "MSFT"}]
+            evidence = _evidence(intent)
             repository.record_intent(intent)
             content = _outcome(intent, evidence).model_dump(
                 mode="python",
@@ -566,7 +581,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             repository = OutcomeRepository(Path(temp_dir))
             intent = _intent()
-            evidence = [{"ticker": "MSFT"}]
+            evidence = _evidence(intent)
             outcome = _outcome(intent, evidence)
             repository.record_intent(intent)
             repository.record_outcome(intent, outcome, evidence_rows=evidence)
@@ -610,6 +625,11 @@ def _crash_before(write: Callable[[Path, object], None], failing: int) -> Callab
         write(path, value)
 
     return call
+
+
+def _evidence(intent: PredictionMaturationIntent, **extra: object) -> list[dict[str, object]]:
+    """Outcome evidence holding the decision bar, whose close `_outcome` records."""
+    return [{"ticker": intent.ticker, "session_date_et": intent.decision_session_et.isoformat(), "close": 100.25, **extra}]
 
 
 def _held_open(operation: Callable[..., Any], refusals: int) -> Callable[..., Any]:

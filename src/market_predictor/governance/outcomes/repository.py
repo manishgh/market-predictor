@@ -143,7 +143,7 @@ class OutcomeRepository:
             raise PredictionConflictError from exc
         if stored != intent:
             raise PredictionConflictError
-        _assert_outcome_matches_intent(outcome, intent)
+        _assert_outcome_matches_intent(outcome, intent, evidence_rows)
         evidence_path = self._path(session, "evidence", outcome.evidence_sha256)
         outcome_path = self._path(session, "outcomes", outcome.maturation_key)
         evidence: dict[str, object] = {
@@ -178,11 +178,11 @@ class OutcomeRepository:
             intent = self.load_intent(maturation_key, session)
         except (FileNotFoundError, PredictionConflictError) as exc:
             raise PredictionConflictError from exc
-        _assert_outcome_matches_intent(outcome, intent)
-        _validate_evidence_record(
+        rows = _validate_evidence_record(
             _load_object(self._path(session, "evidence", outcome.evidence_sha256)),
             outcome.evidence_sha256,
         )
+        _assert_outcome_matches_intent(outcome, intent, rows)
         return outcome
 
     def has_outcome(self, maturation_key: str, session: date) -> bool:
@@ -434,6 +434,7 @@ def _semantic_record_key(
 def _assert_outcome_matches_intent(
     outcome: MaturedOutcome,
     intent: PredictionMaturationIntent,
+    evidence_rows: list[dict[str, object]],
 ) -> None:
     try:
         label_cost_value = intent.label_policy["round_trip_cost_bps"]
@@ -443,6 +444,17 @@ def _assert_outcome_matches_intent(
         label_cost_value, (int, float)
     ):
         raise PredictionConflictError
+    try:
+        entry_session = session_after(intent.decision_session_et, 1)
+    except DataReadinessError as exc:
+        raise PredictionConflictError from exc
+    # The recorded decision close, which prices the execution cost, is the evidence's decision bar.
+    decision = intent.decision_session_et.isoformat()
+    decision_closes = [
+        row.get("close")
+        for row in evidence_rows
+        if row.get("ticker") == intent.ticker and row.get("session_date_et") == decision
+    ]
     if (
         outcome.semantic_prediction_id != intent.semantic_prediction_id
         or outcome.snapshot_id != intent.snapshot_id
@@ -454,7 +466,8 @@ def _assert_outcome_matches_intent(
         or outcome.label_round_trip_cost_bps != float(label_cost_value)
         or outcome.execution_participation_fraction != 0.0
         # Entry is the open of the first session after the decision.
-        or outcome.entry_time_utc.astimezone(NEW_YORK).date() != session_after(intent.decision_session_et, 1)
+        or outcome.entry_time_utc.astimezone(NEW_YORK).date() != entry_session
+        or decision_closes != [outcome.decision_close]
     ):
         raise PredictionConflictError
 
@@ -462,15 +475,17 @@ def _assert_outcome_matches_intent(
 def _validate_evidence_record(
     record: dict[str, Any],
     expected_sha256: str,
-) -> None:
+) -> list[dict[str, object]]:
     rows = record.get("rows")
     if (
         record.get("schema") != "market_predictor.outcome_evidence"
         or record.get("evidence_sha256") != expected_sha256
         or not isinstance(rows, list)
+        or any(not isinstance(row, dict) for row in rows)
         or content_sha256(rows) != expected_sha256
     ):
         raise PredictionConflictError
+    return rows
 
 
 def _write_json_durable(path: Path, value: object) -> None:

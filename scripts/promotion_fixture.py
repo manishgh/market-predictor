@@ -247,6 +247,10 @@ def _write_synthetic_shadow_outcomes(
                     "side": side,
                     "decision_group_id": group_id,
                     "ordinal": index,
+                    # The decision bar, whose close the synthetic outcome records.
+                    "ticker": intent.ticker,
+                    "session_date_et": intent.decision_session_et.isoformat(),
+                    "close": 100.0,
                 }
             ]
             repository.record_outcome(

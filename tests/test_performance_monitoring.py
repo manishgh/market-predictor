@@ -26,7 +26,7 @@ from market_predictor.governance.outcomes.performance import (
     write_performance_report,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
-from tests.test_outcome_repository import _intent, _outcome
+from tests.test_outcome_repository import _evidence, _intent, _outcome
 
 RETIRED_CALIBRATION_FIELDS = (
     "opportunity_observed_rate",
@@ -44,7 +44,7 @@ class PerformanceMonitoringTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             repository = OutcomeRepository(Path(temp_dir))
             intent = _intent_variant("MSFT", "1", probability=0.8)
-            evidence = [{"ticker": intent.ticker}]
+            evidence = _evidence(intent)
             early = _outcome(intent, evidence, entry_offset=0)
             repository.record_intent(intent)
 
@@ -641,7 +641,7 @@ def _record(
     net_return: float,
     excess_return: float,
 ) -> None:
-    evidence = [{"ticker": intent.ticker, "maturation_key": intent.maturation_key}]
+    evidence = _evidence(intent, maturation_key=intent.maturation_key)
     base = _outcome(intent, evidence).model_dump(
         mode="python",
         exclude={"outcome_id"},
