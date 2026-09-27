@@ -1434,7 +1434,34 @@ Monitoring implementation record (September 27):
   reports open only the partitions their window reaches (a test records the opened
   sessions); maturation walks only the index. The design's "year of cross-sections" test
   became a partition-bounded read test plus a measured benchmark (see the handoff), since
-  writing 121,000 intents takes hours.
+  writing 121,000 intents takes about 70 minutes.
+- Part (5) review fixes `157f330` (code review: two majors; ML review: minors only).
+  - Registration writes the pending entry before the semantic record, and a rerun
+    restores a missing entry of the canonical intent, so a crash at any write leaves the
+    intent indexed (a crash-injection test covers each of the five writes).
+  - Index entries take no lock file, so `pending/` holds only current entries.
+  - The worker matures an intent only after its horizon's last close and records no
+    attempt before it. This also protects part (2a): an early exit matured before day
+    ten closed would have stored its outcome, which is immutable, without the
+    fixed-horizon return.
+  - The worker drops an entry whose semantic record names another intent, and leaves an
+    entry whose registration has not yet written its semantic record for the rerun; its
+    summary counts index entries by what happened to them.
+  - Reports load each intent once per partition; the repository refuses the flat
+    layout, skips plain files among sessions, checks an attempt's session against its
+    intent, and retries Windows sharing refusals on reads and replacements (four pauses,
+    0.75 s in all). Hypothesis decision groups must be timezone-aware decision times,
+    checked at declaration and by causal shadow.
+  - Part (2b) design inputs: recording an attempt only when its status or reasons change
+    needs the attempt append order part (2) defines; and a target or stop reached before
+    a missing session may mature only when that session was requested and came back empty
+    (a receipt), because after the horizon closes a session can also be missing only
+    because it was not collected yet.
+- Part (2a) `c39c68a`: a target or stop reached on the stock's observed consecutive
+  prefix matures with that exit; without such an exit, the outcome stays pending on the
+  stock's missing sessions. Outcomes record `holding_sessions` and, when the stock's
+  whole path is observed, the fixed-horizon net return and sector excess (next open to
+  the Nth close after the label cost), the trainer's economic target.
 - Carried forward from the part (1) reviews:
   - Until part (4), sufficiency still counts distinct matured decision groups (10) while
     the lookback check already assumes part (4)'s effective periods (10 x N sessions);

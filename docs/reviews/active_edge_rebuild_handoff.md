@@ -246,12 +246,37 @@ nullable `training_data_end`), the four HEAD defects fixed, and the open replay 
   (355 files) and Ruff clean. Both diff reviews found no blocker and no major; their
   minors are fixed in `2f05100` (444 affected tests passed, strict mypy and Ruff clean).
 - Monitoring part (5) `a9c1b89`: session partitions and a pending index (511 affected
-  tests passed, strict mypy and Ruff clean). A background benchmark measures report and
-  pending-scan cost against history length; its result goes here. Diff review of part (5)
-  follows; then part (2), outcome evidence. Verification: 55 affected test files
+  tests passed, strict mypy and Ruff clean). Verification: 55 affected test files
   in seven batches, all passed except `test_canonical_cli`, whose lease clash is fixed in
   `c628aea` (it passes while the real lease is held); strict mypy (354 files) and Ruff
   clean; no pinned file changed; no stored data used a renamed identifier.
+- Monitoring part (2a) `c39c68a`: a target or stop reached before a data gap matures with
+  that exit; outcomes record holding sessions and the fixed-horizon net return and sector
+  excess (the trainer's economic target) when the whole path is observed. 524 affected
+  tests passed; strict mypy and Ruff clean.
+- Part (5) diff reviews: the code review found two majors (a crash between the semantic
+  record and the index entry lost the intent from the index for good, and `pending/`
+  kept one lock file per intent ever pending); the ML review found the same crash window
+  and minors only. All are fixed in `157f330` (details in the plan's monitoring record),
+  including the worker waiting for the horizon's last close, which keeps part (2a)'s
+  fixed-horizon return on early exits. Verification: the 24 import-affected test files,
+  305 passed, and the two edited ones again after the last edit, 42 passed; strict mypy
+  (355 files) and Ruff clean.
+- Repository benchmark (one-off scripts, not tests), 480 members per session:
+  - Registration writes 35 ms per intent, so a year of 121,000 intents takes about 70
+    minutes to build and a nightly cross-section about 17 seconds.
+  - A report over a 14-day window, after the fixes: with 10 stored sessions, 4,800 window
+    intents in 5.5 s and a 71.5 MiB peak Python heap; with 30 stored sessions, 5,280
+    window intents in 11.0 s and 95.4 MiB. The difference is the route-pending scan: no
+    outcome matured in the benchmark, so all 14,400 intents stay indexed, against about
+    5,300 (11 sessions) when maturation keeps up. Listing the index took 0.33 s and
+    1.09 s.
+  - Extrapolated to the 180-day default (about 62,000 window intents): about 70 seconds
+    and 1.1 GiB of Python heap, within the 5 GiB process budget.
+  - The first run (`a9c1b89`) reported 249 s and 397 s, but it timed the report under
+    `tracemalloc`, which slows every allocation; those timings are not comparable.
+- Diff review of `c39c68a` and `157f330` is requested from both reviewers; then part
+  (2b), outcome evidence: receipts, cessation and `unresolvable`.
 - TradingFlow follow-ups, both display-only: swing signals read as neutral in the
   advisory model-direction view; the hard-coded `market_predictor.prediction.v1` label.
 
