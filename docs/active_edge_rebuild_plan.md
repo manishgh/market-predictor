@@ -1521,6 +1521,96 @@ Monitoring implementation record (September 27):
     them), and computes outcome metrics and sufficiency only over decisions whose
     deadline has passed, so the newest edge is not conditioned on fast maturation.
 
+Part (2b) outcome evidence: implementation design (September 27; for review before code)
+
+It implements the consolidated decisions "Outcome evidence", "Symbol changes and
+cessation" and "Unresolvable" together with the part (2a) review inputs. No real
+prediction is registered or matured yet, so no stored record changes.
+
+1. Outcome-bar collection (`collection/outcome_bars.py`; the collection layer may use
+   `sources`, `evidence` and `core`, never `governance`).
+   - Governance builds request units from the pending index: one unit per decision
+     session and horizon, holding the point-in-time tickers of its canonical intents
+     whose horizon's last close has passed, plus SPY, QQQ and their sector ETFs. A unit
+     asks for daily SIP bars adjusted `all` from the decision session to the Nth session,
+     with `asof` set to the decision session, so Alpaca maps each symbol to the company it
+     named that day and follows its later renames. At most 50 symbols per page, following
+     page tokens (`AlpacaSource.fetch_bars_page`).
+   - Every page is kept byte for byte (`bodies/<sha256>.json`). Each unit gets an
+     immutable, self-hashed receipt (`receipts/<decision session>/<receipt id>.json`):
+     requested symbols, sessions and `asof`, URLs, status, `retrieved_at_utc`, page
+     hashes, and for each requested symbol the sessions returned. A symbol absent from the
+     response and one returned with an empty list are both recorded as "no bars" (the
+     Alpaca reference does not say which one it sends).
+   - The loader verifies every page and receipt hash and decodes daily bars into the
+     maturation schema: XNYS session open and close, availability the later of the close
+     plus 15 minutes and `retrieved_at_utc`, feed `sip`, adjustment `all`. Unusable bars
+     (zero volume, prices out of order) are kept for the pinned validator to mark; the
+     loader does not call `canonicalize_bars`, which rejects a batch with any invalid row.
+   - Corporate actions: a new `AlpacaSource.fetch_corporate_actions_page` keeps the raw
+     bytes (the existing `fetch_security_transitions` keeps none). For units with gaps it
+     asks for name changes, cash, stock and stock-and-cash mergers, reorganizations and
+     worthless removals over the path window extended by the grace, with receipts as for
+     bars, including the cash merger `rate`.
+   - Name changes: when a name change of a unit's ticker falls inside the path and the
+     stock's bars stop there, the next collection asks for the new symbol with `asof` on
+     its effective date. Bars are joined back under the intent's ticker, and the evidence
+     records the symbol used for each session.
+   - One command, `collect-outcome-bars`, takes a named monitoring lease (not the
+     heavy-job lease, so a multi-day research job cannot block it) and the 90% memory
+     guard. It never matures anything.
+2. Evidence classification (`governance/outcomes/evidence.py`).
+   - A receipt settles session s for symbol x when it asked for s for x and was retrieved
+     at or after the horizon's last close plus the grace (`pending_grace_days` from the
+     pinned drift policy). The latest settling receipt decides. Before that deadline no
+     gap is proven.
+   - A settled session without a usable bar, because none came back or only an unusable
+     one did, is a proven gap; these form `proven_stock_gaps`.
+   - A duplicated stock row is a data defect and blocks the attempt; it is never a gap.
+3. Outcome states and attempts.
+   - `unresolvable` is terminal until a later maturation supersedes it. After the
+     deadline it requires the barrier unresolved on the usable path, the first gap
+     proven, and one of:
+     - cessation: a merger or reorganization naming the point-in-time ticker as acquiree,
+       or its worthless removal, effective between the entry and the first gap; or a
+       point-in-time membership removal effective in that interval (the sub-reason names
+       the evidence);
+     - `interior_gap`: a proven gap followed by usable bars (a halt). The served label
+       cannot cross it, and the trainer drops such rows too.
+   - A proven tail gap without cessation evidence stays pending
+     (`stock_gap_without_cessation`) and turns overdue for operator action.
+   - Attempts become an append log: `attempts/<key>/<sequence>.json`, the sequence taken
+     under the key's lock; the latest decides. An attempt is written only when its status,
+     reasons or missing intervals differ from the latest. Attempts record the grace, the
+     drift policy hash and the receipt ids they used.
+   - Membership removal needs the point-in-time membership authority: `mature-outcomes`
+     reads it from the live-input root through its pointer. Until the publisher (after
+     part 3) writes one, membership removal is unavailable evidence, never assumed.
+   - The worker keeps unresolvable intents in the index and re-evaluates them every run,
+     so new receipts can supersede them. `_route_oldest_pending` skips an intent whose
+     latest attempt is `unresolvable`.
+   - `mature-outcomes` reads the collected bars and receipts instead of a bars artifact,
+     and the pinned drift policy for the grace.
+4. Reporting.
+   - Cohort rows add `unresolvable_selected_samples`. The unresolvable share is
+     unresolvable / (matured + unresolvable) over selected outcomes whose deadline has
+     passed.
+   - The drift policy gains `maximum_unresolvable_share = 0.05`. After the minimum
+     matured samples, a larger share makes the route not ready
+     (`unresolvable_share_exceeded`).
+   - A diagnostic sensitivity that never gates: the mean excess return with each
+     unresolvable outcome filled by (a) its last usable close and (b) a delisting proxy:
+     the cash `rate` for cash mergers; -30% for NYSE and NYSE American and -55% for Nasdaq
+     removals that are not mergers (Shumway 1997; Shumway and Warther 1999); -100% for
+     worthless removals; the last usable close for stock mergers and interior gaps. The
+     listing exchange comes from an Alpaca asset receipt fetched for each cessation case.
+5. Delivery in three parts, each with its own diff review: (2b-1) sources and collection
+   with receipts and loader; (2b-2) classification, states, the attempt log, the worker
+   and the command; (2b-3) reporting and drift. Tests: settled and unsettled receipts, a
+   renamed symbol, an absent and an empty symbol, an unusable bar as a gap, an interior
+   halt, each cessation sub-reason, attempt order and change-only writes, supersession,
+   route pending exclusion, the ceiling with few samples, and the sensitivity values.
+
 The September 20 user instruction explicitly extends the completed HTTP/CLI and
 TradingFlow cleanup to all remaining Market Predictor implementation. This is a
 changed requirement, not a reopening of previously passed tests without cause.
