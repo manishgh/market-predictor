@@ -14,6 +14,13 @@ This is the only active execution plan. Exact artifact state is recorded in
 
 ## Objective And Boundary
 
+Naming rule (user, September 27): nothing is in production, so no class, type, record
+schema, file or identifier carries a version number (`V3`, `.v3`, `_v1`) in either
+repository. Old-format records are refused by strict validation (unknown fields
+forbidden, required fields), not by version literals. Only the public API may be
+versioned, and only once it is in production. Names bound in closed, hash-pinned
+evidence stay as recorded.
+
 Current product scope: **long-only swing (roughly one to three weeks) and a
 separate open-ended investment cohort**, with verifiable net performance
 against buy-and-hold SPY. Dedicated day-trading strategies and training are being
@@ -1249,6 +1256,105 @@ now, as one step before retirement sub-slice (c). Measured facts it builds on:
    wrong-signed model; the cross-section command with an excluded member and a missing
    session; bundle v3 refusal without or with mismatched boundaries; replay refusal at
    the boundary and acceptance after it; replay actionability from `selected_for_policy`.
+
+Consolidated design review decisions for swing monitoring and replay (September 27;
+both reviews found two blockers each; these supersede the design above where they differ,
+and follow the naming rule: no versions, old records refused by strict validation):
+
+- Scope. Every mechanism works for any horizon N, but evidence minimums are set for the
+  served ten-session route. Ten independent periods at N=252 would need about ten years,
+  so the 63- and 252-session evidence policy belongs to the investment-target design, as
+  already decided ("Investment targets will get their own view and policy later").
+- Registration never waits on drift (blockers: the cross-section would inherit the
+  serving drift gate and a warming route could never collect evidence).
+  - `register-session-predictions` (CLI only) scores the whole cross-section without the
+    actionability gate. It still requires a verified promoted generation with
+    `promoted_at_utc <= as_of` and valid live inputs, and takes the heavy-job lease and
+    the admission lease.
+  - Serving to clients stays fail-closed; a warming route is in shadow monitoring.
+  - Every XNYS session from route activation gets a session record: `registered`
+    (members, scored, abstentions by reason) or `failed` (`exclusion_ceiling_exceeded`,
+    `inputs_unavailable`, `model_unavailable`, `registration_error`). It is written last,
+    as the commit marker, and is idempotent per route, release and session: an identical
+    rerun is accepted, a different one refused.
+  - Drift is not ready on unexplained gaps (no record, older than the grace) and warns
+    when registered sessions fall below a policy share of the window.
+- Population. Rates, sufficiency, the curve and the rank check use only cross-section
+  observations from `registered` sessions, one cross-section per route and session.
+  Request snapshots stay as audit records. A third abstention reason,
+  `sector_peer_floor`, covers members whose sector has too few eligible peers to rank;
+  it is recorded in coverage and not counted toward the 5% input-failure ceiling.
+- Snapshots record a scope, `request` or `decision_cross_section`; a cross-section
+  records its as-of time, route and member-set hash instead of a ticker list, so the
+  100-ticker request limit does not apply. Registration and replay handle both scopes.
+- Outcome evidence (blockers: missing bars cannot tell "not collected" from "did not
+  trade", and the terminal state was irreversible).
+  - A new outcome-bar collection requests each pending intent's path by
+    `canonical_security_id` and the point-in-time ticker per session, and keeps receipts
+    of every request, including empty provider responses.
+  - The managed barrier is applied to the observed consecutive prefix: a target or stop
+    reached before the first missing session matures with that exit (a stopped-out loss
+    is never lost).
+  - After the horizon's last close plus the grace, an outcome is `unresolvable` only when
+    the stock was requested for the missing sessions and came back empty, with the
+    point-in-time membership change as a sub-reason. Not requested means still pending.
+  - Attempts are an append log and the latest decides, so a later successful maturation
+    supersedes `unresolvable`.
+  - The grace has one source, the drift policy's `pending_grace_days`, which
+    `mature-outcomes` reads from the pinned policy file; each attempt records the grace
+    and the policy hash.
+  - The unresolvable share is unresolvable / (matured + unresolvable), applied only after
+    the minimum matured samples, against a drift-policy ceiling (5% for the ten-session
+    route). Dropping an unknown from an equal-weight group mean implicitly gives it the
+    group's mean return; the report says so and adds a diagnostic sensitivity (last
+    observed close; -30% for removals that are not mergers, after Shumway 1997).
+- Evidence and inference (blocker: counting only non-overlapping groups could never
+  reach the minimum within the lookback).
+  - Every overlapping daily group stays. Evidence is counted as effective periods,
+    matured decision sessions divided by N; sufficiency needs at least ten (100 matured
+    sessions for ten sessions). The report lookback defaults to 150 days, and a
+    validator refuses a lookback that cannot reach the minimum for its horizon.
+  - Means (excess return, rank correlation) carry Newey-West standard errors with N-1
+    lags over the daily group means, the standard treatment of overlapping returns.
+  - The N-sleeve curve (Jegadeesh and Titman, 1993) is marked to market daily from the
+    path evidence stored with each outcome; a group joins the curve once all its selected
+    outcomes are resolved.
+  - Excess-return thresholds are per session of actual holding time: the sum of excess
+    returns divided by the sum of holding sessions.
+- Score-versus-return check. Outcomes also record the fixed-horizon net return and
+  sector excess (next open to the Nth close), the served label's own basis rather than
+  the managed exit. The rank correlation is computed within each sector and averaged
+  per decision group, over all scored outcomes (a new path for non-selected ones); the
+  mean and its Newey-West t decide: warning at mean <= 0, severe at t <= -2, after the
+  minimum effective periods.
+- Repository scale. Outcome records are partitioned by decision session with a pending
+  index; reports read only their window's partitions plus the index, and maturation
+  iterates the index. A test builds a year of cross-sections (about 121,000 intents)
+  within the process budget.
+- Replay. The label boundary is the latest label availability over every row that
+  influenced the artifact: final fit, calibration, threshold-selection validation rows
+  and the locked test rows, since promotion depends on them. The bundle requires it
+  before `promoted_at_utc`; replay compares it strictly with the prediction row's
+  `decision_time_utc` (not the request's as-of), exposes it in its response, and uses the
+  exchange calendar's actual close instead of a fixed 16:00 (early closes). The contract
+  notes that `training_data_end` is not a look-ahead boundary.
+- The session helper lives in `governance/outcomes`; swing modules must not import it (a
+  dependency rule is added), a parity test ties it to the pinned `holding_calendar`, and
+  drift delegates to it. Pinned files (`holding_paths.py`, `barrier_and_rank.py`,
+  `label_paths.py`, `research_cohort.py`, `strategy_contract.py`) are only called, never
+  edited.
+- Delivery in reviewable parts, each with its own diff review: (1) sessions, overdue
+  and maturity windows; (2) outcome evidence: receipts, prefix resolution,
+  unresolvable; (3) cross-section registration, snapshot scopes, session records and
+  population; (4) inference, curve and rank check; (5) repository partitioning;
+  (6) replay boundary.
+- Added exit tests (beyond the design's): registration while drift is warming or not
+  ready; cross-sections over 100 members through registration and replay; identical and
+  conflicting session reruns; a republished live generation not double counted; a
+  symbol change or collection gap never becoming unresolvable; a stop before a gap
+  maturing; the ceiling with small samples; the rank check on the fixed-horizon basis;
+  a repository scale budget; refusal of records in the old shapes; replay at the exact
+  boundary and on an early-close day; the session-helper dependency rule.
 
 The September 20 user instruction explicitly extends the completed HTTP/CLI and
 TradingFlow cleanup to all remaining Market Predictor implementation. This is a

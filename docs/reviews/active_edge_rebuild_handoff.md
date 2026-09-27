@@ -173,9 +173,17 @@ SEC clock page runs (archive authority SHA256
   `data/raw/sec_filing_documents_later_sealed_corrected_clock` (reports unit and attempt
   counts only; stays unread): the first run, 16:56-17:49 UTC, ended `incomplete` with one
   index unit lacking a final outcome, checkpoint
-  `ed0effec0d6776bc4a11398087b9fe577194faad6b6c3f5734953e76c935fea4`. Running now: the resume
-  with that checkpoint (log `..._later_sealed_corrected_clock_resume1.log`). Then slice
-  closure.
+  `ed0effec0d6776bc4a11398087b9fe577194faad6b6c3f5734953e76c935fea4`. The first resume
+  (17:50-18:27 UTC) stopped at the 90% system-memory guard with its checkpoint
+  `3901c36b...` saved; the second resume (September 27 05:04-05:35 UTC) completed:
+  status `complete`, manifest
+  `f2a24e1d90556a5ed68adc5c36e1d649e3876cdc25b8b9b50700786b15aa8729`, checkpoint
+  `e32b056529dc470da4937da60253eae6e57ca098b5db0896852dce6e1fb7c250`; all 9,246 index units
+  and 19,061 document units archived, 1 over the size limit; 166 retryable attempts all
+  reached a final outcome. Both SEC collections are complete; slice closure remains.
+- A `test_canonical_cli` failure seen twice during the collections is explained: the
+  decision build takes the heavy-job workspace lease, which the collector held (exit 75).
+  The test now uses a private runtime directory.
 
 Retirement sub-slice (b) `7dd6d44` is pushed (187 files; designs consolidated in
 `c126c22`; diff review by both reviewers pending). Serving, selection, bundles, readiness,
@@ -213,8 +221,17 @@ nullable `training_data_end`), the four HEAD defects fixed, and the open replay 
     `7dd6d44` or `ea93712`, so the sealed collector's resume re-hashes unchanged files.
 - User decision (September 26): fix the ML review's verified monitoring defects and the
   investment replay defects now, as one step before (c). The design, "Swing monitoring
-  and replay correctness design", is in the plan and is frozen for both reviewers'
-  design review before any code.
+  and replay correctness design", is in the plan. Both design reviews (September 27)
+  found two blockers each; their consolidated decisions follow the design in the plan
+  and supersede it. They go back to both reviewers before any code. A draft session
+  helper and the replay-boundary edits are kept aside in the session scratchpad, not in
+  the tree.
+- Naming (user, September 27): `43e1fd2` removes version numbers from class names and
+  from every record identifier nothing persisted depends on; the API contract is
+  `market_predictor.prediction`, field `contract`. Verification: 55 affected test files
+  in seven batches, all passed except `test_canonical_cli`, whose lease clash is fixed in
+  `c628aea` (it passes while the real lease is held); strict mypy (354 files) and Ruff
+  clean; no pinned file changed; no stored data used a renamed identifier.
 - TradingFlow follow-ups, both display-only: swing signals read as neutral in the
   advisory model-direction view; the hard-coded `market_predictor.prediction.v1` label.
 
