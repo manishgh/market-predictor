@@ -122,6 +122,53 @@ class OutcomeMaturationTests(unittest.TestCase):
         )
         self.assertEqual(matured.path_outcome, "target_first")
 
+    def test_stop_before_a_gap_matures_without_the_fixed_horizon(self) -> None:
+        intent = swing_intent()
+        bars = _swing_bars()
+        msft = bars["ticker"].eq("MSFT")
+        bars.loc[msft & bars["session_date_et"].eq(date(2026, 7, 28)), "low"] = 50.0
+        bars = bars.loc[~(msft & bars["session_date_et"].ge(date(2026, 7, 30)))].copy()
+
+        matured, _ = mature_prediction(
+            intent, bars, observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC), source_artifact_sha256="9" * 64
+        )
+
+        assert isinstance(matured, MaturedOutcome)
+        self.assertEqual((matured.path_outcome, matured.holding_sessions), ("stop_first", 2))
+        self.assertIsNone(matured.fixed_horizon_net_return)
+        self.assertIsNone(matured.fixed_horizon_excess_return_vs_sector)
+
+    def test_gap_before_any_barrier_stays_pending_on_the_stock(self) -> None:
+        intent = swing_intent()
+        bars = _swing_bars()
+        msft = bars["ticker"].eq("MSFT")
+        bars = bars.loc[~(msft & bars["session_date_et"].ge(date(2026, 7, 29)))].copy()
+
+        pending, evidence = mature_prediction(
+            intent, bars, observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC), source_artifact_sha256="9" * 64
+        )
+
+        self.assertEqual(pending.status, "pending")
+        self.assertEqual(pending.reasons, ("required_bar_path_incomplete",))
+        self.assertIn("MSFT:2026-07-29", pending.missing_intervals)
+        self.assertEqual(evidence, [])
+
+    def test_fixed_horizon_returns_follow_the_trainer_target(self) -> None:
+        intent = swing_intent()
+        matured, _ = mature_prediction(
+            intent, _swing_bars(), observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC), source_artifact_sha256="9" * 64
+        )
+
+        assert isinstance(matured, MaturedOutcome)
+        cost = float(intent.label_policy["round_trip_cost_bps"]) / 10_000.0
+        # MSFT opens at 100 on the entry session and closes at 105 on the tenth; the sector
+        # ETF (XLK) opens at 201 and closes at 211 over the same interval.
+        self.assertAlmostEqual(matured.fixed_horizon_net_return or 0.0, 105.0 / 100.0 - 1.0 - cost)
+        self.assertAlmostEqual(
+            matured.fixed_horizon_excess_return_vs_sector or 0.0,
+            105.0 / 100.0 - 1.0 - cost - (211.0 / 201.0 - 1.0),
+        )
+
     def test_worker_matures_only_canonical_semantic_occurrence(self) -> None:
         with TemporaryDirectory() as temp_dir:
             repository = OutcomeRepository(Path(temp_dir))

@@ -140,6 +140,13 @@ def _outcome_from_path(
         "excess_return_vs_spy": net_return - path.spy_return,
         "excess_return_vs_qqq": net_return - path.qqq_return,
         "excess_return_vs_sector": net_return - path.sector_return,
+        "holding_sessions": path.holding_sessions,
+        "fixed_horizon_net_return": path.fixed_horizon_net_return,
+        "fixed_horizon_excess_return_vs_sector": (
+            None
+            if path.fixed_horizon_net_return is None or path.fixed_horizon_sector_return is None
+            else path.fixed_horizon_net_return - path.fixed_horizon_sector_return
+        ),
         "evidence_sha256": content_sha256(path.evidence_rows),
     }
     return MaturedOutcome.model_validate(

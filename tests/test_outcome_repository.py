@@ -532,6 +532,9 @@ def _outcome(
         "excess_return_vs_spy": net_return - 0.01,
         "excess_return_vs_qqq": net_return - 0.012,
         "excess_return_vs_sector": net_return - 0.008,
+        "holding_sessions": 10,
+        "fixed_horizon_net_return": 0.05 - label_cost_bps / 10_000.0,
+        "fixed_horizon_excess_return_vs_sector": 0.05 - label_cost_bps / 10_000.0 - 0.008,
         "evidence_sha256": content_sha256(evidence),
     }
     return MaturedOutcome.model_validate(

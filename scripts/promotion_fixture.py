@@ -373,6 +373,9 @@ def _synthetic_outcome(
         "excess_return_vs_spy": net_return,
         "excess_return_vs_qqq": net_return,
         "excess_return_vs_sector": net_return,
+        "holding_sessions": 10,
+        "fixed_horizon_net_return": net_return,
+        "fixed_horizon_excess_return_vs_sector": net_return,
         "evidence_sha256": content_sha256(evidence),
     }
     return MaturedOutcome.model_validate(

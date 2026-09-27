@@ -277,6 +277,11 @@ class MaturedOutcome(_SwingViewContract):
     excess_return_vs_spy: float
     excess_return_vs_qqq: float
     excess_return_vs_sector: float
+    holding_sessions: int = Field(ge=1)
+    # Next open to the Nth close after the label cost, and its excess over the sector ETF on
+    # the same interval (the trainer's economic target); None when the full path is missing.
+    fixed_horizon_net_return: float | None
+    fixed_horizon_excess_return_vs_sector: float | None
     evidence_sha256: str = Field(pattern=SHA256_PATTERN)
 
     @field_validator(
@@ -338,6 +343,13 @@ class MaturedOutcome(_SwingViewContract):
             for benchmark, excess in benchmark_excess
         ):
             raise ValueError("matured outcome benchmark excess return is inconsistent")
+        horizon_sessions = swing_horizon_sessions(self.horizon)
+        if self.holding_sessions > horizon_sessions or (
+            self.path_outcome == "timeout" and self.holding_sessions != horizon_sessions
+        ):
+            raise ValueError("matured outcome holding period is inconsistent with its horizon")
+        if (self.fixed_horizon_net_return is None) != (self.fixed_horizon_excess_return_vs_sector is None):
+            raise ValueError("matured outcome fixed-horizon returns must be recorded together")
         content = self.model_dump(mode="json", exclude={"outcome_id"})
         if content_sha256(content) != self.outcome_id:
             raise ValueError("matured outcome identity is invalid")

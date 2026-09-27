@@ -55,6 +55,11 @@ class MaturedPath:
     qqq_return: float
     sector_return: float
     evidence_rows: list[dict[str, object]]
+    holding_sessions: int
+    # Next open to the Nth close after the label cost, and the sector ETF over the same
+    # interval: the trainer's economic target. None when the stock's full path is not observed.
+    fixed_horizon_net_return: float | None
+    fixed_horizon_sector_return: float | None
 
 
 PathEvaluation = PendingPath | MaturedPath
