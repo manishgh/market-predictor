@@ -15,6 +15,15 @@ The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
 
+Work split (user decision, September 27): this developer owns `market-predictor`; a
+second developer (Astra, a separate ChatGPT/Codex session) owns `trading_flow`. They
+coordinate only through files, relayed by the user: the contract
+`docs/contracts/prediction_api.md` with its golden fixture
+`tests/fixtures/contracts/swing_prediction_response.v3.json` (`4dc5833`), the handoff
+`docs/contracts/tradingflow_handoff.md` (paths, boundaries, tasks), and TradingFlow's
+`docs/integration/market-predictor-notes.md` for acknowledgements and requests. Do not edit
+`trading_flow`; record every wire change in the contract's Change log first.
+
 September 25 user decisions: both investment forecast horizons, 63 and 252 exchange
 sessions, are approved as separate targets (allocation and risk budgets remain
 undecided). TradingFlow's three local commits (`afaafc0`, `5217fad`, `8525f80`) are
