@@ -1415,8 +1415,9 @@ review found a blocker; these complete the consolidated decisions above):
   beside the label boundary, and exposes the boundary in its response.
 - Repository partitioning also covers the semantic-canonical lookup path.
 - Order: (1) sessions, overdue and maturity windows; (5) repository partitioning;
-  (2) outcome evidence; (3) registration and population; (4) inference, curve and rank
-  check; (6) replay.
+  (2) outcome evidence; (3) registration and population; then the nightly live-input
+  publisher (the user's decision of September 27); (4) inference, curve and rank check;
+  (6) replay.
 - Consequence to state plainly: with fail-closed serving, a newly promoted release stays
   warming, with clients refused, for at least 100 matured sessions plus N plus the grace,
   about five and a half months, and again after every re-promotion.
@@ -1496,9 +1497,19 @@ Monitoring implementation record (September 27):
     changes; a response without a usable bar counts as empty; a duplicated stock row is a
     data defect, not a gap; an unusable session inside the path, with later valid bars
     and no exit before it, needs a terminal state of its own.
-  - Part (3): the session record surfaces unfinished registrations. Part (4): the managed
-    excess (net of the execution cost) and the fixed-horizon excess (net of the label
-    cost) are never compared or combined.
+  - Part (3): the session record surfaces unfinished registrations, and the API's v4
+    change also removes `PredictionRowEvidence.decision_atr`, which nothing reads now that
+    intents take the ATR fraction (one version change for TradingFlow, not two). Part (4):
+    the managed excess (net of the execution cost) and the fixed-horizon excess (net of
+    the label cost) are never compared or combined, and each statistic stays on its
+    stated basis.
+  - Confirmation reviews of `1ef0a7f`: no blocker, no major. Their minors are fixed in
+    `b872b30`: the repository binds the recorded decision close to the decision bar in the
+    outcome's evidence, on record and on load; a timeout's fixed-horizon sector return
+    must equal its managed sector return (the same interval); a calendar-edge failure in
+    the entry check is a record conflict. The ML review found no unintended change to any
+    statistic or population: every matured outcome now needs the same complete path, so
+    every one carries its fixed-horizon return.
 - Carried forward from the part (1) reviews:
   - Until part (4), sufficiency still counts distinct matured decision groups (10) while
     the lookback check already assumes part (4)'s effective periods (10 x N sessions);

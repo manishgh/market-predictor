@@ -281,12 +281,18 @@ nullable `training_data_end`), the four HEAD defects fixed, and the open replay 
   ATR is stored as a fraction, so later splits no longer move the stop and target; and
   the outcome contract ties timeouts and holding periods together. Verification: the
   25 import-affected test files, 318 passed, plus the dependency and architecture boundary tests, 230 passed; strict mypy (355 files) and Ruff clean.
+- Confirmation reviews of `1ef0a7f`: no blocker and no major from either. Their minors
+  are fixed in `b872b30` (decision close bound to the evidence's decision bar; a
+  timeout's sector interval checked; calendar-edge errors reported as conflicts).
+  Verification: the 25 import-affected test files, 319 passed; strict mypy (355 files)
+  and Ruff clean.
+- User decision (September 27): no production code publishes the swing live-input
+  generation (daily bars and point-in-time memberships behind `active_generation.json`),
+  so nothing can register or serve real predictions yet. The nightly live-input
+  publisher is built right after part (3), so registration is tested end to end on real
+  Alpaca data before parts (4) and (6).
 - Next: the part (2b) design (outcome-bar collection with receipts, cessation evidence,
   `unresolvable`, the attempt order), reviewed before code.
-- Open decision for the user: no production code publishes the swing live-input
-  generation (daily bars and point-in-time memberships behind
-  `active_generation.json`), so registration (part 3) cannot run on real data until a
-  publisher exists; it is not yet scheduled in the plan.
 - TradingFlow follow-ups, both display-only: swing signals read as neutral in the
   advisory model-direction view; the hard-coded `market_predictor.prediction.v1` label.
 
