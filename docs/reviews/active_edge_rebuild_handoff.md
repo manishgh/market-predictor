@@ -326,6 +326,19 @@ nullable `training_data_end`), the four HEAD defects fixed, and the open replay 
   set; strict mypy and Ruff clean. One corrupt receipt still blocks its decision session
   (fail closed); the operator path resolves the intents it holds. Part (2b-3), the
   unresolvable ceiling and the sensitivity, must land before registration runs.
+- Part (2b-3) `8f389fd`: the 5% unresolvable ceiling applied once evidence suffices
+  (`maximum_unresolvable_share`, new drift pin `1d21b757...`), and diagnostic sensitivity
+  fills on every entered unresolvable outcome: the last usable close and a stress value
+  (a merger's cash and acquirer shares at the acquirer's close; nothing for a worthless
+  removal; -55% otherwise, the listing exchange not yet recorded; the managed path past
+  a halt). Merger terms were measured on stored provider records (Xilinx 1.7234 AMD
+  shares, Zynga $3.50 plus 0.0406 Take-Two, FLIR $28 plus 0.0718 Teledyne), since the
+  provider documents no field meanings. The confirmation reviews of `1871f7e` are closed
+  here too: an operator resolution needs an overdue intent with a proven stock gap or
+  blocked evidence and a well-formed operator id, unreadable evidence never undoes it,
+  and provider evidence naming a reason replaces it; operator ids are not yet tied to
+  authenticated principals. Verification: the 26 import- and config-affected test files,
+  346 passed; strict mypy (361 files) and Ruff clean. Diff review requested.
 - TradingFlow follow-ups, both display-only: swing signals read as neutral in the
   advisory model-direction view; the hard-coded `market_predictor.prediction.v1` label.
 
