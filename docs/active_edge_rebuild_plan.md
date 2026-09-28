@@ -53,7 +53,8 @@ Part (2b-3) review fixes are implemented in `346e0ec`, with handoff receipt `21e
 Part (3)'s design is in `38c698e`; the September 28 continuation review below records
 three corrections before code. Resume with bounded part (3a), then (3b), then (3c).
 The nightly live-input publisher follows (3), before monitoring (4) and replay (6).
-No part (3) implementation or API v4 is claimed by this documentation checkpoint.
+Part (3a) is implemented in `b3c8761`; part (3b) is next. API v4 is published;
+TradingFlow consumer integration remains pending.
 
 Verification policy update (September 20): both repositories' `AGENTS.md` now use
 targeted code checks, affected component integration/integrity/causality checks,
@@ -1767,6 +1768,39 @@ It implements the consolidated decisions "Registration never waits on drift", "P
    registration while drift is warming or not ready; identical and conflicting reruns; a
    failed record replaced by a retry; a republished live generation not double counted; a
    session gap turning drift not ready; request snapshots refused by intent registration.
+
+
+Part (3a) implementation `b3c8761` (September 28, pushed): shared request/internal
+scoring, complete typed membership, natural peer-floor abstentions, cascaded input
+failure accounting and API v4. Empty eligible frames abstain without an estimator
+call and retain the decision cutoff. Internal scoring takes admission and bypasses
+only drift. The five-outcome fixture removes unused row-level `decision_atr`.
+Component verification: 302 passed, 1 opt-in memory benchmark skipped; live features,
+prediction API/service/snapshots, outcome intents, replay, package/architecture and
+continuity tests. Ruff clean on seven changed Python files; strict mypy clean on four
+source files. Local consolidated diff review found no remaining supported defect.
+Existing C# binary: 38 passed, 1 producer-fixture parity failure. C# source still
+consumes the retired unversioned contract. Its handoff records the v4 adoption/hash;
+consumer integration remains pending with TradingFlow's owner. No full suite,
+training, provider or sealed-data run; no owned worker remains. No readiness claim.
+
+Part (3b) implementation freeze: strict request/cross-section snapshot scope;
+canonical decision identity separate from audit timestamps/ids; durable route and
+session records. Bind full membership, response and source identities. Identical
+reruns reuse the first immutable audit snapshot; changed payloads fail. Under the
+monitoring lease, write a verified route activation anchor before scoring, intents
+for scored members and observations for every member, then a session commit marker
+binding exact record ids. Unavailable unscored feature metadata stays null. Partial
+writes are resumable but cannot authorize report population. A registered session
+cannot be replaced; failures can retry. Request snapshots remain audit-only. Replay
+reads either scope without constructing a >100-ticker public request. Add production
+registration and an audited not_run operation against a known route anchor.
+Exit tests: deterministic/reordered retries, changed payload/source rejection,
+>100 members, all-abstention, drift-blocked registration, request refusal, crash
+before commit, failed retry and tampering. Part (3c) consumes only committed sessions
+for population/coverage/drift. Publisher, training and collection ownership are outside
+this slice. The documentation push was rejected by automatic approval review pending
+explicit user authorization; local work may continue and publication stays pending.
 
 Part (3) continuation review (September 28, against `21ef677`):
 

@@ -4,7 +4,8 @@ Status: active
 Last updated: 2026-09-28
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `346e0ec` (monitoring part (2b-3) review fixes).
+Last completed implementation checkpoint: `b3c8761` (monitoring part (3a), API v4;
+TradingFlow consumer integration pending).
 Last implementation handoff receipt: `21ef677`; inspected HEAD and the local
 `origin/unified-swing-product` tracking ref both point there at continuation start.
 Latest pending design: `38c698e` (monitoring part (3), registration and population).
@@ -16,6 +17,39 @@ Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
+
+Part (3a) implementation `b3c8761` (September 28, pushed): shared request/internal
+scoring, complete typed membership, natural peer-floor abstentions, cascaded input
+failure accounting and API v4. Empty eligible frames abstain without an estimator
+call and retain the decision cutoff. Internal scoring takes admission and bypasses
+only drift. The five-outcome fixture removes unused row-level `decision_atr`.
+Component verification: 302 passed, 1 opt-in memory benchmark skipped; live features,
+prediction API/service/snapshots, outcome intents, replay, package/architecture and
+continuity tests. Ruff clean on seven changed Python files; strict mypy clean on four
+source files. Local consolidated diff review found no remaining supported defect.
+Existing C# binary: 38 passed, 1 producer-fixture parity failure. C# source still
+consumes the retired unversioned contract. Its handoff records the v4 adoption/hash;
+consumer integration remains pending with TradingFlow's owner. No full suite,
+training, provider or sealed-data run; no owned worker remains. No readiness claim.
+
+Part (3b) implementation freeze: strict request/cross-section snapshot scope;
+canonical decision identity separate from audit timestamps/ids; durable route and
+session records. Bind full membership, response and source identities. Identical
+reruns reuse the first immutable audit snapshot; changed payloads fail. Under the
+monitoring lease, write a verified route activation anchor before scoring, intents
+for scored members and observations for every member, then a session commit marker
+binding exact record ids. Unavailable unscored feature metadata stays null. Partial
+writes are resumable but cannot authorize report population. A registered session
+cannot be replaced; failures can retry. Request snapshots remain audit-only. Replay
+reads either scope without constructing a >100-ticker public request. Add production
+registration and an audited not_run operation against a known route anchor.
+Exit tests: deterministic/reordered retries, changed payload/source rejection,
+>100 members, all-abstention, drift-blocked registration, request refusal, crash
+before commit, failed retry and tampering. Part (3c) consumes only committed sessions
+for population/coverage/drift. Publisher, training and collection ownership are outside
+this slice. The documentation push was rejected by automatic approval review pending
+explicit user authorization; local work may continue and publication stays pending.
+
 
 Work split (user decision, September 27): this developer owns `market-predictor`; a
 second developer (Astra, a separate ChatGPT/Codex session) owns `trading_flow`. They
@@ -1237,10 +1271,11 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: monitoring part (3), starting with part (3a) cross-section
-scoring, correct member abstentions and the reviewed API v4 change. Part (2b-3) is
-implemented through `346e0ec`; do not rerun its closed implementation reviews without
-new evidence. Part (3) has a design only (`38c698e`), not an implementation.
+Exact next checkpoint: part (3b), scoped snapshots and deterministic session
+registration, following the freeze above. Part (3a) is pushed as `b3c8761`; API v4
+is published. The earlier review below is design history, superseded where it says
+all part (3) code is pending.
+
 
 The September 28 local continuation review is consolidated in the active plan under
 "Part (3) continuation review". It found three design gaps: audit timestamps/random
