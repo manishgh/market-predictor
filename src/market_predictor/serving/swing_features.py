@@ -20,6 +20,7 @@ from market_predictor.canonical.joins import MEMBERSHIP_VALUE_COLUMNS
 from market_predictor.canonical.reconciliation import stamp_canonical_decision_ids
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core import path_integrity
+from market_predictor.core.cross_section_contracts import CrossSectionMember
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.governance.promotion.bundle_contracts import (
@@ -73,6 +74,7 @@ class SwingLiveFeatureFrames:
     as_of_utc: pd.Timestamp
     decision_time_utc: pd.Timestamp
     session_date_et: date
+    members: tuple[CrossSectionMember, ...]
     # Point-in-time members left out because their market or catalyst inputs were incomplete.
     excluded_security_ids: tuple[str, ...] = ()
     excluded_tickers: tuple[str, ...] = ()
@@ -342,12 +344,12 @@ def build_live_swing_features(
         live_manifest_path=live_manifest_path,
         expected_live_manifest_sha256=expected_live_manifest_sha256,
     )
-    members = _effective_membership_tickers(
+    members = _effective_members(
         point_in_time_memberships,
         decision_time=_expected_swing_decision_time(cutoff),
         contract=contract,
     )
-    expected = tuple(sorted(members))
+    expected = tuple(member.security_id for member in members)
     _reject_future_evidence(
         stock_daily_bars,
         label="stock daily bars",
@@ -434,6 +436,9 @@ def build_live_swing_features(
     )
     _validate_profile_identity(finalized)
 
+    members, excluded_security_ids = _classify_member_abstentions(
+        members, finalized[SWING_FEATURE_PROFILE], excluded_security_ids, contract=contract,
+    )
     technical = _model_frame(
         finalized[SWING_FEATURE_PROFILE],
         columns=swing_model_feature_columns(contract=contract, catalyst=False),
@@ -462,8 +467,9 @@ def build_live_swing_features(
         as_of_utc=cutoff,
         decision_time_utc=pd.Timestamp(decision_times.iloc[0]),
         session_date_et=sessions.iloc[0],
+        members=members,
         excluded_security_ids=excluded_security_ids,
-        excluded_tickers=tuple(sorted(members[security_id] for security_id in excluded_security_ids)),
+        excluded_tickers=tuple(sorted(member.ticker for member in members if member.abstention_reason == "live_inputs_incomplete")),
     )
     _verify_live_feature_bindings(
         catalyst_authority_directory=catalyst_authority_directory,
@@ -658,8 +664,6 @@ def _model_frame(
     profile: str,
 ) -> pd.DataFrame:
     eligible = rows["feature_eligible"].fillna(False).astype(bool) & rows["cross_section_eligible"].fillna(False).astype(bool)
-    if not bool(eligible.any()):
-        raise DataReadinessError(f"{profile} has no stocks meeting the sector peer floor")
     eligible_rows = rows.loc[eligible]
     identity = pd.MultiIndex.from_frame(
         eligible_rows.loc[:, SWING_LIVE_IDENTITY_COLUMNS],
@@ -667,23 +671,25 @@ def _model_frame(
     )
     frame = eligible_rows.loc[:, columns].copy()
     frame.index = identity
-    validate_ordered_feature_frame(frame, columns, frame_name=profile)
+    if not frame.empty:
+        validate_ordered_feature_frame(frame, columns, frame_name=profile)
     return frame
 
 
-def _effective_membership_tickers(
+def _effective_members(
     memberships: pd.DataFrame,
     *,
     decision_time: pd.Timestamp,
     contract: StrategyContract,
-) -> dict[str, str]:
-    """Each effective member's point-in-time ticker, by security identity."""
+) -> tuple[CrossSectionMember, ...]:
+    """Complete effective membership, including members with no usable market rows."""
     required = {
         "ticker",
         "security_id",
         "effective_from_utc",
         "effective_to_utc",
         "available_at_utc",
+        "sector",
     }
     missing = sorted(required.difference(memberships.columns))
     if missing:
@@ -710,11 +716,57 @@ def _effective_membership_tickers(
         raise DataReadinessError("effective point-in-time membership is empty or invalid")
     if bool(current.duplicated("ticker").any()) or bool(current.duplicated("security_id").any()):
         raise DataReadinessError("effective point-in-time membership has ambiguous ticker/security identity")
-    tickers = dict(zip(current["security_id"].astype(str), current["ticker"].astype(str), strict=True))
+    if current["sector"].isna().any() or current["sector"].astype(str).str.strip().eq("").any():
+        raise DataReadinessError("effective membership has no point-in-time sector")
     minimum = contract.labels.minimum_cross_section_for_ranking
-    if len(tickers) < minimum:
-        raise DataReadinessError(f"expected swing cross-section is below the frozen minimum: {len(tickers)} < {minimum}")
-    return tickers
+    if len(current) < minimum:
+        raise DataReadinessError(f"expected swing cross-section is below the frozen minimum: {len(current)} < {minimum}")
+    return tuple(
+        CrossSectionMember(
+            security_id=str(row.security_id), ticker=str(row.ticker), sector=str(row.sector),
+            membership_available_at_utc=pd.Timestamp(row.available_at_utc).to_pydatetime(),
+        )
+        for row in current.sort_values("security_id", kind="stable").itertuples(index=False)
+    )
+
+
+def _classify_member_abstentions(
+    members: tuple[CrossSectionMember, ...],
+    rows: pd.DataFrame,
+    excluded_ids: tuple[str, ...],
+    *,
+    contract: StrategyContract,
+) -> tuple[tuple[CrossSectionMember, ...], tuple[str, ...]]:
+    """Count both direct input failures and sector drops they cause, once per member."""
+    excluded = set(excluded_ids)
+    membership = {member.security_id: member for member in members}
+    sector_counts: dict[str, int] = {}
+    for item in members:
+        sector_counts[item.sector] = sector_counts.get(item.sector, 0) + 1
+    reasons: dict[str, str] = {key: "live_inputs_incomplete" for key in excluded}
+    for row in rows.itertuples(index=False):
+        member = membership.get(str(row.security_id))
+        if member is None or str(row.ticker).upper() != member.ticker or str(row.sector) != member.sector:
+            raise DataReadinessError("live feature row differs from effective membership")
+        if not bool(row.feature_eligible):
+            excluded.add(member.security_id)
+            reasons[member.security_id] = "live_inputs_incomplete"
+        elif not bool(row.cross_section_eligible):
+            if sector_counts[member.sector] >= contract.labels.minimum_cross_section_for_ranking:
+                excluded.add(member.security_id)
+                reasons[member.security_id] = "live_inputs_incomplete"
+            else:
+                reasons[member.security_id] = "sector_peer_floor"
+    observed = set(rows["security_id"].astype(str))
+    if observed | set(excluded_ids) != set(membership):
+        raise DataReadinessError("live member classification is incomplete")
+    failures = _validate_live_security_exclusions(
+        tuple(membership), tuple(excluded), contract=contract, reason="market, catalyst or cascaded sector peer failures",
+    )
+    classified = tuple(CrossSectionMember.model_validate({
+        **member.model_dump(), "abstention_reason": reasons.get(member.security_id),
+    }) for member in members)
+    return classified, failures
 
 
 def _expected_swing_decision_time(cutoff: pd.Timestamp) -> pd.Timestamp:

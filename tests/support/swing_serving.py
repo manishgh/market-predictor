@@ -15,6 +15,7 @@ import pytest
 
 import market_predictor.serving.prediction_service as service_module
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.cross_section_contracts import CrossSectionMember
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.prediction_contracts import ModelInfo, PredictionRequest
 from market_predictor.execution_policy import EXECUTION_POLICY_SHA256
@@ -141,6 +142,8 @@ def swing_serving(
     *,
     generation_cache: type[GenerationCache] = GenerationCache,
     excluded_tickers: tuple[str, ...] = (),
+    peer_floor_tickers: tuple[str, ...] = (),
+    member_count: int = 60,
     **service_options: Any,
 ) -> SwingServing:
     """Build the promoted swing service; drift enforcement stays on unless disabled."""
@@ -227,6 +230,8 @@ def swing_serving(
         technical_features=features,
         catalyst_features=swing_model_feature_columns(contract=contract, catalyst=True),
         excluded_tickers=excluded_tickers,
+        peer_floor_tickers=peer_floor_tickers,
+        member_count=member_count,
     )
     monkeypatch.setattr(service_module, "build_live_swing_features", lambda *_args, **_kwargs: live)
     options: dict[str, Any] = {
@@ -304,10 +309,12 @@ def live_frames(
     technical_features: tuple[str, ...],
     catalyst_features: tuple[str, ...],
     excluded_tickers: tuple[str, ...] = (),
+    peer_floor_tickers: tuple[str, ...] = (),
+    member_count: int = 60,
 ) -> SwingLiveFeatureFrames:
     identities: list[dict[str, object]] = []
     context_rows: list[dict[str, object]] = []
-    for index in range(60):
+    for index in range(member_count):
         identity = {
             "decision_id": f"decision-{index}",
             "security_id": f"SEC-{index:03d}",
@@ -359,5 +366,12 @@ def live_frames(
         as_of_utc=pd.Timestamp(NOW),
         decision_time_utc=DECISION,
         session_date_et=DECISION.tz_convert("America/New_York").date(),
+        members=tuple(CrossSectionMember(
+            security_id=str(row["security_id"]), ticker=str(row["ticker"]), sector=str(row["sector"]),
+            membership_available_at_utc=DECISION.to_pydatetime(),
+        ) for row in context_rows) + tuple(CrossSectionMember(
+            security_id=f"SEC-{ticker}", ticker=ticker, sector="Small", membership_available_at_utc=DECISION.to_pydatetime(),
+            abstention_reason="live_inputs_incomplete" if ticker in excluded_tickers else "sector_peer_floor",
+        ) for ticker in (*excluded_tickers, *peer_floor_tickers)),
         excluded_tickers=excluded_tickers,
     )

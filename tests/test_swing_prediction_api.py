@@ -179,11 +179,11 @@ _FIXED_ID = "00000000-0000-4000-8000-000000000000"
 
 def _contract_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
     """A served response with its per-call values fixed, as TradingFlow receives it."""
-    serving = swing_serving(tmp_path, monkeypatch, enforce_drift=False, excluded_tickers=("T060",))
+    serving = swing_serving(tmp_path, monkeypatch, enforce_drift=False, excluded_tickers=("T060",), peer_floor_tickers=("T061",))
     with TestClient(create_app(serving.service)) as client:
         response = client.post(
             "/v1/predictions/swing",
-            json={"tickers": ["T000", "T059", "T060", "MISSING"], "as_of": NOW.isoformat()},
+            json={"tickers": ["T000", "T059", "T060", "T061", "MISSING"], "as_of": NOW.isoformat()},
         )
     assert response.status_code == 200, response.text
     payload = response.json()
@@ -210,3 +210,60 @@ def test_contract_fixture_matches_the_served_response(
         "the served swing response changed; update docs/contracts/prediction_api.md, regenerate the "
         "fixture with MARKET_PREDICTOR_WRITE_CONTRACT_FIXTURE=1 and tell TradingFlow"
     )
+
+
+def test_monitoring_cross_section_exceeds_request_limit_and_preserves_client_drift_gate(tmp_path, monkeypatch):
+    serving = swing_serving(tmp_path, monkeypatch, member_count=120, excluded_tickers=("INPUT",), peer_floor_tickers=("THIN",))
+    result = serving.service.predict_swing_cross_section(NOW)
+    assert len(result.members) == len(result.response.predictions) == 122
+    assert len(result.response.evidence.row_feature_availability) == 120
+    reasons = {row.ticker: row.swing.abstention_reasons for row in result.response.predictions}
+    assert reasons["INPUT"] == ["live_inputs_incomplete"]
+    assert reasons["THIN"] == ["sector_peer_floor"]
+    with pytest.raises(PredictionDriftBlockedError):
+        serving.service.predict(PredictionRequest(tickers=["T000"], mode="swing", as_of=NOW))
+    serving.generation_cache.current = False
+    with pytest.raises(PredictionReadinessError) as error:
+        serving.service.predict_swing_cross_section(NOW)
+    assert "generation changed" in str(error.value.__cause__)
+
+
+def test_monitoring_cross_section_rejects_future_promotion_and_naive_time(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from datetime import timedelta
+    serving = swing_serving(tmp_path, monkeypatch)
+    generation = serving.generation_cache.generation
+    serving.generation_cache.generation = replace(generation, bundle=generation.bundle.model_copy(
+        update={"promoted_at_utc": NOW + timedelta(seconds=1)},
+    ))
+    with pytest.raises(PredictionReadinessError) as error:
+        serving.service.predict_swing_cross_section(NOW)
+    assert "unavailable at the requested as_of" in str(error.value.__cause__)
+    with pytest.raises(PredictionValidationError):
+        serving.service.predict_swing_cross_section(NOW.replace(tzinfo=None))
+
+
+def test_all_thin_members_abstain_without_estimator_and_keep_decision_cutoff(tmp_path, monkeypatch):
+    from dataclasses import replace
+    serving = swing_serving(tmp_path, monkeypatch)
+    live = service_module.build_live_swing_features()
+    empty = replace(live, technical_market=live.technical_market.iloc[:0], catalyst_full=live.catalyst_full.iloc[:0],
+                    context=live.context.iloc[:0], members=tuple(member.model_copy(update={"abstention_reason": "sector_peer_floor"})
+                                                              for member in live.members))
+    monkeypatch.setattr(service_module, "build_live_swing_features", lambda *args, **kwargs: empty)
+    def fail_predict(*args, **kwargs):
+        pytest.fail("empty cross-section reached the estimator")
+    monkeypatch.setattr(service_module.SwingInferenceEngine, "predict", fail_predict)
+    result = serving.service.predict_swing_cross_section(NOW)
+    assert len(result.response.predictions) == 60
+    assert all(row.swing.abstention_reasons == ["sector_peer_floor"] for row in result.response.predictions)
+    assert result.response.evidence.prediction_cutoff_utc == live.decision_time_utc
+    assert result.response.evidence.row_feature_availability == []
+
+
+def test_peer_floor_is_distinct_from_nonmembership_in_public_response(tmp_path, monkeypatch):
+    serving = swing_serving(tmp_path, monkeypatch, enforce_drift=False, peer_floor_tickers=("THIN",))
+    response = serving.service.predict(PredictionRequest(tickers=["THIN", "UNKNOWN"], mode="swing", as_of=NOW))
+    assert response.contract_version == "market_predictor.prediction.v4"
+    assert response.predictions[0].swing.abstention_reasons == ["sector_peer_floor"]
+    assert response.predictions[1].swing.abstention_reasons == ["out_of_universe"]

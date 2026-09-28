@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -12,6 +12,7 @@ from uuid import uuid4
 import pandas as pd
 
 from market_predictor.admission import InferenceAdmissionController
+from market_predictor.core.cross_section_contracts import CrossSectionMember
 from market_predictor.core.errors import DataReadinessError, MarketPredictorError
 from market_predictor.core.prediction_contracts import (
     CatalystConfirmationInfo,
@@ -164,6 +165,23 @@ def swing_live_input_provider_from_config(
     )
 
 
+@dataclass(frozen=True)
+class _SwingScoringRequest:
+    as_of: datetime
+    tickers: tuple[str, ...] | None = None
+    horizon: str = "10b"
+    requested_models: list[str] | None = None
+    correlation_id: str | None = None
+
+
+@dataclass(frozen=True)
+class SwingCrossSectionPrediction:
+    response: PredictionResponse
+    members: tuple[CrossSectionMember, ...]
+    promoted_at_utc: datetime
+    as_of_utc: datetime
+
+
 class PredictionService:
     """Production serving boundary for promoted market prediction models."""
 
@@ -250,6 +268,20 @@ class PredictionService:
             raise PredictionDependencyError from exc
 
     def predict_swing(self, request: PredictionRequest) -> PredictionResponse:
+        internal = _SwingScoringRequest(
+            as_of=request.as_of or datetime.now(UTC), tickers=tuple(request.tickers),
+            horizon=request.horizon, requested_models=request.requested_models, correlation_id=request.correlation_id,
+        )
+        return self._score_swing(internal, monitoring=False).response
+
+    def predict_swing_cross_section(self, as_of: datetime) -> SwingCrossSectionPrediction:
+        """Internal monitoring only: collect evidence while client serving is drift-blocked."""
+        if as_of.utcoffset() is None:
+            raise PredictionValidationError
+        with self.admission.lease(estimated_incremental_gib=self.inference_memory_reservation_gib):
+            return self._score_swing(_SwingScoringRequest(as_of=as_of.astimezone(UTC)), monitoring=True)
+
+    def _score_swing(self, request: _SwingScoringRequest, *, monitoring: bool) -> SwingCrossSectionPrediction:
         try:
             _validate_swing_requested_models(request.requested_models)
             route, resolved_horizon = self._serving_route("swing", request)
@@ -276,12 +308,10 @@ class PredictionService:
                 prediction_policy_sha256=prediction_policy_sha256,
             )
             as_of = request.as_of or datetime.now(UTC)
-            self._require_actionable_drift(
-                mode="swing",
-                horizon=resolved_horizon,
-                model=model,
-                checked_at=as_of,
-            )
+            if not monitoring:
+                self._require_actionable_drift(
+                    mode="swing", horizon=resolved_horizon, model=model, checked_at=as_of,
+                )
             if bundle.promoted_at_utc > as_of.astimezone(UTC):
                 raise DataReadinessError("promoted swing bundle was unavailable at the requested as_of")
             if self.swing_live_input_provider is None:
@@ -305,10 +335,11 @@ class PredictionService:
                 memory_headroom_gib=self.memory_headroom_gib,
             )
             model_features = live.technical_market if generation.bundle.feature_profile == "technical_market" else live.catalyst_full
+            if request.tickers is None:
+                request = replace(request, tickers=tuple(member.ticker for member in live.members))
             raw_scores = engine.predict(
-                feature_frame=model_features,
-                requested_models=request.requested_models,
-            )
+                feature_frame=model_features, requested_models=request.requested_models,
+            ) if not model_features.empty else {"classifier": ()}
             assert_memory_budget(
                 hard_budget_gib=self.memory_budget_gib,
                 headroom_gib=self.memory_headroom_gib,
@@ -335,7 +366,7 @@ class PredictionService:
                 bundle_sha256=bundle.sha256(),
                 threshold=engine.threshold,
                 selected_security_ids=selected_ids,
-                excluded_tickers=frozenset(live.excluded_tickers),
+                members={member.ticker: member for member in live.members},
                 contract=contract,
                 model_as_of_utc=bundle.promoted_at_utc,
                 data_as_of_utc=inputs.generated_at_utc,
@@ -351,6 +382,7 @@ class PredictionService:
                 live_input_manifest_sha256=inputs.manifest_sha256,
                 catalyst_authority_sha256=inputs.catalyst_authority_sha256,
                 source_watermarks=dict(inputs.source_watermarks),
+                decision_time_utc=live.decision_time_utc.to_pydatetime(),
             )
             assert_memory_budget(
                 hard_budget_gib=self.memory_budget_gib,
@@ -362,7 +394,7 @@ class PredictionService:
                 generation,
             ):
                 raise DataReadinessError("active swing model generation changed during inference")
-            return response
+            return SwingCrossSectionPrediction(response, live.members, bundle.promoted_at_utc, as_of)
         except PredictionServiceError:
             raise
         except (
@@ -557,7 +589,7 @@ class PredictionService:
     def _serving_route(
         self,
         mode: str,
-        request: PredictionRequest,
+        request: _SwingScoringRequest,
     ) -> tuple[ServingRoute, str]:
         if mode not in DEFAULT_MODE_HORIZONS:
             raise PredictionValidationError
@@ -669,13 +701,13 @@ def _selected_edge_swing_security_ids(
 
 def _edge_swing_predictions(
     *,
-    request: PredictionRequest,
+    request: _SwingScoringRequest,
     context: pd.DataFrame,
     bundle: PromotedSwingBundle,
     bundle_sha256: str,
     threshold: float,
     selected_security_ids: set[str],
-    excluded_tickers: frozenset[str],
+    members: Mapping[str, CrossSectionMember],
     contract: StrategyContract,
     model_as_of_utc: datetime,
     data_as_of_utc: datetime,
@@ -690,16 +722,18 @@ def _edge_swing_predictions(
     )
     ranks = {str(row["security_id"]): rank for rank, (_, row) in enumerate(ranked.iterrows(), start=1)}
     predictions: list[SwingPrediction] = []
-    for ticker in request.tickers:
+    for ticker in request.tickers or ():
         row = by_ticker.get(ticker)
         if row is None:
+            if ticker in members and members[ticker].abstention_reason is None:
+                raise DataReadinessError("effective member has neither a score nor an abstention reason")
             predictions.append(
                 SwingPrediction(
                     ticker=ticker,
                     signal="abstain",
                     action="abstain",
                     abstention_reasons=[
-                        "live_inputs_incomplete" if ticker in excluded_tickers else "out_of_universe"
+                        members[ticker].abstention_reason or "live_inputs_incomplete" if ticker in members else "out_of_universe"
                     ],
                     model_id=bundle.model_id,
                     serving_bundle_sha256=bundle_sha256,
@@ -712,7 +746,9 @@ def _edge_swing_predictions(
                         status="invalid",
                         reasons=[
                             "Market or catalyst inputs for this member are incomplete at the decision."
-                            if ticker in excluded_tickers
+                            if ticker in members and members[ticker].abstention_reason != "sector_peer_floor"
+                            else "This member has too few eligible sector peers for ranking."
+                            if ticker in members
                             else "Ticker is absent from the verified live reference universe."
                         ],
                         daily_bar_count=0,
@@ -888,7 +924,7 @@ def _edge_catalyst_confirmation(
 
 def _edge_swing_response(
     *,
-    request: PredictionRequest,
+    request: _SwingScoringRequest,
     model: ModelInfo,
     predictions: list[SwingPrediction],
     context: pd.DataFrame,
@@ -896,10 +932,11 @@ def _edge_swing_response(
     live_input_manifest_sha256: str,
     catalyst_authority_sha256: str,
     source_watermarks: dict[str, str],
+    decision_time_utc: datetime,
 ) -> PredictionResponse:
     request_id = str(uuid4())
     latest = context.sort_values("decision_time_utc", kind="stable").groupby("ticker", as_index=False).tail(1)
-    requested = latest.loc[latest["ticker"].astype(str).str.upper().isin(request.tickers)]
+    requested = latest.loc[latest["ticker"].astype(str).str.upper().isin(request.tickers or ())]
     row_evidence = [
         PredictionRowEvidence(
             ticker=str(row["ticker"]).upper(),
@@ -915,14 +952,10 @@ def _edge_swing_response(
             market_cap_bucket=str(row["market_cap_bucket"]),
             liquidity_bucket=str(row["liquidity_bucket"]),
             price_feed=str(row["price_feed"]),
-            decision_atr=(
-                _required_edge_float(row, "atr_pct_14")
-                * _required_edge_float(row, "close")
-            ),
         )
         for _, row in requested.iterrows()
     ]
-    cutoff = max((row.decision_time_utc for row in row_evidence), default=request.as_of or datetime.now(UTC))
+    cutoff = decision_time_utc
     bundle_sha256 = bundle.sha256()
     policy_sha256 = model.prediction_policy_sha256
     if policy_sha256 is None or model.prediction_policy is None:

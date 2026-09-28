@@ -1,7 +1,7 @@
 # Prediction API Contract
 
 Owner: Market Predictor (producer). Consumer: TradingFlow (`MarketPredictorHttpClient`).
-Current version: `market_predictor.prediction.v3`. The API is the only versioned name:
+Current version: `market_predictor.prediction.v4`. The API is the only versioned name:
 models are not final, so internal records and nested policies carry no version.
 Golden fixture: `tests/fixtures/contracts/swing_prediction_response.json`, a real served
 response kept equal to the code by
@@ -38,7 +38,7 @@ Every field below is always present. "non-null" means TradingFlow may rely on a 
 
 | Path | Type | Notes |
 | --- | --- | --- |
-| `contract_version` | string | `market_predictor.prediction.v3` |
+| `contract_version` | string | `market_predictor.prediction.v4` |
 | `request_id` | string, non-null | |
 | `generated_at_utc` | ISO-8601 UTC, non-null | |
 | `mode` | `swing`, non-null | |
@@ -126,6 +126,11 @@ Non-200 responses carry `{"error": {"code", "message", "correlation_id", "retrya
   bumps `contract_version`. Adding an optional field does not, but still gets an entry.
 - TradingFlow acknowledges an entry in its notes file before relying on it.
 
+`sector_peer_floor` means the ticker is a verified member, but its sector naturally
+has fewer eligible peers than the frozen ranking floor. An input failure which
+causes a sector to fall below that floor remains `live_inputs_incomplete` and counts
+toward the input-failure ceiling. Neither abstention carries a fabricated model score.
+
 ## Pending changes (designed, not yet in code)
 
 From the swing monitoring and replay correctness design, under review:
@@ -135,6 +140,14 @@ From the swing monitoring and replay correctness design, under review:
   a promoted model records them.
 
 ## Change log
+
+- 2026-09-28: API v4 adds `sector_peer_floor` for effective members in naturally
+  thin sectors and removes unused `evidence.row_feature_availability[].decision_atr`.
+  Input failures and their cascaded peer exclusions stay `live_inputs_incomplete`;
+  `out_of_universe` is reserved for nonmembers. The 100-ticker HTTP limit is unchanged.
+  Internal full-cross-section scoring bypasses only drift and is not an HTTP route.
+  TradingFlow must accept v4 and re-pin the regenerated golden fixture. Fixture
+  SHA-256: `96cbcd133b8e96253b034fabba10624be79b0d80550f043f3869905251bec522`.
 
 Entries are append-only history, newest first; the newest entry is the current contract.
 

@@ -202,7 +202,6 @@ class PredictionRowEvidence(_PredictionContract):
     market_cap_bucket: str | None = None
     liquidity_bucket: str | None = None
     price_feed: str | None = None
-    decision_atr: float | None = None
 
     @field_validator("decision_time_utc", "feature_available_at_utc")
     @classmethod
@@ -439,7 +438,7 @@ class TickerPrediction(_PredictionContract):
 
 
 class PredictionResponse(_PredictionContract):
-    contract_version: Literal["market_predictor.prediction.v3"] = "market_predictor.prediction.v3"
+    contract_version: Literal["market_predictor.prediction.v4"] = "market_predictor.prediction.v4"
     request_id: str = Field(default_factory=lambda: str(uuid4()))
     generated_at_utc: datetime = Field(default_factory=lambda: datetime.now(UTC))
     mode: PredictionMode

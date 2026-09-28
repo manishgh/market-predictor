@@ -5,7 +5,24 @@ Counterpart: the Market Predictor developer working in `C:\project\market-predic
 The two developers never message each other directly; the user relays, and these files
 are the shared record.
 
-## Action required (2026-09-27 correction)
+## Action required (2026-09-28 API v4)
+
+Accept only `contract_version = market_predictor.prediction.v4`, retain the `/v1/`
+routes, and re-pin `swing_prediction_response.json` to SHA-256 `96cbcd133b8e96253b034fabba10624be79b0d80550f043f3869905251bec522`.
+The fixture now includes `T061`, a verified member abstaining as `sector_peer_floor`.
+Display it as unavailable for ranking, never as out of universe or an actionable
+signal. The unused row-evidence `decision_atr` field is removed; risk distances and
+all scored prediction fields retain their meanings. No HTTP cross-section endpoint
+is added. Acknowledge this change in the shared notes file.
+
+Consumer verification on September 28 using the existing test binary (`--no-build
+--no-restore`, filtered to `MarketPredictorHttpClientTests`): 38 passed, one failed,
+`GoldenFixture_MatchesPublishedHashAndLocalProducerCopy`. Current C# source still
+expects the previously retired unversioned `contract` field. The consumer update and
+a fresh C# build/parity run remain owned by TradingFlow; this is not an integration
+pass or production-readiness claim.
+
+## Historical action (2026-09-27 correction)
 
 TradingFlow integrated the "later" change-log entry, which removed the API version.
 The user then clarified that the public API stays versioned, so the current contract is

@@ -1,5 +1,5 @@
 {
-  "contract_version": "market_predictor.prediction.v3",
+  "contract_version": "market_predictor.prediction.v4",
   "data_source": "live",
   "errors": [],
   "evidence": {
@@ -31,7 +31,6 @@
     "row_feature_availability": [
       {
         "canonical_security_id": "SEC-000",
-        "decision_atr": 2.0,
         "decision_group_id": "2026-07-08T22:00:00+00:00",
         "decision_time_utc": "2026-07-08T22:00:00Z",
         "feature_available_at_utc": "2026-07-08T22:00:00Z",
@@ -47,7 +46,6 @@
       },
       {
         "canonical_security_id": "SEC-059",
-        "decision_atr": 2.0,
         "decision_group_id": "2026-07-08T22:00:00+00:00",
         "decision_time_utc": "2026-07-08T22:00:00Z",
         "feature_available_at_utc": "2026-07-08T22:00:00Z",
@@ -478,6 +476,85 @@
         "volume_z20": null
       },
       "ticker": "T060"
+    },
+    {
+      "errors": [
+        "sector_peer_floor"
+      ],
+      "final_signal": "abstain",
+      "readiness_status": "invalid",
+      "swing": {
+        "abstention_reasons": [
+          "sector_peer_floor"
+        ],
+        "action": "abstain",
+        "benchmark_context": [],
+        "catalyst": {
+          "direction": "none",
+          "event_count": 0,
+          "material_event_count": 0,
+          "minutes_since_latest": null,
+          "reasons": [],
+          "relevance": 0.0,
+          "score": 0.0,
+          "sentiment": 0.0,
+          "source_diversity": 0,
+          "status": "absent"
+        },
+        "classifier_score": null,
+        "close": null,
+        "data_as_of_utc": "2026-07-08T22:05:00Z",
+        "date": null,
+        "decision_score": null,
+        "drivers": {},
+        "event_count": null,
+        "expected_horizon": "up to 10 trading sessions",
+        "feature_schema_version": "market_predictor.swing_panel.independent_holding_paths",
+        "global_context": {
+          "active_flashpoints": [],
+          "negative_impact": 0.0,
+          "net_impact": 0.0,
+          "positive_impact": 0.0
+        },
+        "lineage": {
+          "catalyst_authority_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "live_input_manifest_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "model_artifact_sha256": "2ae680ec9b95c9eff4dcc977873978ae6fac1299f4d8430b8385f4658493e094"
+        },
+        "managed_risk": null,
+        "model_as_of_utc": "2026-07-08T20:00:00Z",
+        "model_id": "swing-promoted-test",
+        "model_prediction": null,
+        "monitor_theme": null,
+        "news_count": null,
+        "probability": null,
+        "rank": null,
+        "readiness": {
+          "benchmark_status": "unknown",
+          "daily_bar_count": 0,
+          "latest_price_date": null,
+          "market_context_status": "unknown",
+          "model_status": "promoted",
+          "price_feed": "sip",
+          "reasons": [
+            "This member has too few eligible sector peers for ranking."
+          ],
+          "required_bar_count": 250,
+          "source_status": "unavailable",
+          "status": "invalid",
+          "timeframe": "daily"
+        },
+        "regressor_score": null,
+        "return_1d": null,
+        "selected_for_policy": false,
+        "selection_eligible": false,
+        "sentiment_mean": null,
+        "serving_bundle_sha256": "43de6f03c79f94f7b82f226408c810b8350b61dba0d51768d2e0ebd4ef2f3d8d",
+        "signal": "abstain",
+        "ticker": "T061",
+        "volume_z20": null
+      },
+      "ticker": "T061"
     },
     {
       "errors": [

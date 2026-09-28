@@ -825,6 +825,7 @@ def _market_inputs() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
             {
                 "ticker": f"T{index:03d}",
                 "security_id": security_id,
+                "sector": "Technology",
                 "effective_from_utc": pd.Timestamp("2020-01-01T00:00:00Z"),
                 "effective_to_utc": pd.NaT,
                 "available_at_utc": pd.Timestamp("2020-01-01T00:00:00Z"),
@@ -833,3 +834,47 @@ def _market_inputs() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         ]
     )
     return stock, benchmarks, memberships
+
+
+@pytest.mark.parametrize("first_sector_size,excluded_count,expected_failure", [(29, 0, False), (30, 1, True), (31, 1, False)])
+def test_member_abstentions_count_cascaded_input_failures(contract, first_sector_size, excluded_count, expected_failure):
+    from market_predictor.core.cross_section_contracts import CrossSectionMember
+    members = tuple(CrossSectionMember(security_id=f"s{i}", ticker=f"T{i}", sector="A" if i < first_sector_size else "B",
+                                      membership_available_at_utc=DECISION_TIME.to_pydatetime()) for i in range(100))
+    excluded = tuple(member.security_id for member in members[:excluded_count])
+    rows = pd.DataFrame([dict(security_id=member.security_id, ticker=member.ticker, sector=member.sector,
+                              feature_eligible=True, cross_section_eligible=(first_sector_size-excluded_count >= 30
+                                                                           if member.sector == "A" else True))
+                         for member in members[excluded_count:]])
+    if expected_failure:
+        with pytest.raises(DataReadinessError, match="ceiling"):
+            live_module._classify_member_abstentions(members, rows, excluded, contract=contract)
+    else:
+        classified, failures = live_module._classify_member_abstentions(members, rows, excluded, contract=contract)
+        assert failures == excluded
+        assert len(classified) == 100
+        assert sum(member.abstention_reason == "sector_peer_floor" for member in classified) == (29 if first_sector_size == 29 else 0)
+
+
+def test_empty_model_frame_is_available_for_all_abstaining_members():
+    rows = pd.DataFrame({"decision_id": ["d"], "security_id": ["s"], "ticker": ["T"], "session_date_et": ["2026-07-08"],
+                         "decision_time_utc": [DECISION_TIME], "feature_eligible": [True], "cross_section_eligible": [False], "f": [1.0]})
+    result = live_module._model_frame(rows, columns=("f",), profile=SWING_FEATURE_PROFILE)
+    assert result.empty
+    assert tuple(result.columns) == ("f",)
+
+
+def test_live_build_retains_every_member_when_all_sectors_are_thin(contract, monkeypatch):
+    rows = _technical_rows()
+    rows["sector"] = [f"Thin-{i // 20}" for i in range(len(rows))]
+    stock, benchmarks, memberships = _market_inputs()
+    memberships["sector"] = rows["sector"].to_numpy()
+    authority = _authority(_stamp(rows))
+    monkeypatch.setattr(live_module, "build_swing_feature_rows", lambda *args, **kwargs: rows.copy())
+    monkeypatch.setattr(live_module, "load_catalyst_decision_authority", lambda *args, **kwargs: authority)
+    result = _build(contract, stock=stock, benchmarks=benchmarks, memberships=memberships)
+    assert result.technical_market.empty and result.catalyst_full.empty and result.context.empty
+    assert len(result.members) == len(rows)
+    assert all(member.abstention_reason == "sector_peer_floor" for member in result.members)
+    assert result.excluded_security_ids == ()
+    assert result.decision_time_utc == DECISION_TIME
