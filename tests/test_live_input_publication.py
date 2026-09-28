@@ -240,3 +240,13 @@ def test_changed_generation_invalidates_existing_reader_cache(source, monkeypatc
     assert pointer["previous_generation_id"] == first["generation_id"]
     with pytest.raises(DataReadinessError, match="regress"):
         publish_live_inputs(request, root)
+
+
+
+def test_oversized_authority_metadata_is_refused_before_json_loading(source):
+    request, root, _ = source
+    path = request.catalyst_authority.path.parent / "source_coverage.parquet.manifest.json"
+    path.write_bytes(b" " * 1_048_577)
+    with pytest.raises(DataReadinessError, match="metadata byte limit"):
+        publish_live_inputs(request, root)
+    assert not (root / "active_generation.json").exists()

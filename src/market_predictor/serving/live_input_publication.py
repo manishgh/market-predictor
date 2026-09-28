@@ -84,6 +84,8 @@ def _guard(stage: str) -> None:
 
 def _verify(pin: PinnedFile) -> Path:
     path = path_integrity.verify_no_reparse_ancestry(pin.path, label="live publication input")
+    if path.is_file() and path.suffix.lower() in {".json", ".toml"} and path.stat().st_size > 1_048_576:
+        raise DataReadinessError("publication metadata byte limit exceeded")
     if not path.is_file() or file_sha256(path) != pin.sha256:
         raise DataReadinessError("live publication input pin does not verify")
     return path
@@ -173,6 +175,8 @@ def _publish(request: LiveInputPublication, output_directory: Path, *, maximum_b
     for path in authority_root.iterdir():
         if not path.is_file():
             raise DataReadinessError("catalyst authority must have a flat immutable inventory")
+        if path.suffix.lower() == ".json" and path.stat().st_size > 1_048_576:
+            raise DataReadinessError("publication authority metadata byte limit exceeded")
         source_files[path] = file_sha256(path)
     authority_manifest = _json(authority_root / "_manifest.json")
     authority_request = authority_manifest.get("request")
