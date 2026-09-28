@@ -49,7 +49,12 @@ class EvidenceTerms:
         return horizon_close(intent) + timedelta(days=self.grace_days)
 
     def settles(self, intent: PredictionMaturationIntent, receipt: BarReceipt) -> bool:
-        return receipt.finished_at_utc >= horizon_close(intent) + timedelta(days=self.settlement_days)
+        """Whether every page of the receipt was retrieved the settlement period after the last close."""
+        return receipt.started_at_utc >= horizon_close(intent) + timedelta(days=self.settlement_days)
+
+    def settles_session(self, session: date, receipt: BarReceipt) -> bool:
+        """Whether every page of the receipt was retrieved the settlement period after one session's close."""
+        return receipt.started_at_utc >= session_close(session) + timedelta(days=self.settlement_days)
 
 
 @dataclass(frozen=True)
@@ -126,9 +131,10 @@ def cessation_evidence(
     """Why the stock stopped trading, from actions effective between the decision and the deadline.
 
     Returns the reason with the receipts that prove it, or None. Renames are followed, so a
-    merger naming a later symbol of the same company counts. Worthless removals carry only a
-    process date in the provider's schema, which is used for them; every other action needs
-    its effective date.
+    merger naming a later symbol of the same company counts. Worthless removals and name
+    changes carry only a process date in the provider's schema. The provider processes a
+    worthless removal long after the delisting, so one processed on or after the decision
+    session counts; mergers and reorganizations need their effective date inside the window.
     """
     window = (intent.decision_session_et, terms.deadline(intent).astimezone(NEW_YORK).date())
     symbols = symbols_in_use(intent, action_receipts, terms=terms)
@@ -138,7 +144,7 @@ def cessation_evidence(
                 if record.get("acquiree_symbol") in symbols and _within(record.get("effective_date"), window):
                     return reason, (receipt.receipt_id,)
         for record in receipt.actions.get("worthless_removals", ()):
-            if record.get("symbol") in symbols and _within(record.get("process_date"), window):
+            if record.get("symbol") in symbols and _within(record.get("process_date"), (window[0], date.max)):
                 return "worthless_removal", (receipt.receipt_id,)
     if memberships is not None and _membership_removed(memberships, intent, window):
         return "membership_removal", ()

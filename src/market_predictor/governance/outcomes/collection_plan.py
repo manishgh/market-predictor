@@ -4,9 +4,9 @@ Maturation leaves each intent's latest attempt, so the plan follows its conclusi
 - bars are requested every night until a settled receipt exists, then weekly;
 - a gap inside the path needs a one-minute request for that session;
 - a gap at the end of the path without cessation evidence needs the ticker's corporate
-  actions, and those of every later name, weekly;
+  actions, and those of every later name, nightly until the deadline, then weekly;
 - an intent 90 days past its deadline is frozen: nothing is collected for it again unless an
-  operator reruns it.
+  operator names it (`only`), which also sets its cadence aside.
 """
 
 from __future__ import annotations
@@ -37,6 +37,7 @@ from market_predictor.governance.outcomes.repository import OutcomeRepository
 from market_predictor.governance.outcomes.sessions import session_after
 
 RECOLLECT_AFTER = timedelta(days=7)
+NIGHTLY = timedelta(hours=20)
 FREEZE_AFTER = timedelta(days=90)
 _PAGE_SYMBOLS = 50
 
@@ -53,19 +54,23 @@ def plan_outcome_collection(
     receipts_root: Path,
     now: datetime,
     terms: EvidenceTerms,
+    only: tuple[str, date] | None = None,
 ) -> CollectionPlan:
+    """Plan tonight's collection; `only` names one intent (maturation key, decision session) to collect now."""
     daily: dict[tuple[date, date], set[str]] = defaultdict(set)
     benchmarks: dict[tuple[date, date], set[str]] = defaultdict(set)
     minute: set[tuple[date, date, str]] = set()
     actions: dict[tuple[date, str], date] = {}
     held: dict[date, tuple[tuple[BarReceipt, ...], tuple[ActionReceipt, ...]]] = {}
-    for key, session in repository.pending():
+    entries = repository.pending() if only is None else [only]
+    for key, session in entries:
         if repository.has_outcome(key, session):
             continue
         intent = repository.load_intent(key, session)
         if repository.semantic_canonical_key(intent.semantic_prediction_id, session) != key:
             continue
-        if horizon_close(intent) > now or now > terms.deadline(intent) + FREEZE_AFTER:
+        forced = only is not None
+        if horizon_close(intent) > now or (not forced and now > terms.deadline(intent) + FREEZE_AFTER):
             continue
         if session not in held:
             held[session] = (load_bar_receipts(receipts_root, [session]), load_action_receipts(receipts_root, [session]))
@@ -73,7 +78,7 @@ def plan_outcome_collection(
         last = session_after(session, swing_horizon_sessions(intent.horizon))
         latest = repository.latest_attempt(key, session)
         reasons = latest.reasons if latest is not None else ()
-        if _bars_due(intent, bar_receipts, last=last, now=now, terms=terms):
+        if forced or _bars_due(intent, bar_receipts, last=last, now=now, terms=terms):
             daily[(session, last)].add(intent.ticker)
             policy = intent.label_policy
             benchmarks[(session, last)].update(
@@ -86,8 +91,9 @@ def plan_outcome_collection(
         if reasons == ("stock_gap_without_cessation",):
             gap = _first_gap(intent, bar_receipts, terms)
             end = min(now.date(), (gap or last) + FREEZE_AFTER)
+            interval = NIGHTLY if now <= terms.deadline(intent) else RECOLLECT_AFTER
             for symbol in symbols_in_use(intent, action_receipts, terms=terms):
-                if _actions_due(action_receipts, session=session, symbol=symbol, now=now):
+                if forced or _actions_due(action_receipts, session=session, symbol=symbol, now=now, interval=interval):
                     actions[(session, symbol)] = max(end, actions.get((session, symbol), end))
     bar_units: list[OutcomeBarUnit] = []
     for (session, last), stocks in sorted(daily.items()):
@@ -127,13 +133,15 @@ def _bars_due(
     return now - max(requested) >= RECOLLECT_AFTER
 
 
-def _actions_due(receipts: tuple[ActionReceipt, ...], *, session: date, symbol: str, now: datetime) -> bool:
+def _actions_due(
+    receipts: tuple[ActionReceipt, ...], *, session: date, symbol: str, now: datetime, interval: timedelta
+) -> bool:
     requested = [
         receipt.finished_at_utc
         for receipt in receipts
         if receipt.unit.decision_session == session and receipt.unit.symbol == symbol
     ]
-    return not requested or now - max(requested) >= RECOLLECT_AFTER
+    return not requested or now - max(requested) >= interval
 
 
 def _first_gap(intent: PredictionMaturationIntent, receipts: tuple[BarReceipt, ...], terms: EvidenceTerms) -> date | None:

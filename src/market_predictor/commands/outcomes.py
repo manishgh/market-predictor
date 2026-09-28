@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import fields
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -26,7 +26,7 @@ from market_predictor.governance.outcomes.performance import (
     write_performance_report,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
-from market_predictor.governance.outcomes.worker import mature_pending_intents
+from market_predictor.governance.outcomes.worker import mature_pending_intents, record_operator_resolution
 from market_predictor.monitoring_lease import monitoring_lease
 from market_predictor.serving.outcome_intents import register_snapshot_intents
 from market_predictor.serving.routes import ServingRoute
@@ -98,13 +98,24 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
         ),
         receipt_dir: Path = typer.Option(_RECEIPT_DIR, help="Outcome evidence receipts and page bodies."),
         drift_policy: Path = typer.Option(_DRIFT_POLICY, help="Drift policy with the grace and settlement periods."),
+        maturation_key: str | None = typer.Option(
+            None, help="Collect for this one intent now, even if frozen or not yet due; needs --decision-session."
+        ),
+        decision_session: str | None = typer.Option(None, help="The named intent's decision session."),
     ) -> None:
         """Collect the bars and corporate actions that pending outcomes still need, with receipts."""
 
+        if (maturation_key is None) != (decision_session is None):
+            raise typer.BadParameter("--maturation-key and --decision-session go together")
+        only = (
+            (maturation_key.strip().lower(), date.fromisoformat(decision_session.strip()))
+            if maturation_key is not None and decision_session is not None
+            else None
+        )
         terms = _evidence_terms(drift_policy)
         with monitoring_lease("collect-outcome-bars"):
             plan = plan_outcome_collection(
-                OutcomeRepository(outcome_dir), receipts_root=receipt_dir, now=datetime.now(UTC), terms=terms
+                OutcomeRepository(outcome_dir), receipts_root=receipt_dir, now=datetime.now(UTC), terms=terms, only=only
             )
             source = AlpacaSource(Settings())
             bars = collect_bars(source, plan.bar_units, root=receipt_dir)
@@ -168,6 +179,32 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
                 "rerun them to complete the pending index"
             )
             raise typer.Exit(code=1)
+
+    @app.command("record-operator-outcome-resolution")
+    def record_operator_outcome_resolution(
+        maturation_key: str = typer.Option(..., help="The pending intent's maturation key."),
+        decision_session: str = typer.Option(..., help="The intent's decision session, such as 2026-07-24."),
+        operator: str = typer.Option(..., help="Who verified the finding."),
+        reference: str = typer.Option(..., help="The evidence checked: a filing, an exchange notice, a URL."),
+        outcome_dir: Path = typer.Option(
+            Path("data/predictions/outcomes"),
+            help="Durable local outcome repository.",
+        ),
+        drift_policy: Path = typer.Option(_DRIFT_POLICY, help="Drift policy with the grace and settlement periods."),
+    ) -> None:
+        """Record an operator's verified finding that a stock stopped trading, so its outcome never matures."""
+
+        with monitoring_lease("record-operator-outcome-resolution"):
+            attempt = record_operator_resolution(
+                OutcomeRepository(outcome_dir),
+                maturation_key=maturation_key.strip().lower(),
+                decision_session=date.fromisoformat(decision_session.strip()),
+                operator_id=operator.strip(),
+                reference=reference.strip(),
+                observed_as_of=datetime.now(UTC),
+                terms=_evidence_terms(drift_policy),
+            )
+        console.print(attempt.model_dump_json())
 
     @app.command("build-outcome-performance-report")
     def build_outcome_performance_report(

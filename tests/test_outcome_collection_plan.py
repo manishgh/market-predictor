@@ -57,6 +57,18 @@ def test_nothing_is_collected_before_the_close_or_after_the_freeze(tmp_path: Pat
     assert before.bar_units == () and frozen.bar_units == ()
 
 
+def test_an_operator_can_collect_one_frozen_intent(tmp_path: Path) -> None:
+    repository = _repository(tmp_path)
+    intent = _intent()
+    frozen = datetime(2026, 8, 14, 20, 0, tzinfo=UTC) + FREEZE_AFTER + timedelta(days=1)
+
+    plan = plan_outcome_collection(repository, receipts_root=tmp_path / "receipts", now=frozen, terms=TERMS,
+                                   only=(intent.maturation_key, intent.decision_session_et))
+
+    [unit] = plan.bar_units
+    assert "MSFT" in unit.symbols
+
+
 def test_an_interior_gap_asks_for_that_session_in_minutes(tmp_path: Path) -> None:
     repository = _repository(tmp_path)
     bars = _swing_bars()
@@ -83,8 +95,13 @@ def test_a_tail_gap_asks_for_the_corporate_actions_of_every_name_it_took(tmp_pat
 
     _collected_actions(receipts, {"name_changes": [{"id": "rename-1", "old_symbol": "MSFT", "new_symbol": "MSFX",
                                                     "process_date": "2026-07-28"}]})
+    # Before the deadline every name's actions are asked for again each night.
     renamed = plan_outcome_collection(repository, receipts_root=receipts, now=now, terms=TERMS)
-    assert [unit.symbol for unit in renamed.action_units] == ["MSFX"]
+    assert [unit.symbol for unit in renamed.action_units] == ["MSFT", "MSFX"]
+    # After it, only weekly: the ticker was asked three days ago, the new name never.
+    after_deadline = datetime(2026, 8, 15, 20, 0, tzinfo=UTC)
+    weekly = plan_outcome_collection(repository, receipts_root=receipts, now=after_deadline, terms=TERMS)
+    assert [unit.symbol for unit in weekly.action_units] == ["MSFX"]
 
 
 def test_units_hold_at_most_fifty_symbols_with_their_benchmarks(tmp_path: Path) -> None:

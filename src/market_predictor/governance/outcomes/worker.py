@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -15,6 +15,7 @@ from market_predictor.collection.outcome_bars import (
 )
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.governance.outcomes.contracts import (
+    OPERATOR_VERIFIED,
     MaturationAttempt,
     MaturedOutcome,
     PredictionMaturationIntent,
@@ -60,8 +61,11 @@ def mature_pending_intents(
         "registration_incomplete": 0,
         "not_canonical_dropped": 0,
         "already_matured": 0,
+        "observed_before_latest_attempt": 0,
     }
     receipts: dict[date, tuple[tuple[BarReceipt, ...], tuple[ActionReceipt, ...]]] = {}
+    # Evidence is what had been collected by the observation time; a backdated run never reads ahead.
+    observed = observed_as_of.astimezone(UTC)
     for maturation_key, session in repository.pending():
         summary["index_entries"] += 1
         if repository.has_outcome(maturation_key, session):
@@ -77,6 +81,11 @@ def mature_pending_intents(
             repository.drop_pending(maturation_key, session)
             summary["not_canonical_dropped"] += 1
             continue
+        latest = repository.latest_attempt(maturation_key, session)
+        # An attempt log runs forward in time, so a run observing an earlier time adds nothing.
+        if latest is not None and observed < latest.observed_as_of_utc:
+            summary["observed_before_latest_attempt"] += 1
+            continue
         try:
             # An outcome is taken only once the horizon has closed, so a target or stop reached
             # earlier still records the fixed-horizon return over the whole path.
@@ -84,7 +93,10 @@ def mature_pending_intents(
                 summary["horizon_open"] += 1
                 continue
             if session not in receipts:
-                receipts[session] = (load_bar_receipts(receipts_root, [session]), load_action_receipts(receipts_root, [session]))
+                receipts[session] = (
+                    tuple(r for r in load_bar_receipts(receipts_root, [session]) if r.finished_at_utc <= observed),
+                    tuple(r for r in load_action_receipts(receipts_root, [session]) if r.finished_at_utc <= observed),
+                )
             bar_receipts, action_receipts = receipts[session]
             result, evidence = resolve_intent(
                 intent,
@@ -108,10 +120,45 @@ def mature_pending_intents(
         if isinstance(result, MaturedOutcome):
             repository.record_outcome(intent, result, evidence_rows=evidence)
             summary["matured"] += 1
+        elif latest is not None and latest.reasons == (OPERATOR_VERIFIED,):
+            # An operator's resolution stands until the evidence matures the outcome.
+            summary["unresolvable"] += 1
         else:
             repository.record_attempt(result, decision_session=session)
             summary[result.status] += 1
     return summary
+
+
+def record_operator_resolution(
+    repository: OutcomeRepository,
+    *,
+    maturation_key: str,
+    decision_session: date,
+    operator_id: str,
+    reference: str,
+    observed_as_of: datetime,
+    terms: EvidenceTerms,
+) -> MaturationAttempt:
+    """Record an operator's verified finding that a pending outcome can never mature.
+
+    For a stock that stopped trading without provider evidence of why; `reference` names the
+    evidence the operator checked. Only a later maturation supersedes it.
+    """
+    intent = repository.load_intent(maturation_key, decision_session)
+    if repository.has_outcome(maturation_key, decision_session):
+        raise DataReadinessError("an outcome that matured cannot be resolved by an operator")
+    if horizon_last_close(decision_session, swing_horizon_sessions(intent.horizon), through=observed_as_of) is None:
+        raise DataReadinessError("an operator resolves an outcome only after its horizon has closed")
+    attempt = maturation_attempt(
+        intent,
+        observed_as_of=observed_as_of,
+        status="unresolvable",
+        reasons=(OPERATOR_VERIFIED,),
+        context=_context(terms),
+        operator_id=operator_id,
+        operator_reference=reference,
+    )
+    return repository.record_attempt(attempt, decision_session=decision_session)
 
 
 def resolve_intent(
@@ -151,6 +198,8 @@ def resolve_intent(
                 last_session=gap,
                 timeframe="1Min",
             )
+            # A minute receipt proves the halt only once the session had settled.
+            minute = tuple(receipt for receipt in minute if terms.settles_session(gap, receipt))
             receipt_ids.extend(receipt.receipt_id for receipt in minute)
             if not minute:
                 reasons = ("interior_gap_needs_minute_bars",)

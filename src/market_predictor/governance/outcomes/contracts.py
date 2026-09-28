@@ -25,6 +25,8 @@ SHA256_PATTERN = r"^[0-9a-f]{64}$"
 # Swing horizons count exchange sessions, such as 10b, 63b or 252b.
 SWING_HORIZON_PATTERN = r"^[1-9]\d*b$"
 RETIRED_INTRADAY = "intraday prediction records are retired; only swing records are accepted"
+# The reason an operator records after verifying that a stock stopped trading.
+OPERATOR_VERIFIED = "operator_verified"
 
 
 def refuse_retired_intraday(data: object) -> object:
@@ -236,6 +238,9 @@ class MaturationAttempt(FrozenContract):
     settlement_days: int = Field(ge=0)
     drift_policy_sha256: str = Field(pattern=SHA256_PATTERN)
     receipt_ids: tuple[str, ...] = ()
+    # Who verified an operator resolution and the evidence they checked, present exactly for one.
+    operator_id: str | None = Field(default=None, min_length=1, max_length=128)
+    operator_reference: str | None = Field(default=None, min_length=8, max_length=500)
 
     @field_validator("observed_as_of_utc")
     @classmethod
@@ -254,6 +259,13 @@ class MaturationAttempt(FrozenContract):
             raise ValueError("maturation attempt must state its reasons")
         if self.settlement_days >= self.grace_days:
             raise ValueError("maturation attempt settlement must precede its grace deadline")
+        operator = self.reasons == (OPERATOR_VERIFIED,)
+        if (
+            operator != (self.operator_reference is not None)
+            or operator != (self.operator_id is not None)
+            or (operator and self.status != "unresolvable")
+        ):
+            raise ValueError("an operator resolution is unresolvable and names its operator and evidence")
         content = self.model_dump(mode="json", exclude={"attempt_id"})
         if content_sha256(content) != self.attempt_id:
             raise ValueError("maturation attempt identity is invalid")

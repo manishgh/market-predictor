@@ -24,7 +24,7 @@ from market_predictor.governance.outcomes.contracts import (
 from market_predictor.governance.outcomes.evidence import EvidenceTerms
 from market_predictor.governance.outcomes.maturation import mature_prediction
 from market_predictor.governance.outcomes.repository import OutcomeRepository
-from market_predictor.governance.outcomes.worker import mature_pending_intents
+from market_predictor.governance.outcomes.worker import mature_pending_intents, record_operator_resolution
 from market_predictor.modeling.maturation import PendingPath
 from market_predictor.swing.contracts import SwingDatasetConfig
 from market_predictor.swing.labels import add_exact_swing_labels
@@ -403,7 +403,7 @@ class OutcomeMaturationTests(unittest.TestCase):
             receipts = _collected(Path(temp_dir), bars.loc[~(bars["ticker"].eq("MSFT") & bars["session_date_et"].ge(date(2026, 7, 29)))])
             rename = {"id": "rename-1", "old_symbol": "MSFT", "new_symbol": "MSFX", "process_date": "2026-07-28"}
             _collected_actions(receipts, {"name_changes": [rename]})
-            removal = {"id": "removal-1", "symbol": "MSFX", "process_date": "2026-07-31"}
+            removal = {"id": "removal-1", "symbol": "MSFX", "process_date": "2026-11-30"}
             _collected_actions(receipts, {"worthless_removals": [removal]}, symbol="MSFX")
 
             latest = _latest(repository, intent, receipts)
@@ -432,6 +432,74 @@ class OutcomeMaturationTests(unittest.TestCase):
             latest = _latest(repository, intent, receipts)
 
             self.assertEqual((latest.status, latest.reasons), ("unresolvable", ("interior_gap",)))
+
+    def test_a_minute_receipt_confirms_a_halt_only_once_settled(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            bars = _swing_bars()
+            receipts = _collected(Path(temp_dir), bars.loc[~(bars["ticker"].eq("MSFT") & bars["session_date_et"].eq(date(2026, 7, 27)))])
+            # Retrieved the next morning: final, but before the settlement period ended.
+            _collected_minutes(receipts, traded=False, retrieved=datetime(2026, 7, 28, 12, tzinfo=UTC))
+
+            self.assertEqual(_latest(repository, intent, receipts).reasons, ("interior_gap_needs_minute_bars",))
+
+    def test_a_backdated_run_reads_only_receipts_collected_by_its_time(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            receipts = _collected(Path(temp_dir))
+
+            summary = _mature(repository, receipts, observed=RETRIEVED - timedelta(hours=1))
+
+            self.assertEqual((summary["matured"], summary["pending"]), (0, 1))
+            latest = repository.latest_attempt(intent.maturation_key, intent.decision_session_et)
+            assert latest is not None
+            self.assertEqual((latest.reasons, latest.receipt_ids), (("decision_session_not_observed",), ()))
+            # A run observing an earlier time than the latest attempt adds nothing to the log.
+            summary = _mature(repository, receipts, observed=RETRIEVED - timedelta(days=1))
+            self.assertEqual(summary["observed_before_latest_attempt"], 1)
+
+    def test_an_operator_resolution_stands_until_the_evidence_matures_the_outcome(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            bars = _swing_bars()
+            gap = bars.loc[~(bars["ticker"].eq("MSFT") & bars["session_date_et"].ge(date(2026, 7, 29)))]
+            receipts = _collected(Path(temp_dir), gap)
+            self.assertEqual(_latest(repository, intent, receipts).reasons, ("stock_gap_without_cessation",))
+
+            resolution = record_operator_resolution(
+                repository, maturation_key=intent.maturation_key, decision_session=intent.decision_session_et,
+                operator_id="operator@example", reference="exchange delisting notice, filing 0001",
+                observed_as_of=OBSERVED + timedelta(hours=1), terms=TERMS,
+            )
+            summary = _mature(repository, receipts, observed=OBSERVED + timedelta(days=1))
+
+            self.assertEqual((resolution.status, resolution.reasons), ("unresolvable", ("operator_verified",)))
+            self.assertEqual(summary["unresolvable"], 1)
+            self.assertEqual(repository.latest_attempt(intent.maturation_key, intent.decision_session_et), resolution)
+            # The late bars arrive after all: the outcome matures and supersedes the resolution.
+            _collected(Path(temp_dir), retrieved=OBSERVED + timedelta(days=2))
+            summary = _mature(repository, receipts, observed=OBSERVED + timedelta(days=3))
+            self.assertEqual(summary["matured"], 1)
+
+    def test_a_new_drift_policy_writes_a_new_attempt(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            receipts = Path(temp_dir) / "receipts"
+            _mature(repository, receipts)
+
+            mature_pending_intents(repository, receipts_root=receipts, observed_as_of=OBSERVED + timedelta(days=1),
+                                   terms=EvidenceTerms(grace_days=7, settlement_days=2, drift_policy_sha256="e" * 64))
+
+            attempts = repository.attempts(intent.maturation_key, intent.decision_session_et)
+            self.assertEqual([attempt.drift_policy_sha256 for attempt in attempts], ["d" * 64, "e" * 64])
 
     def test_a_session_any_receipt_returned_is_never_a_proven_gap(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -524,12 +592,13 @@ def _collected_actions(receipts: Path, actions: dict[str, object], *, symbol: st
     collect_corporate_actions(source, [unit], root=receipts, clock=receipt_clock())
 
 
-def _collected_minutes(receipts: Path, *, traded: bool) -> None:
+def _collected_minutes(receipts: Path, *, traded: bool, retrieved: datetime = RETRIEVED) -> None:
     minute = {"t": "2026-07-27T13:30:00Z", "o": 100.0, "h": 100.0, "l": 100.0, "c": 100.0, "v": 10}
     bars = {"MSFT": [minute]} if traded else {}
-    source = receipt_source(lambda _url, _params: (200, {"bars": bars, "next_page_token": None}))
+    source = receipt_source(lambda _url, _params: (200, {"bars": bars, "next_page_token": None}), retrieved)
     unit = OutcomeBarUnit(DECISION, date(2026, 7, 27), date(2026, 7, 27), ("MSFT",), "1Min")
-    collect_bars(source, [unit], root=receipts, clock=receipt_clock())
+    collect_bars(source, [unit], root=receipts, clock=receipt_clock(retrieved))
+
 
 def _swing_bars() -> pd.DataFrame:
     sessions = [

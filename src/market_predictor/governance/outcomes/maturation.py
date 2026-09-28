@@ -85,6 +85,8 @@ def maturation_attempt(
     reasons: tuple[str, ...],
     context: AttemptContext,
     missing_intervals: tuple[str, ...] = (),
+    operator_id: str | None = None,
+    operator_reference: str | None = None,
 ) -> MaturationAttempt:
     if status not in {"pending", "blocked", "unresolvable"}:
         raise ValueError("maturation attempt status must be pending, blocked or unresolvable")
@@ -101,6 +103,8 @@ def maturation_attempt(
         "settlement_days": context.settlement_days,
         "drift_policy_sha256": context.drift_policy_sha256,
         "receipt_ids": tuple(sorted(set(context.receipt_ids))),
+        "operator_id": operator_id,
+        "operator_reference": operator_reference,
     }
     return MaturationAttempt.model_validate(
         {**base, "attempt_id": content_sha256(base)}

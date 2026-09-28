@@ -303,6 +303,10 @@ class OutcomeRepositoryTests(unittest.TestCase):
             repository.record_attempt(_attempt(intent), decision_session=session)
             repository.record_attempt(_attempt(intent, observed=later), decision_session=session)
             self.assertEqual(len(repository.attempts(intent.maturation_key, session)), 1)
+            # The log runs forward in time.
+            with self.assertRaises(PredictionConflictError):
+                repository.record_attempt(_attempt(intent, reasons=("earlier",), observed=later - timedelta(days=30)),
+                                          decision_session=session)
 
             unresolvable = _attempt(intent, status="unresolvable", reasons=("cash_merger",), observed=later)
             repository.record_attempt(unresolvable, decision_session=session)
@@ -757,6 +761,8 @@ def _attempt(
         "settlement_days": 3,
         "drift_policy_sha256": "d" * 64,
         "receipt_ids": (),
+        "operator_id": None,
+        "operator_reference": None,
     }
     return MaturationAttempt.model_validate(
         {**base, "attempt_id": content_sha256(base)}
