@@ -111,8 +111,8 @@ def test_a_daily_unit_is_collected_and_reloaded_with_absent_symbols_as_no_bars(t
     [loaded] = load_bar_receipts(tmp_path, [DECISION])
 
     assert receipt["status"] == "complete" and loaded.complete
-    assert loaded.sessions_returned("MSFT") == frozenset([DECISION, *SESSIONS])
-    assert loaded.sessions_returned("TWTR") == frozenset()
+    assert loaded.sessions_with_rows("MSFT") == frozenset([DECISION, *SESSIONS])
+    assert loaded.sessions_with_rows("TWTR") == frozenset()
     request = source.client.requests[0]  # type: ignore[attr-defined]
     assert (request["asof"], request["adjustment"], request["timeframe"]) == ("2026-07-24", "all", "1Day")
     bars = daily_path_bars(loaded, "MSFT")
@@ -127,7 +127,7 @@ def test_an_empty_response_is_a_complete_receipt_without_bars(tmp_path: Path) ->
 
     [loaded] = load_bar_receipts(tmp_path, [DECISION])
 
-    assert loaded.complete and loaded.sessions_returned("TWTR") == frozenset()
+    assert loaded.complete and loaded.sessions_with_rows("TWTR") == frozenset()
 
 
 def test_a_page_chain_is_followed_and_verified_on_load(tmp_path: Path) -> None:
@@ -137,7 +137,7 @@ def test_a_page_chain_is_followed_and_verified_on_load(tmp_path: Path) -> None:
     [loaded] = load_bar_receipts(tmp_path, [DECISION])
 
     assert len(receipt["pages"]) == 2  # type: ignore[arg-type]
-    assert loaded.sessions_returned("MSFT") == frozenset(SESSIONS)
+    assert loaded.sessions_with_rows("MSFT") == frozenset(SESSIONS)
 
 
 def test_a_receipt_without_its_first_page_is_refused(tmp_path: Path) -> None:
@@ -210,7 +210,7 @@ def test_bars_retrieved_before_they_were_final_count_as_not_returned(tmp_path: P
 
     [loaded] = load_bar_receipts(tmp_path, [DECISION])
 
-    assert loaded.sessions_returned("MSFT") == frozenset(SESSIONS[:2])
+    assert loaded.sessions_with_rows("MSFT") == frozenset(SESSIONS[:2])
 
 
 def test_a_duplicated_session_is_a_defect_not_a_gap(tmp_path: Path) -> None:
@@ -262,7 +262,7 @@ def test_minute_receipts_are_matched_to_their_session(tmp_path: Path) -> None:
                                     first_session=SESSIONS[0], last_session=SESSIONS[0], timeframe="1Min")
 
     assert first.unit.start == datetime(2026, 7, 27, 13, 30, tzinfo=UTC)
-    assert first.sessions_returned("MSFT") == frozenset({SESSIONS[0]})
+    assert first.sessions_with_rows("MSFT") == frozenset({SESSIONS[0]})
 
 
 def test_units_refuse_malformed_requests() -> None:
@@ -309,13 +309,14 @@ def test_corporate_actions_are_collected_and_reloaded(tmp_path: Path) -> None:
     assert loaded.actions == {"cash_mergers": (merger,)}
 
 
-def test_an_action_repeated_across_pages_is_refused(tmp_path: Path) -> None:
+def test_an_action_repeated_across_pages_fails_the_receipt(tmp_path: Path) -> None:
     merger = {"id": "merger-1", "acquiree_symbol": "TWTR", "effective_date": "2022-10-28"}
-    collect_corporate_actions(_source(_actions({"cash_mergers": [merger]}, {"cash_mergers": [merger]})),
-                              [_action_unit()], root=tmp_path, clock=_clock())
+    [receipt] = collect_corporate_actions(_source(_actions({"cash_mergers": [merger]}, {"cash_mergers": [merger]})),
+                                          [_action_unit()], root=tmp_path, clock=_clock())
 
-    with pytest.raises(DataReadinessError, match="repeats an action"):
-        load_action_receipts(tmp_path, [DECISION])
+    assert receipt["status"] == "failed" and "repeated an action" in receipt["failure"]["message"]  # type: ignore[index]
+    [loaded] = load_action_receipts(tmp_path, [DECISION])
+    assert not loaded.complete
 
 
 def test_a_refused_corporate_action_request_is_a_failed_receipt(tmp_path: Path) -> None:

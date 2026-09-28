@@ -189,7 +189,8 @@ class BarReceipt:
     finished_at_utc: datetime
     rows: Mapping[str, tuple[tuple[dict[str, Any], datetime], ...]]
 
-    def sessions_returned(self, symbol: str) -> frozenset[date]:
+    def sessions_with_rows(self, symbol: str) -> frozenset[date]:
+        """Sessions with any final row for the symbol, usable or not; usability is the validator's call."""
         return frozenset(_bar_session(row["t"], self.unit) for row, _ in self.rows.get(symbol, ()))
 
 
@@ -268,6 +269,7 @@ def collect_corporate_actions(
         pages: list[dict[str, object]] = []
         failure: dict[str, str] | None = None
         token: str | None = None
+        identities: list[str] = []
         try:
             for _ in range(_MAXIMUM_PAGES):
                 response = fetch_corporate_actions_page(
@@ -275,7 +277,11 @@ def collect_corporate_actions(
                 )
                 _store_body(root, response)
                 pages.append({"request_page_token": token, "response": http_response_record(response)})
-                _, token = decode_corporate_actions_page(response, expected_params=unit.request_params(token))
+                families, token = decode_corporate_actions_page(response, expected_params=unit.request_params(token))
+                identities.extend(str(item["id"]) for records in families.values() for item in records if item.get("id"))
+                if len(identities) != len(set(identities)):
+                    # A paging fault on the provider's side; such a receipt never counts as complete.
+                    raise DataReadinessError("the provider repeated an action across pages")
                 if token is None:
                     break
             else:
