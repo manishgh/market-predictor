@@ -435,13 +435,16 @@ def _publish(
     started: datetime,
     finished: datetime,
 ) -> dict[str, object]:
+    # The attempt spans the process clock and every page's retrieval clock, so a clock step
+    # between the two can never make a stored receipt fail its own verification.
+    retrieved = [_aware(_mapping(page["response"])["retrieved_at_utc"]) for page in pages]
     content: dict[str, object] = {
         "schema": schema,
         "unit": unit,
         "status": "failed" if failure else "complete",
         "failure": failure,
-        "attempt_started_at_utc": started.astimezone(UTC).isoformat(),
-        "attempt_finished_at_utc": finished.astimezone(UTC).isoformat(),
+        "attempt_started_at_utc": min([started.astimezone(UTC), *retrieved]).isoformat(),
+        "attempt_finished_at_utc": max([finished.astimezone(UTC), *retrieved]).isoformat(),
         "pages": pages,
     }
     receipt = {**content, "receipt_id": json_sha256(content)}

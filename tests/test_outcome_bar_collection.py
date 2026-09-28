@@ -155,6 +155,17 @@ def test_a_receipt_without_its_first_page_is_refused(tmp_path: Path) -> None:
         load_bar_receipts(tmp_path, [DECISION])
 
 
+def test_a_clock_step_during_collection_still_leaves_a_loadable_receipt(tmp_path: Path) -> None:
+    # The process clock reads seconds after the client's retrieval clock.
+    ahead = RETRIEVED + timedelta(seconds=5)
+    collect_bars(_source(_daily({"MSFT": [_bar(s) for s in SESSIONS]})), [_unit("MSFT")],
+                 root=tmp_path, clock=_clock(ahead))
+
+    [loaded] = load_bar_receipts(tmp_path, [DECISION])
+
+    assert loaded.complete and loaded.started_at_utc == RETRIEVED
+
+
 def test_a_failed_response_is_a_failed_receipt_that_never_supplies_a_path(tmp_path: Path) -> None:
     [receipt] = collect_bars(
         _source(lambda _url, _params: (429, {"message": "too many requests"})),
