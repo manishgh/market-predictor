@@ -4,12 +4,13 @@ Status: active
 Last updated: 2026-09-28
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `8fdb29f` (monitoring part (3b), local;
-publication pending). Last pushed implementation: `b3c8761` (API v4; consumer migration pending).
-Last implementation handoff receipt: `21ef677`; inspected HEAD and the local
-`origin/unified-swing-product` tracking ref both point there at continuation start.
-Latest pending design: `38c698e` (monitoring part (3), registration and population).
-Working tree was clean before this documentation-only continuation review.
+Last locally verified implementation checkpoint: `116d711` (monitoring part (3c)).
+Part (3b): `8fdb29f` (local). Last pushed implementation: `b3c8761` (part (3a), API v4).
+Publication after (3a) is blocked pending explicit user authorization following an
+automatic approval-review rejection. No push was retried after that rejection.
+The working tree was clean after the local implementation commit; this documentation
+receipt is committed separately. The continuation baseline was `21ef677`.
+Part (3)'s design: `38c698e`, amended by the September 28 review in `18bdd8e`.
 Earlier retirement sub-slice (b) closure: `ea93712`, after `7dd6d44`.
 Last completed model-training checkpoint: relationship run on `a8be7cb` (artifact pins below).
 Baseline model-training checkpoint: `07963cc` (pushed; unchanged).
@@ -17,6 +18,55 @@ Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
+
+Part (3c) implementation `116d711` (September 28, local; publication pending):
+reports load only committed session inventories, preserving every member in the
+denominator and rejecting missing or mismatched committed evidence. Coverage binds
+each release activation to expected XNYS cutoffs and partitions registered, failed
+and missing sessions. Missing sessions beyond the existing grace block actionability;
+registered share below 95% warns without upgrading a warming route. Session-record
+and as-of deciding-attempt ids bind cohort/report identities. Unknown unscored
+metadata remains null in observations and is labelled unavailable in grouped reports.
+Internal report fields are required; prior reports have no compatibility fallback.
+
+Consolidated component review found two concrete consumer conflicts and one contract
+conflict, all fixed in the same checkpoint:
+- Major, `performance.py`/`repository.py`: a prior partial snapshot can own the shared
+  semantic pending index. The committed session's intent could then disappear from
+  the overdue check. Reporting now traverses exact committed intent ids, reuses loaded
+  in-window intents and does not open old observation partitions. It checks outcome
+  and attempt availability at report time. Route-wide source ids include the evidence
+  consumed outside the rolling metric window; the metric population still uses the
+  established maturity-aligned window. Regression tests cover a competing partial
+  index and a future outcome for an older committed decision. This correctness cost
+  is a sequential scan of committed intent/outcome metadata, not the old pending-only
+  scan; no production-scale performance claim is made.
+- Major, `serving/session_registration.py`: collection/maturation still require a
+  canonical pending intent. A changed snapshot after a partial write must not commit
+  unreachable intents. Registration checks existing semantic bindings before writing
+  and verifies them before the final marker. Conflicting retries fail closed; the
+  original immutable snapshot remains resumable without rebinding or deleting evidence.
+  The new integration test verifies both the refusal and original-snapshot recovery.
+- Moderate, `session_records.py`: route coverage must represent the existing supported
+  swing/investment horizon syntax. It now uses the shared horizon pattern; unsupported
+  drift evidence policies still fail closed. This adds no investment scorer or policy.
+
+Verification tier: component. The reporting, drift, registration, repository, intent,
+package and architecture run passed 323 tests. The subsequent reporting/CLI/maturation
+run passed 88 with one invalid new fixture (its two availability clocks disagreed);
+the fixture was corrected. After all final fixes, all 25 re-affected population,
+registration and intent tests passed. Ruff clean on 11 changed Python files; strict
+mypy clean on six source modules; diff checks clean. All test processes completed.
+No full suite, training, provider collection, sealed-data read, live registration,
+deployment or promotion ran. API bytes unchanged from (3a); the separately owned C#
+consumer migration remains pending. The publisher does not exist yet.
+
+Monitoring part (3a)/(3b)/(3c) is implemented and locally verified. Formal checkpoint
+closure still awaits publication: automatic approval review rejected the continuity
+document push to the GitHub destination without explicit user authorization. Do not
+retry or work around that rejection before authorization. Local commits after
+`b3c8761`, including this code receipt, remain unpublished.
+
 
 
 Part (3b) implementation `8fdb29f` (local; publication awaiting authorization): scoped
@@ -83,7 +133,7 @@ Work split (user decision, September 27): this developer owns `market-predictor`
 second developer (Astra, a separate ChatGPT/Codex session) owns `trading_flow`. They
 coordinate only through files, relayed by the user: the contract
 `docs/contracts/prediction_api.md` with its golden fixture
-`tests/fixtures/contracts/swing_prediction_response.json` (current API v3 fixture), the handoff
+`tests/fixtures/contracts/swing_prediction_response.json` (current API v4 fixture), the handoff
 `docs/contracts/tradingflow_handoff.md` (paths, boundaries, tasks), and TradingFlow's
 `docs/integration/market-predictor-notes.md` for acknowledgements and requests. Do not edit
 `trading_flow`; record every wire change in the contract's Change log first.
@@ -1299,62 +1349,40 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: part (3c), committed-session population, coverage and drift.
-Part (3a) is pushed as `b3c8761`; part (3b) is locally committed as `8fdb29f`.
-Publication after (3a) awaits explicit authorization following the automatic review
-rejection. Earlier pending-code statements below are superseded by these receipts.
+Exact next checkpoint: publish the verified monitoring part (3) commits once the
+user authorizes the rejected GitHub push; then freeze and implement the nightly
+live-input publisher. Parts (3a), (3b), and (3c) are locally implemented and verified.
+Do not reopen them for another general review. The API v4 consumer migration remains
+with TradingFlow's developer; relay only through the existing contract/handoff files.
 
+The publisher must use the verified causal source authorities and availability clocks,
+publish an atomic immutable live generation, and preserve existing memory/admission
+and point-in-time guards. There is no production publisher or real-data registration
+receipt yet. Freeze a bounded design and exit gates before coding; do not equate the
+synthetic registration tests with a promoted release or live readiness. Complete this
+before part (4) inference/curve/rank work and part (6) replay boundaries.
 
-The September 28 local continuation review is consolidated in the active plan under
-"Part (3) continuation review". It found three design gaps: audit timestamps/random
-request ids prevent deterministic session retries; generic feature ineligibility
-cannot exempt missing input data as short history; and the scored-only evidence path
-cannot represent every member or an all-abstaining cross-section. The plan records
-the exact code evidence, bounded remedies and exit tests. This is not a claimed
-approval by the prior independent reviewers. Preserve the existing exclusion ceiling;
-fold the proposed `insufficient_history` reason into `live_inputs_incomplete` for this
-slice. Only natural sector peer-floor abstentions are exempt from that ceiling.
+Files to read: AGENTS.md; the current checkpoint and part (3) receipts/design in the
+active plan; `serving/swing_features.py`, `serving/prediction_service.py`,
+`serving/session_registration.py`, `governance/outcomes/session_records.py`,
+`governance/outcomes/session_coverage.py`, `governance/outcomes/performance.py`,
+and `docs/contracts/tradingflow_handoff.md`. Source paths are beneath
+`src/market_predictor`; locate the actual live-input provider before designing its writer.
 
-Order and boundaries:
-1. Finalize the amended part (3a) design, then implement the shared scorer, full member
-   identity/reason evidence and `sector_peer_floor`. Keep client serving drift-gated;
-   only internal monitoring scoring bypasses that gate. Preserve model/source
-   verification, promotion availability, admission and memory guards.
-2. Before a wire change lands, append the contract change log, regenerate the fixture
-   and update the TradingFlow handoff. Current code still serves
-   `market_predictor.prediction.v3`; no API v4 is published by this review.
-3. Part (3b): deterministic decision identity, scoped snapshots, cross-section-only
-   intent registration, full member observations, session records and crash/retry
-   behavior. Part (3c): committed-session populations, coverage, drift and identities.
-4. Build the nightly live-input publisher immediately after (3), and verify real-data
-   registration before part (4) inference/curve/rank and part (6) replay boundaries.
-   No production publisher currently exists; synthetic tests cannot establish live
-   registration readiness.
-5. Close the remaining retirement/replay and SEC-slice gates, then resume qualified
-   issuer/SEC reaction features and the final two frozen fits. Both corrected SEC
-   collections are complete (receipts above); no collector needs resuming. The later
-   collection stays sealed and unread. Do not refit the completed baseline or
-   relationship specifications, widen the six-specification budget, or start deferred
-   R7.8 deployment/security work. TradingFlow remains owned by the other developer.
-
-Files to read: the part (3) design and continuation review in the active plan;
-`serving/prediction_service.py`, `serving/swing_features.py`,
-`core/prediction_contracts.py`, `serving/snapshot_store.py`,
-`serving/outcome_intents.py`, `governance/outcomes/contracts.py`,
-`governance/outcomes/repository.py`, `governance/outcomes/performance.py`, and
-`docs/contracts/prediction_api.md` (source paths are below `src/market_predictor`).
-
-Continuation baseline verification: project `.venv/Scripts/python.exe -m pytest
-tests/test_active_continuity_documents.py tests/test_prediction_snapshot.py
-tests/test_swing_live_features.py -q -p no:cacheprovider` with unique basetemp
-`C:/Users/manis/Documents/Codex/2026-09-28/c/work/resume-checks-01`: 24 passed,
-1 skipped (opt-in production-scale RSS benchmark), one expected non-finite-payload
-serializer warning, 26.83 seconds. Post-edit continuity tests: 2 passed (0.15 s);
-`git diff --check` clean.
-Read-only probes confirmed that a changed recording timestamp changes the snapshot
-hash and `PredictionRequest` rejects 101 tickers. New part (3) behavior is unimplemented
-and unverified. No full suite, lint/types, C# checks, training, provider collection,
-sealed-content inspection or model promotion ran for this prose-only review.
+Part (3c) verification commands used the project `.venv/Scripts/python.exe` with
+`PYTHONDONTWRITEBYTECODE=1`, TEMP/TMP set to the chat's writable work directory and
+`-p no:cacheprovider --basetemp=C:/Users/manis/Documents/Codex/2026-09-28/c/work/<unique>`:
+- 323 passed: pytest `test_session_population`, `test_performance_monitoring`,
+  `test_drift_policy`, `test_session_registration`, `test_outcome_repository`,
+  `test_outcome_intents`, `test_package_dependency_boundaries`, `test_architecture_boundaries`.
+- Additional direct-consumer verification: `test_outcome_commands`,
+  `test_outcome_maturation`, and continuity tests passed in the 88-pass run described
+  above. Its single new population fixture failure was corrected and reverified.
+- Final 25 passed: pytest `tests/test_session_population.py`,
+  `tests/test_session_registration.py`, `tests/test_outcome_intents.py` (46.41 seconds).
+- Ruff `--no-cache` over all 11 changed Python files; strict mypy over performance,
+  repository, session coverage, session records, drift policy and session registration.
+  No full-suite or fresh C# build was run for the internal reporting checkpoint.
 
 Historical research constraints still apply: unchanged 586,305 decisions, labels,
 weights, costs, splits and approved exclusions; initial fit July 2019-May 2024.

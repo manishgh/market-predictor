@@ -14,7 +14,7 @@ This is the only active execution plan. Exact artifact state is recorded in
 
 ## Objective And Boundary
 
-Naming rule (user, September 27): Only the public API is versioned (contract `market_predictor.prediction.v3`, routes
+Naming rule (user, September 27): Only the public API is versioned (current contract `market_predictor.prediction.v4`, routes
 under `/v1/`). Models are not final, so model, record, class, file and other internal
 names carry no version number (`V3`, `.v3`, `_v1`) in either repository.
 Old-format records are refused by strict validation (unknown fields forbidden, required
@@ -48,13 +48,15 @@ outside this repository.
 
 ## Unified Product Implementation
 
-Current checkpoint: **Monitoring part (3), registration and population** (`in progress`).
-Part (2b-3) review fixes are implemented in `346e0ec`, with handoff receipt `21ef677`.
-Part (3)'s design is in `38c698e`; the September 28 continuation review below records
-three corrections before code. Resume with bounded part (3a), then (3b), then (3c).
-The nightly live-input publisher follows (3), before monitoring (4) and replay (6).
-Part (3a) is implemented in `b3c8761`; part (3b) is next. API v4 is published;
-TradingFlow consumer integration remains pending.
+Current checkpoint: **Monitoring part (3), publication closure** (`in progress`).
+Implementation is locally complete: (3a) `b3c8761` is pushed, (3b) `8fdb29f`
+and (3c) `116d711` are committed and verified locally. Automatic approval review
+blocked publication after (3a); explicit user authorization is pending. No further
+part (3) implementation is planned absent a concrete failing invariant.
+The nightly live-input publisher is the next implementation checkpoint after this
+closure, before monitoring (4) and replay (6). Freeze its inputs, publication and
+availability rules before coding. Real-data registration remains unverified.
+API v4 is published; TradingFlow's separate consumer migration is still pending.
 
 Verification policy update (September 20): both repositories' `AGENTS.md` now use
 targeted code checks, affected component integration/integrity/causality checks,
@@ -1783,6 +1785,54 @@ re-affected registration/snapshot/intent/replay tests passed. Ruff clean on ten 
 Python files; strict mypy clean on eight sources. No full suite or live/provider run.
 API v4 bytes unchanged from part (3a); C# migration is still separately pending.
 
+Part (3c) implementation `116d711` (September 28, local; publication pending):
+reports load only committed session inventories, preserving every member in the
+denominator and rejecting missing or mismatched committed evidence. Coverage binds
+each release activation to expected XNYS cutoffs and partitions registered, failed
+and missing sessions. Missing sessions beyond the existing grace block actionability;
+registered share below 95% warns without upgrading a warming route. Session-record
+and as-of deciding-attempt ids bind cohort/report identities. Unknown unscored
+metadata remains null in observations and is labelled unavailable in grouped reports.
+Internal report fields are required; prior reports have no compatibility fallback.
+
+Consolidated component review found two concrete consumer conflicts and one contract
+conflict, all fixed in the same checkpoint:
+- Major, `performance.py`/`repository.py`: a prior partial snapshot can own the shared
+  semantic pending index. The committed session's intent could then disappear from
+  the overdue check. Reporting now traverses exact committed intent ids, reuses loaded
+  in-window intents and does not open old observation partitions. It checks outcome
+  and attempt availability at report time. Route-wide source ids include the evidence
+  consumed outside the rolling metric window; the metric population still uses the
+  established maturity-aligned window. Regression tests cover a competing partial
+  index and a future outcome for an older committed decision. This correctness cost
+  is a sequential scan of committed intent/outcome metadata, not the old pending-only
+  scan; no production-scale performance claim is made.
+- Major, `serving/session_registration.py`: collection/maturation still require a
+  canonical pending intent. A changed snapshot after a partial write must not commit
+  unreachable intents. Registration checks existing semantic bindings before writing
+  and verifies them before the final marker. Conflicting retries fail closed; the
+  original immutable snapshot remains resumable without rebinding or deleting evidence.
+  The new integration test verifies both the refusal and original-snapshot recovery.
+- Moderate, `session_records.py`: route coverage must represent the existing supported
+  swing/investment horizon syntax. It now uses the shared horizon pattern; unsupported
+  drift evidence policies still fail closed. This adds no investment scorer or policy.
+
+Verification tier: component. The reporting, drift, registration, repository, intent,
+package and architecture run passed 323 tests. The subsequent reporting/CLI/maturation
+run passed 88 with one invalid new fixture (its two availability clocks disagreed);
+the fixture was corrected. After all final fixes, all 25 re-affected population,
+registration and intent tests passed. Ruff clean on 11 changed Python files; strict
+mypy clean on six source modules; diff checks clean. All test processes completed.
+No full suite, training, provider collection, sealed-data read, live registration,
+deployment or promotion ran. API bytes unchanged from (3a); the separately owned C#
+consumer migration remains pending. The publisher does not exist yet.
+
+Monitoring part (3a)/(3b)/(3c) is implemented and locally verified. Formal checkpoint
+closure still awaits publication: automatic approval review rejected the continuity
+document push to the GitHub destination without explicit user authorization. Do not
+retry or work around that rejection before authorization. Local commits after
+`b3c8761`, including this code receipt, remain unpublished.
+
 Part (3c) freeze: performance reads only the exact source-id inventory of registered
 session markers and fails on missing/mismatched committed rows; partial/uncommitted
 rows do not enter any rate, outcome statistic or route-pending gate. Report session
@@ -1833,11 +1883,11 @@ explicit user authorization; local work may continue and publication stays pendi
 Part (3) continuation review (September 28, against `21ef677`):
 
 This is a local, code-grounded design review, not a claim that the prior two
-independent reviewers have approved this implementation design. No part (3) code,
-API v4, session registration command or live-input publisher has landed. Complete
+independent reviewers have approved this implementation design. At that review baseline no part (3) code,
+API v4, session registration command or live-input publisher had landed. The review required
 the following corrections in the bounded implementation designs before their code.
-These corrections supersede the affected wording above. The current public contract
-and golden fixture remain v3.
+These corrections supersede the affected wording above. At that historical baseline the public contract
+and golden fixture were v3; the implementation receipts above supersede that status.
 
 1. Major: deterministic registration identity is underspecified. In
    `serving/snapshot_store.py`, `record` hashes `recorded_at_utc`; the response also
