@@ -1685,6 +1685,81 @@ blocker; these supersede the design above where they differ):
   body tampering and a missing body; lease contention; the re-collection stop rule; the
   halt corroboration; recorded real corporate-action pages.
 
+Part (3) registration and population: implementation design (September 28; for review
+before code)
+
+It implements the consolidated decisions "Registration never waits on drift", "Population",
+"Snapshots record a scope", "Registration lease", "Session records", "Identities" and
+"Sector peer floor". Measured facts it builds on:
+- The live path drops a member from the model frame when it is feature-ineligible or its
+  sector has fewer than `minimum_cross_section_for_ranking` (30) eligible peers
+  (`serving/swing_features.py` `_model_frame`); such a member then abstains as
+  `out_of_universe`, which is wrong: it is a member. Several S&P 500 sectors hold fewer
+  than 30 members, so this is common, not rare.
+- Members excluded for market or catalyst inputs abstain as `live_inputs_incomplete` and
+  count toward the 5% ceiling (`_validate_live_security_exclusions`).
+
+1. Scoring the cross-section (`serving/prediction_service.py`).
+   - The request path and a new `predict_swing_cross_section(as_of)` share one scoring
+     function. The cross-section scores every effective point-in-time member, requires a
+     verified promoted generation with `promoted_at_utc <= as_of` and valid live inputs,
+     and skips only the actionability (drift) gate; serving to clients stays gated.
+   - Every member gets a prediction or an abstention with a reason:
+     - `live_inputs_incomplete`: excluded for market or catalyst inputs (counted in the
+       5% ceiling, as now);
+     - `sector_peer_floor`: feature-eligible, but its sector has too few eligible peers.
+       When the sector reaches the floor only with its excluded peers, the drop is
+       cascaded from an input exclusion: it is recorded as `live_inputs_incomplete` and
+       counts toward the ceiling;
+     - `insufficient_history` (proposed): feature-ineligible for warm-up or history
+       reasons (a new constituent). It is neither an input failure nor a peer-floor drop;
+       the review should confirm this third reason or fold it into one of the two.
+   - `out_of_universe` remains only for a requested ticker that is not a member.
+2. Public contract: API `market_predictor.prediction.v4` through the append-only change
+   log. It adds the new abstention reasons and removes `PredictionRowEvidence.decision_atr`,
+   which nothing reads since intents take the ATR fraction. The golden fixture is
+   regenerated and TradingFlow's handoff names the one change it must adopt.
+3. Snapshots (`serving/snapshot_store.py`). A snapshot records `scope`: `request` (as
+   now, audit-only) or `decision_cross_section`: the as-of time, the route and release,
+   the member-set hash and the full response, with no request ticker list, so the
+   100-ticker request limit does not apply.
+4. Registration (`register-session-predictions --as-of`, production CLI only).
+   - Takes the monitoring lease (shared with collection and maturation, a bounded wait),
+     the admission lease and the 90% memory guard, never the heavy-job lease.
+   - Scores the cross-section, records its snapshot, then its intents (scored members)
+     and observations (every member, abstentions included), then the session record,
+     written last as the commit marker.
+   - `register-outcome-intents` accepts only `decision_cross_section` snapshots.
+5. Session records (outcome repository, `session_records/<session>/<route key>.json`).
+   - Status `registered` (members, scored, counts by abstention reason, the snapshot id and
+     content hash, the member-set hash) or `failed` (`exclusion_ceiling_exceeded`,
+     `inputs_unavailable`, `model_unavailable`, `registration_error`, and `not_run`
+     written by an operator), with `recorded_at_utc` outside the identity.
+   - An identical rerun is accepted, a different one refused; a `failed` record may be
+     replaced by `registered` from a retry for the same session.
+   - Route activation, per release, is the first XNYS session whose decision cutoff is at
+     or after the generation's `promoted_at_utc`.
+6. Population and drift (`governance/outcomes/performance.py`, `drift/policy.py`).
+   - Rates, sufficiency, the curve and the rank check use only cross-section observations
+     from `registered` sessions, one cross-section per route and session.
+   - The report counts the route's sessions in the window since activation, and those with
+     no record or a `failed` one. Drift is not ready when a session older than the grace
+     has no record, and warns when registered sessions fall below
+     `minimum_registered_session_share` (0.95) of the window.
+   - Cohort and report identities also bind the session-record ids and the ids of the
+     deciding attempts.
+7. The live-input publisher follows this part (the user's decision). Until it exists,
+   registration runs only against test generations; the listing exchange for the
+   sensitivity's delisting stress joins the membership data there.
+8. Delivery in three parts, each with its own diff review: (3a) cross-section scoring, the
+   abstention reasons and API v4; (3b) snapshot scope, registration, session records and the
+   cross-section-only intent registration; (3c) population, session coverage and drift,
+   identities. Tests: a thin sector abstaining as `sector_peer_floor`; a cascaded drop
+   counted in the ceiling; more than 100 members through registration and replay;
+   registration while drift is warming or not ready; identical and conflicting reruns; a
+   failed record replaced by a retry; a republished live generation not double counted; a
+   session gap turning drift not ready; request snapshots refused by intent registration.
+
 The September 20 user instruction explicitly extends the completed HTTP/CLI and
 TradingFlow cleanup to all remaining Market Predictor implementation. This is a
 changed requirement, not a reopening of previously passed tests without cause.
