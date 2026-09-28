@@ -3,12 +3,10 @@
 Status: active
 Last updated: 2026-09-28
 Repository: `C:\project\market-predictor`
-Branch: `unified-swing-product`
-Last locally verified implementation checkpoint: `cb70f81` (publisher metadata bounds),
-following `ebe5dfb` (nightly live-input publisher). Monitoring part (3c): `116d711`.
-Part (3b): `8fdb29f` (local). Last pushed implementation: `b3c8761` (part (3a), API v4).
-Publication after (3a) is blocked pending explicit user authorization following an
-automatic approval-review rejection. No push was retried after that rejection.
+Branch: `main`
+Last verified publisher implementation: `cb70f81`, following `ebe5dfb`.
+Monitoring implementations: `b3c8761`, `8fdb29f`, `116d711`. All are pushed on main
+through `bb88f75`; the user explicitly authorized GitHub publication and main merges.
 The code changes are committed; this documentation receipt is committed separately. The continuation baseline was `21ef677`.
 Part (3)'s design: `38c698e`, amended by the September 28 review in `18bdd8e`.
 Earlier retirement sub-slice (b) closure: `ea93712`, after `7dd6d44`.
@@ -71,28 +69,35 @@ builder rejects inadequate membership, and the live-feature suite verifies mathe
 batch/live parity. This is software verification, not real-source admission or promotion.
 No full suite, training, collection, deployment, sealed-data read or live broker call ran.
 
-TradingFlow's narrow migration is prepared against its existing dirty source snapshot
-in `C:/Users/manis/Documents/Codex/2026-09-28/c/work/trading-flow-v4`. It reads only
-`contract_version = market_predictor.prediction.v4`, re-pins the producer fixture, and
-renders `sector_peer_floor` distinctly while preserving nullable scores and advisory
-isolation. Independent plan and final code review found no remaining actionable issue.
-Fresh Web/Contracts compilation and 84 focused consumer tests passed; the Android build
-passed with zero warnings/errors. The final patch passed `git apply --check` against
-the original checkout; all recorded baseline hashes matched at export.
+Main integration receipt (September 28): the user explicitly authorized merging
+both projects into main and pushing to their configured GitHub remotes. Market
+Predictor main fast-forwarded to `bb88f75` and was pushed, including publisher commits
+`ebe5dfb`/`cb70f81` and all monitoring commits. TradingFlow main includes
+`e3b6734` locally. Market Predictor's earlier publication blocker is resolved.
+Automatic approval review rejected the TradingFlow push because private source and
+documentation require explicit approval for that exact payload and configured GitHub
+destination. A payload-specific approval question is pending; no retry was attempted.
 
-The original TradingFlow checkout and running Web process remain untouched pending
-the user's safe-stop/isolation decision. Its AGENTS.md requires stopping project runtimes
-before source changes. The patch, original-file hashes and application instructions are
-in `C:/Users/manis/Documents/Codex/2026-09-28/c/outputs/tradingflow-api-v4.patch`,
-`tradingflow-api-v4-baseline.json` and `tradingflow-api-v4-status.md`. Recheck hashes before
-applying; do not overwrite other developer edits or use stale test binaries as proof.
+TradingFlow's predictor integration was isolated onto committed main, including the
+required evidence records, signal display and Web/Android projections. Only
+`contract_version = market_predictor.prediction.v4` is accepted; all five fixture
+outcomes, null scores and distinct sector_peer_floor labels are preserved. Advisory
+output remains independent of execution scoring. The isolated main checkout passed
+84 freshly built focused tests and an Android build with zero warnings/errors.
+Independent plan and final isolation review found no remaining actionable findings.
+
+TradingFlow main was built in
+`C:/Users/manis/Documents/Codex/2026-09-28/c/work/trading-flow-main`. Its original
+`C:/project/trading_flow` checkout remains on unified-swing-product with all unrelated
+uncommitted work and its running process preserved. This is a source merge, not a
+runtime deployment. The earlier patch under the chat outputs is historical preparation;
+the committed main implementation is now authoritative. Do not reset the dirty checkout
+or apply its old patch onto main. Integrate its remaining local work separately.
 
 Real-data activation remains `environment_pending`: no active generation was found at
 `data/live/edge_rebuild/swing/active_generation.json`; approved current source paths/pins
-and a promoted release have not been supplied/verified. GitHub publication remains
-separately blocked by the prior automatic approval-review rejection; no retry occurred.
-
-
+and a promoted release have not been supplied/verified. No real nightly publication,
+session registration, model promotion, broker call or deployment was performed.
 
 Historical part (3c) receipt `116d711` (September 28, local; publication pending):
 reports load only committed session inventories, preserving every member in the
@@ -136,15 +141,11 @@ No full suite, training, provider collection, sealed-data read, live registratio
 deployment or promotion ran. API bytes unchanged from (3a); the separately owned C#
 consumer migration and publisher were pending at that checkpoint; see current receipt above.
 
-Monitoring part (3a)/(3b)/(3c) is implemented and locally verified. Formal checkpoint
-closure still awaits publication: automatic approval review rejected the continuity
-document push to the GitHub destination without explicit user authorization. Do not
-retry or work around that rejection before authorization. Local commits after
-`b3c8761`, including this code receipt, remain unpublished.
+Monitoring part (3a)/(3b)/(3c) is implemented and verified. The earlier publication
+block described in these historical receipts was resolved by the user's explicit
+merge/push instruction. See the current main integration receipt above.
 
-
-
-Part (3b) implementation `8fdb29f` (local; publication awaiting authorization): scoped
+Historical Part (3b) implementation `8fdb29f` (local; publication awaiting authorization): scoped
 snapshots and deterministic decision ids, full-member observations, strict route and
 session records, crash/retry recovery, production registration and audited not_run.
 Request snapshots cannot register. Cross-section replay is not constrained by the
@@ -1424,20 +1425,22 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: resolve the pending safe-stop/isolation decision, then apply
-the verified TradingFlow API v4 patch only after checking its baseline hashes and
-stopping the authorized runtime. Rebuild/retest and restore the app normally. Obtain
-approved production canonical/catalyst source paths and independent pins for a real
-nightly publication; verify a promoted release before session registration. Do not
-reimplement the publisher or treat the isolated migration as applied. Local GitHub
-publication still requires the pending explicit authorization. Do not advance to part
-(4) inference/curve/rank work or part (6) replay boundaries until this checkpoint closes.
+Exact next checkpoint: obtain approved production canonical stock/benchmark bars,
+point-in-time membership and catalyst authority paths with independent pins, then run
+the verified nightly publisher. Verify a promoted release before session registration.
+Source implementation is complete and Market Predictor main is pushed. TradingFlow's
+verified main commit awaits payload-specific push approval; do not retry before it
+arrives. Do not reimplement the
+publisher or API v4 migration. TradingFlow's running original checkout remains dirty
+and unchanged; reconcile its unrelated work separately before any runtime deployment.
+Do not advance to part (4) inference/curve/rank or part (6) replay until the current
+environment-dependent checkpoint closes.
 
 Files to read: AGENTS.md; this current receipt and the active plan; README publisher
 instructions; `serving/live_input_publication.py`, `serving/swing_features.py`,
 `serving/session_registration.py`, `commands/session_monitoring.py` (source paths under
-`src/market_predictor`); `docs/contracts/tradingflow_handoff.md`; TradingFlow AGENTS.md
-and the migration status/baseline/patch named above.
+`src/market_predictor`); `docs/contracts/tradingflow_handoff.md`; TradingFlow main's
+AGENTS.md and `docs/integration/market-predictor-handoff.md`.
 
 Publisher verification uses `.venv/Scripts/python.exe`, `PYTHONDONTWRITEBYTECODE=1`,
 writable TEMP/TMP, `-p no:cacheprovider` and a unique writable `--basetemp`:

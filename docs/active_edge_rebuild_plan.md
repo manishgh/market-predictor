@@ -6,7 +6,7 @@ Last updated: 2026-09-28
 
 Repository: `C:\project\market-predictor`
 
-Branch: `unified-swing-product`
+Branch: `main`
 
 This is the only active execution plan. Exact artifact state is recorded in
 `docs/reviews/active_edge_rebuild_handoff.md`; statistical rules are defined in
@@ -49,10 +49,11 @@ outside this repository.
 ## Unified Product Implementation
 
 Current checkpoint: **Nightly live-input publisher and API v4 consumer** (`in progress`).
-Monitoring implementation is locally complete: (3a) `b3c8761` is pushed, (3b) `8fdb29f`
-and (3c) `116d711` are committed and verified locally. Automatic approval review
-blocked publication after (3a); explicit user authorization is pending. No further
-part (3) implementation is planned absent a concrete failing invariant.
+Monitoring and publisher software is verified and pushed on main. The reviewed
+API v4 consumer integration is also committed on TradingFlow main, with its push awaiting
+payload-specific approval after automatic review rejection. The current checkpoint
+remains environment_pending for approved live inputs and promoted-release registration;
+no further publisher or consumer implementation is planned absent a concrete defect.
 Nightly live-input publisher freeze (September 28, user requested implementation):
 publish prepared, independently pinned production canonical stock bars, benchmark bars,
 point-in-time membership and a production catalyst decision authority into the existing
@@ -105,27 +106,35 @@ builder rejects inadequate membership, and the live-feature suite verifies mathe
 batch/live parity. This is software verification, not real-source admission or promotion.
 No full suite, training, collection, deployment, sealed-data read or live broker call ran.
 
-TradingFlow's narrow migration is prepared against its existing dirty source snapshot
-in `C:/Users/manis/Documents/Codex/2026-09-28/c/work/trading-flow-v4`. It reads only
-`contract_version = market_predictor.prediction.v4`, re-pins the producer fixture, and
-renders `sector_peer_floor` distinctly while preserving nullable scores and advisory
-isolation. Independent plan and final code review found no remaining actionable issue.
-Fresh Web/Contracts compilation and 84 focused consumer tests passed; the Android build
-passed with zero warnings/errors. The final patch passed `git apply --check` against
-the original checkout; all recorded baseline hashes matched at export.
+Main integration receipt (September 28): the user explicitly authorized merging
+both projects into main and pushing to their configured GitHub remotes. Market
+Predictor main fast-forwarded to `bb88f75` and was pushed, including publisher commits
+`ebe5dfb`/`cb70f81` and all monitoring commits. TradingFlow main includes
+`e3b6734` locally. Market Predictor's earlier publication blocker is resolved.
+Automatic approval review rejected the TradingFlow push because private source and
+documentation require explicit approval for that exact payload and configured GitHub
+destination. A payload-specific approval question is pending; no retry was attempted.
 
-The original TradingFlow checkout and running Web process remain untouched pending
-the user's safe-stop/isolation decision. Its AGENTS.md requires stopping project runtimes
-before source changes. The patch, original-file hashes and application instructions are
-in `C:/Users/manis/Documents/Codex/2026-09-28/c/outputs/tradingflow-api-v4.patch`,
-`tradingflow-api-v4-baseline.json` and `tradingflow-api-v4-status.md`. Recheck hashes before
-applying; do not overwrite other developer edits or use stale test binaries as proof.
+TradingFlow's predictor integration was isolated onto committed main, including the
+required evidence records, signal display and Web/Android projections. Only
+`contract_version = market_predictor.prediction.v4` is accepted; all five fixture
+outcomes, null scores and distinct sector_peer_floor labels are preserved. Advisory
+output remains independent of execution scoring. The isolated main checkout passed
+84 freshly built focused tests and an Android build with zero warnings/errors.
+Independent plan and final isolation review found no remaining actionable findings.
+
+TradingFlow main was built in
+`C:/Users/manis/Documents/Codex/2026-09-28/c/work/trading-flow-main`. Its original
+`C:/project/trading_flow` checkout remains on unified-swing-product with all unrelated
+uncommitted work and its running process preserved. This is a source merge, not a
+runtime deployment. The earlier patch under the chat outputs is historical preparation;
+the committed main implementation is now authoritative. Do not reset the dirty checkout
+or apply its old patch onto main. Integrate its remaining local work separately.
 
 Real-data activation remains `environment_pending`: no active generation was found at
 `data/live/edge_rebuild/swing/active_generation.json`; approved current source paths/pins
-and a promoted release have not been supplied/verified. GitHub publication remains
-separately blocked by the prior automatic approval-review rejection; no retry occurred.
-
+and a promoted release have not been supplied/verified. No real nightly publication,
+session registration, model promotion, broker call or deployment was performed.
 
 Verification policy update (September 20): both repositories' `AGENTS.md` now use
 targeted code checks, affected component integration/integrity/causality checks,
