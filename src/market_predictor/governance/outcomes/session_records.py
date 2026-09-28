@@ -13,7 +13,7 @@ from market_predictor.canonical.cutoffs import swing_prediction_cutoffs
 from market_predictor.core import path_integrity
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.core.prediction_contracts import PredictionConflictError
-from market_predictor.governance.outcomes.contracts import content_sha256
+from market_predictor.governance.outcomes.contracts import SWING_HORIZON_PATTERN, content_sha256
 from market_predictor.governance.outcomes.repository import _write_json_durable
 from market_predictor.locking import file_lock
 
@@ -23,7 +23,7 @@ SHA = r"^[0-9a-f]{64}$"
 class MonitoringRoute(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     view: Literal["swing"] = "swing"
-    horizon: Literal["10b"] = "10b"
+    horizon: str = Field(default="10b", pattern=SWING_HORIZON_PATTERN)
     model_release_id: str = Field(pattern=SHA)
     model_artifact_sha256: str = Field(pattern=SHA)
     prediction_policy_sha256: str = Field(pattern=SHA)

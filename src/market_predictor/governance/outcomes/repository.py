@@ -270,8 +270,10 @@ class OutcomeRepository:
             raise PredictionConflictError
         return frozenset(str(horizon) for horizon in horizons)
 
-    def session_intents(self, session: date) -> list[PredictionMaturationIntent]:
+    def session_intents(self, session: date, *, intent_ids: tuple[str, ...] | None = None) -> list[PredictionMaturationIntent]:
         root = self._partition(session) / "intents"
+        if intent_ids is not None:
+            return [self.load_intent(key, session) for key in intent_ids]
         if not root.exists():
             return []
         return [self.load_intent(path.stem, session) for path in sorted(root.glob("*.json"))]
@@ -280,6 +282,7 @@ class OutcomeRepository:
         self,
         session: date,
         intents: Mapping[str, PredictionMaturationIntent],
+        *, observation_ids: tuple[str, ...] | None = None,
     ) -> list[PredictionMonitoringObservation]:
         """The partition's observations, each checked against its intent in `intents`.
 
@@ -287,10 +290,14 @@ class OutcomeRepository:
         so no intent is loaded twice.
         """
         root = self._partition(session) / "observations"
-        if not root.exists():
+        if not root.exists() and observation_ids is None:
             return []
         observations: list[PredictionMonitoringObservation] = []
-        for path in sorted(root.glob("*.json")):
+        paths = (
+            [self._path(session, "observations", key) for key in observation_ids]
+            if observation_ids is not None else sorted(root.glob("*.json"))
+        )
+        for path in paths:
             observation = self._load_model(path, PredictionMonitoringObservation)
             if observation.observation_id != path.stem or observation.decision_session_et != session:
                 raise PredictionConflictError

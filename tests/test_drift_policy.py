@@ -25,6 +25,7 @@ from market_predictor.governance.drift.policy import (
     evaluate_drift,
 )
 from market_predictor.governance.outcomes.contracts import content_sha256
+from market_predictor.governance.outcomes.session_records import MonitoringRoute, expected_sessions
 from market_predictor.modeling.feature_reference import feature_reference_names_sha256
 from market_predictor.production_cli import app
 
@@ -591,6 +592,13 @@ class DriftPolicyTests(unittest.TestCase):
         window_start = generated - timedelta(days=lookback_days)
         pending_count = int(oldest_pending is not None)
         total_predictions = samples + pending_count + unresolvable
+        route = MonitoringRoute(
+            model_release_id=self.release_id, model_artifact_sha256=self.model_sha,
+            prediction_policy_sha256=self.prediction_policy_sha, label_policy_sha256=self.label_policy_sha,
+            execution_policy_sha256=self.execution_policy_sha, horizon=horizon, promoted_at_utc=window_start,
+        )
+        sessions = [session.isoformat() for session in expected_sessions(route, start=window_start, end=generated)]
+        record_ids = sorted(content_sha256(session) for session in sessions)
         row_identity: dict[str, object] = {
             "model_release_id": self.release_id,
             "model_artifact_sha256": self.model_sha,
@@ -601,6 +609,8 @@ class DriftPolicyTests(unittest.TestCase):
             "source_intent_ids_sha256": "1" * 64,
             "source_observation_ids_sha256": "6" * 64,
             "source_outcome_ids_sha256": "2" * 64,
+            "source_session_record_ids_sha256": content_sha256(record_ids),
+            "source_attempt_ids_sha256": content_sha256([]),
             "view": "swing",
             "horizon": horizon,
             "cohort_type": "all",
@@ -692,6 +702,10 @@ class DriftPolicyTests(unittest.TestCase):
             "source_intent_ids": ["3" * 64],
             "source_observation_ids": ["6" * 64],
             "source_outcome_ids": ["4" * 64],
+            "source_session_record_ids": record_ids,
+            "source_attempt_ids": [],
+            "session_coverage": [{"route": route.model_dump(mode="json"), "expected_sessions": sessions,
+                "registered_sessions": sessions, "failed_sessions": [], "missing_sessions": [], "source_record_ids": record_ids}],
             "rows": [row],
         }
         return {

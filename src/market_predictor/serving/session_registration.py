@@ -102,10 +102,18 @@ def register_cross_section_snapshot(
     observations = monitoring_observations_from_response(
         response, snapshot_id=snapshot_id, intents={(intent.ticker, intent.view): intent for intent in intents}, members=members,
     )
+    if any(repository.semantic_canonical_key(intent.semantic_prediction_id, session) not in (None, intent.maturation_key)
+           for intent in intents):
+        raise PredictionConflictError
     for intent in intents:
         repository.record_intent(intent)
     for observation in observations:
         repository.record_observation(observation)
+    # Collection and maturation consume the semantic pending index. A changed snapshot
+    # after a partial write must not commit intents that those consumers cannot reach.
+    # Resume the original immutable snapshot; never silently rebind its semantic rows.
+    if any(repository.semantic_canonical_key(intent.semantic_prediction_id, session) != intent.maturation_key for intent in intents):
+        raise PredictionConflictError
     record = make_session_record(
         route=route, decision_session=session, status="registered", failure_reason=None, recorded_at_utc=datetime.now(UTC),
         snapshot_id=snapshot_id, snapshot_sha256=envelope["content_sha256"],

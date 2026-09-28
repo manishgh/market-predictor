@@ -29,6 +29,7 @@ from market_predictor.governance.outcomes.contracts import (
     swing_horizon_sessions,
 )
 from market_predictor.governance.outcomes.performance import validate_performance_report
+from market_predictor.governance.outcomes.session_records import decision_cutoff
 from market_predictor.governance.outcomes.sessions import (
     fewest_sessions_in_window,
     most_sessions_in_window,
@@ -576,6 +577,24 @@ def _performance_state(
     if not policy.lookback_supports_minimum(_as_int(performance_report.get("lookback_days"), "lookback_days"), horizon):
         reasons.append("performance_window_too_short")
         return "unavailable", "not_ready"
+    coverage_rows = performance_report.get("session_coverage")
+    coverage = [item for item in coverage_rows if isinstance(item, dict) and isinstance(item.get("route"), dict)
+                and all(item["route"].get(key) == row.get(key) for key in (
+                    "view", "horizon", "model_release_id", "model_artifact_sha256", "prediction_policy_sha256",
+                    "label_policy_sha256", "execution_policy_sha256"))] if isinstance(coverage_rows, list) else []
+    if len(coverage) != 1:
+        reasons.append("monitoring_session_coverage_unavailable")
+        return "unavailable", "not_ready"
+    missing_sessions = coverage[0]["missing_sessions"]
+    if any(now > decision_cutoff(date.fromisoformat(str(session))) + timedelta(days=policy.pending_grace_days)
+           for session in missing_sessions):
+        reasons.append("monitoring_sessions_missing")
+        return "unavailable", "not_ready"
+    expected_count = len(coverage[0]["expected_sessions"])
+    registered_count = len(coverage[0]["registered_sessions"])
+    coverage_warning = bool(expected_count and registered_count / expected_count < policy.minimum_registered_session_share)
+    if coverage_warning:
+        reasons.append("monitoring_registered_session_share_low")
     # The route-wide oldest pending decision: one that left the window still blocks.
     oldest = row.get("route_oldest_pending_decision_session_et")
     if oldest is not None and policy.outcome_overdue(horizon, date.fromisoformat(str(oldest)), now):
@@ -642,7 +661,8 @@ def _performance_state(
         reasons.append("selected_policy_performance_severe")
         return "severe", "not_ready"
     warning = (
-        weakest_excess <= policy.warning_min_excess_return
+        coverage_warning
+        or weakest_excess <= policy.warning_min_excess_return
         or drawdown >= policy.warning_max_drawdown
     )
     if warning:

@@ -24,6 +24,15 @@ these cross-section snapshots; ordinary request snapshots remain audit records.
 `record-monitoring-not-run` audits a missed session against a known route key and
 requires an operator id and reason. These commands share the monitoring lease.
 
+Performance reports read the exact observation and intent inventory of committed
+sessions; partial writes and request snapshots never enter population rates. Missing
+committed evidence fails reporting. Coverage uses XNYS decision cutoffs since each
+release activation: missing sessions beyond the configured grace block actionability,
+and a registered-session share below 95% warns without upgrading insufficient evidence.
+Report and cohort identities bind session records and the deciding maturation attempts
+available at report time. Source-id inventories also include evidence used by the
+route-wide overdue check, so they can extend beyond the rolling metric window.
+
 The nightly live-input publisher is still pending. Synthetic registration tests do
 not establish live readiness, profitability or permission to trade. API v4's consumer
 migration is recorded in `docs/contracts/tradingflow_handoff.md`.

@@ -188,3 +188,27 @@ def test_all_abstaining_snapshot_cannot_misstate_model_identity(tmp_path, monkey
     result = replace(result, response=result.response.model_copy(update={"evidence": evidence}))
     with pytest.raises(PredictionConflictError):
         _snapshot(service, result)
+
+
+
+def test_changed_snapshot_after_partial_write_cannot_commit_unreachable_intents(tmp_path, monkeypatch):
+    from market_predictor.serving.outcome_intents import maturation_intents_from_response
+    service = swing_serving(tmp_path, monkeypatch).service
+    result = service.predict_swing_cross_section(NOW)
+    original = _snapshot(service, result)
+    repository = OutcomeRepository(tmp_path / "outcomes")
+    intents = maturation_intents_from_response(original, snapshot_id=original.snapshot_id)
+    repository.record_intent(intents[0])
+    # Membership provenance changes the decision snapshot, but not this scored intent's semantic id.
+    member = result.members[0]
+    changed_member = member.model_copy(update={"membership_available_at_utc": member.membership_available_at_utc - timedelta(seconds=1)})
+    changed = _snapshot(service, replace(result, members=(changed_member, *result.members[1:])))
+    assert original.snapshot_id != changed.snapshot_id
+    with pytest.raises(PredictionConflictError):
+        register_snapshot_intents(service.snapshot_store, repository, changed.snapshot_id)
+    assert SessionRecordStore(repository.root).records(as_of=datetime.now(UTC)) == []
+    # The first immutable decision is recoverable without rebinding or deleting evidence.
+    registration = register_snapshot_intents(service.snapshot_store, repository, original.snapshot_id)
+    assert registration.session_record.status == "registered"
+    assert all(repository.semantic_canonical_key(intent.semantic_prediction_id, intent.decision_session_et) == intent.maturation_key
+               for intent in registration.intents)

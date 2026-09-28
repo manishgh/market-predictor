@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
+from collections import defaultdict
 from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -28,6 +29,8 @@ from market_predictor.governance.outcomes.contracts import (
     swing_horizon_sessions,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
+from market_predictor.governance.outcomes.session_coverage import SessionCoverage, build_session_coverage
+from market_predictor.governance.outcomes.session_records import SessionRecord, SessionRecordStore, expected_sessions
 from market_predictor.governance.outcomes.sessions import horizon_last_close
 from market_predictor.locking import file_lock
 
@@ -62,6 +65,8 @@ class SelectedPolicyCohort(BaseModel):
     source_intent_ids_sha256: str = Field(pattern=SHA256_PATTERN)
     source_observation_ids_sha256: str = Field(pattern=SHA256_PATTERN)
     source_outcome_ids_sha256: str = Field(pattern=SHA256_PATTERN)
+    source_session_record_ids_sha256: str = Field(pattern=SHA256_PATTERN)
+    source_attempt_ids_sha256: str = Field(pattern=SHA256_PATTERN)
     view: Literal["swing"]
     horizon: str = Field(pattern=SWING_HORIZON_PATTERN)
     cohort_type: Literal[
@@ -249,6 +254,9 @@ class SelectedPolicyPerformanceReport(BaseModel):
     source_intent_ids: tuple[str, ...]
     source_observation_ids: tuple[str, ...]
     source_outcome_ids: tuple[str, ...]
+    source_session_record_ids: tuple[str, ...]
+    source_attempt_ids: tuple[str, ...]
+    session_coverage: tuple[SessionCoverage, ...]
     rows: tuple[SelectedPolicyCohort, ...]
 
     @field_validator(
@@ -268,6 +276,8 @@ class SelectedPolicyPerformanceReport(BaseModel):
         "source_intent_ids",
         "source_observation_ids",
         "source_outcome_ids",
+        "source_session_record_ids",
+        "source_attempt_ids",
     )
     @classmethod
     def canonical_source_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
@@ -291,6 +301,15 @@ class SelectedPolicyPerformanceReport(BaseModel):
             != self.window_end_utc - timedelta(days=self.lookback_days)
         ):
             raise ValueError("selected-policy report window is inconsistent")
+        route_keys = [coverage.route.key() for coverage in self.session_coverage]
+        if route_keys != sorted(set(route_keys)):
+            raise ValueError("report coverage routes must be sorted and unique")
+        for coverage in self.session_coverage:
+            expected = expected_sessions(coverage.route, start=self.window_start_utc, end=self.window_end_utc)
+            if coverage.expected_sessions != expected:
+                raise ValueError("report coverage does not match route activation and window")
+            if not set(coverage.source_record_ids).issubset(self.source_session_record_ids):
+                raise ValueError("report omits session coverage source ids")
         route_starts: dict[tuple[str, ...], datetime] = {}
         for row in self.rows:
             route = tuple(str(getattr(row, column)) for column in _IDENTITY_COLUMNS)
@@ -322,31 +341,55 @@ def build_performance_cohorts(
     source_intent_ids: set[str] = set()
     source_observation_ids: set[str] = set()
     source_outcome_ids: set[str] = set()
+    source_attempt_ids: set[str] = set()
+    session_store = SessionRecordStore(repository.root)
+    session_records = session_store.records(as_of=generated)
+    committed = [record for record in session_records if record.status == "registered"]
+    allowed_intents = {key: record for record in committed for key in record.intent_ids}
+    source_session_record_ids = {record.record_id for record in session_records}
+    record_by_observation = {key: record for record in committed for key in record.observation_ids}
+    if len(record_by_observation) != sum(len(record.observation_ids) for record in committed):
+        raise DataReadinessError("an observation is committed by more than one session")
+    coverage = build_session_coverage(session_store.routes(), session_records, start=window_start, end=generated)
     # Maturity-aligned: a decision belongs to the window when its horizon's last session closes
     # inside it, or has not closed yet, so every horizon covers the outcomes of the same period.
     # Only the session partitions that can hold such decisions are read.
     intents: dict[str, PredictionMaturationIntent] = {}
     canonical_keys: dict[str, str] = {}
     observations: list[PredictionMonitoringObservation] = []
-    for session in repository.sessions():
-        included = {
-            horizon
-            for horizon in repository.session_horizons(session)
-            if _matures_in_window(session, horizon, window_start, generated)
-        }
-        if not included:
+    for record in committed:
+        session = record.decision_session
+        if not _matures_in_window(session, record.route.horizon, window_start, generated):
             continue
-        # Each intent is loaded and validated once per report.
-        stored = {intent.maturation_key: intent for intent in repository.session_intents(session)}
-        session_keys = repository.session_canonical_keys(session, stored)
-        canonical_keys.update(session_keys)
-        intents.update((key, stored[key]) for key in session_keys.values())
-        observations.extend(
-            observation
-            for observation in repository.session_observations(session, stored)
-            if observation.decision_time_utc <= generated and observation.horizon in included
-        )
-    route_oldest_pending = _route_oldest_pending(repository, generated=generated)
+        try:
+            stored = {intent.maturation_key: intent for intent in repository.session_intents(session, intent_ids=record.intent_ids)}
+            observed = repository.session_observations(session, stored, observation_ids=record.observation_ids)
+        except (OSError, ValueError) as exc:
+            raise DataReadinessError("committed monitoring session source evidence is unavailable") from exc
+        if len({row.ticker for row in observed}) != record.members or len(stored) != record.scored:
+            raise DataReadinessError("committed monitoring session population differs")
+        for observation in observed:
+            if (observation.snapshot_id != record.snapshot_id or observation.decision_session_et != session
+                    or any(str(getattr(observation, key)) != value for key, value in record.route.identity().items())):
+                raise DataReadinessError("committed monitoring observation has a different session or route identity")
+        if sum(row.probability is not None for row in observed) != record.scored:
+            raise DataReadinessError("committed monitoring scores differ from session counts")
+        canonical_keys.update((intent.semantic_prediction_id, intent.maturation_key) for intent in stored.values())
+        intents.update(stored)
+        observations.extend(observed)
+    route_session_ids: dict[tuple[str, ...], set[str]] = defaultdict(set)
+    route_attempt_ids: dict[tuple[str, ...], set[str]] = defaultdict(set)
+    route_intent_ids: dict[tuple[str, ...], set[str]] = defaultdict(set)
+    route_outcome_ids: dict[tuple[str, ...], set[str]] = defaultdict(set)
+    for session_record in session_records:
+        route_key = tuple(session_record.route.identity()[column] for column in _IDENTITY_COLUMNS)
+        route_session_ids[route_key].add(session_record.record_id)
+    route_oldest_pending = _route_oldest_pending(repository, generated=generated, allowed_intents=allowed_intents,
+                                               source_attempt_ids=source_attempt_ids, route_attempt_ids=route_attempt_ids,
+                                               route_intent_ids=route_intent_ids, route_outcome_ids=route_outcome_ids,
+                                               cached_intents=intents)
+    source_intent_ids.update(key for keys in route_intent_ids.values() for key in keys)
+    source_outcome_ids.update(key for keys in route_outcome_ids.values() for key in keys)
     for observation in _canonical_observations(canonical_keys, observations):
         intent = (
             intents.get(observation.maturation_key)
@@ -367,6 +410,9 @@ def build_performance_cohorts(
             if intent is not None and intent.actionable and outcome is None
             else None
         )
+        deciding = _deciding_attempt(repository, intent, generated_at=generated) if intent is not None else None
+        if deciding is not None:
+            source_attempt_ids.add(deciding.attempt_id)
         fills = {fill.basis: fill for fill in resolution.sensitivity} if resolution is not None else {}
         stress = [fill for basis, fill in fills.items() if basis != "last_usable_close"]
         source_observation_ids.add(observation.observation_id)
@@ -377,6 +423,8 @@ def build_performance_cohorts(
         records.append(
             {
                 **_monitoring_record(observation, outcome),
+                "session_record_id": record_by_observation[observation.observation_id].record_id,
+                "deciding_attempt_id": deciding.attempt_id if deciding is not None else None,
                 "unresolvable": resolution is not None,
                 "operator_verified": resolution is not None and resolution.reasons == (OPERATOR_VERIFIED,),
                 "never_entered": resolution is not None and resolution.never_entered,
@@ -432,13 +480,17 @@ def build_performance_cohorts(
                     cohort_value=(
                         "all"
                         if cohort_column is None
-                        else str(identity[cohort_column])
+                        else "unavailable" if pd.isna(identity[cohort_column]) else str(identity[cohort_column])
                     ),
                     minimum_samples=minimum_samples,
                     # A route's rows span its included decisions, which may precede the outcome window.
                     window_start=min(window_start, route_starts[route]),
                     window_end=generated,
                     route_oldest_pending=route_oldest_pending.get(route) if cohort_type == "all" else None,
+                    route_session_ids=route_session_ids[route] if cohort_type == "all" else set(),
+                    route_attempt_ids=route_attempt_ids[route] if cohort_type == "all" else set(),
+                    route_intent_ids=route_intent_ids[route] if cohort_type == "all" else set(),
+                    route_outcome_ids=route_outcome_ids[route] if cohort_type == "all" else set(),
                 )
                 rows.append(
                     SelectedPolicyCohort.model_validate(row).model_dump(
@@ -464,6 +516,9 @@ def build_performance_cohorts(
         "source_intent_ids": sorted(source_intent_ids),
         "source_observation_ids": sorted(source_observation_ids),
         "source_outcome_ids": sorted(source_outcome_ids),
+        "source_session_record_ids": sorted(source_session_record_ids),
+        "source_attempt_ids": sorted(source_attempt_ids),
+        "session_coverage": [item.model_dump(mode="json") for item in sorted(coverage, key=lambda c: c.route.key())],
         "rows": rows,
     }
     report = SelectedPolicyPerformanceReport.model_validate(
@@ -597,16 +652,20 @@ def _matured_selected_outcome(
     return None if outcome.matured_at_utc > generated_at else outcome
 
 
+def _deciding_attempt(
+    repository: OutcomeRepository, intent: PredictionMaturationIntent, *, generated_at: datetime,
+) -> MaturationAttempt | None:
+    observed = [attempt for attempt in repository.attempts(intent.maturation_key, intent.decision_session_et)
+                if attempt.observed_as_of_utc <= generated_at]
+    return observed[-1] if observed else None
+
+
 def _unresolvable(
     repository: OutcomeRepository, intent: PredictionMaturationIntent, *, generated_at: datetime
 ) -> MaturationAttempt | None:
     """The intent's latest attempt observed by the report time, when it is `unresolvable`."""
-    observed = [
-        attempt
-        for attempt in repository.attempts(intent.maturation_key, intent.decision_session_et)
-        if attempt.observed_as_of_utc <= generated_at
-    ]
-    return observed[-1] if observed and observed[-1].status == "unresolvable" else None
+    attempt = _deciding_attempt(repository, intent, generated_at=generated_at)
+    return attempt if attempt is not None and attempt.status == "unresolvable" else None
 
 
 def _sensitivity_mean(matured: pd.DataFrame, unresolvable: pd.DataFrame, fill_column: str) -> float | None:
@@ -631,19 +690,38 @@ def _route_oldest_pending(
     repository: OutcomeRepository,
     *,
     generated: datetime,
+    allowed_intents: dict[str, SessionRecord],
+    source_attempt_ids: set[str],
+    route_attempt_ids: dict[tuple[str, ...], set[str]],
+    route_intent_ids: dict[tuple[str, ...], set[str]],
+    route_outcome_ids: dict[tuple[str, ...], set[str]],
+    cached_intents: dict[str, PredictionMaturationIntent],
 ) -> dict[tuple[str, ...], date]:
     """The oldest decision session of each route's selected intents that have no outcome yet."""
     oldest: dict[tuple[str, ...], date] = {}
-    for maturation_key, session in repository.pending():
-        intent = repository.load_intent(maturation_key, session)
-        if (
-            not intent.actionable
-            or intent.decision_time_utc > generated
-            or repository.has_outcome(maturation_key, session)
-            or _unresolvable(repository, intent, generated_at=generated) is not None
-        ):
-            continue
+    # The shared pending index is canonical per semantic id, including partial writes.
+    # The commit inventory is authoritative here; an earlier partial snapshot must not
+    # hide a committed intent. Load only intent/attempt/outcome evidence, never old
+    # observation partitions. Current outcomes are checked at the report's as-of time.
+    for maturation_key, record in allowed_intents.items():
+        intent = cached_intents.get(maturation_key) or repository.load_intent(maturation_key, record.decision_session)
+        if (intent.snapshot_id != record.snapshot_id or
+                any(str(getattr(intent, key)) != value for key, value in record.route.identity().items())):
+            raise DataReadinessError("committed monitoring intent has a different session or route identity")
         route = tuple(str(getattr(intent, column)) for column in _IDENTITY_COLUMNS)
+        route_intent_ids[route].add(maturation_key)
+        if not intent.actionable or intent.decision_time_utc > generated:
+            continue
+        deciding = _deciding_attempt(repository, intent, generated_at=generated)
+        if deciding is not None:
+            source_attempt_ids.add(deciding.attempt_id)
+            route_attempt_ids[route].add(deciding.attempt_id)
+        outcome = _matured_selected_outcome(repository, intent, generated_at=generated)
+        if outcome is not None:
+            route_outcome_ids[route].add(outcome.outcome_id)
+            continue
+        if deciding is not None and deciding.status == "unresolvable":
+            continue
         if route not in oldest or intent.decision_session_et < oldest[route]:
             oldest[route] = intent.decision_session_et
     return oldest
@@ -706,6 +784,10 @@ def _cohort_row(
     window_start: datetime,
     window_end: datetime,
     route_oldest_pending: date | None,
+    route_session_ids: set[str],
+    route_attempt_ids: set[str],
+    route_intent_ids: set[str],
+    route_outcome_ids: set[str],
 ) -> dict[str, object]:
     ordered = group.sort_values(
         ["decision_time_utc", "decision_group_id", "observation_id"],
@@ -737,9 +819,11 @@ def _cohort_row(
             for column in _IDENTITY_COLUMNS
         },
         "feature_artifact_set_sha256": content_sha256(feature_ids),
-        "source_intent_ids_sha256": content_sha256(intent_ids),
+        "source_intent_ids_sha256": content_sha256(sorted(route_intent_ids | set(intent_ids))),
         "source_observation_ids_sha256": content_sha256(observation_ids),
-        "source_outcome_ids_sha256": content_sha256(outcome_ids),
+        "source_outcome_ids_sha256": content_sha256(sorted(route_outcome_ids | set(outcome_ids))),
+        "source_session_record_ids_sha256": content_sha256(sorted(route_session_ids | set(ordered["session_record_id"].astype(str)))),
+        "source_attempt_ids_sha256": content_sha256(sorted(route_attempt_ids | set(ordered["deciding_attempt_id"].dropna().astype(str)))),
         "cohort_type": cohort_type,
         "cohort_value": cohort_value,
         "window_start_utc": window_start.isoformat().replace("+00:00", "Z"),

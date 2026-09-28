@@ -20,12 +20,15 @@ from market_predictor.governance.outcomes.contracts import (
     semantic_prediction_sha256,
 )
 from market_predictor.governance.outcomes.performance import (
-    build_performance_cohorts,
+    build_performance_cohorts as build_committed_performance_cohorts,
+)
+from market_predictor.governance.outcomes.performance import (
     load_performance_report,
     validate_performance_report,
     write_performance_report,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
+from tests.support.monitoring import commit_test_population
 from tests.test_outcome_repository import _attempt, _evidence, _intent, _outcome
 
 RETIRED_CALIBRATION_FIELDS = (
@@ -37,6 +40,11 @@ RETIRED_CALIBRATION_FIELDS = (
     "downside_brier_score",
     "downside_calibration_error",
 )
+
+
+def build_performance_cohorts(repository, **kwargs):
+    commit_test_population(repository)
+    return build_committed_performance_cohorts(repository, **kwargs)
 
 
 class PerformanceMonitoringTests(unittest.TestCase):
@@ -127,6 +135,8 @@ class PerformanceMonitoringTests(unittest.TestCase):
             repository = OutcomeRepository(Path(temp_dir))
             canonical = _intent_variant("MSFT", "1", probability=0.8)
             repeated = _intent_variant("MSFT", "2", probability=0.8)
+            repeated = repeated.model_copy(update={"snapshot_id": "2" * 64,
+                "maturation_key": maturation_key_sha256("2" * 64, repeated.semantic_prediction_id)})
             self.assertEqual(
                 canonical.semantic_prediction_id,
                 repeated.semantic_prediction_id,
@@ -237,8 +247,8 @@ class PerformanceMonitoringTests(unittest.TestCase):
             self.assertEqual(row["oldest_pending_decision_session_et"], "2026-07-24")
             self.assertEqual(row["matured_selected_samples"], 0)
             self.assertEqual(row["evidence_status"], "insufficient_evidence")
-            self.assertEqual(report["source_intent_ids"], [pending.maturation_key])
-            self.assertEqual(report["source_outcome_ids"], [])
+            self.assertEqual(set(report["source_intent_ids"]), {pending.maturation_key, old.maturation_key})
+            self.assertEqual(len(report["source_outcome_ids"]), 1)  # Old outcome resolves the route-wide pending check.
 
     def test_window_is_aligned_to_when_outcomes_finish(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -263,7 +273,7 @@ class PerformanceMonitoringTests(unittest.TestCase):
             row = next(item for item in report["rows"] if item["cohort_type"] == "all")
 
             self.assertEqual(row["total_predictions"], 1)
-            self.assertEqual(report["source_intent_ids"], [finishing.maturation_key])
+            self.assertEqual(set(report["source_intent_ids"]), {finishing.maturation_key, finished.maturation_key})
             self.assertEqual(report["window_start_utc"], "2026-07-03T00:00:00Z")
             # Every cohort of the route spans the route's included decisions.
             self.assertEqual({item["window_start_utc"] for item in report["rows"]}, {"2026-06-26T22:00:00Z"})
@@ -284,7 +294,8 @@ class PerformanceMonitoringTests(unittest.TestCase):
                 lookback_days=30,
             )
 
-            self.assertEqual(report["source_intent_ids"], [on_edge.maturation_key])
+            self.assertEqual(set(report["source_intent_ids"]), {on_edge.maturation_key, before.maturation_key})
+            self.assertEqual(next(row for row in report["rows"] if row["cohort_type"] == "all")["total_predictions"], 1)
 
     def test_backdated_report_counts_later_outcomes_as_pending(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -429,14 +440,15 @@ class PerformanceMonitoringTests(unittest.TestCase):
                 repository.record_intent(
                     _intent_variant(f"T{index:03d}", "1", probability=0.8, decision_time=decision)
                 )
+            commit_test_population(repository)
             opened: list[date] = []
             loads: dict[str, int] = {}
             original = repository.session_intents
             original_load = repository.load_intent
 
-            def recording(session: date) -> list[PredictionMaturationIntent]:
+            def recording(session: date, **kwargs) -> list[PredictionMaturationIntent]:
                 opened.append(session)
-                return original(session)
+                return original(session, **kwargs)
 
             def counting(maturation_key: str, session: date) -> PredictionMaturationIntent:
                 loads[maturation_key] = loads.get(maturation_key, 0) + 1
@@ -444,7 +456,7 @@ class PerformanceMonitoringTests(unittest.TestCase):
 
             repository.session_intents = recording  # type: ignore[method-assign]
             repository.load_intent = counting  # type: ignore[method-assign]
-            build_performance_cohorts(
+            build_committed_performance_cohorts(
                 repository,
                 generated_at=datetime(2026, 8, 2, tzinfo=UTC),
                 minimum_samples=1,
@@ -453,8 +465,8 @@ class PerformanceMonitoringTests(unittest.TestCase):
 
             # 30 days of outcomes plus the ten-session horizon: about 30 of 145 partitions.
             self.assertLess(len(opened), 40)
-            # Each intent is loaded once by its partition read and once more by the pending scan.
-            self.assertEqual(max(loads.values()), 2)
+            # In-window intents are reused for the committed route-wide pending scan.
+            self.assertEqual(max(loads.values()), 1)
             self.assertGreaterEqual(min(opened), date(2026, 6, 15))
             self.assertEqual(len(repository.sessions()), len(sessions))
 
@@ -646,7 +658,7 @@ def _intent_variant(
         }
     )
     semantic_id = semantic_prediction_sha256(base)
-    snapshot_id = snapshot_character * 64
+    snapshot_id = content_sha256({"session": decision.date().isoformat(), "release": release})
     return PredictionMaturationIntent.model_validate(
         {
             **base,
