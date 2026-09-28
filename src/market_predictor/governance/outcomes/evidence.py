@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from typing import Any
 
 import pandas as pd
 
@@ -55,6 +56,15 @@ class EvidenceTerms:
     def settles_session(self, session: date, receipt: BarReceipt) -> bool:
         """Whether every page of the receipt was retrieved the settlement period after one session's close."""
         return receipt.started_at_utc >= session_close(session) + timedelta(days=self.settlement_days)
+
+
+@dataclass(frozen=True)
+class Cessation:
+    """Why a stock stopped trading: the reason, the receipts that prove it and the provider's record."""
+
+    reason: str
+    receipt_ids: tuple[str, ...]
+    record: Mapping[str, Any] | None
 
 
 @dataclass(frozen=True)
@@ -127,10 +137,10 @@ def cessation_evidence(
     action_receipts: Sequence[ActionReceipt],
     memberships: pd.DataFrame | None,
     terms: EvidenceTerms,
-) -> tuple[str, tuple[str, ...]] | None:
+) -> Cessation | None:
     """Why the stock stopped trading, from actions effective between the decision and the deadline.
 
-    Returns the reason with the receipts that prove it, or None. Renames are followed, so a
+    Returns None without such evidence. Renames are followed, so a
     merger naming a later symbol of the same company counts. Worthless removals and name
     changes carry only a process date in the provider's schema. The provider processes a
     worthless removal long after the delisting, so one processed on or after the decision
@@ -142,12 +152,12 @@ def cessation_evidence(
         for family, reason in _MERGER_FAMILIES.items():
             for record in receipt.actions.get(family, ()):
                 if record.get("acquiree_symbol") in symbols and _within(record.get("effective_date"), window):
-                    return reason, (receipt.receipt_id,)
+                    return Cessation(reason, (receipt.receipt_id,), record)
         for record in receipt.actions.get("worthless_removals", ()):
             if record.get("symbol") in symbols and _within(record.get("process_date"), (window[0], date.max)):
-                return "worthless_removal", (receipt.receipt_id,)
+                return Cessation("worthless_removal", (receipt.receipt_id,), record)
     if memberships is not None and _membership_removed(memberships, intent, window):
-        return "membership_removal", ()
+        return Cessation("membership_removal", (), None)
     return None
 
 
@@ -207,6 +217,16 @@ def _usable_sessions(frame: pd.DataFrame) -> frozenset[date]:
         return frozenset()
     validated = validate_outcome_observations(frame)
     return frozenset(validated.loc[validated["outcome_observation_valid"], "session_date_et"])
+
+
+def usable_rows(bars: pd.DataFrame, ticker: str) -> dict[date, pd.Series]:
+    """A ticker's usable bars by session: exactly one row, valid for the observation validator."""
+    rows = bars.loc[bars["ticker"].eq(ticker)].reset_index(drop=True)
+    if rows.empty:
+        return {}
+    valid = validate_outcome_observations(rows)["outcome_observation_valid"]
+    single = rows.groupby("session_date_et")["ticker"].transform("size").eq(1)
+    return {row["session_date_et"]: row for _, row in rows.loc[valid & single].iterrows()}
 
 
 def _complete_actions(

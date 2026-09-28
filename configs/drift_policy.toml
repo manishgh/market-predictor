@@ -5,6 +5,7 @@ maximum_report_age_minutes = 1440
 maximum_last_matured_age_minutes = 10080
 pending_grace_days = 7
 outcome_settlement_days = 3
+maximum_unresolvable_share = 0.05
 evidence_horizons = ["10b"]
 minimum_registered_session_share = 0.95
 warning_min_excess_return = -0.001

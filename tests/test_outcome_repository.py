@@ -763,6 +763,7 @@ def _attempt(
         "receipt_ids": (),
         "operator_id": None,
         "operator_reference": None,
+        "sensitivity": [],
     }
     return MaturationAttempt.model_validate(
         {**base, "attempt_id": content_sha256(base)}

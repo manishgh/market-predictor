@@ -221,6 +221,30 @@ class PredictionMaturationIntent(_SwingViewContract):
         return self
 
 
+class SensitivityFill(FrozenContract):
+    """A diagnostic value for an unresolvable outcome, net of the execution cost; it never gates."""
+
+    basis: Literal[
+        "last_usable_close",
+        "cash_merger",
+        "stock_merger",
+        "stock_and_cash_merger",
+        "worthless_removal",
+        "delisting_stress",
+        "halt_crossing",
+    ]
+    fill_session: date
+    net_return: float
+    sector_return: float
+    excess_return_vs_sector: float
+
+    @model_validator(mode="after")
+    def excess_is_net_less_sector(self) -> Self:
+        if not math.isclose(self.excess_return_vs_sector, self.net_return - self.sector_return, abs_tol=1e-12):
+            raise ValueError("sensitivity fill excess return is inconsistent")
+        return self
+
+
 class MaturationAttempt(FrozenContract):
     contract: Literal["market_predictor.maturation_attempt"] = (
         "market_predictor.maturation_attempt"
@@ -239,8 +263,10 @@ class MaturationAttempt(FrozenContract):
     drift_policy_sha256: str = Field(pattern=SHA256_PATTERN)
     receipt_ids: tuple[str, ...] = ()
     # Who verified an operator resolution and the evidence they checked, present exactly for one.
-    operator_id: str | None = Field(default=None, min_length=1, max_length=128)
+    operator_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,127}$")
     operator_reference: str | None = Field(default=None, min_length=8, max_length=500)
+    # Diagnostic fills, recorded only for an unresolvable outcome that was entered.
+    sensitivity: tuple[SensitivityFill, ...] = ()
 
     @field_validator("observed_as_of_utc")
     @classmethod
@@ -266,6 +292,10 @@ class MaturationAttempt(FrozenContract):
             or (operator and self.status != "unresolvable")
         ):
             raise ValueError("an operator resolution is unresolvable and names its operator and evidence")
+        if self.sensitivity and self.status != "unresolvable":
+            raise ValueError("only an unresolvable attempt carries sensitivity fills")
+        if len({fill.basis for fill in self.sensitivity}) != len(self.sensitivity):
+            raise ValueError("maturation attempt repeats a sensitivity basis")
         content = self.model_dump(mode="json", exclude={"attempt_id"})
         if content_sha256(content) != self.attempt_id:
             raise ValueError("maturation attempt identity is invalid")

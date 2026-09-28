@@ -26,14 +26,20 @@ from market_predictor.collection.outcome_bars import (
     load_bar_receipts,
 )
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.governance.outcomes.contracts import PredictionMaturationIntent, swing_horizon_sessions
+from market_predictor.governance.outcomes.contracts import (
+    OPERATOR_VERIFIED,
+    PredictionMaturationIntent,
+    swing_horizon_sessions,
+)
 from market_predictor.governance.outcomes.evidence import (
     EvidenceTerms,
+    cessation_evidence,
     horizon_close,
     path_evidence,
     symbols_in_use,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
+from market_predictor.governance.outcomes.sensitivity import acquirer_terms
 from market_predictor.governance.outcomes.sessions import session_after
 
 RECOLLECT_AFTER = timedelta(days=7)
@@ -60,6 +66,7 @@ def plan_outcome_collection(
     daily: dict[tuple[date, date], set[str]] = defaultdict(set)
     benchmarks: dict[tuple[date, date], set[str]] = defaultdict(set)
     minute: set[tuple[date, date, str]] = set()
+    acquirers: set[tuple[date, date, str]] = set()
     actions: dict[tuple[date, str], date] = {}
     held: dict[date, tuple[tuple[BarReceipt, ...], tuple[ActionReceipt, ...]]] = {}
     entries = repository.pending() if only is None else [only]
@@ -88,13 +95,22 @@ def plan_outcome_collection(
             gap = _first_gap(intent, bar_receipts, terms)
             if gap is not None:
                 minute.add((session, gap, intent.ticker))
-        if reasons == ("stock_gap_without_cessation",):
+        if reasons in (("stock_gap_without_cessation",), (OPERATOR_VERIFIED,)):
+            # Provider evidence may still name a more specific reason than an operator's.
             gap = _first_gap(intent, bar_receipts, terms)
             end = min(now.date(), (gap or last) + FREEZE_AFTER)
             interval = NIGHTLY if now <= terms.deadline(intent) else RECOLLECT_AFTER
             for symbol in symbols_in_use(intent, action_receipts, terms=terms):
                 if forced or _actions_due(action_receipts, session=session, symbol=symbol, now=now, interval=interval):
                     actions[(session, symbol)] = max(end, actions.get((session, symbol), end))
+        if reasons in (("stock_merger",), ("stock_and_cash_merger",)):
+            # A stock merger's stress fill values its shares at the acquirer's close.
+            cessation = cessation_evidence(intent, action_receipts=action_receipts, memberships=None, terms=terms)
+            acquirer = acquirer_terms(reasons[0], cessation.record if cessation is not None else None)
+            if acquirer is not None and not complete_bar_receipts(
+                bar_receipts, decision_session=session, symbol=acquirer[0], first_session=session, last_session=acquirer[1]
+            ):
+                acquirers.add((session, acquirer[1], acquirer[0]))
     bar_units: list[OutcomeBarUnit] = []
     for (session, last), stocks in sorted(daily.items()):
         shared = sorted(benchmarks[(session, last)])
@@ -105,6 +121,11 @@ def plan_outcome_collection(
     bar_units.extend(
         OutcomeBarUnit(session, gap, gap, (symbol,), "1Min") for session, gap, symbol in sorted(minute)
     )
+    for session, effective, symbol in sorted(acquirers):
+        try:
+            bar_units.append(OutcomeBarUnit(session, session, max(session, effective), (symbol,)))
+        except ValueError:
+            continue  # A symbol the bars endpoint cannot take; the stress fill waits without it.
     action_units = tuple(
         CorporateActionUnit(session, symbol, session, end) for (session, symbol), end in sorted(actions.items())
     )

@@ -132,8 +132,10 @@ class OutcomeRepository:
                 # The log runs forward in time, so "the latest attempt at time T" stays well defined.
                 raise PredictionConflictError
             if latest is not None and (
-                latest.status, latest.reasons, latest.missing_intervals, latest.drift_policy_sha256
-            ) == (attempt.status, attempt.reasons, attempt.missing_intervals, attempt.drift_policy_sha256):
+                latest.status, latest.reasons, latest.missing_intervals, latest.drift_policy_sha256, latest.sensitivity
+            ) == (
+                attempt.status, attempt.reasons, attempt.missing_intervals, attempt.drift_policy_sha256, attempt.sensitivity
+            ):
                 return latest
             _write_json_durable(root / f"{count + 1:08d}.json", attempt.model_dump(mode="json"))
         return attempt

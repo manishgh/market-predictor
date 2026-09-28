@@ -18,6 +18,7 @@ from market_predictor.governance.outcomes.contracts import (
     MaturationAttempt,
     MaturedOutcome,
     PredictionMaturationIntent,
+    SensitivityFill,
     content_sha256,
 )
 from market_predictor.modeling.maturation import MaturedPath, PendingPath
@@ -87,6 +88,7 @@ def maturation_attempt(
     missing_intervals: tuple[str, ...] = (),
     operator_id: str | None = None,
     operator_reference: str | None = None,
+    sensitivity: tuple[SensitivityFill, ...] = (),
 ) -> MaturationAttempt:
     if status not in {"pending", "blocked", "unresolvable"}:
         raise ValueError("maturation attempt status must be pending, blocked or unresolvable")
@@ -105,6 +107,7 @@ def maturation_attempt(
         "receipt_ids": tuple(sorted(set(context.receipt_ids))),
         "operator_id": operator_id,
         "operator_reference": operator_reference,
+        "sensitivity": [fill.model_dump(mode="json") for fill in sensitivity],
     }
     return MaturationAttempt.model_validate(
         {**base, "attempt_id": content_sha256(base)}

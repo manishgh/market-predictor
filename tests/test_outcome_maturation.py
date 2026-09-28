@@ -15,6 +15,7 @@ from market_predictor.collection.outcome_bars import (
     collect_corporate_actions,
 )
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.execution_policy import DEFAULT_EXECUTION_POLICY, round_trip_cost_bps
 from market_predictor.governance.outcomes.contracts import (
     RETIRED_INTRADAY,
     MaturationAttempt,
@@ -394,6 +395,117 @@ class OutcomeMaturationTests(unittest.TestCase):
             # It stays indexed, so later evidence can still mature it.
             self.assertEqual(repository.pending(), [(intent.maturation_key, intent.decision_session_et)])
 
+    def test_unresolvable_outcomes_carry_their_sensitivity_fills(self) -> None:
+        intent = swing_intent()
+        # Entered at MSFT's July 27 open of 100; the last usable close before the gap is July 28's 101.25.
+        cost = round_trip_cost_bps(price=100.0, atr_pct=intent.decision_atr_fraction * 100.25 / 100.0,
+                                   participation=0.0, policy=DEFAULT_EXECUTION_POLICY) / 10_000.0
+        merger = {"id": "m-1", "acquiree_symbol": "MSFT", "effective_date": "2026-07-29", "process_date": "2026-08-03"}
+        for actions, basis, value in (
+            ({"cash_mergers": [{**merger, "rate": "104.00"}]}, "cash_merger", 104.0),
+            ({"worthless_removals": [{"id": "w-1", "symbol": "MSFT", "process_date": "2026-11-30"}]},
+             "worthless_removal", 0.0),
+        ):
+            with self.subTest(basis), TemporaryDirectory() as temp_dir:
+                repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+                repository.record_intent(intent)
+                receipts = _collected(Path(temp_dir), _tail_gap())
+                _collected_actions(receipts, actions)
+
+                fills = {fill.basis: fill for fill in _latest(repository, intent, receipts).sensitivity}
+
+                self.assertAlmostEqual(fills["last_usable_close"].net_return, 101.25 / 100.0 - 1.0 - cost)
+                self.assertAlmostEqual(fills[basis].net_return, value / 100.0 - 1.0 - cost)
+                # XLK from the July 27 open (201) to July 28's close (203).
+                self.assertAlmostEqual(fills["last_usable_close"].sector_return, 203.0 / 201.0 - 1.0)
+
+    def test_a_stock_merger_fill_waits_for_the_acquirer_close(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            receipts = _collected(Path(temp_dir), _tail_gap())
+            _collected_actions(receipts, {"stock_mergers": [{
+                "id": "s-1", "acquiree_symbol": "MSFT", "acquirer_symbol": "ACQ", "acquirer_rate": 2,
+                "acquiree_rate": 1, "effective_date": "2026-07-29", "process_date": "2026-08-03"}]})
+
+            first = _latest(repository, intent, receipts)
+            self.assertEqual(first.reasons, ("stock_merger",))
+            self.assertEqual([fill.basis for fill in first.sensitivity], ["last_usable_close"])
+
+            # Two acquirer shares at its July 29 close of 51 value the stock at 102.
+            acquirer = _swing_bars().assign(ticker="ACQ", close=51.0, high=52.0, low=50.0, open=51.0)
+            acquirer = acquirer.drop_duplicates("session_date_et")
+            _collected(Path(temp_dir), acquirer.loc[acquirer["session_date_et"].le(date(2026, 7, 29))],
+                       units=[OutcomeBarUnit(DECISION, DECISION, date(2026, 7, 29), ("ACQ",))])
+            fills = {fill.basis: fill for fill in _latest(repository, intent, receipts).sensitivity}
+            self.assertIn("stock_merger", fills)
+            self.assertAlmostEqual(fills["stock_merger"].net_return + 1.0, 102.0 / 100.0, places=2)
+
+    def test_a_halt_fill_continues_the_managed_path_past_the_halt(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            bars = _swing_bars()
+            receipts = _collected(Path(temp_dir), bars.loc[~(bars["ticker"].eq("MSFT") & bars["session_date_et"].eq(date(2026, 7, 27)))])
+            _collected_minutes(receipts, traded=False)
+
+            latest = _latest(repository, intent, receipts)
+
+            self.assertEqual(latest.reasons, ("interior_gap",))
+            # The halt starts on the entry session, so the position was never entered: no fills.
+            self.assertEqual(latest.sensitivity, ())
+
+    def test_operator_resolutions_need_an_overdue_proven_gap_and_survive_unreadable_evidence(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            receipts = _collected(Path(temp_dir))
+            _mature(repository, Path(temp_dir) / "empty")
+
+            def resolve(observed: datetime) -> MaturationAttempt:
+                return record_operator_resolution(
+                    repository, maturation_key=intent.maturation_key, decision_session=intent.decision_session_et,
+                    operator_id="operator@example", reference="exchange delisting notice, filing 0001",
+                    receipts_root=receipts, observed_as_of=observed, terms=TERMS,
+                )
+
+            # A decision not yet observed is collection lag, never an operator's call.
+            with self.assertRaisesRegex(DataReadinessError, "proven stock gap"):
+                resolve(OBSERVED + timedelta(days=3))
+            gap_receipts = _collected(Path(temp_dir) / "gap", _tail_gap())
+            _mature(repository, gap_receipts, observed=OBSERVED + timedelta(hours=1))
+            with self.assertRaisesRegex(DataReadinessError, "overdue"):
+                resolve(OBSERVED + timedelta(hours=2))
+            resolution = resolve(OBSERVED + timedelta(days=3))
+            # Unreadable evidence afterwards never undoes it.
+            next((gap_receipts / "bodies").glob("*.json")).unlink()
+            summary = _mature(repository, gap_receipts, observed=OBSERVED + timedelta(days=4))
+            self.assertEqual((summary["unresolvable"], summary["blocked"]), (1, 0))
+            self.assertEqual(repository.latest_attempt(intent.maturation_key, intent.decision_session_et), resolution)
+
+    def test_provider_evidence_replaces_an_operator_resolution(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            receipts = _collected(Path(temp_dir), _tail_gap())
+            _mature(repository, receipts)
+            record_operator_resolution(
+                repository, maturation_key=intent.maturation_key, decision_session=intent.decision_session_et,
+                operator_id="operator@example", reference="exchange delisting notice, filing 0001",
+                receipts_root=receipts, observed_as_of=OBSERVED + timedelta(days=3), terms=TERMS,
+            )
+            _collected_actions(receipts, {"worthless_removals": [{"id": "w-1", "symbol": "MSFT", "process_date": "2026-11-30"}]})
+
+            _mature(repository, receipts, observed=OBSERVED + timedelta(days=4))
+
+            latest = repository.latest_attempt(intent.maturation_key, intent.decision_session_et)
+            assert latest is not None
+            self.assertEqual(latest.reasons, ("worthless_removal",))
+
     def test_a_rename_and_a_worthless_removal_are_followed(self) -> None:
         with TemporaryDirectory() as temp_dir:
             repository = OutcomeRepository(Path(temp_dir) / "outcomes")
@@ -475,16 +587,17 @@ class OutcomeMaturationTests(unittest.TestCase):
             resolution = record_operator_resolution(
                 repository, maturation_key=intent.maturation_key, decision_session=intent.decision_session_et,
                 operator_id="operator@example", reference="exchange delisting notice, filing 0001",
-                observed_as_of=OBSERVED + timedelta(hours=1), terms=TERMS,
+                receipts_root=receipts, observed_as_of=OBSERVED + timedelta(days=2), terms=TERMS,
             )
-            summary = _mature(repository, receipts, observed=OBSERVED + timedelta(days=1))
+            summary = _mature(repository, receipts, observed=OBSERVED + timedelta(days=3))
 
             self.assertEqual((resolution.status, resolution.reasons), ("unresolvable", ("operator_verified",)))
+            self.assertEqual([fill.basis for fill in resolution.sensitivity], ["last_usable_close", "delisting_stress"])
             self.assertEqual(summary["unresolvable"], 1)
             self.assertEqual(repository.latest_attempt(intent.maturation_key, intent.decision_session_et), resolution)
             # The late bars arrive after all: the outcome matures and supersedes the resolution.
-            _collected(Path(temp_dir), retrieved=OBSERVED + timedelta(days=2))
-            summary = _mature(repository, receipts, observed=OBSERVED + timedelta(days=3))
+            _collected(Path(temp_dir), retrieved=OBSERVED + timedelta(days=4))
+            summary = _mature(repository, receipts, observed=OBSERVED + timedelta(days=5))
             self.assertEqual(summary["matured"], 1)
 
     def test_a_new_drift_policy_writes_a_new_attempt(self) -> None:
@@ -565,7 +678,19 @@ def _latest(repository: OutcomeRepository, intent: PredictionMaturationIntent, r
     return latest
 
 
-def _collected(root: Path, bars: pd.DataFrame | None = None, *, retrieved: datetime = RETRIEVED) -> Path:
+def _tail_gap() -> pd.DataFrame:
+    """The fixture without MSFT from July 29, before which no target or stop is reached."""
+    bars = _swing_bars()
+    return bars.loc[~(bars["ticker"].eq("MSFT") & bars["session_date_et"].ge(date(2026, 7, 29)))]
+
+
+def _collected(
+    root: Path,
+    bars: pd.DataFrame | None = None,
+    *,
+    retrieved: datetime = RETRIEVED,
+    units: list[OutcomeBarUnit] | None = None,
+) -> Path:
     """Collect the fixture's bars as Alpaca returns them into receipts under `root / receipts`."""
     frame = _swing_bars() if bars is None else bars
 
@@ -581,8 +706,8 @@ def _collected(root: Path, bars: pd.DataFrame | None = None, *, retrieved: datet
         }
         return 200, {"bars": rows, "next_page_token": None}
 
-    unit = OutcomeBarUnit(DECISION, DECISION, LAST, ("MSFT", "QQQ", "SPY", "XLK"))
-    collect_bars(receipt_source(respond, retrieved), [unit], root=root / "receipts", clock=receipt_clock(retrieved))
+    chosen = units or [OutcomeBarUnit(DECISION, DECISION, LAST, ("MSFT", "QQQ", "SPY", "XLK"))]
+    collect_bars(receipt_source(respond, retrieved), chosen, root=root / "receipts", clock=receipt_clock(retrieved))
     return root / "receipts"
 
 

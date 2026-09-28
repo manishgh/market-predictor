@@ -190,6 +190,7 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
             Path("data/predictions/outcomes"),
             help="Durable local outcome repository.",
         ),
+        receipt_dir: Path = typer.Option(_RECEIPT_DIR, help="Outcome evidence receipts and page bodies."),
         drift_policy: Path = typer.Option(_DRIFT_POLICY, help="Drift policy with the grace and settlement periods."),
     ) -> None:
         """Record an operator's verified finding that a stock stopped trading, so its outcome never matures."""
@@ -201,6 +202,7 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
                 decision_session=date.fromisoformat(decision_session.strip()),
                 operator_id=operator.strip(),
                 reference=reference.strip(),
+                receipts_root=receipt_dir,
                 observed_as_of=datetime.now(UTC),
                 terms=_evidence_terms(drift_policy),
             )

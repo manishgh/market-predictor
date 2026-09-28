@@ -50,6 +50,18 @@ class DriftPolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "settlement"):
             DriftPolicy(outcome_settlement_days=7, pending_grace_days=7)
 
+    def test_a_sufficient_route_carries_at_most_the_unresolvable_share(self) -> None:
+        # 1 of 21 (4.8%) is within the 5% ceiling; 2 of 22 (9.1%) is not.
+        within = self._evaluate(self._report(samples=20, unresolvable=1))
+        beyond = self._evaluate(self._report(samples=20, unresolvable=2))
+        # Before evidence suffices the ceiling does not apply: outcomes of one stock cluster.
+        warming = self._evaluate(self._report(samples=5, unresolvable=2))
+
+        self.assertEqual((within.state, within.actionability), ("stable", "actionable"))
+        self.assertEqual(beyond.actionability, "not_ready")
+        self.assertIn("unresolvable_share_exceeded", beyond.reasons)
+        self.assertNotIn("unresolvable_share_exceeded", warming.reasons)
+
     def test_stable_and_warning_performance_remain_actionable(self) -> None:
         stable = self._evaluate(self._report(samples=20))
         warning = self._evaluate(self._report(samples=20, drawdown=0.20))
@@ -573,11 +585,12 @@ class DriftPolicyTests(unittest.TestCase):
         oldest_pending: datetime | None = None,
         lookback_days: int = 180,
         route_oldest_pending: datetime | None = None,
+        unresolvable: int = 0,
     ) -> dict[str, object]:
         generated = generated_at or self.now
         window_start = generated - timedelta(days=lookback_days)
         pending_count = int(oldest_pending is not None)
-        total_predictions = samples + pending_count
+        total_predictions = samples + pending_count + unresolvable
         row_identity: dict[str, object] = {
             "model_release_id": self.release_id,
             "model_artifact_sha256": self.model_sha,
@@ -603,8 +616,11 @@ class DriftPolicyTests(unittest.TestCase):
             "actionable_predictions": total_predictions,
             "matured_selected_samples": samples,
             "pending_selected_samples": pending_count,
-            "unresolvable_selected_samples": 0,
-            "unresolvable_selected_securities": 0,
+            "unresolvable_selected_samples": unresolvable,
+            "unresolvable_selected_securities": unresolvable,
+            "operator_verified_selected_samples": 0,
+            "sensitivity_mean_excess_last_close": None,
+            "sensitivity_mean_excess_stress": None,
             "oldest_pending_decision_time_utc": (
                 oldest_pending.isoformat().replace("+00:00", "Z")
                 if oldest_pending is not None

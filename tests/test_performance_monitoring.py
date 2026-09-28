@@ -404,7 +404,9 @@ class PerformanceMonitoringTests(unittest.TestCase):
 
             row = all_row(datetime(2026, 8, 20, tzinfo=UTC))
             self.assertEqual((row["pending_selected_samples"], row["unresolvable_selected_samples"]), (0, 1))
-            self.assertEqual(row["unresolvable_selected_securities"], 1)
+            self.assertEqual((row["unresolvable_selected_securities"], row["operator_verified_selected_samples"]), (1, 0))
+            # No fill was recorded, so no sensitivity mean can be formed.
+            self.assertIsNone(row["sensitivity_mean_excess_stress"])
             # A settled cessation never holds the route as an overdue pending decision.
             self.assertIsNone(row["route_oldest_pending_decision_session_et"])
             # A report dated before the attempt still sees the decision pending.

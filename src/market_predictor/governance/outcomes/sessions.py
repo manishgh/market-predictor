@@ -37,6 +37,16 @@ def session_close(session: date) -> datetime:
     return close
 
 
+def session_on_or_before(day: date) -> date:
+    """The last XNYS session on or before a calendar day."""
+    closes = _closes()
+    labels = closes.index[closes.index <= pd.Timestamp(day)]
+    if labels.empty:
+        raise DataReadinessError(f"the XNYS calendar starts after {day}")
+    session: date = labels[-1].date()
+    return session
+
+
 def session_after(session: date, count: int) -> date:
     """The XNYS session `count` sessions after `session`, itself an XNYS session."""
     if count < 0:

@@ -14,6 +14,7 @@ from tests.test_outcome_maturation import (
     _collected_actions,
     _mature,
     _swing_bars,
+    _tail_gap,
 )
 from tests.test_outcome_repository import _intent
 from tests.test_performance_monitoring import _intent_variant
@@ -115,3 +116,18 @@ def test_units_hold_at_most_fifty_symbols_with_their_benchmarks(tmp_path: Path) 
     assert len(units) == 2
     assert all(len(unit.symbols) <= 50 and BENCHMARKS <= set(unit.symbols) for unit in units)
     assert sum(len(set(unit.symbols) - BENCHMARKS) for unit in units) == 60
+
+
+def test_a_stock_merger_asks_for_the_acquirer_close(tmp_path: Path) -> None:
+    repository = _repository(tmp_path)
+    receipts = _collected(tmp_path, _tail_gap())
+    _collected_actions(receipts, {"stock_mergers": [{
+        "id": "s-1", "acquiree_symbol": "MSFT", "acquirer_symbol": "ACQ", "acquirer_rate": 2, "acquiree_rate": 1,
+        "effective_date": "2026-07-29", "process_date": "2026-08-03"}]})
+    _mature(repository, receipts)
+
+    plan = plan_outcome_collection(repository, receipts_root=receipts, now=RETRIEVED + timedelta(days=1), terms=TERMS)
+
+    assert [(unit.symbols, unit.last_session) for unit in plan.bar_units if unit.symbols == ("ACQ",)] == [
+        (("ACQ",), date(2026, 7, 29))
+    ]

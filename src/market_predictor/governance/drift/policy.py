@@ -58,6 +58,8 @@ class DriftPolicy(BaseModel):
     # Calendar days after that close before a collection receipt can prove a gap. It is shorter
     # than the grace, so a stock that stopped trading is resolved before it could turn overdue.
     outcome_settlement_days: int = Field(default=3, ge=0)
+    # Unresolvable / (matured + unresolvable) selected outcomes a sufficient route may carry.
+    maximum_unresolvable_share: float = Field(default=0.05, ge=0, le=1)
     # Evidence minimums are defined per horizon; only the served ten-session route has them.
     evidence_horizons: tuple[str, ...] = ("10b",)
     # The share of sessions a route must register; the rest is tolerated failure.
@@ -594,6 +596,11 @@ def _performance_state(
     ):
         reasons.append("selected_policy_evidence_insufficient")
         return "warming", "rank_only"
+    # Applied only once evidence suffices, since the outcomes of one acquired stock cluster.
+    unresolvable = _as_int(row.get("unresolvable_selected_samples"), "unresolvable_selected_samples")
+    if unresolvable / (samples + unresolvable) > policy.maximum_unresolvable_share:
+        reasons.append("unresolvable_share_exceeded")
+        return "unavailable", "not_ready"
     last_matured = _timestamp(
         row.get("last_matured_outcome_utc"),
         "last_matured_outcome_utc",

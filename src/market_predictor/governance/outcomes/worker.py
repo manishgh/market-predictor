@@ -10,6 +10,7 @@ from market_predictor.collection.outcome_bars import (
     ActionReceipt,
     BarReceipt,
     complete_bar_receipts,
+    daily_path_bars,
     load_action_receipts,
     load_bar_receipts,
 )
@@ -19,12 +20,15 @@ from market_predictor.governance.outcomes.contracts import (
     MaturationAttempt,
     MaturedOutcome,
     PredictionMaturationIntent,
+    SensitivityFill,
     swing_horizon_sessions,
 )
 from market_predictor.governance.outcomes.evidence import (
+    Cessation,
     EvidenceTerms,
     cessation_evidence,
     path_evidence,
+    usable_rows,
 )
 from market_predictor.governance.outcomes.maturation import (
     AttemptContext,
@@ -32,7 +36,15 @@ from market_predictor.governance.outcomes.maturation import (
     mature_prediction,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
+from market_predictor.governance.outcomes.sensitivity import acquirer_terms, sensitivity_fills
 from market_predictor.governance.outcomes.sessions import horizon_last_close
+
+# The latest reasons of an intent whose stock gap is proven but not yet explained.
+_PROVEN_GAP_REASONS = (
+    ("stock_gap_without_cessation",),
+    ("interior_gap_needs_minute_bars",),
+    ("interior_gap_contradicted",),
+)
 
 
 def mature_pending_intents(
@@ -107,6 +119,10 @@ def mature_pending_intents(
                 terms=terms,
             )
         except (DataReadinessError, KeyError, TypeError, ValueError) as exc:
+            if latest is not None and latest.reasons == (OPERATOR_VERIFIED,):
+                # Unreadable evidence never undoes an operator's resolution.
+                summary["unresolvable"] += 1
+                continue
             attempt = maturation_attempt(
                 intent,
                 observed_as_of=observed_as_of,
@@ -120,8 +136,9 @@ def mature_pending_intents(
         if isinstance(result, MaturedOutcome):
             repository.record_outcome(intent, result, evidence_rows=evidence)
             summary["matured"] += 1
-        elif latest is not None and latest.reasons == (OPERATOR_VERIFIED,):
-            # An operator's resolution stands until the evidence matures the outcome.
+        elif latest is not None and latest.reasons == (OPERATOR_VERIFIED,) and result.status != "unresolvable":
+            # An operator's resolution stands until the evidence matures the outcome or names
+            # a more specific reason.
             summary["unresolvable"] += 1
         else:
             repository.record_attempt(result, decision_session=session)
@@ -136,27 +153,39 @@ def record_operator_resolution(
     decision_session: date,
     operator_id: str,
     reference: str,
+    receipts_root: Path,
     observed_as_of: datetime,
     terms: EvidenceTerms,
 ) -> MaturationAttempt:
     """Record an operator's verified finding that a pending outcome can never mature.
 
-    For a stock that stopped trading without provider evidence of why; `reference` names the
-    evidence the operator checked. Only a later maturation supersedes it.
+    Only for a proven stock gap without provider evidence of why the stock stopped trading;
+    `reference` names the evidence the operator checked. A later maturation, or provider
+    evidence naming a more specific reason, supersedes it. Its stress fill is a delisting.
     """
     intent = repository.load_intent(maturation_key, decision_session)
     if repository.has_outcome(maturation_key, decision_session):
         raise DataReadinessError("an outcome that matured cannot be resolved by an operator")
-    if horizon_last_close(decision_session, swing_horizon_sessions(intent.horizon), through=observed_as_of) is None:
-        raise DataReadinessError("an operator resolves an outcome only after its horizon has closed")
+    latest = repository.latest_attempt(maturation_key, decision_session)
+    stuck = latest is not None and (latest.reasons in _PROVEN_GAP_REASONS or latest.status == "blocked")
+    if not stuck or observed_as_of < terms.deadline(intent):
+        # Collection lag or a benchmark gap would otherwise leave the metrics by an operator's choice.
+        raise DataReadinessError("an operator resolves only an overdue outcome with a proven stock gap or blocked evidence")
+    observed = observed_as_of.astimezone(UTC)
+    bar_receipts = tuple(r for r in load_bar_receipts(receipts_root, [decision_session]) if r.finished_at_utc <= observed)
+    evidence = path_evidence(intent, bar_receipts, terms=terms)
     attempt = maturation_attempt(
         intent,
         observed_as_of=observed_as_of,
         status="unresolvable",
         reasons=(OPERATOR_VERIFIED,),
-        context=_context(terms),
+        context=_context(terms, evidence.receipt_ids),
         operator_id=operator_id,
         operator_reference=reference,
+        sensitivity=sensitivity_fills(
+            intent, evidence=evidence, reason=OPERATOR_VERIFIED, cessation_record=None,
+            acquirer_close=None, acquirer_collected=False,
+        ),
     )
     return repository.record_attempt(attempt, decision_session=decision_session)
 
@@ -187,6 +216,7 @@ def resolve_intent(
     status = "pending"
     reasons = result.reasons
     receipt_ids = list(evidence.receipt_ids)
+    cessation: Cessation | None = None
     gap = evidence.first_gap
     if gap is not None and gap in evidence.proven_stock_gaps and f"{intent.ticker}:{gap}" in result.missing_intervals:
         if evidence.trades_after(gap):
@@ -214,8 +244,18 @@ def resolve_intent(
             if cessation is None:
                 reasons = ("stock_gap_without_cessation",)
             else:
-                status, reasons = "unresolvable", (cessation[0],)
-                receipt_ids.extend(cessation[1])
+                status, reasons = "unresolvable", (cessation.reason,)
+                receipt_ids.extend(cessation.receipt_ids)
+    sensitivity: tuple[SensitivityFill, ...] = ()
+    if status == "unresolvable":
+        record = cessation.record if cessation is not None else None
+        acquirer = acquirer_terms(reasons[0], record)
+        acquirer_close, collected, acquirer_receipts = _acquirer_close(intent, bar_receipts, acquirer)
+        receipt_ids.extend(acquirer_receipts)
+        sensitivity = sensitivity_fills(
+            intent, evidence=evidence, reason=reasons[0], cessation_record=record,
+            acquirer_close=acquirer_close, acquirer_collected=collected,
+        )
     attempt = maturation_attempt(
         intent,
         observed_as_of=observed_as_of,
@@ -223,8 +263,32 @@ def resolve_intent(
         reasons=reasons,
         missing_intervals=result.missing_intervals,
         context=_context(terms, receipt_ids),
+        sensitivity=sensitivity,
     )
     return attempt, []
+
+
+def _acquirer_close(
+    intent: PredictionMaturationIntent,
+    bar_receipts: Sequence[BarReceipt],
+    acquirer: tuple[str, date] | None,
+) -> tuple[float | None, bool, tuple[str, ...]]:
+    """The acquirer's usable close on the effective session, whether its bars were collected, and the receipt."""
+    if acquirer is None:
+        return None, False, ()
+    symbol, effective = acquirer
+    decision = intent.decision_session_et
+    covering = complete_bar_receipts(
+        bar_receipts, decision_session=decision, symbol=symbol, first_session=decision, last_session=effective
+    )
+    for receipt in reversed(covering):
+        try:
+            rows = usable_rows(daily_path_bars(receipt, symbol), symbol)
+        except DataReadinessError:
+            continue
+        if effective in rows:
+            return float(rows[effective]["close"]), True, (receipt.receipt_id,)
+    return None, bool(covering), tuple(receipt.receipt_id for receipt in covering[-1:])
 
 
 def _context(terms: EvidenceTerms, receipt_ids: Sequence[str] = ()) -> AttemptContext:

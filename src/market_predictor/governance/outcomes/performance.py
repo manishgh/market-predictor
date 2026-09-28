@@ -17,7 +17,9 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.core.prediction_contracts import PredictionConflictError
 from market_predictor.governance.outcomes.contracts import (
+    OPERATOR_VERIFIED,
     SWING_HORIZON_PATTERN,
+    MaturationAttempt,
     MaturedOutcome,
     PredictionMaturationIntent,
     PredictionMonitoringObservation,
@@ -83,6 +85,13 @@ class SelectedPolicyCohort(BaseModel):
     # with the distinct securities they belong to (one acquired stock can fill several).
     unresolvable_selected_samples: int = Field(ge=0)
     unresolvable_selected_securities: int = Field(ge=0)
+    # Of those, the ones an operator resolved, audited apart.
+    operator_verified_selected_samples: int = Field(ge=0)
+    # Diagnostics, never gates: the mean excess return vs the sector over matured outcomes and
+    # every unresolvable one filled at its last usable close, or at its stress value. None when
+    # nothing is unresolvable or some unresolvable outcome has no such fill.
+    sensitivity_mean_excess_last_close: float | None = None
+    sensitivity_mean_excess_stress: float | None = None
     oldest_pending_decision_time_utc: datetime | None = None
     oldest_pending_decision_session_et: date | None = None
     # Over every stored intent of the route, not only this window: nothing leaves monitoring uncounted.
@@ -146,8 +155,13 @@ class SelectedPolicyCohort(BaseModel):
             raise ValueError("selected-policy maturation counts are inconsistent")
         if (self.unresolvable_selected_samples == 0) != (self.unresolvable_selected_securities == 0) or (
             self.unresolvable_selected_securities > self.unresolvable_selected_samples
+            or self.operator_verified_selected_samples > self.unresolvable_selected_samples
         ):
             raise ValueError("selected-policy unresolvable counts are inconsistent")
+        if self.unresolvable_selected_samples == 0 and (
+            self.sensitivity_mean_excess_last_close is not None or self.sensitivity_mean_excess_stress is not None
+        ):
+            raise ValueError("selected-policy sensitivity needs an unresolvable outcome")
         pending_evidence = (self.oldest_pending_decision_time_utc, self.oldest_pending_decision_session_et)
         if any((self.pending_selected_samples > 0) != (value is not None) for value in pending_evidence):
             raise ValueError("selected-policy pending timestamp is inconsistent")
@@ -345,12 +359,13 @@ def build_performance_cohorts(
             if intent is not None
             else None
         )
-        unresolvable = (
-            intent is not None
-            and intent.actionable
-            and outcome is None
-            and _unresolvable(repository, intent, generated_at=generated)
+        resolution = (
+            _unresolvable(repository, intent, generated_at=generated)
+            if intent is not None and intent.actionable and outcome is None
+            else None
         )
+        fills = {fill.basis: fill for fill in resolution.sensitivity} if resolution is not None else {}
+        stress = [fill for basis, fill in fills.items() if basis != "last_usable_close"]
         source_observation_ids.add(observation.observation_id)
         if intent is not None:
             source_intent_ids.add(intent.maturation_key)
@@ -359,7 +374,12 @@ def build_performance_cohorts(
         records.append(
             {
                 **_monitoring_record(observation, outcome),
-                "unresolvable": unresolvable,
+                "unresolvable": resolution is not None,
+                "operator_verified": resolution is not None and resolution.reasons == (OPERATOR_VERIFIED,),
+                "fill_last_close_excess": (
+                    fills["last_usable_close"].excess_return_vs_sector if "last_usable_close" in fills else None
+                ),
+                "fill_stress_excess": stress[0].excess_return_vs_sector if stress else None,
                 "canonical_security_id": intent.canonical_security_id if intent is not None else None,
             }
         )
@@ -573,14 +593,24 @@ def _matured_selected_outcome(
     return None if outcome.matured_at_utc > generated_at else outcome
 
 
-def _unresolvable(repository: OutcomeRepository, intent: PredictionMaturationIntent, *, generated_at: datetime) -> bool:
-    """Whether the intent's latest attempt observed by the report time is `unresolvable`."""
+def _unresolvable(
+    repository: OutcomeRepository, intent: PredictionMaturationIntent, *, generated_at: datetime
+) -> MaturationAttempt | None:
+    """The intent's latest attempt observed by the report time, when it is `unresolvable`."""
     observed = [
         attempt
         for attempt in repository.attempts(intent.maturation_key, intent.decision_session_et)
         if attempt.observed_as_of_utc <= generated_at
     ]
-    return bool(observed) and observed[-1].status == "unresolvable"
+    return observed[-1] if observed and observed[-1].status == "unresolvable" else None
+
+
+def _sensitivity_mean(matured: pd.DataFrame, unresolvable: pd.DataFrame, fill_column: str) -> float | None:
+    """The mean excess return vs the sector with every unresolvable outcome filled from one column."""
+    if unresolvable.empty or unresolvable[fill_column].isna().any():
+        return None
+    values = pd.concat([matured["excess_return_vs_sector"], unresolvable[fill_column]]).astype(float)
+    return float(values.mean())
 
 
 def _earliest(*sessions: date | None) -> date:
@@ -605,7 +635,7 @@ def _route_oldest_pending(
             not intent.actionable
             or intent.decision_time_utc > generated
             or repository.has_outcome(maturation_key, session)
-            or _unresolvable(repository, intent, generated_at=generated)
+            or _unresolvable(repository, intent, generated_at=generated) is not None
         ):
             continue
         route = tuple(str(getattr(intent, column)) for column in _IDENTITY_COLUMNS)
@@ -717,6 +747,9 @@ def _cohort_row(
         "pending_selected_samples": len(pending),
         "unresolvable_selected_samples": len(unresolvable),
         "unresolvable_selected_securities": int(unresolvable["canonical_security_id"].nunique()),
+        "operator_verified_selected_samples": int(unresolvable["operator_verified"].astype(bool).sum()),
+        "sensitivity_mean_excess_last_close": _sensitivity_mean(matured, unresolvable, "fill_last_close_excess"),
+        "sensitivity_mean_excess_stress": _sensitivity_mean(matured, unresolvable, "fill_stress_excess"),
         "oldest_pending_decision_time_utc": (
             _timestamp_text(pending["decision_time_utc"].min())
             if not pending.empty
