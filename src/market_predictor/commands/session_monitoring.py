@@ -6,10 +6,14 @@ from typing import Any
 
 import typer
 
+from market_predictor.canonical.store import file_sha256
 from market_predictor.config import get_settings
+from market_predictor.core import path_integrity
+from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.governance.outcomes.repository import OutcomeRepository
 from market_predictor.governance.outcomes.session_records import SessionRecordStore, make_session_record
 from market_predictor.monitoring_lease import monitoring_lease
+from market_predictor.serving.live_input_publication import LiveInputPublication, publish_live_inputs
 from market_predictor.serving.prediction_service import (
     PredictionService,
     serving_routes_from_config,
@@ -35,6 +39,24 @@ def _service() -> PredictionService:
 
 
 def register_session_monitoring_commands(app: typer.Typer, console: Any) -> None:
+    @app.command("publish-swing-live-inputs")
+    def publish_inputs(
+        request_path: Path = typer.Option(..., help="Strict publication JSON with absolute paths and independent source pins."),
+        expected_request_sha256: str = typer.Option(...),
+        output_directory: Path = typer.Option(Path("data/live/edge_rebuild/swing")),
+        maximum_bytes: int = typer.Option(512 * 1024 * 1024, min=1),
+        maximum_rows: int = typer.Option(2_000_000, min=1),
+    ) -> None:
+        """Verify prepared causal inputs and activate one immutable nightly generation."""
+        safe = path_integrity.verify_no_reparse_ancestry(request_path, label="live publication request")
+        if safe.stat().st_size > 1_048_576 or file_sha256(safe) != expected_request_sha256:
+            raise typer.BadParameter("publication request hash or byte limit does not verify")
+        request = LiveInputPublication.model_validate(parse_strict_json_object(safe.read_bytes(), label="live publication request"))
+        if file_sha256(safe) != expected_request_sha256:
+            raise typer.BadParameter("publication request changed during loading")
+        result = publish_live_inputs(request, output_directory, maximum_bytes=maximum_bytes, maximum_rows=maximum_rows)
+        console.print_json(data=result)
+
     @app.command("register-session-predictions")
     def register_session(
         as_of: datetime = typer.Option(..., formats=["%Y-%m-%dT%H:%M:%S%z"]),

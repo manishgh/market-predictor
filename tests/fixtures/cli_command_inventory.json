@@ -38,6 +38,7 @@
     "publish-live-features",
     "publish-local-release",
     "publish-serving-bundle",
+    "publish-swing-live-inputs",
     "quarantine-outcome-receipt",
     "record-monitoring-not-run",
     "record-operator-outcome-resolution",

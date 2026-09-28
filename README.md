@@ -33,9 +33,35 @@ Report and cohort identities bind session records and the deciding maturation at
 available at report time. Source-id inventories also include evidence used by the
 route-wide overdue check, so they can extend beyond the rolling metric window.
 
-The nightly live-input publisher is still pending. Synthetic registration tests do
-not establish live readiness, profitability or permission to trade. API v4's consumer
-migration is recorded in `docs/contracts/tradingflow_handoff.md`.
+Publish prepared source inputs before registering the nightly cross-section:
+
+```powershell
+market-predictor-prod publish-swing-live-inputs --request-path <request.json> --expected-request-sha256 <approved-request-hash>
+```
+
+The strict JSON request contains `as_of_utc`, `stock_daily_bars`,
+`benchmark_daily_bars`, `point_in_time_memberships`, `catalyst_authority`, and
+`strategy_contract`. Every pin has an absolute `path` and `sha256`; the three
+canonical parquet inputs also need `manifest_sha256` for their adjacent canonical
+manifest. `catalyst_authority.path` names its `_authority.json`. Sources must be
+production-ready and independently approved; computing a hash does not grant data
+admission. The cutoff must describe the current completed nightly decision.
+
+The publisher takes the heavy-job and monitoring leases, derives watermarks from
+verified source rows, validates through the production reader and shared feature
+builder, and atomically activates an immutable generation. Failures preserve the
+previous pointer. Identical requests reuse their original verified generation;
+older cutoffs cannot roll back the pointer. Actual generation/activation clocks
+are retained, so registration's `--as-of` must be at or after the returned activation
+time. Default output is `data/live/edge_rebuild/swing`; use `--output-directory` to
+match a custom serving configuration. Bounds default to 512 MiB aggregate stored/
+expanded parquet bytes and two million rows, with a 4 GiB process memory guard.
+
+This command publishes existing authorities; collection and scheduling remain
+separate operations. No current real-data source request or promoted release has
+been verified by this checkpoint. Synthetic checks do not establish live readiness,
+profitability or permission to trade. API v4 consumer status is recorded in
+`docs/contracts/tradingflow_handoff.md`.
 
 ## Unified Product Boundary
 

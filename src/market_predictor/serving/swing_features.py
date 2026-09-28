@@ -134,12 +134,16 @@ class FileSwingLiveInputProvider:
             label="swing live-input repository",
         )
         pointer = _load_input_pointer(root)
+        if _strict_utc_value(pointer["activated_at_utc"], "live-input activation") > _utc_cutoff(as_of_utc):
+            raise DataReadinessError("swing live inputs were activated after as_of_utc")
         cached = self._cached
         if cached is not None and cached.pointer_sha256 == pointer["pointer_sha256"]:
             _validate_cached_input_cutoff(cached, as_of_utc)
             return cached
         with self._lock:
             pointer = _load_input_pointer(root)
+            if _strict_utc_value(pointer["activated_at_utc"], "live-input activation") > _utc_cutoff(as_of_utc):
+                raise DataReadinessError("swing live inputs were activated after as_of_utc")
             cached = self._cached
             if cached is not None and cached.pointer_sha256 == pointer["pointer_sha256"]:
                 _validate_cached_input_cutoff(cached, as_of_utc)
