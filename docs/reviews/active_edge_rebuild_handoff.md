@@ -291,8 +291,17 @@ nullable `training_data_end`), the four HEAD defects fixed, and the open replay 
   so nothing can register or serve real predictions yet. The nightly live-input
   publisher is built right after part (3), so registration is tested end to end on real
   Alpaca data before parts (4) and (6).
-- Next: the part (2b) design (outcome-bar collection with receipts, cessation evidence,
-  `unresolvable`, the attempt order), reviewed before code.
+- Part (2b) design `c87a9e4` and `057fbf5`, consolidated in `2cf26dd` after both design
+  reviews (no blocker; majors on one price basis per path, settlement before the overdue
+  deadline, and unresolvable intents leaving pending). Two provider facts were measured
+  with read-only requests: Alpaca omits a symbol without bars (`{"bars":{}}` when none
+  has any), and `asof` on the decision session follows a later rename (FB to META).
+- Part (2b-1) `d23df6a`: receipted daily and one-minute bar collection and corporate-action
+  collection (`collection/outcome_bars.py`, `collection/http_records.py`) and the shared
+  monitoring lease (`monitoring_lease.py`). Verification: the new tests, 13 passed; the
+  dependency and architecture tests, 230 passed; strict mypy (358 files) and Ruff clean.
+  No existing module imports the new code yet. Diff review requested; part (2b-2),
+  classification, states and the attempt log, follows.
 - TradingFlow follow-ups, both display-only: swing signals read as neutral in the
   advisory model-direction view; the hard-coded `market_predictor.prediction.v1` label.
 
