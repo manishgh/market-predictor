@@ -4,12 +4,12 @@ Status: active
 Last updated: 2026-09-28
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last locally verified implementation checkpoint: `116d711` (monitoring part (3c)).
+Last locally verified implementation checkpoint: `cb70f81` (publisher metadata bounds),
+following `ebe5dfb` (nightly live-input publisher). Monitoring part (3c): `116d711`.
 Part (3b): `8fdb29f` (local). Last pushed implementation: `b3c8761` (part (3a), API v4).
 Publication after (3a) is blocked pending explicit user authorization following an
 automatic approval-review rejection. No push was retried after that rejection.
-The working tree was clean after the local implementation commit; this documentation
-receipt is committed separately. The continuation baseline was `21ef677`.
+The code changes are committed; this documentation receipt is committed separately. The continuation baseline was `21ef677`.
 Part (3)'s design: `38c698e`, amended by the September 28 review in `18bdd8e`.
 Earlier retirement sub-slice (b) closure: `ea93712`, after `7dd6d44`.
 Last completed model-training checkpoint: relationship run on `a8be7cb` (artifact pins below).
@@ -19,7 +19,82 @@ The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
 
-Part (3c) implementation `116d711` (September 28, local; publication pending):
+Nightly live-input publisher freeze (September 28, user requested implementation):
+publish prepared, independently pinned production canonical stock bars, benchmark bars,
+point-in-time membership and a production catalyst decision authority into the existing
+reader format. This is the canonical nightly writer, not a provider collector. A strict
+request binds absolute input paths, data/manifest hashes, strategy hash and observation
+cutoff. Reuse canonical artifact/authority verification and the shared live feature
+builder; derive source watermarks from verified rows, never operator-supplied clocks.
+Acquire the shared heavy-job lease before any input load and the monitoring lease for
+publication. Bound aggregate file bytes, uncompressed parquet bytes and rows, with 4 GiB
+memory guards. Stage an immutable generation (retaining any hash-bound external catalyst
+dependency), validate it through the production
+reader and feature builder, move the immutable generation, then atomically replace the
+active pointer last. Errors leave the previous pointer intact; retain old generations.
+Identical request retries verify and reuse the current generation; older observation
+cutoffs cannot roll it back. Actual generation/activation times cannot be backdated.
+Readers reject future activation even on cached generations. CLI lives only on the
+production surface. No model training/promotion, provider transfer, scheduled automation,
+sealed-source read, deployment or order work is authorized by this checkpoint.
+Exit checks: CLI/reader round trip, parity through shared builder, identical retries,
+future activation/source clocks, changed pins, research-only authority, limits, path
+escapes, partial publication and reader cache invalidation; Ruff/strict mypy, component
+tests, one consolidated review. Real-data registration is environment_pending until
+verified current source paths/pins and a promoted release are available.
+
+TradingFlow migration is newly authorized by the user's current request, superseding
+the earlier separate-developer-only boundary for this narrow API task. Preserve its
+existing dirty work. API v4 parser/fixture/reason display only, advisory isolation
+unchanged; independent plan/code review and fresh focused C# build/tests required.
+
+Publisher software is locally implemented in `ebe5dfb`, with final metadata bounds
+in `cb70f81`. `publish-swing-live-inputs` is the production-only entry point. It verifies
+independent input pins and production admission, derives causal source watermarks,
+validates through the existing reader/shared feature builder, and activates an immutable
+generation by atomic pointer replacement. Retries verify existing evidence before reuse.
+No real nightly publication or session registration has been performed.
+
+Consolidated review fixes: aggregate byte/row bounds include the independently pinned
+external canonical-decision artifact; retries deeply verify copied catalyst evidence;
+cached readers reject future activation; JSON/TOML metadata is capped at 1 MiB before
+parsing. The generation embeds bars, membership and catalyst payloads, but a catalyst
+authority may retain its original absolute, hash-pinned canonical-decision dependency.
+That dependency must remain available; the generation is not universally portable.
+
+Verification tier: component. Publisher/live-feature/registration/service/API/CLI and
+package/architecture tests passed 333 tests, with one opt-in memory benchmark skipped.
+Swing API and continuity checks passed nine tests. After the metadata fix, all 17
+publisher tests passed; Ruff and strict mypy were clean on the affected files/modules.
+Positive publisher fixtures stub the expensive feature-builder boundary; the real
+builder rejects inadequate membership, and the live-feature suite verifies mathematical
+batch/live parity. This is software verification, not real-source admission or promotion.
+No full suite, training, collection, deployment, sealed-data read or live broker call ran.
+
+TradingFlow's narrow migration is prepared against its existing dirty source snapshot
+in `C:/Users/manis/Documents/Codex/2026-09-28/c/work/trading-flow-v4`. It reads only
+`contract_version = market_predictor.prediction.v4`, re-pins the producer fixture, and
+renders `sector_peer_floor` distinctly while preserving nullable scores and advisory
+isolation. Independent plan and final code review found no remaining actionable issue.
+Fresh Web/Contracts compilation and 84 focused consumer tests passed; the Android build
+passed with zero warnings/errors. The final patch passed `git apply --check` against
+the original checkout; all recorded baseline hashes matched at export.
+
+The original TradingFlow checkout and running Web process remain untouched pending
+the user's safe-stop/isolation decision. Its AGENTS.md requires stopping project runtimes
+before source changes. The patch, original-file hashes and application instructions are
+in `C:/Users/manis/Documents/Codex/2026-09-28/c/outputs/tradingflow-api-v4.patch`,
+`tradingflow-api-v4-baseline.json` and `tradingflow-api-v4-status.md`. Recheck hashes before
+applying; do not overwrite other developer edits or use stale test binaries as proof.
+
+Real-data activation remains `environment_pending`: no active generation was found at
+`data/live/edge_rebuild/swing/active_generation.json`; approved current source paths/pins
+and a promoted release have not been supplied/verified. GitHub publication remains
+separately blocked by the prior automatic approval-review rejection; no retry occurred.
+
+
+
+Historical part (3c) receipt `116d711` (September 28, local; publication pending):
 reports load only committed session inventories, preserving every member in the
 denominator and rejecting missing or mismatched committed evidence. Coverage binds
 each release activation to expected XNYS cutoffs and partitions registered, failed
@@ -59,7 +134,7 @@ registration and intent tests passed. Ruff clean on 11 changed Python files; str
 mypy clean on six source modules; diff checks clean. All test processes completed.
 No full suite, training, provider collection, sealed-data read, live registration,
 deployment or promotion ran. API bytes unchanged from (3a); the separately owned C#
-consumer migration remains pending. The publisher does not exist yet.
+consumer migration and publisher were pending at that checkpoint; see current receipt above.
 
 Monitoring part (3a)/(3b)/(3c) is implemented and locally verified. Formal checkpoint
 closure still awaits publication: automatic approval review rejected the continuity
@@ -1349,25 +1424,38 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: publish the verified monitoring part (3) commits once the
-user authorizes the rejected GitHub push; then freeze and implement the nightly
-live-input publisher. Parts (3a), (3b), and (3c) are locally implemented and verified.
-Do not reopen them for another general review. The API v4 consumer migration remains
-with TradingFlow's developer; relay only through the existing contract/handoff files.
+Exact next checkpoint: resolve the pending safe-stop/isolation decision, then apply
+the verified TradingFlow API v4 patch only after checking its baseline hashes and
+stopping the authorized runtime. Rebuild/retest and restore the app normally. Obtain
+approved production canonical/catalyst source paths and independent pins for a real
+nightly publication; verify a promoted release before session registration. Do not
+reimplement the publisher or treat the isolated migration as applied. Local GitHub
+publication still requires the pending explicit authorization. Do not advance to part
+(4) inference/curve/rank work or part (6) replay boundaries until this checkpoint closes.
 
-The publisher must use the verified causal source authorities and availability clocks,
-publish an atomic immutable live generation, and preserve existing memory/admission
-and point-in-time guards. There is no production publisher or real-data registration
-receipt yet. Freeze a bounded design and exit gates before coding; do not equate the
-synthetic registration tests with a promoted release or live readiness. Complete this
-before part (4) inference/curve/rank work and part (6) replay boundaries.
+Files to read: AGENTS.md; this current receipt and the active plan; README publisher
+instructions; `serving/live_input_publication.py`, `serving/swing_features.py`,
+`serving/session_registration.py`, `commands/session_monitoring.py` (source paths under
+`src/market_predictor`); `docs/contracts/tradingflow_handoff.md`; TradingFlow AGENTS.md
+and the migration status/baseline/patch named above.
 
-Files to read: AGENTS.md; the current checkpoint and part (3) receipts/design in the
-active plan; `serving/swing_features.py`, `serving/prediction_service.py`,
-`serving/session_registration.py`, `governance/outcomes/session_records.py`,
-`governance/outcomes/session_coverage.py`, `governance/outcomes/performance.py`,
-and `docs/contracts/tradingflow_handoff.md`. Source paths are beneath
-`src/market_predictor`; locate the actual live-input provider before designing its writer.
+Publisher verification uses `.venv/Scripts/python.exe`, `PYTHONDONTWRITEBYTECODE=1`,
+writable TEMP/TMP, `-p no:cacheprovider` and a unique writable `--basetemp`:
+- pytest `tests/test_live_input_publication.py tests/test_swing_live_features.py
+  tests/test_session_registration.py tests/test_prediction_service.py tests/test_api.py
+  tests/test_cli_surfaces.py tests/test_package_dependency_boundaries.py
+  tests/test_architecture_boundaries.py`: 333 passed, one skipped.
+- pytest `tests/test_swing_prediction_api.py tests/test_active_continuity_documents.py`:
+  nine passed. Final publisher-only run after metadata bound: 17 passed.
+- Ruff over the three changed source modules and publisher tests; strict mypy over
+  live_input_publication, swing_features and session_monitoring. Final metadata fix
+  repeated publisher lint/type checks successfully.
+- TradingFlow snapshot: `dotnet test src/TradingFlow.Tests/TradingFlow.Tests.csproj
+  --no-restore --disable-build-servers --filter
+  "FullyQualifiedName~MarketPredictorHttpClientTests|FullyQualifiedName~UniverseRankServiceTests|FullyQualifiedName~PredictorEvidencePresentationTests"`:
+  84 passed. `dotnet build src/TradingFlow.Mobile/TradingFlow.Mobile.csproj --no-restore
+  --disable-build-servers -f net10.0-android -v minimal`: succeeded. TEMP/TMP pointed to
+  writable chat work; no device install or live endpoint acceptance was performed.
 
 Part (3c) verification commands used the project `.venv/Scripts/python.exe` with
 `PYTHONDONTWRITEBYTECODE=1`, TEMP/TMP set to the chat's writable work directory and

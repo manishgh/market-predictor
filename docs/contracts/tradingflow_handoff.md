@@ -15,12 +15,24 @@ signal. The unused row-evidence `decision_atr` field is removed; risk distances 
 all scored prediction fields retain their meanings. No HTTP cross-section endpoint
 is added. Acknowledge this change in the shared notes file.
 
-Consumer verification on September 28 using the existing test binary (`--no-build
---no-restore`, filtered to `MarketPredictorHttpClientTests`): 38 passed, one failed,
-`GoldenFixture_MatchesPublishedHashAndLocalProducerCopy`. Current C# source still
-expects the previously retired unversioned `contract` field. The consumer update and
-a fresh C# build/parity run remain owned by TradingFlow; this is not an integration
-pass or production-readiness claim.
+September 28 current receipt: the user authorized this narrow consumer migration.
+It is implemented in an isolated copy of TradingFlow's dirty source tree, independently
+reviewed, and freshly verified: 84 focused tests passed, Web/Contracts compiled, and the
+Android build passed with zero warnings/errors. The exact producer fixture hash above
+and all five outcomes are covered. Predictor evidence remains advisory only.
+
+The original checkout is unchanged because its Web process is running and its safe-stop
+decision is pending. The reviewed patch passes `git apply --check` against that checkout.
+Patch, original-file hashes and instructions are under
+`C:/Users/manis/Documents/Codex/2026-09-28/c/outputs/tradingflow-api-v4.patch`,
+`tradingflow-api-v4-baseline.json` and `tradingflow-api-v4-status.md`. Reverify those hashes
+and stop the authorized runtime before applying; rebuild/retest and restore the service.
+Prepared acknowledgement and handoff updates are included in the patch. No live endpoint
+acceptance or original-checkout integration pass is claimed.
+
+Historical observation before migration: an old test binary passed 38 tests and failed
+golden fixture parity; the original source still reads the retired unversioned field.
+The newly built isolated tests supersede that old-binary result for patch verification.
 
 ## Historical action (2026-09-27 correction)
 
@@ -38,7 +50,7 @@ Read-only for TradingFlow (owned by Market Predictor):
 | Path | What it is |
 | --- | --- |
 | `C:\project\market-predictor\docs\contracts\prediction_api.md` | The prediction API contract: endpoints, fields, nullability, signal/action values, abstention reasons, errors, change rules, pending changes and change log. |
-| `C:\project\market-predictor\tests\fixtures\contracts\swing_prediction_response.json` | A real served response covering a selected setup (`T000`), a ranked candidate (`T059`), a member with incomplete inputs (`T060`) and an unknown ticker (`MISSING`). Per-call values (request and correlation IDs, generation time, server path) are fixed. |
+| `C:\project\market-predictor\tests\fixtures\contracts\swing_prediction_response.json` | A real served response covering a selected setup (`T000`), a ranked candidate (`T059`), a member with incomplete inputs (`T060`), insufficient eligible sector peers (`T061`) and an unknown ticker (`MISSING`). Per-call values (request and correlation IDs, generation time, server path) are fixed. |
 | `C:\project\market-predictor\docs\contracts\tradingflow_handoff.md` | This file. |
 
 Owned by TradingFlow (create it; Market Predictor reads it):
@@ -63,7 +75,7 @@ Owned by TradingFlow (create it; Market Predictor reads it):
   code changes; verify under its Risk-Based Verification policy.
 - Do not implement anything listed under Pending changes until it moves to the
   Change log.
-- Versions (user rule, September 27). Only the public API is versioned (contract `market_predictor.prediction.v3`, routes
+- Versions (user rule, September 27). Only the public API is versioned (contract `market_predictor.prediction.v4`, routes
 under `/v1/`). Models are not final, so model, record, class, file and other internal
 names carry no version number (`V2`, `.v3`, `_v1`), in TradingFlow as in
   Market Predictor. Names bound in already-published, hash-pinned evidence stay as
@@ -73,25 +85,23 @@ names carry no version number (`V2`, `.v3`, `_v1`), in TradingFlow as in
 
 1. Contract test from the golden fixture.
    - Copy the fixture into the TradingFlow test project and record its source path and
-     SHA-256 (`360206c2440e4fb39bac210a50b12c6d233e4f49a140fd356e5d283b034536cb`) beside it.
+     SHA-256 (`96cbcd133b8e96253b034fabba10624be79b0d80550f043f3869905251bec522`) beside it.
    - Parse it through the production deserializer and `Validate` path of
-     `MarketPredictorHttpClient` for each of the four tickers, asserting the expected
-     result: `T000` and `T059` available; `T060` and `MISSING` available with swing
+     `MarketPredictorHttpClient` for each of the five tickers, asserting the expected
+     result: `T000` and `T059` available; `T060`, `T061` and `MISSING` available with swing
      evidence, `final_signal` `abstain` and their abstention reason in `Errors`.
    - Add a local check that the copy equals the source file when
      `C:\project\market-predictor` exists, so a regenerated fixture cannot drift silently.
-2. Contract version. `MarketPredictorHttpClient.cs` lines 336 and 400 hard-code
-   `market_predictor.prediction.v1`. Read `contract_version` from the response, accept
-   only `market_predictor.prediction.v3`, and treat anything else as `incompatible`.
-3. Signal vocabulary. `UniverseRankService.cs` (`SupportiveSignals`, `OpposedSignals`,
-   about lines 130-150) lists retired names and the action `watch_for_entry`, so every
-   current signal reads as neutral. Map the current `final_signal` values from the
-   contract's Signals and actions table: `positive_setup` supportive; `low_probability`
-   opposed; `ranked_candidate`, `neutral` and `abstain` neutral. It stays display-only.
-4. Abstentions. Show `live_inputs_incomplete` ("inputs incomplete at the decision")
+2. Contract version. Replace the retired unversioned contract. Read `contract_version` from the response, accept
+   only `market_predictor.prediction.v4`, and treat anything else as `incompatible`.
+3. Signal vocabulary. Preserve the existing `UniverseRankService` mapping:
+   `positive_setup` supportive; `low_probability` opposed; `ranked_candidate`,
+   `neutral` and `abstain` neutral. It stays display-only. Update synthetic test payloads
+   to v4 so advisory-isolation checks exercise compatible responses.
+4. Abstentions. Show `sector_peer_floor` ("too few eligible sector peers for ranking"), `live_inputs_incomplete` ("inputs incomplete at the decision")
    separately from `out_of_universe` ("not in the point-in-time universe") wherever
    predictor evidence is displayed.
 5. Verification: `MarketPredictorHttpClientTests` plus the tests affected by tasks 2-4,
    and the affected project builds with nullable and analyzer checks. Record the tier,
    commands and results in TradingFlow's own handoff, then write an acknowledgement of the
-   2026-09-27 Change log entries in your notes file.
+   2026-09-28 API v4 Change log entry in your notes file.
