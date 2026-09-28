@@ -338,7 +338,17 @@ nullable `training_data_end`), the four HEAD defects fixed, and the open replay 
   blocked evidence and a well-formed operator id, unreadable evidence never undoes it,
   and provider evidence naming a reason replaces it; operator ids are not yet tied to
   authenticated principals. Verification: the 26 import- and config-affected test files,
-  346 passed; strict mypy (361 files) and Ruff clean. Diff review requested.
+  346 passed; strict mypy (361 files) and Ruff clean. Both diff reviews (no blocker; one
+  major each) are fixed in `346e0ec`: reorganizations are matched on the company's own
+  `symbol` (the provider's measured record shape: `symbol` and `stock_movements`, no
+  acquiree field) and filled at the last usable close, like a stock merger whose acquirer
+  has no bar, never as a loss; fills need the sector bar on their session; never-entered
+  decisions are marked and stay out of the sensitivity means; an operator may resolve a
+  block only for defective stock evidence, and resolutions no longer need readable
+  evidence; `quarantine-outcome-receipt` moves a receipt that no longer verifies aside
+  (with who and why), so its session loads again. The ceiling over deadline-passed
+  decisions only belongs to part (4), with every other metric. Verification: 352 passed on
+  the same set, plus the collection and dependency tests, 246 passed.
 - TradingFlow follow-ups, both display-only: swing signals read as neutral in the
   advisory model-direction view; the hard-coded `market_predictor.prediction.v1` label.
 
