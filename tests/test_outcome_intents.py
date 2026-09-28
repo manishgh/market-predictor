@@ -18,8 +18,10 @@ def test_registers_identity_complete_swing_snapshot_for_maturation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     serving = swing_serving(tmp_path, monkeypatch, enforce_drift=False, persist_snapshots=True)
-    response = serving.service.predict(
-        PredictionRequest(tickers=["T000", "T059", "MISSING"], as_of=NOW)
+    monkeypatch.setenv("MARKET_PREDICTOR_RUNTIME_DIR", str(tmp_path / "runtime"))
+    result = serving.service.predict_swing_cross_section(NOW)
+    response = serving.service.snapshot_store.record_cross_section(
+        result.response, result.members, as_of=NOW, promoted_at=result.promoted_at_utc,
     )
     assert response.snapshot_id is not None
     repository = OutcomeRepository(tmp_path / "data/outcomes")
@@ -30,8 +32,8 @@ def test_registers_identity_complete_swing_snapshot_for_maturation(
         response.snapshot_id,
     )
 
-    assert {intent.ticker for intent in registration.intents} == {"T000", "T059"}
-    assert registration.unmonitored_tickers == {"out_of_universe": ["MISSING"]}
+    assert {intent.ticker for intent in registration.intents} == {f"T{i:03d}" for i in range(60)}
+    assert registration.unmonitored_tickers == {}
     for intent in registration.intents:
         assert (intent.view, intent.horizon) == ("swing", "10b")
         assert intent.model_release_id == response.models["swing"].release_id
@@ -39,8 +41,7 @@ def test_registers_identity_complete_swing_snapshot_for_maturation(
     # MISSING is outside the live universe: it abstains unscored, so nothing is monitored.
     observations = monitoring_observations_from_response(response, snapshot_id=response.snapshot_id)
     assert {(observation.ticker, observation.view) for observation in observations} == {
-        ("T000", "swing"),
-        ("T059", "swing"),
+        (f"T{i:03d}", "swing") for i in range(60)
     }
 
 
@@ -50,7 +51,11 @@ def test_members_with_incomplete_inputs_are_reported_not_called_out_of_universe(
     serving = swing_serving(
         tmp_path, monkeypatch, enforce_drift=False, persist_snapshots=True, excluded_tickers=("T060",)
     )
-    response = serving.service.predict(PredictionRequest(tickers=["T000", "T060", "MISSING"], as_of=NOW))
+    monkeypatch.setenv("MARKET_PREDICTOR_RUNTIME_DIR", str(tmp_path / "runtime"))
+    result = serving.service.predict_swing_cross_section(NOW)
+    response = serving.service.snapshot_store.record_cross_section(
+        result.response, result.members, as_of=NOW, promoted_at=result.promoted_at_utc,
+    )
     assert response.snapshot_id is not None
     reasons = {
         prediction.ticker: prediction.swing.abstention_reasons
@@ -62,11 +67,11 @@ def test_members_with_incomplete_inputs_are_reported_not_called_out_of_universe(
         serving.service.snapshot_store, OutcomeRepository(tmp_path / "data/outcomes"), response.snapshot_id
     )
 
-    assert reasons == {"T000": [], "T060": ["live_inputs_incomplete"], "MISSING": ["out_of_universe"]}
-    assert registration.unmonitored_tickers == {
-        "live_inputs_incomplete": ["T060"],
-        "out_of_universe": ["MISSING"],
-    }
+    assert reasons["T000"] == []
+    assert reasons["T060"] == ["live_inputs_incomplete"]
+    assert registration.unmonitored_tickers == {}
+    assert registration.session_record.members == 61
+    assert registration.session_record.abstentions == {"live_inputs_incomplete": 1}
 
 
 def test_scored_prediction_without_evidence_row_is_refused(

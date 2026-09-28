@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import date
 from zoneinfo import ZoneInfo
 
+from market_predictor.core.cross_section_contracts import CrossSectionMember
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.prediction_contracts import (
     PredictionResponse,
@@ -19,6 +20,8 @@ from market_predictor.governance.outcomes.contracts import (
     semantic_prediction_sha256,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
+from market_predictor.governance.outcomes.session_records import SessionRecord
+from market_predictor.monitoring_lease import monitoring_lease
 from market_predictor.serving.snapshot_store import PredictionSnapshotStore
 
 _EASTERN = ZoneInfo("America/New_York")
@@ -31,6 +34,7 @@ class SnapshotRegistration:
     intents: list[PredictionMaturationIntent]
     # Requested tickers the model never scored, by abstention reason; they have no observation.
     unmonitored_tickers: dict[str, list[str]]
+    session_record: SessionRecord | None = None
 
 
 def register_snapshot_intents(
@@ -38,26 +42,9 @@ def register_snapshot_intents(
     outcome_repository: OutcomeRepository,
     snapshot_id: str,
 ) -> SnapshotRegistration:
-    _, response, _ = snapshot_store.load(snapshot_id)
-    intents = maturation_intents_from_response(response, snapshot_id=snapshot_id)
-    intent_by_view: dict[tuple[str, str], PredictionMaturationIntent] = {
-        (intent.ticker, intent.view): intent for intent in intents
-    }
-    observations = monitoring_observations_from_response(
-        response,
-        snapshot_id=snapshot_id,
-        intents=intent_by_view,
-    )
-    recorded = [outcome_repository.record_intent(intent) for intent in intents]
-    for observation in observations:
-        outcome_repository.record_observation(observation)
-    observed = {observation.ticker for observation in observations}
-    unmonitored: dict[str, list[str]] = {}
-    for prediction in response.predictions:
-        if prediction.swing is not None and prediction.ticker not in observed:
-            reason = "+".join(prediction.swing.abstention_reasons)
-            unmonitored.setdefault(reason, []).append(prediction.ticker)
-    return SnapshotRegistration(recorded, {reason: sorted(tickers) for reason, tickers in sorted(unmonitored.items())})
+    from market_predictor.serving.session_registration import register_cross_section_snapshot
+    with monitoring_lease("register-outcome-intents"):
+        return register_cross_section_snapshot(snapshot_store, outcome_repository, snapshot_id)
 
 
 def maturation_intents_from_response(
@@ -94,6 +81,7 @@ def monitoring_observations_from_response(
     *,
     snapshot_id: str,
     intents: dict[tuple[str, str], PredictionMaturationIntent] | None = None,
+    members: tuple[CrossSectionMember, ...] | None = None,
 ) -> list[PredictionMonitoringObservation]:
     evidence = response.evidence
     if evidence is None or evidence.identity_status != "complete":
@@ -108,12 +96,19 @@ def monitoring_observations_from_response(
             for intent in maturation_intents_from_response(response, snapshot_id=snapshot_id)
         }
     )
+    member_map = {member.ticker: member for member in members or ()}
     scored = {(row.ticker, row.view) for row in evidence.row_feature_availability}
     observations: list[PredictionMonitoringObservation] = []
     for prediction in response.predictions:
         if prediction.swing is None or response.models.get("swing") is None:
             continue
         if (prediction.ticker, "swing") not in scored:
+            if members is not None:
+                member = member_map.get(prediction.ticker)
+                if member is None or member.abstention_reason is None:
+                    raise DataReadinessError("unscored monitoring member has no verified abstention")
+                observations.append(_unscored_observation(response, member, snapshot_id=snapshot_id))
+                continue
             # An unscored abstention carries no model decision; the caller reports it as unmonitored.
             if prediction.swing.abstention_reasons not in UNMONITORED_ABSTENTIONS:
                 raise DataReadinessError(f"scored swing prediction for {prediction.ticker} has no evidence row")
@@ -333,3 +328,28 @@ def _decision_atr_fraction(prediction: SwingPrediction) -> float:
     if prediction.managed_risk is None:
         raise DataReadinessError(f"maturation requires the managed risk context for {prediction.ticker}")
     return prediction.managed_risk.atr_fraction_of_latest_close
+
+
+def _unscored_observation(
+    response: PredictionResponse, member: CrossSectionMember, *, snapshot_id: str,
+) -> PredictionMonitoringObservation:
+    evidence = response.evidence
+    assert evidence is not None
+    model = response.models["swing"]
+    decision = evidence.prediction_cutoff_utc
+    content: dict[str, object] = {
+        "contract": "market_predictor.prediction_observation", "snapshot_id": snapshot_id,
+        "ticker": member.ticker, "view": "swing", "horizon": model.resolved_horizon,
+        "decision_time_utc": decision, "decision_session_et": decision.astimezone(_EASTERN).date(),
+        "decision_group_id": decision.isoformat(), "model_release_id": model.release_id,
+        "model_artifact_sha256": model.artifact_sha256,
+        "feature_artifact_sha256": evidence.feature_artifacts["swing"].artifact_sha256,
+        "prediction_policy_sha256": model.prediction_policy_sha256, "label_policy_sha256": model.label_policy_sha256,
+        "execution_policy_sha256": model.execution_policy_sha256,
+        "market_regime": None, "sector": member.sector, "market_cap_bucket": None, "liquidity_bucket": None,
+        "probability": None, "calibration_bin": None, "signal": "abstain", "rank": None,
+        "selection_eligible": False, "selected_for_policy": False, "actionable": False,
+        "readiness_status": "invalid", "catalyst_status": "unavailable", "maturation_key": None,
+    }
+    content["semantic_prediction_id"] = monitoring_semantic_sha256(content)
+    return PredictionMonitoringObservation.model_validate({**content, "observation_id": content_sha256(content)})

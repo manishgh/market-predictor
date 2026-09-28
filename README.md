@@ -11,6 +11,23 @@ The system is not deployed. There are no supported legacy models or compatibilit
 paths. Serving fails closed until a model passes validation and is published in a
 hash-verified promoted bundle.
 
+## Nightly Monitoring Registration
+
+`market-predictor-prod register-session-predictions --as-of 2026-09-28T22:05:00+00:00`
+scores the full effective membership under a verified promoted release. It bypasses
+only the client drift gate so a warming route can collect evidence. Source readiness,
+model availability, admission and memory guards remain enforced. It writes a scoped
+immutable snapshot, scored-member intents, every member's monitoring observation,
+and the final session commit marker. Retries reuse identical decisions; conflicting
+reruns cannot replace a registered session. `register-outcome-intents` accepts only
+these cross-section snapshots; ordinary request snapshots remain audit records.
+`record-monitoring-not-run` audits a missed session against a known route key and
+requires an operator id and reason. These commands share the monitoring lease.
+
+The nightly live-input publisher is still pending. Synthetic registration tests do
+not establish live readiness, profitability or permission to trade. API v4's consumer
+migration is recorded in `docs/contracts/tradingflow_handoff.md`.
+
 ## Unified Product Boundary
 
 The prediction HTTP surface is swing-only: `POST /v1/predictions/swing` accepts

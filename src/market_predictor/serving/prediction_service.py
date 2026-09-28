@@ -36,6 +36,7 @@ from market_predictor.core.prediction_contracts import (
     TickerPrediction,
 )
 from market_predictor.governance.drift.policy import DriftAssessment, DriftStateStore
+from market_predictor.governance.outcomes.session_records import MonitoringRoute
 from market_predictor.governance.promotion.bundle_contracts import PromotedSwingBundle
 from market_predictor.modeling.feature_reference import (
     feature_reference_names_sha256,
@@ -406,6 +407,26 @@ class PredictionService:
             ValueError,
         ) as exc:
             raise PredictionReadinessError from exc
+
+    def monitoring_route(self, as_of: datetime) -> MonitoringRoute:
+        """Verify the release identity before recording a monitoring attempt."""
+        if as_of.utcoffset() is None:
+            raise PredictionValidationError
+        route = self.routes["swing"]["10b"]
+        with self.admission.lease(estimated_incremental_gib=self.inference_memory_reservation_gib):
+            contract = load_strategy_contract(self._resolve(Path("configs/edge_rebuild_strategy_contract.toml")))
+            generation = self._edge_swing_generation(route, contract=contract)
+            if generation.bundle.promoted_at_utc > as_of:
+                raise PredictionModelUnavailableError
+            engine = SwingInferenceEngine(generation)
+            policy, policy_sha = _swing_prediction_policy(probability_threshold=engine.threshold, contract=contract)
+            model = _edge_swing_model_info(generation, bundle_root=self._resolve(route.repository), resolved_horizon="10b",
+                                         contract=contract, prediction_policy=policy, prediction_policy_sha256=policy_sha)
+            return MonitoringRoute.model_validate({
+                "model_release_id": model.release_id, "model_artifact_sha256": model.artifact_sha256,
+                "prediction_policy_sha256": model.prediction_policy_sha256, "label_policy_sha256": model.label_policy_sha256,
+                "execution_policy_sha256": model.execution_policy_sha256, "promoted_at_utc": generation.bundle.promoted_at_utc,
+            })
 
     def preload(self) -> None:
         """Verify and deserialize every configured active route before readiness."""

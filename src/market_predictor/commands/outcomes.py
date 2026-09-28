@@ -69,7 +69,7 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
             help="Durable local outcome repository.",
         ),
     ) -> None:
-        """Freeze maturation intents from one identity-complete live snapshot."""
+        """Commit intents and observations from a complete decision-cross-section snapshot."""
 
         registration = register_snapshot_intents(
             PredictionSnapshotStore(snapshot_dir),

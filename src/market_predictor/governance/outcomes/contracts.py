@@ -65,10 +65,10 @@ class PredictionMonitoringObservation(_SwingViewContract):
     prediction_policy_sha256: str = Field(pattern=SHA256_PATTERN)
     label_policy_sha256: str = Field(pattern=SHA256_PATTERN)
     execution_policy_sha256: str = Field(pattern=SHA256_PATTERN)
-    market_regime: str = Field(min_length=1, max_length=64)
+    market_regime: str | None = Field(min_length=1, max_length=64)
     sector: str = Field(min_length=1, max_length=128)
-    market_cap_bucket: str = Field(min_length=1, max_length=64)
-    liquidity_bucket: str = Field(min_length=1, max_length=64)
+    market_cap_bucket: str | None = Field(min_length=1, max_length=64)
+    liquidity_bucket: str | None = Field(min_length=1, max_length=64)
     probability: float | None = Field(default=None, ge=0.0, le=1.0)
     calibration_bin: int | None = Field(default=None, ge=0, le=9)
     signal: str = Field(min_length=1, max_length=128)
@@ -94,6 +94,9 @@ class PredictionMonitoringObservation(_SwingViewContract):
 
     @model_validator(mode="after")
     def validate_observation(self) -> Self:
+        metadata = (self.market_regime, self.market_cap_bucket, self.liquidity_bucket)
+        if self.probability is not None and any(value is None for value in metadata):
+            raise ValueError("scored observation requires feature-derived cohort metadata")
         if self.selected_for_policy and not self.selection_eligible:
             raise ValueError("selected observation must be eligible")
         if self.actionable != (
