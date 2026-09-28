@@ -314,8 +314,18 @@ nullable `training_data_end`), the four HEAD defects fixed, and the open replay 
   removals, following renames) or a minute-confirmed halt makes an outcome
   `unresolvable`, which leaves the report's pending counts. Attempts are an append log
   written only on change. Verification: the 27 import- and config-affected test files,
-  354 passed; strict mypy (360 files) and Ruff clean. Diff review requested; part (2b-3),
-  the unresolvable ceiling and the sensitivity, follows.
+  354 passed; strict mypy (360 files) and Ruff clean. Both diff reviews (no blocker; one
+  major each, the same one: a stock that stopped trading without provider evidence could
+  stay pending and block its route for good) are fixed in `1871f7e`: an audited operator
+  resolution (`record-operator-outcome-resolution`, naming the operator and the evidence,
+  superseded only by a later maturation) and single-intent collection past the freeze;
+  worthless removals counted by a process date on or after the decision; maturation
+  reading only receipts collected by its time; attempts running forward in time; a new
+  drift policy writing a new attempt; settlement judged by the start of a receipt's
+  retrieval; corporate actions asked nightly until the deadline. 359 passed on the same
+  set; strict mypy and Ruff clean. One corrupt receipt still blocks its decision session
+  (fail closed); the operator path resolves the intents it holds. Part (2b-3), the
+  unresolvable ceiling and the sensitivity, must land before registration runs.
 - TradingFlow follow-ups, both display-only: swing signals read as neutral in the
   advisory model-direction view; the hard-coded `market_predictor.prediction.v1` label.
 
