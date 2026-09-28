@@ -619,6 +619,7 @@ class DriftPolicyTests(unittest.TestCase):
             "unresolvable_selected_samples": unresolvable,
             "unresolvable_selected_securities": unresolvable,
             "operator_verified_selected_samples": 0,
+            "unresolvable_never_entered_samples": 0,
             "sensitivity_mean_excess_last_close": None,
             "sensitivity_mean_excess_stress": None,
             "oldest_pending_decision_time_utc": (

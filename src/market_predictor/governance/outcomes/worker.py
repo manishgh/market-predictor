@@ -26,6 +26,7 @@ from market_predictor.governance.outcomes.contracts import (
 from market_predictor.governance.outcomes.evidence import (
     Cessation,
     EvidenceTerms,
+    StockEvidenceDefectError,
     cessation_evidence,
     path_evidence,
     usable_rows,
@@ -39,6 +40,8 @@ from market_predictor.governance.outcomes.repository import OutcomeRepository
 from market_predictor.governance.outcomes.sensitivity import acquirer_terms, sensitivity_fills
 from market_predictor.governance.outcomes.sessions import horizon_last_close
 
+# The blocked reason when every receipt of the stock's own path is defective.
+STOCK_EVIDENCE_DEFECTIVE = "stock_evidence_defective"
 # The latest reasons of an intent whose stock gap is proven but not yet explained.
 _PROVEN_GAP_REASONS = (
     ("stock_gap_without_cessation",),
@@ -127,7 +130,11 @@ def mature_pending_intents(
                 intent,
                 observed_as_of=observed_as_of,
                 status="blocked",
-                reasons=(f"invalid_maturation_input:{type(exc).__name__}",),
+                reasons=(
+                    (STOCK_EVIDENCE_DEFECTIVE,)
+                    if isinstance(exc, StockEvidenceDefectError)
+                    else (f"invalid_maturation_input:{type(exc).__name__}",)
+                ),
                 context=_context(terms),
             )
             repository.record_attempt(attempt, decision_session=session)
@@ -167,25 +174,37 @@ def record_operator_resolution(
     if repository.has_outcome(maturation_key, decision_session):
         raise DataReadinessError("an outcome that matured cannot be resolved by an operator")
     latest = repository.latest_attempt(maturation_key, decision_session)
-    stuck = latest is not None and (latest.reasons in _PROVEN_GAP_REASONS or latest.status == "blocked")
+    stuck = latest is not None and latest.reasons in (*_PROVEN_GAP_REASONS, (STOCK_EVIDENCE_DEFECTIVE,))
     if not stuck or observed_as_of < terms.deadline(intent):
-        # Collection lag or a benchmark gap would otherwise leave the metrics by an operator's choice.
-        raise DataReadinessError("an operator resolves only an overdue outcome with a proven stock gap or blocked evidence")
+        # A benchmark gap or collection lag would otherwise leave the metrics by an operator's choice.
+        raise DataReadinessError(
+            "an operator resolves only an overdue outcome with a proven stock gap or defective stock evidence"
+        )
     observed = observed_as_of.astimezone(UTC)
-    bar_receipts = tuple(r for r in load_bar_receipts(receipts_root, [decision_session]) if r.finished_at_utc <= observed)
-    evidence = path_evidence(intent, bar_receipts, terms=terms)
+    fills: tuple[SensitivityFill, ...] = ()
+    entered = True
+    receipt_ids: tuple[str, ...] = ()
+    try:
+        bar_receipts = tuple(r for r in load_bar_receipts(receipts_root, [decision_session]) if r.finished_at_utc <= observed)
+        evidence = path_evidence(intent, bar_receipts, terms=terms)
+        fills, entered = sensitivity_fills(
+            intent, evidence=evidence, reason=OPERATOR_VERIFIED, cessation_record=None,
+            acquirer_close=None, acquirer_collected=False,
+        )
+        receipt_ids = evidence.receipt_ids
+    except DataReadinessError:
+        # Unreadable evidence never stops a resolution; its fills stay unknown.
+        pass
     attempt = maturation_attempt(
         intent,
         observed_as_of=observed_as_of,
         status="unresolvable",
         reasons=(OPERATOR_VERIFIED,),
-        context=_context(terms, evidence.receipt_ids),
+        context=_context(terms, receipt_ids),
         operator_id=operator_id,
         operator_reference=reference,
-        sensitivity=sensitivity_fills(
-            intent, evidence=evidence, reason=OPERATOR_VERIFIED, cessation_record=None,
-            acquirer_close=None, acquirer_collected=False,
-        ),
+        sensitivity=fills,
+        never_entered=not entered,
     )
     return repository.record_attempt(attempt, decision_session=decision_session)
 
@@ -247,12 +266,13 @@ def resolve_intent(
                 status, reasons = "unresolvable", (cessation.reason,)
                 receipt_ids.extend(cessation.receipt_ids)
     sensitivity: tuple[SensitivityFill, ...] = ()
+    entered = True
     if status == "unresolvable":
         record = cessation.record if cessation is not None else None
         acquirer = acquirer_terms(reasons[0], record)
         acquirer_close, collected, acquirer_receipts = _acquirer_close(intent, bar_receipts, acquirer)
         receipt_ids.extend(acquirer_receipts)
-        sensitivity = sensitivity_fills(
+        sensitivity, entered = sensitivity_fills(
             intent, evidence=evidence, reason=reasons[0], cessation_record=record,
             acquirer_close=acquirer_close, acquirer_collected=collected,
         )
@@ -264,6 +284,7 @@ def resolve_intent(
         missing_intervals=result.missing_intervals,
         context=_context(terms, receipt_ids),
         sensitivity=sensitivity,
+        never_entered=not entered,
     )
     return attempt, []
 

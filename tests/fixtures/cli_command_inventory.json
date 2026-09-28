@@ -38,6 +38,7 @@
     "publish-live-features",
     "publish-local-release",
     "publish-serving-bundle",
+    "quarantine-outcome-receipt",
     "record-operator-outcome-resolution",
     "register-outcome-intents",
     "rollback-local-release",

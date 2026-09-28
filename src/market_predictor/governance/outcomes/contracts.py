@@ -229,6 +229,8 @@ class SensitivityFill(FrozenContract):
         "cash_merger",
         "stock_merger",
         "stock_and_cash_merger",
+        "merger_at_last_close",
+        "reorganization",
         "worthless_removal",
         "delisting_stress",
         "halt_crossing",
@@ -267,6 +269,8 @@ class MaturationAttempt(FrozenContract):
     operator_reference: str | None = Field(default=None, min_length=8, max_length=500)
     # Diagnostic fills, recorded only for an unresolvable outcome that was entered.
     sensitivity: tuple[SensitivityFill, ...] = ()
+    # An unresolvable decision whose position was never entered has no return to fill.
+    never_entered: bool = False
 
     @field_validator("observed_as_of_utc")
     @classmethod
@@ -292,8 +296,10 @@ class MaturationAttempt(FrozenContract):
             or (operator and self.status != "unresolvable")
         ):
             raise ValueError("an operator resolution is unresolvable and names its operator and evidence")
-        if self.sensitivity and self.status != "unresolvable":
+        if (self.sensitivity or self.never_entered) and self.status != "unresolvable":
             raise ValueError("only an unresolvable attempt carries sensitivity fills")
+        if self.never_entered and self.sensitivity:
+            raise ValueError("a never-entered decision has no sensitivity fills")
         if len({fill.basis for fill in self.sensitivity}) != len(self.sensitivity):
             raise ValueError("maturation attempt repeats a sensitivity basis")
         content = self.model_dump(mode="json", exclude={"attempt_id"})

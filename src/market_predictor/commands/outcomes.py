@@ -9,7 +9,7 @@ from typing import Any
 import pandas as pd
 import typer
 
-from market_predictor.collection.outcome_bars import collect_bars, collect_corporate_actions
+from market_predictor.collection.outcome_bars import collect_bars, collect_corporate_actions, quarantine_receipt
 from market_predictor.commands.configuration import load_typed_config
 from market_predictor.config import Settings
 from market_predictor.core.json_integrity import parse_strict_json_object
@@ -179,6 +179,30 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
                 "rerun them to complete the pending index"
             )
             raise typer.Exit(code=1)
+
+    @app.command("quarantine-outcome-receipt")
+    def quarantine_outcome_receipt(
+        receipt_id: str = typer.Option(..., help="The receipt that no longer verifies."),
+        decision_session: str = typer.Option(..., help="Its decision session, such as 2026-07-24."),
+        kind: str = typer.Option("bars", help="bars or corporate-actions."),
+        operator: str = typer.Option(..., help="Who quarantines it."),
+        reason: str = typer.Option(..., help="Why it no longer verifies."),
+        receipt_dir: Path = typer.Option(_RECEIPT_DIR, help="Outcome evidence receipts and page bodies."),
+    ) -> None:
+        """Move a receipt that no longer verifies out of its session, so its evidence is collected again."""
+
+        if kind not in ("bars", "corporate-actions"):
+            raise typer.BadParameter("--kind is bars or corporate-actions")
+        with monitoring_lease("quarantine-outcome-receipt"):
+            moved = quarantine_receipt(
+                receipt_dir,
+                collection="bar_receipts" if kind == "bars" else "action_receipts",
+                decision_session=date.fromisoformat(decision_session.strip()),
+                receipt_id=receipt_id.strip().lower(),
+                operator_id=operator.strip(),
+                reason=reason,
+            )
+        console.print(json.dumps({"quarantined": str(moved)}, sort_keys=True))
 
     @app.command("record-operator-outcome-resolution")
     def record_operator_outcome_resolution(

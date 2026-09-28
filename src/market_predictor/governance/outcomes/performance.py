@@ -85,8 +85,10 @@ class SelectedPolicyCohort(BaseModel):
     # with the distinct securities they belong to (one acquired stock can fill several).
     unresolvable_selected_samples: int = Field(ge=0)
     unresolvable_selected_securities: int = Field(ge=0)
-    # Of those, the ones an operator resolved, audited apart.
+    # Of those, the ones an operator resolved, audited apart, and the ones never entered, which
+    # have no return and stay out of the sensitivity means.
     operator_verified_selected_samples: int = Field(ge=0)
+    unresolvable_never_entered_samples: int = Field(ge=0)
     # Diagnostics, never gates: the mean excess return vs the sector over matured outcomes and
     # every unresolvable one filled at its last usable close, or at its stress value. None when
     # nothing is unresolvable or some unresolvable outcome has no such fill.
@@ -156,6 +158,7 @@ class SelectedPolicyCohort(BaseModel):
         if (self.unresolvable_selected_samples == 0) != (self.unresolvable_selected_securities == 0) or (
             self.unresolvable_selected_securities > self.unresolvable_selected_samples
             or self.operator_verified_selected_samples > self.unresolvable_selected_samples
+            or self.unresolvable_never_entered_samples > self.unresolvable_selected_samples
         ):
             raise ValueError("selected-policy unresolvable counts are inconsistent")
         if self.unresolvable_selected_samples == 0 and (
@@ -376,6 +379,7 @@ def build_performance_cohorts(
                 **_monitoring_record(observation, outcome),
                 "unresolvable": resolution is not None,
                 "operator_verified": resolution is not None and resolution.reasons == (OPERATOR_VERIFIED,),
+                "never_entered": resolution is not None and resolution.never_entered,
                 "fill_last_close_excess": (
                     fills["last_usable_close"].excess_return_vs_sector if "last_usable_close" in fills else None
                 ),
@@ -606,10 +610,11 @@ def _unresolvable(
 
 
 def _sensitivity_mean(matured: pd.DataFrame, unresolvable: pd.DataFrame, fill_column: str) -> float | None:
-    """The mean excess return vs the sector with every unresolvable outcome filled from one column."""
-    if unresolvable.empty or unresolvable[fill_column].isna().any():
+    """The mean excess return vs the sector with every entered unresolvable outcome filled from one column."""
+    entered = unresolvable.loc[~unresolvable["never_entered"].astype(bool)]
+    if entered.empty or entered[fill_column].isna().any():
         return None
-    values = pd.concat([matured["excess_return_vs_sector"], unresolvable[fill_column]]).astype(float)
+    values = pd.concat([matured["excess_return_vs_sector"], entered[fill_column]]).astype(float)
     return float(values.mean())
 
 
@@ -748,6 +753,7 @@ def _cohort_row(
         "unresolvable_selected_samples": len(unresolvable),
         "unresolvable_selected_securities": int(unresolvable["canonical_security_id"].nunique()),
         "operator_verified_selected_samples": int(unresolvable["operator_verified"].astype(bool).sum()),
+        "unresolvable_never_entered_samples": int(unresolvable["never_entered"].astype(bool).sum()),
         "sensitivity_mean_excess_last_close": _sensitivity_mean(matured, unresolvable, "fill_last_close_excess"),
         "sensitivity_mean_excess_stress": _sensitivity_mean(matured, unresolvable, "fill_stress_excess"),
         "oldest_pending_decision_time_utc": (

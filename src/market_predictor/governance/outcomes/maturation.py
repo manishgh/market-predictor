@@ -89,6 +89,7 @@ def maturation_attempt(
     operator_id: str | None = None,
     operator_reference: str | None = None,
     sensitivity: tuple[SensitivityFill, ...] = (),
+    never_entered: bool = False,
 ) -> MaturationAttempt:
     if status not in {"pending", "blocked", "unresolvable"}:
         raise ValueError("maturation attempt status must be pending, blocked or unresolvable")
@@ -108,6 +109,7 @@ def maturation_attempt(
         "operator_id": operator_id,
         "operator_reference": operator_reference,
         "sensitivity": [fill.model_dump(mode="json") for fill in sensitivity],
+        "never_entered": never_entered,
     }
     return MaturationAttempt.model_validate(
         {**base, "attempt_id": content_sha256(base)}

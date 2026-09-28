@@ -13,6 +13,7 @@ from market_predictor.collection.outcome_bars import (
     OutcomeBarUnit,
     collect_bars,
     collect_corporate_actions,
+    quarantine_receipt,
 )
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.execution_policy import DEFAULT_EXECUTION_POLICY, round_trip_cost_bps
@@ -505,6 +506,115 @@ class OutcomeMaturationTests(unittest.TestCase):
             latest = repository.latest_attempt(intent.maturation_key, intent.decision_session_et)
             assert latest is not None
             self.assertEqual(latest.reasons, ("worthless_removal",))
+
+    def test_value_preserving_events_are_never_filled_as_losses(self) -> None:
+        intent = swing_intent()
+        # A reorganization in the provider's recorded shape (the company in `symbol`).
+        reorganization = {"id": "r-1", "symbol": "MSFT", "cusip": "594918104", "effective_date": "2026-07-29",
+                          "process_date": "2026-07-29", "payable_date": "2026-07-29",
+                          "stock_movements": [{"cusip": "30609A109", "new_rate": 1, "source_rate": 1, "symbol": ""}]}
+        merger = {"id": "s-1", "acquiree_symbol": "MSFT", "acquirer_symbol": "FGN", "acquirer_rate": 2,
+                  "acquiree_rate": 1, "effective_date": "2026-07-29", "process_date": "2026-08-03"}
+        for actions, basis, acquirer_collected in (
+            ({"reorganizations": [reorganization]}, "reorganization", False),
+            ({"stock_mergers": [merger]}, "merger_at_last_close", True),
+        ):
+            with self.subTest(basis), TemporaryDirectory() as temp_dir:
+                repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+                repository.record_intent(intent)
+                receipts = _collected(Path(temp_dir), _tail_gap())
+                _collected_actions(receipts, actions)
+                if acquirer_collected:
+                    # A foreign acquirer: its request comes back without bars.
+                    _collected(Path(temp_dir), _swing_bars().iloc[0:0],
+                               units=[OutcomeBarUnit(DECISION, DECISION, date(2026, 7, 29), ("FGN",))])
+
+                fills = {fill.basis: fill for fill in _latest(repository, intent, receipts).sensitivity}
+
+                # Both keep the last usable close (101.25), never a delisting or a zero.
+                self.assertAlmostEqual(fills[basis].net_return, fills["last_usable_close"].net_return)
+
+    def test_a_fill_needs_the_sector_bar_on_its_session(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            bars = _tail_gap()
+            bars = bars.loc[~(bars["ticker"].eq("XLK") & bars["session_date_et"].eq(date(2026, 7, 28)))]
+            receipts = _collected(Path(temp_dir), bars)
+            _collected_actions(receipts, {"worthless_removals": [{"id": "w-1", "symbol": "MSFT", "process_date": "2026-11-30"}]})
+
+            fills = _latest(repository, intent, receipts).sensitivity
+
+            # July 28, the last usable session, has no sector bar; the removal's fill session does.
+            self.assertEqual([fill.basis for fill in fills], ["worthless_removal"])
+
+    def test_a_never_entered_decision_is_marked_and_carries_no_fills(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            bars = _swing_bars()
+            receipts = _collected(Path(temp_dir), bars.loc[~(bars["ticker"].eq("MSFT") & bars["session_date_et"].ge(date(2026, 7, 27)))])
+            _collected_actions(receipts, {"cash_mergers": [{"id": "m-1", "acquiree_symbol": "MSFT", "rate": "104.00",
+                                                            "effective_date": "2026-07-27", "process_date": "2026-07-27"}]})
+
+            latest = _latest(repository, intent, receipts)
+
+            self.assertEqual((latest.status, latest.never_entered, latest.sensitivity), ("unresolvable", True, ()))
+
+    def test_an_operator_resolution_of_a_halt_continues_the_path(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            bars = _swing_bars()
+            receipts = _collected(Path(temp_dir), bars.loc[~(bars["ticker"].eq("MSFT") & bars["session_date_et"].eq(date(2026, 7, 28)))])
+            self.assertEqual(_latest(repository, intent, receipts).reasons, ("interior_gap_needs_minute_bars",))
+
+            resolution = record_operator_resolution(
+                repository, maturation_key=intent.maturation_key, decision_session=intent.decision_session_et,
+                operator_id="operator@example", reference="exchange halt notice, reference 42",
+                receipts_root=receipts, observed_as_of=OBSERVED + timedelta(days=3), terms=TERMS,
+            )
+
+            self.assertEqual([fill.basis for fill in resolution.sensitivity], ["last_usable_close", "halt_crossing"])
+
+    def test_defective_stock_evidence_is_an_operator_case_and_other_blocks_are_not(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            bars = _swing_bars()
+            duplicated = pd.concat([bars, bars.loc[bars["ticker"].eq("MSFT") & bars["session_date_et"].eq(date(2026, 7, 28))]])
+            receipts = _collected(Path(temp_dir), duplicated)
+
+            self.assertEqual(_latest(repository, intent, receipts).reasons, ("stock_evidence_defective",))
+            resolution = record_operator_resolution(
+                repository, maturation_key=intent.maturation_key, decision_session=intent.decision_session_et,
+                operator_id="operator@example", reference="provider duplicated the session, ticket 7",
+                receipts_root=receipts, observed_as_of=OBSERVED + timedelta(days=3), terms=TERMS,
+            )
+            self.assertEqual(resolution.reasons, ("operator_verified",))
+
+    def test_a_quarantined_receipt_frees_its_session(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            receipts = _collected(Path(temp_dir))
+            [damaged] = (receipts / "bar_receipts" / DECISION.isoformat()).glob("*.json")
+            next((receipts / "bodies").glob("*.json")).unlink()
+            self.assertEqual(_mature(repository, receipts)["blocked"], 1)
+
+            moved = quarantine_receipt(receipts, collection="bar_receipts", decision_session=DECISION,
+                                       receipt_id=damaged.stem, operator_id="operator@example",
+                                       reason="page body lost on disk")
+            _collected(Path(temp_dir), retrieved=OBSERVED + timedelta(hours=1))
+            summary = _mature(repository, receipts, observed=OBSERVED + timedelta(hours=2))
+
+            self.assertEqual(summary["matured"], 1)
+            self.assertTrue(moved.is_file() and moved.with_name(f"{damaged.stem}.reason.json").is_file())
 
     def test_a_rename_and_a_worthless_removal_are_followed(self) -> None:
         with TemporaryDirectory() as temp_dir:

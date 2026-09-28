@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
@@ -635,3 +636,45 @@ def _sequence(value: object) -> list[Any]:
     if not isinstance(value, list):
         raise DataReadinessError("an outcome receipt field is not a list")
     return value
+
+
+QUARANTINE_SCHEMA = "market_predictor.outcome_receipt_quarantine"
+_OPERATOR_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,127}$")
+
+
+def quarantine_receipt(
+    root: Path,
+    *,
+    collection: Literal["bar_receipts", "action_receipts"],
+    decision_session: date,
+    receipt_id: str,
+    operator_id: str,
+    reason: str,
+    clock: Callable[[], datetime] = _now,
+) -> Path:
+    """Move a receipt out of its session, with a record of who did it and why.
+
+    For a receipt that no longer verifies (a lost body, a damaged file): its session loads
+    again and the collection plan asks for the evidence anew. The receipt and the record stay
+    under `quarantine/` for audit; nothing is deleted.
+    """
+    if not re.fullmatch(r"[0-9a-f]{64}", receipt_id) or not _OPERATOR_ID.fullmatch(operator_id) or len(reason.strip()) < 8:
+        raise ValueError("a quarantine needs a receipt id, a well-formed operator id and a stated reason")
+    source = root / collection / decision_session.isoformat() / f"{receipt_id}.json"
+    if not source.is_file():
+        raise DataReadinessError(f"no such outcome receipt: {source}")
+    target = root / "quarantine" / collection / decision_session.isoformat()
+    record = {
+        "schema": QUARANTINE_SCHEMA,
+        "collection": collection,
+        "decision_session_et": decision_session.isoformat(),
+        "receipt_id": receipt_id,
+        "operator_id": operator_id,
+        "reason": reason.strip(),
+        "quarantined_at_utc": clock().astimezone(UTC).isoformat(),
+    }
+    _write_once(target / f"{receipt_id}.reason.json", _encode(record))
+    moved = target / f"{receipt_id}.json"
+    os.replace(source, moved)
+    _fsync_directory(source.parent)
+    return moved

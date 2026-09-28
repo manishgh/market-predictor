@@ -6,11 +6,15 @@ with the sector ETF from the entry open to the fill session's close:
 - `last_usable_close`: sold at the last usable close before the gap;
 - a stress fill from the evidence: a cash merger's cash per share; a stock merger's acquirer
   shares at the acquirer's close on the effective session, plus the cash of a stock-and-cash
-  merger, a stock component without an acquirer bar valued at zero; nothing for a worthless
+  merger (`merger_at_last_close` when the acquirer has no bar, such as a foreign listing); a
+  reorganization, which preserves value, at the last usable close; nothing for a worthless
   removal; for any other removal the Nasdaq delisting return, -55% from the last usable close
   (Shumway and Warther 1999), because the listing exchange is not recorded yet; and for a
   halt, the managed path continued past it.
-A fill session after the horizon's last session is capped there. The fills never gate.
+A fill session after the horizon's last session is capped there, and a fill needs the sector
+ETF's bar on its session. The acquirer's close carries the adjustments made between the
+effective date and its retrieval, so a dividend in between slightly understates the shares'
+nominal value. The fills never gate.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ from typing import Any
 import pandas as pd
 
 from market_predictor.execution_policy import DEFAULT_EXECUTION_POLICY, executable_fill_price, round_trip_cost_bps
-from market_predictor.governance.outcomes.contracts import PredictionMaturationIntent, SensitivityFill
+from market_predictor.governance.outcomes.contracts import OPERATOR_VERIFIED, PredictionMaturationIntent, SensitivityFill
 from market_predictor.governance.outcomes.evidence import PathEvidence, usable_rows
 from market_predictor.governance.outcomes.sessions import session_on_or_before
 
@@ -38,16 +42,19 @@ def sensitivity_fills(
     cessation_record: Mapping[str, Any] | None,
     acquirer_close: float | None,
     acquirer_collected: bool,
-) -> tuple[SensitivityFill, ...]:
-    """The fills of an unresolvable outcome; none when the position was never entered.
+) -> tuple[tuple[SensitivityFill, ...], bool]:
+    """The fills of an unresolvable outcome, and whether its position was entered at all.
 
-    A stock merger's stress fill waits for the acquirer's bars (`acquirer_collected`).
+    A never-entered decision has no position and so no return to fill. A stock merger's stress
+    fill waits until the acquirer's bars were collected (`acquirer_collected`).
     """
     stock = usable_rows(evidence.bars, intent.ticker)
     sector = usable_rows(evidence.bars, intent.primary_benchmark)
     decision, entry_session = intent.decision_session_et, evidence.path_sessions[0]
-    if decision not in stock or entry_session not in stock or entry_session not in sector:
-        return ()
+    if decision not in stock or entry_session not in stock:
+        return (), False
+    if entry_session not in sector:
+        return (), True
     entry = float(stock[entry_session]["open"])
     decision_close = float(stock[decision]["close"])
     cost = round_trip_cost_bps(
@@ -60,11 +67,10 @@ def sensitivity_fills(
 
     def fill(basis: str, value: float, session: date) -> SensitivityFill | None:
         capped = min(session, last_session)
-        closes = [candidate for candidate in sector if entry_session <= candidate <= capped]
-        if not closes:
+        if capped not in sector:
             return None
         net = value / entry - 1.0 - cost
-        sector_return = float(sector[max(closes)]["close"]) / float(sector[entry_session]["open"]) - 1.0
+        sector_return = float(sector[capped]["close"]) / float(sector[entry_session]["open"]) - 1.0
         return SensitivityFill.model_validate(
             {
                 "basis": basis,
@@ -78,7 +84,7 @@ def sensitivity_fills(
     gap = evidence.first_gap or last_session
     traded = [session for session in evidence.path_sessions if session < gap and session in stock]
     if not traded:
-        return ()
+        return (), False
     last_traded = max(traded)
     last_close = float(stock[last_traded]["close"])
     fills: list[SensitivityFill | None] = [fill("last_usable_close", last_close, last_traded)]
@@ -86,21 +92,27 @@ def sensitivity_fills(
     if reason == "cash_merger" and cessation_record is not None and effective is not None:
         fills.append(fill("cash_merger", _number(cessation_record, "rate"), effective))
     elif reason in _STOCK_MERGERS and cessation_record is not None and effective is not None:
-        if acquirer_close is not None or acquirer_collected:
+        if acquirer_close is not None:
             cash = _number(cessation_record, "cash_rate") if reason == "stock_and_cash_merger" else 0.0
             acquiree_shares = _number(cessation_record, "acquiree_rate")
             if acquiree_shares == 0:
                 raise ValueError("a stock merger's acquiree_rate is zero")
             shares = _number(cessation_record, "acquirer_rate") / acquiree_shares
-            fills.append(fill(reason, cash + shares * (acquirer_close or 0.0), effective))
+            fills.append(fill(reason, cash + shares * acquirer_close, effective))
+        elif acquirer_collected:
+            # The acquirer has no bar to value the shares; the deal is taken at the last close.
+            fills.append(fill("merger_at_last_close", last_close, effective))
+    elif reason == "reorganization":
+        fills.append(fill("reorganization", last_close, effective or gap))
     elif reason == "worthless_removal":
         fills.append(fill("worthless_removal", 0.0, gap))
-    elif reason == "interior_gap":
+    elif reason == "interior_gap" or (reason == OPERATOR_VERIFIED and evidence.trades_after(gap)):
+        # The bars after a halt are observed, so the managed path continues past it.
         fills.append(_halt_crossing(intent, stock, evidence.path_sessions, entry, decision_close, fill))
     else:
-        # A membership removal, a reorganization or an operator's finding: a delisting.
+        # A membership removal or an operator's finding on a tail gap: a delisting.
         fills.append(fill("delisting_stress", last_close * (1.0 + DELISTING_STRESS_RETURN), gap))
-    return tuple(item for item in fills if item is not None)
+    return tuple(item for item in fills if item is not None), True
 
 
 def acquirer_terms(reason: str, record: Mapping[str, Any] | None) -> tuple[str, date] | None:

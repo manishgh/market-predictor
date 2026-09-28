@@ -33,8 +33,11 @@ _MERGER_FAMILIES = {
     "cash_mergers": "cash_merger",
     "stock_mergers": "stock_merger",
     "stock_and_cash_mergers": "stock_and_cash_merger",
-    "reorganizations": "reorganization",
 }
+
+
+class StockEvidenceDefectError(DataReadinessError):
+    """Every receipt covering the stock's own path is defective, such as a duplicated session."""
 
 
 @dataclass(frozen=True)
@@ -105,7 +108,7 @@ def path_evidence(
     benchmarks = (str(policy["broad_benchmark"]).upper(), str(policy["growth_benchmark"]).upper(), intent.primary_benchmark)
     frames: list[pd.DataFrame] = []
     receipt_ids: set[str] = set()
-    stock = _candidates(receipts, decision=decision, symbol=intent.ticker, last=last)
+    stock = _candidates(receipts, decision=decision, symbol=intent.ticker, last=last, own=True)
     stock_usable: frozenset[date] = frozenset()
     if stock:
         chosen = _chosen(stock)
@@ -153,6 +156,10 @@ def cessation_evidence(
             for record in receipt.actions.get(family, ()):
                 if record.get("acquiree_symbol") in symbols and _within(record.get("effective_date"), window):
                     return Cessation(reason, (receipt.receipt_id,), record)
+        # A reorganization names the company in `symbol` and its exchange in `stock_movements`.
+        for record in receipt.actions.get("reorganizations", ()):
+            if record.get("symbol") in symbols and _within(record.get("effective_date"), window):
+                return Cessation("reorganization", (receipt.receipt_id,), record)
         for record in receipt.actions.get("worthless_removals", ()):
             if record.get("symbol") in symbols and _within(record.get("process_date"), (window[0], date.max)):
                 return Cessation("worthless_removal", (receipt.receipt_id,), record)
@@ -189,7 +196,9 @@ class _Candidate:
     usable: frozenset[date]
 
 
-def _candidates(receipts: Sequence[BarReceipt], *, decision: date, symbol: str, last: date) -> list[_Candidate]:
+def _candidates(
+    receipts: Sequence[BarReceipt], *, decision: date, symbol: str, last: date, own: bool = False
+) -> list[_Candidate]:
     """Each covering receipt's path for the symbol; a defective receipt is skipped, never evidence."""
     covering = complete_bar_receipts(
         receipts, decision_session=decision, symbol=symbol, first_session=decision, last_session=last
@@ -203,7 +212,8 @@ def _candidates(receipts: Sequence[BarReceipt], *, decision: date, symbol: str, 
         frame = frame.loc[frame["session_date_et"].le(last)].reset_index(drop=True)
         candidates.append(_Candidate(receipt, frame, _usable_sessions(frame)))
     if covering and not candidates:
-        raise DataReadinessError(f"every receipt covering {symbol} for {decision} is defective")
+        error = StockEvidenceDefectError if own else DataReadinessError
+        raise error(f"every receipt covering {symbol} for {decision} is defective")
     return candidates
 
 
