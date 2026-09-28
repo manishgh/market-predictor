@@ -1,13 +1,15 @@
 # Active Edge Rebuild Handoff
 
 Status: active
-Last updated: 2026-09-26
+Last updated: 2026-09-28
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `ea93712` (pushed; review follow-up closing retirement
-sub-slice (b), after `7dd6d44` swing-only serving and monitoring), after `dfd1b76` (SEC retry passes with resume),
-`20799b9` (retirement sub-slice (a), collection package), `beaa4eb` (memory-guard batch keeping) and
-`da5d4c3` (per-issuer SEC acceptance clock).
+Last completed implementation checkpoint: `346e0ec` (monitoring part (2b-3) review fixes).
+Last implementation handoff receipt: `21ef677`; inspected HEAD and the local
+`origin/unified-swing-product` tracking ref both point there at continuation start.
+Latest pending design: `38c698e` (monitoring part (3), registration and population).
+Working tree was clean before this documentation-only continuation review.
+Earlier retirement sub-slice (b) closure: `ea93712`, after `7dd6d44`.
 Last completed model-training checkpoint: relationship run on `a8be7cb` (artifact pins below).
 Baseline model-training checkpoint: `07963cc` (pushed; unchanged).
 Source-collection checkpoint: `19698d6` (pushed).
@@ -19,7 +21,7 @@ Work split (user decision, September 27): this developer owns `market-predictor`
 second developer (Astra, a separate ChatGPT/Codex session) owns `trading_flow`. They
 coordinate only through files, relayed by the user: the contract
 `docs/contracts/prediction_api.md` with its golden fixture
-`tests/fixtures/contracts/swing_prediction_response.v3.json` (`4dc5833`), the handoff
+`tests/fixtures/contracts/swing_prediction_response.json` (current API v3 fixture), the handoff
 `docs/contracts/tradingflow_handoff.md` (paths, boundaries, tasks), and TradingFlow's
 `docs/integration/market-predictor-notes.md` for acknowledgements and requests. Do not edit
 `trading_flow`; record every wire change in the contract's Change log first.
@@ -1235,89 +1237,71 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: qualify issuer-news and SEC reaction inputs for the final
-feature profile, using saved initial-fit evidence before requesting any download.
-Single-chunk verification (`7a9334c`), the cohort news inventory (`177f6f3`) and the
-legacy identity proofs with the inventory rerun (`4844b3f`) are complete; do not
-rebuild them. Content qualification uses the rerun inventory
-(`..._with_legacy_proofs`) and must keep the weaker CUSIP-chain basis separable.
-Current slice: SEC form inventory and filing-document collection. Its design is
-reviewed and consolidated in the plan (September 24; no blockers from either
-reviewer). The user decided on September 24 to collect now and leave nothing for
-later: documents of cohort 8-Ks carrying item 2.02, 7.01 or 8.01 in the initial fit
-(22,067 accessions: EDGAR detail page, primary document and every EX-99 exhibit), and
-the same selection after the initial-fit cutoff into a sealed store that is not read
-or summarized until qualification rules are frozen on initial-fit evidence. The inventory,
-collector, pilot and corrected initial-fit collection are done (see Current State);
-remaining: the sealed collection (running) and slice closure.
-Freeze content qualification with development-only precision and recall review before
-joining the completed-session measurement into the last profile.
-No final feature selection or fitting belongs to the SEC slice.
-The baseline and relationship profiles are already trained (four of six frozen
-specifications); never rerun or tune them. Freeze source fields, event availability,
-issuer matching, completed reaction windows, exact columns and missingness before
-coding the third profile. Preserve matched decisions/labels, split dates, weights,
-costs and the approved exclusions. Initial fit remains July 2019-May 2024, not the
-outer validation/test publications. Assign source/attribution and transformation/
-consumer slices to disjoint implementation workers with independent review; heavy
-runs remain sequential. Automatic raw collection ownership migration, investment
-targets and trading admission remain separate decisions.
+Exact next checkpoint: monitoring part (3), starting with part (3a) cross-section
+scoring, correct member abstentions and the reviewed API v4 change. Part (2b-3) is
+implemented through `346e0ec`; do not rerun its closed implementation reviews without
+new evidence. Part (3) has a design only (`38c698e`), not an implementation.
 
-Plan review found old readiness evidence has five current implementation-pin
-mismatches and is not admitted by the existing training loader. This requires a
-new saved-row/source verification and readiness report, not rewriting old hashes.
-The old model request's ten mismatches do not prohibit a new independently verified
-derivative experiment. Preserve existing replay verifiers unchanged. The saved
-combined daily source contains availability/source/ingestion metadata but its
-reader drops those columns: fix the bounded adapter, do not redownload everything.
-Corrected FI/SATS streams and WTW/ATVI/INFO/SBNY unavailable boundaries must remain
-explicit. Missing added features stay null with reasons; no additional exclusions,
-shortened warmup, date/weight/cost changes or invented source clocks.
+The September 28 local continuation review is consolidated in the active plan under
+"Part (3) continuation review". It found three design gaps: audit timestamps/random
+request ids prevent deterministic session retries; generic feature ineligibility
+cannot exempt missing input data as short history; and the scored-only evidence path
+cannot represent every member or an all-abstaining cross-section. The plan records
+the exact code evidence, bounded remedies and exit tests. This is not a claimed
+approval by the prior independent reviewers. Preserve the existing exclusion ceiling;
+fold the proposed `insufficient_history` reason into `live_inputs_incomplete` for this
+slice. Only natural sector peer-floor abstentions are exempt from that ceiling.
 
-Read `evidence/news_collection.py`, `sources/news_collection.py`,
-`sources/news_collection_settings.py` and `commands/news_collection.py`, plus
-TradingFlow's `NewsReceiptImporter.cs` and the raw-exchange section of its
-`docs/research/evidence-repository-design.md`. Consumer integration must bind real
-publication/attempt evidence, never fabricate old EvidenceSourceObservation hashes
-or treat receipt time as historical article availability. Review the existing desk
-REST/news-stream consumers before any cutover. No runtime migration is complete yet.
-Both main branches are preserved remotely and TradingFlow cleanup is closed in
-`cb747da`. Leave its untracked local settings/runtime reports alone. Shared news
-ownership now precedes deferred retirement; no new provider job has started. Session 86175
-exited zero; do not resume it or repeat training. CLI retirement is committed in
-`9c32ce1`, including registry, adapter, admission and scoped test/doc changes.
-The unused cross-sectional intraday research package and root helpers are removed;
-no raw data or original model artifact is deleted. Keep shared minute/hourly transports and swing
-`intraday_return`; never silently repin training evidence after moving source code.
-Do not resume training merely because an HTTP or CLI boundary is complete.
+Order and boundaries:
+1. Finalize the amended part (3a) design, then implement the shared scorer, full member
+   identity/reason evidence and `sector_peer_floor`. Keep client serving drift-gated;
+   only internal monitoring scoring bypasses that gate. Preserve model/source
+   verification, promotion availability, admission and memory guards.
+2. Before a wire change lands, append the contract change log, regenerate the fixture
+   and update the TradingFlow handoff. Current code still serves
+   `market_predictor.prediction.v3`; no API v4 is published by this review.
+3. Part (3b): deterministic decision identity, scoped snapshots, cross-section-only
+   intent registration, full member observations, session records and crash/retry
+   behavior. Part (3c): committed-session populations, coverage, drift and identities.
+4. Build the nightly live-input publisher immediately after (3), and verify real-data
+   registration before part (4) inference/curve/rank and part (6) replay boundaries.
+   No production publisher currently exists; synthetic tests cannot establish live
+   registration readiness.
+5. Close the remaining retirement/replay and SEC-slice gates, then resume qualified
+   issuer/SEC reaction features and the final two frozen fits. Both corrected SEC
+   collections are complete (receipts above); no collector needs resuming. The later
+   collection stays sealed and unread. Do not refit the completed baseline or
+   relationship specifications, widen the six-specification budget, or start deferred
+   R7.8 deployment/security work. TradingFlow remains owned by the other developer.
 
-Retained research follow-up: qualify and implement issuer/SEC reaction inputs for
-the two remaining bounded return specifications. The relationship profile is complete.
+Files to read: the part (3) design and continuation review in the active plan;
+`serving/prediction_service.py`, `serving/swing_features.py`,
+`core/prediction_contracts.py`, `serving/snapshot_store.py`,
+`serving/outcome_intents.py`, `governance/outcomes/contracts.py`,
+`governance/outcomes/repository.py`, `governance/outcomes/performance.py`, and
+`docs/contracts/prediction_api.md` (source paths are below `src/market_predictor`).
 
-1. Existing technical training is complete: preserve its immutable artifacts as
-   the two baseline specifications. Do not retrain them or tune settings after
-   inspecting these results. Keep the approved six-specification experiment cap.
-2. Follow the original active plan's feature design and acceptance matrix. Map
-   genuinely distinct price/volume/regime relationships to current owners; audit
-   issuer/SEC causal event and reaction availability. Freeze exact columns and
-   source semantics before constructing matched histories. Reuse saved evidence;
-   aggregate catalyst_full is not the completed reaction profile.
-3. Reuse the verified return estimator/validation/artifact modules for the two
-   remaining profile/learner comparisons once their acceptance gates pass. Keep
-   chronological masks, dates, holdout assignment, costs and date weights matched.
-   No new exclusions or reaction-source claims can be inferred from this fit.
-4. Funded evaluation of the preregistered long-only policies remains unrun. Unknown
-   selected outcomes must not disappear from that evaluation. The raw archives
-   cover later dates, but outer-validation/test publications are still separate
-   work; the exposed historical test must never be called untouched.
+Continuation baseline verification: project `.venv/Scripts/python.exe -m pytest
+tests/test_active_continuity_documents.py tests/test_prediction_snapshot.py
+tests/test_swing_live_features.py -q -p no:cacheprovider` with unique basetemp
+`C:/Users/manis/Documents/Codex/2026-09-28/c/work/resume-checks-01`: 24 passed,
+1 skipped (opt-in production-scale RSS benchmark), one expected non-finite-payload
+serializer warning, 26.83 seconds. Post-edit continuity tests: 2 passed (0.15 s);
+`git diff --check` clean.
+Read-only probes confirmed that a changed recording timestamp changes the snapshot
+hash and `PredictionRequest` rejects 101 tickers. New part (3) behavior is unimplemented
+and unverified. No full suite, lint/types, C# checks, training, provider collection,
+sealed-content inspection or model promotion ran for this prose-only review.
 
-Decision config: `configs/swing_corrected_outcomes.toml`,
+Historical research constraints still apply: unchanged 586,305 decisions, labels,
+weights, costs, splits and approved exclusions; initial fit July 2019-May 2024.
+The qualified-content source is the completed inventory with legacy identity proofs,
+keeping the weaker CUSIP-chain provenance distinct. Old model/evidence pins must not
+be rewritten. Decision config: `configs/swing_corrected_outcomes.toml`,
 `ded3b30af1185c7ab0759fa5f81c559c37c590419751c942b61ab479e67c2348`.
 Strategy config: `configs/edge_rebuild_strategy_contract.toml`,
 `02a087be6b9eff4971770026ca75dce3978f8f9e2028c1f21d027daefec9c0e7`.
-Use the existing `materialize-swing-research-dataset` command and explicit
-predictor/outcome replay pins above. Resume only with an independently checked
-current checkpoint SHA256.
+Heavy materialization/fits remain sequential under the shared lease and memory guard.
 
 ## Splits And Research Rules
 

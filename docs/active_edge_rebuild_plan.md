@@ -2,7 +2,7 @@
 
 Status: active
 
-Last updated: 2026-09-26
+Last updated: 2026-09-28
 
 Repository: `C:\project\market-predictor`
 
@@ -47,6 +47,13 @@ portfolio management: alerts, orders, final position sizing, and execution remai
 outside this repository.
 
 ## Unified Product Implementation
+
+Current checkpoint: **Monitoring part (3), registration and population** (`in progress`).
+Part (2b-3) review fixes are implemented in `346e0ec`, with handoff receipt `21ef677`.
+Part (3)'s design is in `38c698e`; the September 28 continuation review below records
+three corrections before code. Resume with bounded part (3a), then (3b), then (3c).
+The nightly live-input publisher follows (3), before monitoring (4) and replay (6).
+No part (3) implementation or API v4 is claimed by this documentation checkpoint.
 
 Verification policy update (September 20): both repositories' `AGENTS.md` now use
 targeted code checks, affected component integration/integrity/causality checks,
@@ -160,7 +167,8 @@ old baseline result files remain OS access-denied, so a fresh paired comparison 
 unverified. Ranking is weak and mean error exceeds zero-excess prediction. No funded
 SPY outperformance, outer validation, test or promotion is claimed.
 
-Current checkpoint: **Qualify issuer-news and SEC reaction inputs** (`in progress`).
+Research checkpoint: **Qualify issuer-news and SEC reaction inputs** (paused behind
+monitoring correctness and the remaining retirement/replay gates).
 This starts with source/feature design, not another unrestricted training search.
 Inventory existing initial-fit issuer event content, SEC acceptance times, coverage,
 identity and completed price/volume reaction windows. Freeze exact columns, clocks,
@@ -1759,6 +1767,75 @@ It implements the consolidated decisions "Registration never waits on drift", "P
    registration while drift is warming or not ready; identical and conflicting reruns; a
    failed record replaced by a retry; a republished live generation not double counted; a
    session gap turning drift not ready; request snapshots refused by intent registration.
+
+Part (3) continuation review (September 28, against `21ef677`):
+
+This is a local, code-grounded design review, not a claim that the prior two
+independent reviewers have approved this implementation design. No part (3) code,
+API v4, session registration command or live-input publisher has landed. Complete
+the following corrections in the bounded implementation designs before their code.
+These corrections supersede the affected wording above. The current public contract
+and golden fixture remain v3.
+
+1. Major: deterministic registration identity is underspecified. In
+   `serving/snapshot_store.py`, `record` hashes `recorded_at_utc`; the response also
+   includes generated time and random request/correlation ids from
+   `serving/prediction_service.py::_edge_swing_response`. Excluding only the session
+   record's recording time cannot make identical reruns identical. A direct call to
+   `_content_sha256` with unchanged request/response and two recording times produces
+   different hashes. Define a canonical decision payload, separate from audit metadata,
+   for cross-section/session identity. Bind route, release, decision, sorted member
+   identities, scores, abstentions and source evidence; preserve the original audit
+   snapshot and its byte hash. A changed source pin or decision payload must conflict
+   or resolve to the already committed session without adding observations; it must
+   never silently replace that session. Test identical reruns with different wall
+   clocks and request ids, changed scores/source pins, reordered member input and a
+   republished live generation. Request audit snapshots may retain their existing
+   per-call identity. This is part (3b), not a reopening of request snapshot storage.
+2. Major: `feature_eligible == false` does not prove a genuinely short listing history.
+   `_select_complete_current_cross_section` currently counts cold/ineligible members
+   toward the exclusion ceiling. `swing/features/eligibility.py` also sets the flag
+   false for missing warm-up sessions and unavailable sector benchmark features.
+   A new constituent can have a long prior price history. Blanket reclassification as
+   `insufficient_history` would exempt provider gaps from the governed 5% ceiling.
+   For part (3a), fold this proposed reason into `live_inputs_incomplete` and retain
+   the current ceiling behavior. A future non-failure history category needs its own
+   verified coverage/listing evidence and reviewed rule. Classify peer-floor cascades
+   using the full effective membership's point-in-time sector identities before
+   exclusions; count the union of direct and cascaded failures once against that
+   unchanged membership. Tests: short/missing stock history, missing benchmark,
+   naturally thin sector, and a 30-member sector falling to 29 after one input failure.
+3. Major: the design needs an explicit evidence path for unscored members and an
+   all-abstaining cross-section. `_model_frame` raises when nobody meets the floor;
+   `live.context` retains only scored members. `serving/outcome_intents.py` skips
+   unscored abstentions and refuses an empty observation set; its observation builder
+   requires feature-derived regime/cap/liquidity metadata. Therefore reusing this
+   response alone cannot implement "observations for every member". Part (3a) must
+   return the complete verified member identity/reason set and the actual session
+   cutoff independently of the scored frame. An otherwise valid all-thin-sector
+   cross-section abstains without calling an estimator on empty input; failed source
+   readiness still fails. Part (3b) must bind member evidence into the snapshot and
+   represent unavailable observation metadata explicitly, without fake feature times
+   or invented categories. Intent creation remains restricted to scored members.
+   Test all members represented exactly once, all-abstention registration, unavailable
+   metadata, unchanged selection among scored members, and crash/retry before the
+   final session commit marker. Part (3c) must exclude all partially written sessions.
+
+Implementation constraint confirmed: `PredictionRequest` rejects 101 tickers, and
+snapshot loading currently validates that type. The shared scorer must take an
+internal cross-section context rather than construct or bypass validation on a public
+request. Keep the HTTP request limit; test more than 100 members through scoring,
+snapshot load and registration. Preserve promotion-time checks, admission, memory
+guards and generation-change checks; only the internal monitoring path skips drift.
+
+Verification for this review: existing continuity, snapshot and live-feature tests,
+24 passed, 1 skipped (26.83 s); one warning from the deliberate non-finite payload
+test. Direct read-only diagnostics confirmed recording-time hash differences and
+101-ticker request rejection. These are baseline checks, not evidence that the new
+exit gates pass. No training, sealed-data reads, provider requests, full suite, code
+lint/types or C# checks ran. Post-edit continuity tests: 2 passed (0.15 s); `git diff --check` clean.
+The skipped test is the opt-in production-scale RSS benchmark. Rollback is a scoped revert of these two continuity
+documents; runtime admission remains unchanged and fail-closed.
 
 The September 20 user instruction explicitly extends the completed HTTP/CLI and
 TradingFlow cleanup to all remaining Market Predictor implementation. This is a
