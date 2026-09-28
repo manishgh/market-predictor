@@ -300,8 +300,22 @@ nullable `training_data_end`), the four HEAD defects fixed, and the open replay 
   collection (`collection/outcome_bars.py`, `collection/http_records.py`) and the shared
   monitoring lease (`monitoring_lease.py`). Verification: the new tests, 13 passed; the
   dependency and architecture tests, 230 passed; strict mypy (358 files) and Ruff clean.
-  No existing module imports the new code yet. Diff review requested; part (2b-2),
-  classification, states and the attempt log, follows.
+  No existing module imports the new code yet. Both diff reviews (no blocker) and their
+  confirmations are fixed in `b96c593`, `1388eb6` and `62da557`: chains anchored at the
+  first page, receipts matched to the sessions they cover, bars retrieved before they were
+  final not counted, daily bars stamped at New York midnight, a missing price kept as an
+  unusable bar, a duplicated session a defect, a provider repeating an action across pages
+  a failed receipt, and the attempt window spanning the retrieval clocks.
+- Part (2b-2) `7ca95fe`: maturation from receipts (`governance/outcomes/evidence.py`,
+  `collection_plan.py`, the worker and both commands). Paths come from the receipt with
+  the most usable sessions; a gap is proven only by a receipt retrieved three days after
+  the last close (`outcome_settlement_days`, new drift pin `1351df40...`) when no receipt
+  ever returned a usable bar; cessation (mergers, worthless removals, membership
+  removals, following renames) or a minute-confirmed halt makes an outcome
+  `unresolvable`, which leaves the report's pending counts. Attempts are an append log
+  written only on change. Verification: the 27 import- and config-affected test files,
+  354 passed; strict mypy (360 files) and Ruff clean. Diff review requested; part (2b-3),
+  the unresolvable ceiling and the sensitivity, follows.
 - TradingFlow follow-ups, both display-only: swing signals read as neutral in the
   advisory model-direction view; the hard-coded `market_predictor.prediction.v1` label.
 
