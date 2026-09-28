@@ -1547,11 +1547,14 @@ prediction is registered or matured yet, so no stored record changes.
      plus 15 minutes and `retrieved_at_utc`, feed `sip`, adjustment `all`. Unusable bars
      (zero volume, prices out of order) are kept for the pinned validator to mark; the
      loader does not call `canonicalize_bars`, which rejects a batch with any invalid row.
-   - Corporate actions: a new `AlpacaSource.fetch_corporate_actions_page` keeps the raw
-     bytes (the existing `fetch_security_transitions` keeps none). For units with gaps it
-     asks for name changes, cash, stock and stock-and-cash mergers, reorganizations and
-     worthless removals over the path window extended by the grace, with receipts as for
-     bars, including the cash merger `rate`.
+   - Corporate actions: the existing byte-keeping transport is reused
+     (`sources/alpaca_corporate_actions.fetch_corporate_actions_page` and
+     `decode_corporate_actions_page`: one ticker per request, structural checks only, and
+     `process_date` never standing in for `effective_date`). For each stock with a gap it
+     asks for that ticker's actions over the path window extended by the grace, with
+     receipts as for bars. Name changes, cash, stock and stock-and-cash mergers,
+     reorganizations and worthless removals are read from the kept records, including the
+     cash merger `rate`; a record without an `effective_date` is not admitted evidence.
    - Name changes: when a name change of a unit's ticker falls inside the path and the
      stock's bars stop there, the next collection asks for the new symbol with `asof` on
      its effective date. Bars are joined back under the intent's ticker, and the evidence
