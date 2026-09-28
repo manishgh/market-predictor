@@ -1770,6 +1770,34 @@ It implements the consolidated decisions "Registration never waits on drift", "P
    session gap turning drift not ready; request snapshots refused by intent registration.
 
 
+
+Part (3b) implementation `8fdb29f` (local; publication awaiting authorization): scoped
+snapshots and deterministic decision ids, full-member observations, strict route and
+session records, crash/retry recovery, production registration and audited not_run.
+Request snapshots cannot register. Cross-section replay is not constrained by the
+HTTP ticker limit. Session markers bind exact observations and intents; failed records
+retain history and can retry, while committed records cannot be replaced. The local
+consolidated review added model/evidence identity checks and exact session-cutoff
+binding. Verification: 329 affected tests passed; after final review edits, the 24
+re-affected registration/snapshot/intent/replay tests passed. Ruff clean on ten changed
+Python files; strict mypy clean on eight sources. No full suite or live/provider run.
+API v4 bytes unchanged from part (3a); C# migration is still separately pending.
+
+Part (3c) freeze: performance reads only the exact source-id inventory of registered
+session markers and fails on missing/mismatched committed rows; partial/uncommitted
+rows do not enter any rate, outcome statistic or route-pending gate. Report session
+coverage from each verified per-release route activation over XNYS decision cutoffs,
+including registered, failed and missing sessions. Missing sessions older than the
+existing pending grace block actionability; registered share below the existing 95%
+policy warns without upgrading an insufficient route. Bind session-record ids and
+as-of deciding attempt ids into cohort/report identities. Keep unavailable unscored
+metadata null; no fabricated features or outcomes. Preserve the existing matured-window
+accounting and leave estimator statistics/curve/rank redesign to part (4). Test partial
+writes, exact population denominators, missing committed evidence, coverage since
+promotion, failed/not_run records, grace boundaries, re-promotion isolation, as-of
+attempt changes and tampering. Prior raw-record accounting fixtures must explicitly
+commit synthetic sessions; production has no legacy population fallback.
+
 Part (3a) implementation `b3c8761` (September 28, pushed): shared request/internal
 scoring, complete typed membership, natural peer-floor abstentions, cascaded input
 failure accounting and API v4. Empty eligible frames abstain without an estimator

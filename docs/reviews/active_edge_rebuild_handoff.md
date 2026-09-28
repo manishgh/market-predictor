@@ -4,8 +4,8 @@ Status: active
 Last updated: 2026-09-28
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `b3c8761` (monitoring part (3a), API v4;
-TradingFlow consumer integration pending).
+Last completed implementation checkpoint: `8fdb29f` (monitoring part (3b), local;
+publication pending). Last pushed implementation: `b3c8761` (API v4; consumer migration pending).
 Last implementation handoff receipt: `21ef677`; inspected HEAD and the local
 `origin/unified-swing-product` tracking ref both point there at continuation start.
 Latest pending design: `38c698e` (monitoring part (3), registration and population).
@@ -17,6 +17,34 @@ Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
+
+
+Part (3b) implementation `8fdb29f` (local; publication awaiting authorization): scoped
+snapshots and deterministic decision ids, full-member observations, strict route and
+session records, crash/retry recovery, production registration and audited not_run.
+Request snapshots cannot register. Cross-section replay is not constrained by the
+HTTP ticker limit. Session markers bind exact observations and intents; failed records
+retain history and can retry, while committed records cannot be replaced. The local
+consolidated review added model/evidence identity checks and exact session-cutoff
+binding. Verification: 329 affected tests passed; after final review edits, the 24
+re-affected registration/snapshot/intent/replay tests passed. Ruff clean on ten changed
+Python files; strict mypy clean on eight sources. No full suite or live/provider run.
+API v4 bytes unchanged from part (3a); C# migration is still separately pending.
+
+Part (3c) freeze: performance reads only the exact source-id inventory of registered
+session markers and fails on missing/mismatched committed rows; partial/uncommitted
+rows do not enter any rate, outcome statistic or route-pending gate. Report session
+coverage from each verified per-release route activation over XNYS decision cutoffs,
+including registered, failed and missing sessions. Missing sessions older than the
+existing pending grace block actionability; registered share below the existing 95%
+policy warns without upgrading an insufficient route. Bind session-record ids and
+as-of deciding attempt ids into cohort/report identities. Keep unavailable unscored
+metadata null; no fabricated features or outcomes. Preserve the existing matured-window
+accounting and leave estimator statistics/curve/rank redesign to part (4). Test partial
+writes, exact population denominators, missing committed evidence, coverage since
+promotion, failed/not_run records, grace boundaries, re-promotion isolation, as-of
+attempt changes and tampering. Prior raw-record accounting fixtures must explicitly
+commit synthetic sessions; production has no legacy population fallback.
 
 Part (3a) implementation `b3c8761` (September 28, pushed): shared request/internal
 scoring, complete typed membership, natural peer-floor abstentions, cascaded input
@@ -1271,10 +1299,10 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: part (3b), scoped snapshots and deterministic session
-registration, following the freeze above. Part (3a) is pushed as `b3c8761`; API v4
-is published. The earlier review below is design history, superseded where it says
-all part (3) code is pending.
+Exact next checkpoint: part (3c), committed-session population, coverage and drift.
+Part (3a) is pushed as `b3c8761`; part (3b) is locally committed as `8fdb29f`.
+Publication after (3a) awaits explicit authorization following the automatic review
+rejection. Earlier pending-code statements below are superseded by these receipts.
 
 
 The September 28 local continuation review is consolidated in the active plan under
