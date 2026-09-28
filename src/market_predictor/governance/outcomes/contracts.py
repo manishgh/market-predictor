@@ -227,9 +227,15 @@ class MaturationAttempt(FrozenContract):
     maturation_key: str = Field(pattern=SHA256_PATTERN)
     semantic_prediction_id: str = Field(pattern=SHA256_PATTERN)
     observed_as_of_utc: datetime
-    status: Literal["pending", "blocked"]
+    # `unresolvable` is terminal until a later maturation supersedes it; its reason names the evidence.
+    status: Literal["pending", "blocked", "unresolvable"]
     reasons: tuple[str, ...] = ()
     missing_intervals: tuple[str, ...] = ()
+    # The drift policy's grace and settlement that governed the attempt, and the receipts it read.
+    grace_days: int = Field(ge=0)
+    settlement_days: int = Field(ge=0)
+    drift_policy_sha256: str = Field(pattern=SHA256_PATTERN)
+    receipt_ids: tuple[str, ...] = ()
 
     @field_validator("observed_as_of_utc")
     @classmethod
@@ -240,6 +246,14 @@ class MaturationAttempt(FrozenContract):
 
     @model_validator(mode="after")
     def validate_attempt_identity(self) -> Self:
+        if tuple(sorted(set(self.receipt_ids))) != self.receipt_ids or any(
+            not re.fullmatch(SHA256_PATTERN, receipt_id) for receipt_id in self.receipt_ids
+        ):
+            raise ValueError("maturation attempt receipts must be sorted, unique SHA-256 identities")
+        if not self.reasons:
+            raise ValueError("maturation attempt must state its reasons")
+        if self.settlement_days >= self.grace_days:
+            raise ValueError("maturation attempt settlement must precede its grace deadline")
         content = self.model_dump(mode="json", exclude={"attempt_id"})
         if content_sha256(content) != self.attempt_id:
             raise ValueError("maturation attempt identity is invalid")

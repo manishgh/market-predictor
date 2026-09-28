@@ -8,21 +8,32 @@ from tempfile import TemporaryDirectory
 import pandas as pd
 from pydantic import ValidationError
 
+from market_predictor.collection.outcome_bars import (
+    CorporateActionUnit,
+    OutcomeBarUnit,
+    collect_bars,
+    collect_corporate_actions,
+)
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.governance.outcomes.contracts import (
     RETIRED_INTRADAY,
+    MaturationAttempt,
     MaturedOutcome,
     PredictionMaturationIntent,
 )
+from market_predictor.governance.outcomes.evidence import EvidenceTerms
 from market_predictor.governance.outcomes.maturation import mature_prediction
 from market_predictor.governance.outcomes.repository import OutcomeRepository
 from market_predictor.governance.outcomes.worker import mature_pending_intents
+from market_predictor.modeling.maturation import PendingPath
 from market_predictor.swing.contracts import SwingDatasetConfig
 from market_predictor.swing.labels import add_exact_swing_labels
 from market_predictor.swing.labels.barrier_and_rank import (
     BarrierSpec,
     apply_triple_barrier,
 )
+from tests.test_outcome_bar_collection import _clock as receipt_clock
+from tests.test_outcome_bar_collection import _source as receipt_source
 from tests.test_outcome_repository import _intent as swing_intent
 
 
@@ -32,10 +43,9 @@ class OutcomeMaturationTests(unittest.TestCase):
         bars.loc[bars["ticker"].eq("MSFT") & bars["session_date_et"].eq(date(2026, 7, 27)), "volume"] = 0
         result, evidence = mature_prediction(
             swing_intent(), bars, observed_as_of=datetime(2026, 8, 8, 12, tzinfo=UTC),
-            source_artifact_sha256="9" * 64,
             proven_stock_gaps=frozenset(),
         )
-        self.assertEqual(result.status, "pending")
+        self.assertIsInstance(result, PendingPath)
         self.assertEqual(evidence, [])
 
     def test_swing_rejects_non_daily_timeframe(self) -> None:
@@ -48,7 +58,6 @@ class OutcomeMaturationTests(unittest.TestCase):
                 intent,
                 bars,
                 observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
-                source_artifact_sha256="9" * 64,
                 proven_stock_gaps=frozenset(),
             )
 
@@ -60,18 +69,16 @@ class OutcomeMaturationTests(unittest.TestCase):
             intent,
             bars,
             observed_as_of=datetime(2026, 7, 30, 22, 0, tzinfo=UTC),
-            source_artifact_sha256="9" * 64,
             proven_stock_gaps=frozenset(),
         )
         matured, evidence = mature_prediction(
             intent,
             bars,
             observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
-            source_artifact_sha256="9" * 64,
             proven_stock_gaps=frozenset(),
         )
 
-        self.assertEqual(pending.status, "pending")
+        self.assertIsInstance(pending, PendingPath)
         self.assertEqual(pending_evidence, [])
         self.assertIsInstance(matured, MaturedOutcome)
         assert isinstance(matured, MaturedOutcome)
@@ -111,7 +118,6 @@ class OutcomeMaturationTests(unittest.TestCase):
             intent,
             bars,
             observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
-            source_artifact_sha256="9" * 64,
             proven_stock_gaps=frozenset(),
         )
 
@@ -139,16 +145,15 @@ class OutcomeMaturationTests(unittest.TestCase):
 
         # The missing sessions may simply not be collected yet, and the outcome is immutable.
         pending, _ = mature_prediction(
-            intent, bars, observed_as_of=observed, source_artifact_sha256="9" * 64, proven_stock_gaps=frozenset()
+            intent, bars, observed_as_of=observed, proven_stock_gaps=frozenset()
         )
-        self.assertEqual((pending.status, pending.reasons), ("pending", ("required_bar_path_incomplete",)))
+        self.assertEqual(pending.reasons, ("required_bar_path_incomplete",))
         self.assertIn("MSFT:2026-07-30", pending.missing_intervals)
 
         matured, _ = mature_prediction(
             intent,
             bars,
             observed_as_of=observed,
-            source_artifact_sha256="9" * 64,
             proven_stock_gaps=frozenset({date(2026, 7, 30)}),
         )
         assert isinstance(matured, MaturedOutcome)
@@ -166,7 +171,7 @@ class OutcomeMaturationTests(unittest.TestCase):
 
         matured, _ = mature_prediction(
             intent, bars, observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
-            source_artifact_sha256="9" * 64, proven_stock_gaps=frozenset(),
+            proven_stock_gaps=frozenset(),
         )
 
         assert isinstance(matured, MaturedOutcome)
@@ -182,14 +187,13 @@ class OutcomeMaturationTests(unittest.TestCase):
         observed = datetime(2026, 8, 8, 12, 0, tzinfo=UTC)
 
         pending, _ = mature_prediction(
-            intent, bars, observed_as_of=observed, source_artifact_sha256="9" * 64, proven_stock_gaps=frozenset()
+            intent, bars, observed_as_of=observed, proven_stock_gaps=frozenset()
         )
         self.assertEqual(pending.missing_intervals, ("MSFT:2026-08-04", "MSFT:2026-08-05", "MSFT:2026-08-06", "MSFT:2026-08-07"))
         matured, _ = mature_prediction(
             intent,
             bars,
             observed_as_of=observed,
-            source_artifact_sha256="9" * 64,
             proven_stock_gaps=frozenset({date(2026, 8, 4)}),
         )
         assert isinstance(matured, MaturedOutcome)
@@ -205,7 +209,7 @@ class OutcomeMaturationTests(unittest.TestCase):
 
         results = [
             mature_prediction(
-                intent, frame, observed_as_of=observed, source_artifact_sha256="9" * 64, proven_stock_gaps=frozenset()
+                intent, frame, observed_as_of=observed, proven_stock_gaps=frozenset()
             )[0]
             for frame in (bars, split)
         ]
@@ -223,7 +227,7 @@ class OutcomeMaturationTests(unittest.TestCase):
         bars = _swing_bars().assign(security_id=lambda frame: "security:" + frame["ticker"])
         matured, _ = mature_prediction(
             intent, bars, observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
-            source_artifact_sha256="9" * 64, proven_stock_gaps=frozenset(),
+            proven_stock_gaps=frozenset(),
         )
         stock = bars.loc[bars["ticker"].eq("MSFT")]
         decisions = stock.loc[stock["session_date_et"].eq(intent.decision_session_et)].assign(
@@ -253,10 +257,10 @@ class OutcomeMaturationTests(unittest.TestCase):
 
         pending, evidence = mature_prediction(
             intent, bars, observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
-            source_artifact_sha256="9" * 64, proven_stock_gaps=frozenset(),
+            proven_stock_gaps=frozenset(),
         )
 
-        self.assertEqual(pending.status, "pending")
+        self.assertIsInstance(pending, PendingPath)
         self.assertEqual(pending.reasons, ("required_bar_path_incomplete",))
         self.assertIn("MSFT:2026-07-29", pending.missing_intervals)
         self.assertEqual(evidence, [])
@@ -265,7 +269,7 @@ class OutcomeMaturationTests(unittest.TestCase):
         intent = swing_intent()
         matured, _ = mature_prediction(
             intent, _swing_bars(), observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
-            source_artifact_sha256="9" * 64, proven_stock_gaps=frozenset(),
+            proven_stock_gaps=frozenset(),
         )
 
         assert isinstance(matured, MaturedOutcome)
@@ -280,18 +284,13 @@ class OutcomeMaturationTests(unittest.TestCase):
 
     def test_worker_matures_only_canonical_semantic_occurrence(self) -> None:
         with TemporaryDirectory() as temp_dir:
-            repository = OutcomeRepository(Path(temp_dir))
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
             first = swing_intent(snapshot_id="1" * 64)
             duplicate = swing_intent(snapshot_id="2" * 64)
             repository.record_intent(first)
             repository.record_intent(duplicate)
 
-            summary = mature_pending_intents(
-                repository,
-                _swing_bars(),
-                observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
-                source_artifact_sha256="9" * 64,
-            )
+            summary = _mature(repository, _collected(Path(temp_dir)))
 
             # A repeated occurrence is never indexed as pending, so the worker never visits it.
             self.assertEqual((summary["index_entries"], summary["matured"]), (1, 1))
@@ -302,69 +301,168 @@ class OutcomeMaturationTests(unittest.TestCase):
 
     def test_worker_drops_an_index_entry_whose_outcome_is_already_durable(self) -> None:
         with TemporaryDirectory() as temp_dir:
-            repository = OutcomeRepository(Path(temp_dir))
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
             intent = swing_intent()
             repository.record_intent(intent)
-            mature_pending_intents(
-                repository,
-                _swing_bars(),
-                observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
-                source_artifact_sha256="9" * 64,
-            )
+            receipts = _collected(Path(temp_dir))
+            _mature(repository, receipts)
             # Simulate a crash between writing the outcome and removing its index entry.
             repository._write_pending(intent.maturation_key, intent.decision_session_et)
 
-            summary = mature_pending_intents(
-                repository,
-                _swing_bars(),
-                observed_as_of=datetime(2026, 8, 9, 12, 0, tzinfo=UTC),
-                source_artifact_sha256="9" * 64,
-            )
+            summary = _mature(repository, receipts, observed=OBSERVED + timedelta(days=1))
 
             self.assertEqual((summary["already_matured"], summary["matured"]), (1, 0))
             self.assertEqual(repository.pending(), [])
 
     def test_worker_waits_for_the_horizon_to_close_without_recording_attempts(self) -> None:
         with TemporaryDirectory() as temp_dir:
-            repository = OutcomeRepository(Path(temp_dir))
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
             intent = swing_intent()
             repository.record_intent(intent)
 
             # The tenth session after July 24 closes on August 7.
-            summary = mature_pending_intents(
-                repository,
-                _swing_bars(),
-                observed_as_of=datetime(2026, 8, 7, 19, 0, tzinfo=UTC),
-                source_artifact_sha256="9" * 64,
-            )
+            summary = _mature(repository, Path(temp_dir) / "receipts", observed=datetime(2026, 8, 7, 19, 0, tzinfo=UTC))
 
             self.assertEqual((summary["horizon_open"], summary["pending"], summary["matured"]), (1, 0, 0))
             self.assertEqual(repository.pending(), [(intent.maturation_key, intent.decision_session_et)])
-            self.assertFalse((Path(temp_dir) / "sessions" / "2026-07-24" / "attempts").exists())
+            self.assertIsNone(repository.latest_attempt(intent.maturation_key, intent.decision_session_et))
 
     def test_worker_leaves_an_unfinished_registration_and_drops_an_entry_that_lost_the_race(self) -> None:
         with TemporaryDirectory() as temp_dir:
-            repository = OutcomeRepository(Path(temp_dir))
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
             first = swing_intent(snapshot_id="1" * 64)
             repository.record_intent(first)
             session = first.decision_session_et
             # Registration stopped after the index entry, before the semantic record.
-            (Path(temp_dir) / "sessions" / session.isoformat() / "semantic" / f"{first.semantic_prediction_id}.json").unlink()
-            observed = datetime(2026, 8, 8, 12, 0, tzinfo=UTC)
+            (Path(temp_dir) / "outcomes" / "sessions" / session.isoformat() / "semantic" / f"{first.semantic_prediction_id}.json").unlink()
+            receipts = _collected(Path(temp_dir))
 
-            summary = mature_pending_intents(repository, _swing_bars(), observed_as_of=observed, source_artifact_sha256="9" * 64)
+            summary = _mature(repository, receipts)
             self.assertEqual((summary["registration_incomplete"], summary["matured"]), (1, 0))
             self.assertEqual(repository.pending(), [(first.maturation_key, session)])
 
             # Another occurrence registers before the rerun and becomes canonical.
             later = swing_intent(snapshot_id="2" * 64)
             repository.record_intent(later)
-            summary = mature_pending_intents(repository, _swing_bars(), observed_as_of=observed, source_artifact_sha256="9" * 64)
+            summary = _mature(repository, receipts)
 
             self.assertEqual((summary["not_canonical_dropped"], summary["matured"]), (1, 1))
             self.assertTrue(repository.has_outcome(later.maturation_key, session))
             self.assertFalse(repository.has_outcome(first.maturation_key, session))
             self.assertEqual(repository.pending(), [])
+
+    def test_a_settled_gap_lets_an_early_exit_mature_without_the_fixed_horizon(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            bars = _swing_bars()
+            msft = bars["ticker"].eq("MSFT")
+            bars.loc[msft & bars["session_date_et"].eq(date(2026, 7, 28)), "low"] = 50.0
+            bars = bars.loc[~(msft & bars["session_date_et"].ge(date(2026, 7, 30)))]
+
+            # Before the settlement period the missing sessions may still arrive.
+            unsettled = _collected(Path(temp_dir) / "early", bars, retrieved=datetime(2026, 8, 9, 12, tzinfo=UTC))
+            self.assertEqual(_mature(repository, unsettled)["pending"], 1)
+
+            summary = _mature(repository, _collected(Path(temp_dir) / "late", bars))
+
+            self.assertEqual(summary["matured"], 1)
+            outcome = repository.load_outcome(intent.maturation_key, intent.decision_session_et)
+            self.assertEqual((outcome.path_outcome, outcome.holding_sessions), ("stop_first", 2))
+            self.assertIsNone(outcome.fixed_horizon_net_return)
+
+    def test_a_merged_stock_becomes_unresolvable_and_a_bare_gap_waits_for_an_operator(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            bars = _swing_bars()
+            # No target or stop is reached by July 28, the last session before the gap.
+            bars = bars.loc[~(bars["ticker"].eq("MSFT") & bars["session_date_et"].ge(date(2026, 7, 29)))]
+            receipts = _collected(Path(temp_dir), bars)
+
+            self.assertEqual(_latest(repository, intent, receipts).reasons, ("stock_gap_without_cessation",))
+
+            merger = {"id": "merger-1", "acquiree_symbol": "MSFT", "rate": "104.00",
+                      "effective_date": "2026-07-29", "process_date": "2026-08-03"}
+            _collected_actions(receipts, {"cash_mergers": [merger]})
+            latest = _latest(repository, intent, receipts)
+
+            self.assertEqual((latest.status, latest.reasons), ("unresolvable", ("cash_merger",)))
+            self.assertEqual(len(latest.receipt_ids), 2)
+            # It stays indexed, so later evidence can still mature it.
+            self.assertEqual(repository.pending(), [(intent.maturation_key, intent.decision_session_et)])
+
+    def test_a_rename_and_a_worthless_removal_are_followed(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            bars = _swing_bars()
+            receipts = _collected(Path(temp_dir), bars.loc[~(bars["ticker"].eq("MSFT") & bars["session_date_et"].ge(date(2026, 7, 29)))])
+            rename = {"id": "rename-1", "old_symbol": "MSFT", "new_symbol": "MSFX", "process_date": "2026-07-28"}
+            _collected_actions(receipts, {"name_changes": [rename]})
+            removal = {"id": "removal-1", "symbol": "MSFX", "process_date": "2026-07-31"}
+            _collected_actions(receipts, {"worthless_removals": [removal]}, symbol="MSFX")
+
+            latest = _latest(repository, intent, receipts)
+
+            self.assertEqual((latest.status, latest.reasons), ("unresolvable", ("worthless_removal",)))
+
+    def test_an_interior_gap_is_unresolvable_only_when_minute_bars_confirm_the_halt(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            bars = _swing_bars()
+            receipts = _collected(Path(temp_dir), bars.loc[~(bars["ticker"].eq("MSFT") & bars["session_date_et"].eq(date(2026, 7, 27)))])
+
+            self.assertEqual(_latest(repository, intent, receipts).reasons, ("interior_gap_needs_minute_bars",))
+
+            _collected_minutes(receipts, traded=True)
+            self.assertEqual(_latest(repository, intent, receipts).reasons, ("interior_gap_contradicted",))
+
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            repository.record_intent(intent)
+            receipts = _collected(Path(temp_dir), bars.loc[~(bars["ticker"].eq("MSFT") & bars["session_date_et"].eq(date(2026, 7, 27)))])
+            _collected_minutes(receipts, traded=False)
+
+            latest = _latest(repository, intent, receipts)
+
+            self.assertEqual((latest.status, latest.reasons), ("unresolvable", ("interior_gap",)))
+
+    def test_a_session_any_receipt_returned_is_never_a_proven_gap(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            receipts = _collected(Path(temp_dir))
+            # A later, settled receipt transiently omits the last sessions the first one returned.
+            bars = _swing_bars()
+            _collected(Path(temp_dir), bars.loc[~(bars["ticker"].eq("MSFT") & bars["session_date_et"].ge(date(2026, 8, 5)))],
+                       retrieved=datetime(2026, 8, 13, 12, tzinfo=UTC))
+
+            summary = _mature(repository, receipts, observed=OBSERVED + timedelta(days=1))
+
+            self.assertEqual(summary["matured"], 1)
+            outcome = repository.load_outcome(intent.maturation_key, intent.decision_session_et)
+            self.assertIsNotNone(outcome.fixed_horizon_net_return)
+
+    def test_an_unchanged_attempt_is_not_written_again(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir) / "outcomes")
+            intent = swing_intent()
+            repository.record_intent(intent)
+            receipts = Path(temp_dir) / "receipts"
+
+            _mature(repository, receipts)
+            _mature(repository, receipts, observed=OBSERVED + timedelta(days=1))
+
+            attempts = repository.attempts(intent.maturation_key, intent.decision_session_et)
+            self.assertEqual([attempt.reasons for attempt in attempts], [("decision_session_not_observed",)])
+            self.assertEqual((attempts[0].grace_days, attempts[0].settlement_days), (7, 3))
 
     def test_retired_intraday_and_superseded_intents_are_refused(self) -> None:
         payload = swing_intent().model_dump(mode="python")
@@ -379,6 +477,59 @@ class OutcomeMaturationTests(unittest.TestCase):
             if changes.get("view") == "intraday":
                 self.assertIn(RETIRED_INTRADAY, str(raised.exception))
 
+
+TERMS = EvidenceTerms(grace_days=7, settlement_days=3, drift_policy_sha256="d" * 64)
+DECISION = date(2026, 7, 24)
+LAST = date(2026, 8, 7)
+# Settled: at least three days after the tenth session's close on August 7.
+RETRIEVED = datetime(2026, 8, 12, 12, 0, tzinfo=UTC)
+OBSERVED = datetime(2026, 8, 13, 12, 0, tzinfo=UTC)
+
+
+def _mature(repository: OutcomeRepository, receipts: Path, *, observed: datetime = OBSERVED) -> dict[str, int]:
+    return mature_pending_intents(repository, receipts_root=receipts, observed_as_of=observed, terms=TERMS)
+
+
+def _latest(repository: OutcomeRepository, intent: PredictionMaturationIntent, receipts: Path) -> MaturationAttempt:
+    _mature(repository, receipts)
+    latest = repository.latest_attempt(intent.maturation_key, intent.decision_session_et)
+    assert latest is not None
+    return latest
+
+
+def _collected(root: Path, bars: pd.DataFrame | None = None, *, retrieved: datetime = RETRIEVED) -> Path:
+    """Collect the fixture's bars as Alpaca returns them into receipts under `root / receipts`."""
+    frame = _swing_bars() if bars is None else bars
+
+    def respond(_url: str, params: dict[str, object]) -> tuple[int, object]:
+        rows = {
+            symbol: [
+                {"t": f"{row.session_date_et.isoformat()}T04:00:00Z", "o": row.open, "h": row.high,
+                 "l": row.low, "c": row.close, "v": row.volume}
+                for row in frame.loc[frame["ticker"].eq(symbol)].itertuples()
+            ]
+            for symbol in str(params["symbols"]).split(",")
+            if frame["ticker"].eq(symbol).any()
+        }
+        return 200, {"bars": rows, "next_page_token": None}
+
+    unit = OutcomeBarUnit(DECISION, DECISION, LAST, ("MSFT", "QQQ", "SPY", "XLK"))
+    collect_bars(receipt_source(respond, retrieved), [unit], root=root / "receipts", clock=receipt_clock(retrieved))
+    return root / "receipts"
+
+
+def _collected_actions(receipts: Path, actions: dict[str, object], *, symbol: str = "MSFT") -> None:
+    unit = CorporateActionUnit(DECISION, symbol, DECISION, date(2026, 8, 12))
+    source = receipt_source(lambda _url, _params: (200, {"corporate_actions": actions, "next_page_token": None}))
+    collect_corporate_actions(source, [unit], root=receipts, clock=receipt_clock())
+
+
+def _collected_minutes(receipts: Path, *, traded: bool) -> None:
+    minute = {"t": "2026-07-27T13:30:00Z", "o": 100.0, "h": 100.0, "l": 100.0, "c": 100.0, "v": 10}
+    bars = {"MSFT": [minute]} if traded else {}
+    source = receipt_source(lambda _url, _params: (200, {"bars": bars, "next_page_token": None}))
+    unit = OutcomeBarUnit(DECISION, date(2026, 7, 27), date(2026, 7, 27), ("MSFT",), "1Min")
+    collect_bars(source, [unit], root=receipts, clock=receipt_clock())
 
 def _swing_bars() -> pd.DataFrame:
     sessions = [
@@ -432,6 +583,7 @@ def _daily_row(
         "price_feed": "sip",
         "adjustment": "all",
         "timeframe": "1d",
+        "source_artifact_sha256": "9" * 64,
     }
 
 

@@ -55,6 +55,9 @@ class DriftPolicy(BaseModel):
     # Calendar days after the close of a prediction's last horizon session before it is overdue.
     # Maturation cannot finish before that close, so the grace covers collection and weekends.
     pending_grace_days: int = Field(default=7, ge=0)
+    # Calendar days after that close before a collection receipt can prove a gap. It is shorter
+    # than the grace, so a stock that stopped trading is resolved before it could turn overdue.
+    outcome_settlement_days: int = Field(default=3, ge=0)
     # Evidence minimums are defined per horizon; only the served ten-session route has them.
     evidence_horizons: tuple[str, ...] = ("10b",)
     # The share of sessions a route must register; the rest is tolerated failure.
@@ -69,6 +72,12 @@ class DriftPolicy(BaseModel):
     warning_max_drawdown: float = Field(default=0.15, ge=0, le=1)
     severe_max_drawdown: float = Field(default=0.25, ge=0, le=1)
     feature_drift_required: bool = True
+
+    @model_validator(mode="after")
+    def settlement_precedes_grace(self) -> Self:
+        if self.outcome_settlement_days >= self.pending_grace_days:
+            raise ValueError("outcome settlement must end before the pending grace")
+        return self
 
     @model_validator(mode="after")
     def ordered_thresholds(self) -> Self:

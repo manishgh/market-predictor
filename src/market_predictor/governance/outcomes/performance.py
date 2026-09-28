@@ -79,6 +79,10 @@ class SelectedPolicyCohort(BaseModel):
     actionable_predictions: int = Field(ge=0)
     matured_selected_samples: int = Field(ge=0)
     pending_selected_samples: int = Field(ge=0)
+    # Selected decisions whose latest attempt is `unresolvable`: out of pending, counted apart,
+    # with the distinct securities they belong to (one acquired stock can fill several).
+    unresolvable_selected_samples: int = Field(ge=0)
+    unresolvable_selected_securities: int = Field(ge=0)
     oldest_pending_decision_time_utc: datetime | None = None
     oldest_pending_decision_session_et: date | None = None
     # Over every stored intent of the route, not only this window: nothing leaves monitoring uncounted.
@@ -136,10 +140,14 @@ class SelectedPolicyCohort(BaseModel):
         ):
             raise ValueError("selected-policy cohort counts are inconsistent")
         if (
-            self.matured_selected_samples + self.pending_selected_samples
+            self.matured_selected_samples + self.pending_selected_samples + self.unresolvable_selected_samples
             != self.actionable_predictions
         ):
             raise ValueError("selected-policy maturation counts are inconsistent")
+        if (self.unresolvable_selected_samples == 0) != (self.unresolvable_selected_securities == 0) or (
+            self.unresolvable_selected_securities > self.unresolvable_selected_samples
+        ):
+            raise ValueError("selected-policy unresolvable counts are inconsistent")
         pending_evidence = (self.oldest_pending_decision_time_utc, self.oldest_pending_decision_session_et)
         if any((self.pending_selected_samples > 0) != (value is not None) for value in pending_evidence):
             raise ValueError("selected-policy pending timestamp is inconsistent")
@@ -337,12 +345,24 @@ def build_performance_cohorts(
             if intent is not None
             else None
         )
+        unresolvable = (
+            intent is not None
+            and intent.actionable
+            and outcome is None
+            and _unresolvable(repository, intent, generated_at=generated)
+        )
         source_observation_ids.add(observation.observation_id)
         if intent is not None:
             source_intent_ids.add(intent.maturation_key)
         if outcome is not None:
             source_outcome_ids.add(outcome.outcome_id)
-        records.append(_monitoring_record(observation, outcome))
+        records.append(
+            {
+                **_monitoring_record(observation, outcome),
+                "unresolvable": unresolvable,
+                "canonical_security_id": intent.canonical_security_id if intent is not None else None,
+            }
+        )
     frame = pd.DataFrame(records)
     rows: list[dict[str, object]] = []
     if not frame.empty:
@@ -553,6 +573,16 @@ def _matured_selected_outcome(
     return None if outcome.matured_at_utc > generated_at else outcome
 
 
+def _unresolvable(repository: OutcomeRepository, intent: PredictionMaturationIntent, *, generated_at: datetime) -> bool:
+    """Whether the intent's latest attempt observed by the report time is `unresolvable`."""
+    observed = [
+        attempt
+        for attempt in repository.attempts(intent.maturation_key, intent.decision_session_et)
+        if attempt.observed_as_of_utc <= generated_at
+    ]
+    return bool(observed) and observed[-1].status == "unresolvable"
+
+
 def _earliest(*sessions: date | None) -> date:
     return min(session for session in sessions if session is not None)
 
@@ -571,7 +601,12 @@ def _route_oldest_pending(
     oldest: dict[tuple[str, ...], date] = {}
     for maturation_key, session in repository.pending():
         intent = repository.load_intent(maturation_key, session)
-        if not intent.actionable or intent.decision_time_utc > generated or repository.has_outcome(maturation_key, session):
+        if (
+            not intent.actionable
+            or intent.decision_time_utc > generated
+            or repository.has_outcome(maturation_key, session)
+            or _unresolvable(repository, intent, generated_at=generated)
+        ):
             continue
         route = tuple(str(getattr(intent, column)) for column in _IDENTITY_COLUMNS)
         if route not in oldest or intent.decision_session_et < oldest[route]:
@@ -643,7 +678,9 @@ def _cohort_row(
     )
     selected = ordered[ordered["actionable"].astype(bool)]
     matured = selected[selected["outcome_id"].notna()]
-    pending = selected[selected["outcome_id"].isna()]
+    unresolved = selected[selected["outcome_id"].isna()]
+    unresolvable = unresolved[unresolved["unresolvable"].astype(bool)]
+    pending = unresolved[~unresolved["unresolvable"].astype(bool)]
     total = len(ordered)
     eligible_count = int(ordered["selection_eligible"].astype(bool).sum())
     selected_count = int(ordered["selected_for_policy"].astype(bool).sum())
@@ -677,7 +714,9 @@ def _cohort_row(
         "selected_predictions": selected_count,
         "actionable_predictions": actionable_count,
         "matured_selected_samples": matured_count,
-        "pending_selected_samples": actionable_count - matured_count,
+        "pending_selected_samples": len(pending),
+        "unresolvable_selected_samples": len(unresolvable),
+        "unresolvable_selected_securities": int(unresolvable["canonical_security_id"].nunique()),
         "oldest_pending_decision_time_utc": (
             _timestamp_text(pending["decision_time_utc"].min())
             if not pending.empty

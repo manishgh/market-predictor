@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import TypeAlias
 
-import numpy as np
 import pandas as pd
 
 from market_predictor.core.errors import DataReadinessError
@@ -38,7 +39,18 @@ _BAR_COLUMNS = {
     "price_feed",
     "adjustment",
     "timeframe",
+    "source_artifact_sha256",
 }
+
+
+@dataclass(frozen=True)
+class AttemptContext:
+    """The drift policy terms an attempt ran under and the receipts it read."""
+
+    grace_days: int
+    settlement_days: int
+    drift_policy_sha256: str
+    receipt_ids: Sequence[str] = ()
 
 
 def mature_prediction(
@@ -46,34 +58,22 @@ def mature_prediction(
     bars: pd.DataFrame,
     *,
     observed_as_of: datetime,
-    source_artifact_sha256: str,
     proven_stock_gaps: frozenset[date],
-) -> tuple[MaturationResult, list[dict[str, object]]]:
-    """Mature one intent on `bars`.
+) -> tuple[MaturedOutcome | PendingPath, list[dict[str, object]]]:
+    """Mature one intent on `bars`, each of which names its source in `source_artifact_sha256`.
 
     `proven_stock_gaps` holds the sessions in which the stock is proven to have no usable
     bar; a target or stop reached before such a session matures without waiting for it.
     """
-    observed = _aware_utc(observed_as_of)
     data = _prepare_bars(
         bars,
-        observed_as_of=observed,
-        source_artifact_sha256=source_artifact_sha256,
+        observed_as_of=_aware_utc(observed_as_of),
         required_price_feed=intent.price_feed,
         required_timeframe="1d",
     )
     evaluated = evaluate_swing_maturation(intent, data, proven_stock_gaps=proven_stock_gaps)
     if isinstance(evaluated, PendingPath):
-        return (
-            maturation_attempt(
-                intent,
-                observed_as_of=observed,
-                status="pending",
-                reasons=evaluated.reasons,
-                missing_intervals=evaluated.missing_intervals,
-            ),
-            [],
-        )
+        return evaluated, []
     return _outcome_from_path(intent, evaluated), evaluated.evidence_rows
 
 
@@ -83,10 +83,11 @@ def maturation_attempt(
     observed_as_of: datetime,
     status: str,
     reasons: tuple[str, ...],
+    context: AttemptContext,
     missing_intervals: tuple[str, ...] = (),
 ) -> MaturationAttempt:
-    if status not in {"pending", "blocked"}:
-        raise ValueError("maturation attempt status must be pending or blocked")
+    if status not in {"pending", "blocked", "unresolvable"}:
+        raise ValueError("maturation attempt status must be pending, blocked or unresolvable")
     observed = _aware_utc(observed_as_of)
     base = {
         "contract": "market_predictor.maturation_attempt",
@@ -96,6 +97,10 @@ def maturation_attempt(
         "status": status,
         "reasons": reasons,
         "missing_intervals": missing_intervals,
+        "grace_days": context.grace_days,
+        "settlement_days": context.settlement_days,
+        "drift_policy_sha256": context.drift_policy_sha256,
+        "receipt_ids": tuple(sorted(set(context.receipt_ids))),
     }
     return MaturationAttempt.model_validate(
         {**base, "attempt_id": content_sha256(base)}
@@ -164,7 +169,6 @@ def _prepare_bars(
     bars: pd.DataFrame,
     *,
     observed_as_of: datetime,
-    source_artifact_sha256: str,
     required_price_feed: str,
     required_timeframe: str,
 ) -> pd.DataFrame:
@@ -173,11 +177,8 @@ def _prepare_bars(
         raise DataReadinessError(
             f"maturation bars are missing columns: {', '.join(missing)}"
         )
-    if len(source_artifact_sha256) != 64 or any(
-        character not in "0123456789abcdef"
-        for character in source_artifact_sha256
-    ):
-        raise DataReadinessError("maturation source artifact identity is invalid")
+    if not bars["source_artifact_sha256"].astype(str).str.fullmatch(r"[0-9a-f]{64}").all():
+        raise DataReadinessError("maturation bar source identity is invalid")
     data = bars.copy()
     data["ticker"] = data["ticker"].astype(str).str.upper().str.strip()
     for column in ("bar_start_utc", "bar_end_utc", "available_at_utc"):
@@ -195,12 +196,9 @@ def _prepare_bars(
         ).dt.date
     if data["session_date_et"].isna().any():
         raise DataReadinessError("maturation bars contain invalid sessions")
+    # A missing or non-finite price keeps its bar; the observation validator marks it unusable.
     numeric = ["open", "high", "low", "close", "volume"]
     data[numeric] = data[numeric].apply(pd.to_numeric, errors="coerce")
-    if data[numeric].isna().any().any() or not np.isfinite(
-        data[numeric].to_numpy(float)
-    ).all():
-        raise DataReadinessError("maturation bars contain invalid OHLCV")
     if bool(data["available_at_utc"].lt(data["bar_end_utc"]).any()):
         raise DataReadinessError("maturation bar availability precedes bar completion")
     if bool(
@@ -225,7 +223,6 @@ def _prepare_bars(
     if bool(data.duplicated(["ticker", "bar_start_utc"]).any()):
         raise DataReadinessError("maturation bars contain duplicate ticker intervals")
     data = data[data["available_at_utc"].le(observed_as_of)].copy()
-    data["source_artifact_sha256"] = source_artifact_sha256
     return data.sort_values(["ticker", "bar_start_utc"], kind="stable")
 
 

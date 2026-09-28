@@ -292,6 +292,40 @@ class OutcomeRepositoryTests(unittest.TestCase):
                 repository.record_attempt(attempt, decision_session=intent.decision_session_et + timedelta(days=3))
             repository.record_attempt(attempt, decision_session=intent.decision_session_et)
 
+    def test_attempts_are_an_append_log_written_only_on_change(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent()
+            session = intent.decision_session_et
+            repository.record_intent(intent)
+            later = datetime(2026, 8, 20, tzinfo=UTC)
+
+            repository.record_attempt(_attempt(intent), decision_session=session)
+            repository.record_attempt(_attempt(intent, observed=later), decision_session=session)
+            self.assertEqual(len(repository.attempts(intent.maturation_key, session)), 1)
+
+            unresolvable = _attempt(intent, status="unresolvable", reasons=("cash_merger",), observed=later)
+            repository.record_attempt(unresolvable, decision_session=session)
+            self.assertEqual(repository.latest_attempt(intent.maturation_key, session), unresolvable)
+
+            # A missing entry in the log is a conflict, never silently skipped.
+            log = Path(temp_dir) / "sessions" / session.isoformat() / "attempts" / intent.maturation_key
+            (log / "00000001.json").unlink()
+            with self.assertRaises(PredictionConflictError):
+                repository.latest_attempt(intent.maturation_key, session)
+
+    def test_attempts_state_reasons_and_settle_before_the_grace(self) -> None:
+        intent = _intent()
+        content = _attempt(intent).model_dump(mode="python", exclude={"attempt_id"})
+        for name, changes in {
+            "no reasons": {"reasons": ()},
+            "settlement not before the grace": {"settlement_days": 7},
+            "unsorted receipts": {"receipt_ids": ("f" * 64, "e" * 64)},
+        }.items():
+            changed = {**content, **changes}
+            with self.subTest(name), self.assertRaises(ValidationError):
+                MaturationAttempt.model_validate({**changed, "attempt_id": content_sha256(changed)})
+
     def test_reads_and_replacements_retry_a_file_held_open_elsewhere(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repository = OutcomeRepository(Path(temp_dir))
@@ -704,15 +738,25 @@ def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntent:
     )
 
 
-def _attempt(intent: PredictionMaturationIntent) -> MaturationAttempt:
+def _attempt(
+    intent: PredictionMaturationIntent,
+    *,
+    status: str = "pending",
+    reasons: tuple[str, ...] = ("horizon_not_complete",),
+    observed: datetime = datetime(2026, 7, 26, 12, 0, tzinfo=UTC),
+) -> MaturationAttempt:
     base = {
         "contract": "market_predictor.maturation_attempt",
         "maturation_key": intent.maturation_key,
         "semantic_prediction_id": intent.semantic_prediction_id,
-        "observed_as_of_utc": datetime(2026, 7, 26, 12, 0, tzinfo=UTC),
-        "status": "pending",
-        "reasons": ("horizon_not_complete",),
+        "observed_as_of_utc": observed,
+        "status": status,
+        "reasons": reasons,
         "missing_intervals": (),
+        "grace_days": 7,
+        "settlement_days": 3,
+        "drift_policy_sha256": "d" * 64,
+        "receipt_ids": (),
     }
     return MaturationAttempt.model_validate(
         {**base, "attempt_id": content_sha256(base)}

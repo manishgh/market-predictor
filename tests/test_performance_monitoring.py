@@ -26,7 +26,7 @@ from market_predictor.governance.outcomes.performance import (
     write_performance_report,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
-from tests.test_outcome_repository import _evidence, _intent, _outcome
+from tests.test_outcome_repository import _attempt, _evidence, _intent, _outcome
 
 RETIRED_CALIBRATION_FIELDS = (
     "opportunity_observed_rate",
@@ -388,6 +388,28 @@ class PerformanceMonitoringTests(unittest.TestCase):
             self.assertEqual(rows["all"]["pending_selected_samples"], 0)
             self.assertEqual(rows["all"]["route_oldest_pending_decision_session_et"], "2026-03-02")
             self.assertIsNone(rows["sector"]["route_oldest_pending_decision_session_et"])
+
+    def test_unresolvable_decisions_leave_pending_and_are_counted_by_security(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent_variant("MSFT", "1", probability=0.8)
+            repository.record_intent(intent)
+            attempt = _attempt(intent, status="unresolvable", reasons=("cash_merger",),
+                               observed=datetime(2026, 8, 12, tzinfo=UTC))
+            repository.record_attempt(attempt, decision_session=intent.decision_session_et)
+
+            def all_row(generated: datetime) -> dict[str, object]:
+                report = build_performance_cohorts(repository, generated_at=generated, minimum_samples=1)
+                return next(row for row in report["rows"] if row["cohort_type"] == "all")
+
+            row = all_row(datetime(2026, 8, 20, tzinfo=UTC))
+            self.assertEqual((row["pending_selected_samples"], row["unresolvable_selected_samples"]), (0, 1))
+            self.assertEqual(row["unresolvable_selected_securities"], 1)
+            # A settled cessation never holds the route as an overdue pending decision.
+            self.assertIsNone(row["route_oldest_pending_decision_session_et"])
+            # A report dated before the attempt still sees the decision pending.
+            earlier = all_row(datetime(2026, 8, 10, tzinfo=UTC))
+            self.assertEqual((earlier["pending_selected_samples"], earlier["unresolvable_selected_samples"]), (1, 0))
 
     def test_report_reads_only_the_partitions_its_window_can_reach(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

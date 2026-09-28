@@ -32,6 +32,7 @@
     "activate-local-release",
     "activate-serving-bundle",
     "build-outcome-performance-report",
+    "collect-outcome-bars",
     "mature-outcomes",
     "publish-drift-assessment",
     "publish-live-features",

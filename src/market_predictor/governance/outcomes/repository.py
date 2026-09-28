@@ -123,9 +123,47 @@ class OutcomeRepository:
             raise PredictionConflictError from exc
         if intent.semantic_prediction_id != attempt.semantic_prediction_id:
             raise PredictionConflictError
-        path = self._partition(decision_session) / "attempts" / key / f"{_digest(attempt.attempt_id)}.json"
-        self._write_idempotent(path, attempt)
+        # Attempts are an append log in sequence order; the latest decides. An attempt that
+        # repeats the latest one's status, reasons and missing intervals is not written again.
+        root = self._partition(decision_session) / "attempts" / key
+        with file_lock(root / "log"):
+            latest, count = self._attempt_log(root, key)
+            if latest is not None and (latest.status, latest.reasons, latest.missing_intervals) == (
+                attempt.status,
+                attempt.reasons,
+                attempt.missing_intervals,
+            ):
+                return latest
+            _write_json_durable(root / f"{count + 1:08d}.json", attempt.model_dump(mode="json"))
         return attempt
+
+    def latest_attempt(self, maturation_key: str, session: date) -> MaturationAttempt | None:
+        """The attempt that decides an intent without an outcome, or None before its first attempt."""
+        key = _digest(maturation_key)
+        return self._attempt_log(self._partition(session) / "attempts" / key, key)[0]
+
+    def attempts(self, maturation_key: str, session: date) -> list[MaturationAttempt]:
+        """An intent's whole attempt log, in sequence order."""
+        key = _digest(maturation_key)
+        root = self._partition(session) / "attempts" / key
+        _, count = self._attempt_log(root, key)
+        attempts = [self._load_model(root / f"{sequence:08d}.json", MaturationAttempt) for sequence in range(1, count + 1)]
+        if any(attempt.maturation_key != key for attempt in attempts):
+            raise PredictionConflictError
+        return attempts
+
+    def _attempt_log(self, root: Path, key: str) -> tuple[MaturationAttempt | None, int]:
+        if not root.exists():
+            return None, 0
+        names = sorted(path.stem for path in root.glob("*.json"))
+        if names != [f"{sequence:08d}" for sequence in range(1, len(names) + 1)]:
+            raise PredictionConflictError
+        if not names:
+            return None, 0
+        latest = self._load_model(root / f"{names[-1]}.json", MaturationAttempt)
+        if latest.maturation_key != key:
+            raise PredictionConflictError
+        return latest, len(names)
 
     def record_outcome(
         self,

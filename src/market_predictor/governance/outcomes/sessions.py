@@ -30,6 +30,13 @@ def _session(decision_session: date, closes: pd.Series) -> pd.Timestamp:
     return label
 
 
+def session_close(session: date) -> datetime:
+    """The close of an XNYS session, in UTC."""
+    closes = _closes()
+    close: datetime = closes.loc[_session(session, closes)].to_pydatetime()
+    return close
+
+
 def session_after(session: date, count: int) -> date:
     """The XNYS session `count` sessions after `session`, itself an XNYS session."""
     if count < 0:

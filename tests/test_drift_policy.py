@@ -46,6 +46,10 @@ class DriftPolicyTests(unittest.TestCase):
             minimum_independent_decision_groups=5,
         )
 
+    def test_settlement_must_end_before_the_grace(self) -> None:
+        with self.assertRaisesRegex(ValidationError, "settlement"):
+            DriftPolicy(outcome_settlement_days=7, pending_grace_days=7)
+
     def test_stable_and_warning_performance_remain_actionable(self) -> None:
         stable = self._evaluate(self._report(samples=20))
         warning = self._evaluate(self._report(samples=20, drawdown=0.20))
@@ -599,6 +603,8 @@ class DriftPolicyTests(unittest.TestCase):
             "actionable_predictions": total_predictions,
             "matured_selected_samples": samples,
             "pending_selected_samples": pending_count,
+            "unresolvable_selected_samples": 0,
+            "unresolvable_selected_securities": 0,
             "oldest_pending_decision_time_utc": (
                 oldest_pending.isoformat().replace("+00:00", "Z")
                 if oldest_pending is not None

@@ -39,6 +39,11 @@ from market_predictor.sources.http import HttpByteResponse
 BAR_RECEIPT_SCHEMA = "market_predictor.outcome_bar_receipt"
 ACTION_RECEIPT_SCHEMA = "market_predictor.outcome_corporate_action_receipt"
 BarTimeframe = Literal["1Day", "1Min"]
+# The maturation bar schema `daily_path_bars` produces.
+DAILY_BAR_COLUMNS = (
+    "ticker", "session_date_et", "timeframe", "bar_start_utc", "bar_end_utc", "available_at_utc",
+    "open", "high", "low", "close", "volume", "price_feed", "adjustment", "source_artifact_sha256",
+)
 _PAGE_SYMBOLS = 50
 _PAGE_LIMIT = 10_000
 _MAXIMUM_PAGES = 20
@@ -417,11 +422,7 @@ def daily_path_bars(receipt: BarReceipt, symbol: str) -> pd.DataFrame:
                 "source_artifact_sha256": receipt.receipt_id,
             }
         )
-    columns = [
-        "ticker", "session_date_et", "timeframe", "bar_start_utc", "bar_end_utc", "available_at_utc",
-        "open", "high", "low", "close", "volume", "price_feed", "adjustment", "source_artifact_sha256",
-    ]
-    return pd.DataFrame(records, columns=columns)
+    return pd.DataFrame(records, columns=list(DAILY_BAR_COLUMNS))
 
 
 def _publish(
