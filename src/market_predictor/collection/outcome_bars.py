@@ -2,14 +2,16 @@
 
 Every provider page is stored byte for byte under its SHA-256, and each request unit gets one
 immutable, self-hashed receipt, written after its pages. A receipt is `complete` only when its
-page chain ended; anything else is `failed` and records why. Loading verifies every hash and
-decodes the stored pages again with the shared provider decoders, so a receipt proves exactly
-what the provider returned.
+page chain ended; anything else is `failed` and records why. Loading verifies every hash,
+anchors and links the page chain, and decodes the stored pages again with the shared provider
+decoders. A receipt so proves that what it stores is consistent and complete; it is self-hashed,
+not signed, so it does not prove who wrote it.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import os
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -76,6 +78,9 @@ class OutcomeBarUnit:
             raise ValueError("an outcome bar unit needs its sessions in order after the decision")
         if self.timeframe == "1Min" and self.first_session != self.last_session:
             raise ValueError("a one-minute outcome bar unit covers one session")
+        # The decision bar comes from the same receipt as the path, since its close scales the ATR.
+        if self.timeframe == "1Day" and self.first_session != self.decision_session:
+            raise ValueError("a daily outcome bar unit starts on its decision session")
         for session in (self.decision_session, self.first_session, self.last_session):
             if not _is_session(session):
                 raise ValueError(f"not an XNYS session: {session}")
@@ -171,7 +176,11 @@ class CorporateActionUnit:
 
 @dataclass(frozen=True)
 class BarReceipt:
-    """A verified bar receipt; `rows` holds each symbol's decoded provider rows when complete."""
+    """A verified bar receipt; `rows` holds each symbol's decoded provider rows when complete.
+
+    A bar retrieved before it was final (a daily bar before its session's close plus the
+    finalization delay, a minute bar before the session close) counts as not returned.
+    """
 
     receipt_id: str
     unit: OutcomeBarUnit
@@ -293,8 +302,8 @@ def load_bar_receipts(root: Path, decision_sessions: Iterable[date]) -> tuple[Ba
                 raise DataReadinessError("a bar receipt's page chain does not link")
             for symbol, symbol_rows in page.bars.items():
                 for row in symbol_rows:
-                    _bar_session(row.get("t"), unit)
-                    rows.setdefault(symbol, []).append((row, response.retrieved_at_utc))
+                    if response.retrieved_at_utc >= _final_at(_bar_session(row.get("t"), unit), unit.timeframe):
+                        rows.setdefault(symbol, []).append((row, response.retrieved_at_utc))
         receipts.append(
             BarReceipt(
                 receipt_id=str(record["receipt_id"]),
@@ -321,6 +330,9 @@ def load_action_receipts(root: Path, decision_sessions: Iterable[date]) -> tuple
                 raise DataReadinessError("a corporate-action receipt's page chain does not link")
             for family, records in families.items():
                 actions.setdefault(family, []).extend(records)
+        identities = [str(item.get("id")) for records in actions.values() for item in records if item.get("id")]
+        if len(identities) != len(set(identities)):
+            raise DataReadinessError("a corporate-action receipt repeats an action across its pages")
         receipts.append(
             ActionReceipt(
                 receipt_id=str(record["receipt_id"]),
@@ -334,27 +346,35 @@ def load_action_receipts(root: Path, decision_sessions: Iterable[date]) -> tuple
     return tuple(receipts)
 
 
-def latest_complete_bar_receipt(
+def complete_bar_receipts(
     receipts: Iterable[BarReceipt],
     *,
     decision_session: date,
     symbol: str,
+    first_session: date,
+    last_session: date,
     timeframe: BarTimeframe = "1Day",
-) -> BarReceipt | None:
-    """The receipt that supplies the symbol's whole path: its latest complete one.
+) -> tuple[BarReceipt, ...]:
+    """The complete receipts that asked for the symbol over every session in the range, oldest first.
 
-    A receipt reflects the price adjustments as of its own retrieval, so a path never mixes
-    sessions from two receipts.
+    Each reflects the price adjustments as of its own retrieval, so a path takes all of its
+    sessions from one of them.
     """
-    candidates = [
-        receipt
-        for receipt in receipts
-        if receipt.complete
-        and receipt.unit.timeframe == timeframe
-        and receipt.unit.decision_session == decision_session
-        and symbol in receipt.unit.symbols
-    ]
-    return max(candidates, key=lambda receipt: (receipt.finished_at_utc, receipt.receipt_id), default=None)
+    return tuple(
+        sorted(
+            (
+                receipt
+                for receipt in receipts
+                if receipt.complete
+                and receipt.unit.timeframe == timeframe
+                and receipt.unit.decision_session == decision_session
+                and symbol in receipt.unit.symbols
+                and receipt.unit.first_session <= first_session
+                and last_session <= receipt.unit.last_session
+            ),
+            key=lambda receipt: (receipt.finished_at_utc, receipt.receipt_id),
+        )
+    )
 
 
 def daily_path_bars(receipt: BarReceipt, symbol: str) -> pd.DataFrame:
@@ -365,6 +385,10 @@ def daily_path_bars(receipt: BarReceipt, symbol: str) -> pd.DataFrame:
     """
     if not receipt.complete or receipt.unit.timeframe != "1Day" or symbol not in receipt.unit.symbols:
         raise DataReadinessError("daily path bars need a complete daily receipt that requested the symbol")
+    sessions = [_bar_session(row.get("t"), receipt.unit) for row, _ in receipt.rows.get(symbol, ())]
+    if len(sessions) != len(set(sessions)):
+        # Two bars for one session in one response is a provider defect, never a gap.
+        raise DataReadinessError(f"a receipt holds duplicated sessions for {symbol}: {receipt.receipt_id}")
     records: list[dict[str, object]] = []
     for row, retrieved_at in receipt.rows.get(symbol, ()):
         session = _bar_session(row.get("t"), receipt.unit)
@@ -456,12 +480,15 @@ def _verified_pages(
     if record["status"] != "complete":
         return []
     pages = [_mapping(page) for page in _sequence(record["pages"])]
-    if not pages:
-        raise DataReadinessError("a complete outcome receipt holds no page")
+    if not pages or pages[0].get("request_page_token") is not None:
+        raise DataReadinessError("a complete outcome receipt must start with the chain's first page")
     verified: list[tuple[HttpByteResponse, str | None, str | None]] = []
     for index, page in enumerate(pages):
         response_record = _mapping(page["response"])
-        body_path = root / "bodies" / f"{response_record.get('body_sha256')}.json"
+        body_sha256 = str(response_record.get("body_sha256"))
+        if len(body_sha256) != 64 or any(character not in "0123456789abcdef" for character in body_sha256):
+            raise DataReadinessError("an outcome receipt names an invalid page body")
+        body_path = root / "bodies" / f"{body_sha256}.json"
         try:
             body = body_path.read_bytes()
         except OSError as exc:
@@ -491,10 +518,19 @@ def _bar_session(value: object, unit: OutcomeBarUnit) -> date:
         raise DataReadinessError(f"a provider bar has an invalid timestamp: {value}") from exc
     if stamp.tzinfo is None:
         raise DataReadinessError(f"a provider bar timestamp is not timezone-aware: {value}")
-    session: date = stamp.tz_convert(_NEW_YORK).date()
+    local = stamp.tz_convert(_NEW_YORK)
+    session: date = local.date()
+    if unit.timeframe == "1Day" and (local.hour, local.minute, local.second, local.microsecond) != (0, 0, 0, 0):
+        raise DataReadinessError(f"a daily provider bar is not stamped at midnight New York time: {value}")
     if not unit.first_session <= session <= unit.last_session or not _is_session(session):
         raise DataReadinessError(f"a provider bar lies outside the requested sessions: {value}")
     return session
+
+
+def _final_at(session: date, timeframe: BarTimeframe) -> datetime:
+    """When a bar of the session is final: the close plus the delay for daily bars, the close for minutes."""
+    close = _session_close(session)
+    return close + _DAILY_FINALIZATION if timeframe == "1Day" else close
 
 
 def _store_body(root: Path, response: HttpByteResponse) -> None:
@@ -515,8 +551,20 @@ def _write_once(path: Path, payload: bytes) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
+        _fsync_directory(path.parent)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _fsync_directory(path: Path) -> None:
+    """Make a rename durable; Windows has no directory handles to sync."""
+    if os.name == "nt":
+        return
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def _encode(value: object) -> bytes:
@@ -542,9 +590,10 @@ def _session_close(session: date) -> datetime:
 
 
 def _number(row: Mapping[str, Any], key: str) -> float:
+    """A bar field as a number; a missing or non-numeric one is NaN, so the validator marks the bar unusable."""
     value = row.get(key)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise DataReadinessError(f"a provider bar field is not a number: {key}")
+        return math.nan
     return float(value)
 
 

@@ -48,8 +48,11 @@ def monitoring_lease(
             "started_at_utc": datetime.now(UTC).isoformat(),
         }
         temporary = owner_path.with_name(f".{owner_path.name}.{uuid4().hex}.tmp")
-        temporary.write_text(json.dumps(owner, sort_keys=True), encoding="utf-8")
-        os.replace(temporary, owner_path)
+        try:
+            temporary.write_text(json.dumps(owner, sort_keys=True), encoding="utf-8")
+            os.replace(temporary, owner_path)
+        finally:
+            temporary.unlink(missing_ok=True)
         try:
             yield owner
         finally:
