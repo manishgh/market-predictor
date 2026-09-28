@@ -1614,6 +1614,77 @@ prediction is registered or matured yet, so no stored record changes.
    halt, each cessation sub-reason, attempt order and change-only writes, supersession,
    route pending exclusion, the ceiling with few samples, and the sensitivity values.
 
+Consolidated review decisions for part (2b) (September 28; neither design review found a
+blocker; these supersede the design above where they differ):
+
+- One price basis per path (majors in both reviews). Each receipt reflects the price
+  adjustments as of its own retrieval. For each decision session and symbol, the whole
+  path, the decision bar included, comes from exactly one receipt: the latest one whose
+  page chain completed. A newer receipt replaces the whole path, never single sessions.
+  The name-change fallback is dropped: a request for FB with `asof` 2022-06-01 returned
+  every session through 2022-06-14, after the rename to META on 2022-06-09 (measured
+  September 28), so `asof` on the decision session already follows renames. A rename it
+  did not follow would leave a gap without cessation evidence: pending, then overdue for
+  operator action. A duplicate means two rows for one session within one response; it
+  blocks as a data defect. Re-collection never creates duplicates.
+- Settlement before the deadline (code major). A gap is proven by a complete receipt
+  retrieved at least `outcome_settlement_days` (3) after the horizon's last close, a new
+  drift-policy field that must be shorter than `pending_grace_days` (7). An ordinary
+  cessation then becomes `unresolvable` before its outcome could turn overdue. The nightly
+  order is collect, mature, report, drift.
+- Unresolvable leaves pending in the same part (code major). In part (2b-2), an intent
+  whose latest attempt is `unresolvable` leaves the window's pending set,
+  `pending_selected_samples` and the oldest-pending fields as well as the route index scan,
+  and cohort rows count it as `unresolvable_selected_samples` with the number of distinct
+  securities.
+- Interior gaps must be corroborated. Before a proven gap with later usable bars becomes
+  `interior_gap`, one-minute bars for that session are requested with a receipt. Any bar
+  means the stock traded, so the gap is a collection defect: pending, for operator action.
+- Cessation evidence. The corporate-actions query filters on the provider's process date,
+  so it spans process dates from the decision session to the earlier of today and the
+  first gap plus 90 days, and is repeated on later runs. Evidence counts when its effective
+  date lies in [decision session, horizon's last close plus the grace], inclusive. The
+  acquiree or removed symbol must match the symbol in use at the first gap, after any
+  followed rename.
+- The ceiling applies after evidence sufficiency (the effective periods), not after the
+  minimum matured samples, since outcomes of one acquired stock cluster.
+- Sensitivity, still diagnostic. The -30% and -55% fills are named a stress, not a proxy,
+  since removals that are not mergers are broader than Shumway's performance-related
+  delistings. Stock mergers use the acquirer rate times the acquirer's close on the
+  effective date (its daily bar requested with a receipt), and stock-and-cash mergers add
+  the cash rate. An interior gap continues the managed path after the halt, a stop crossed
+  during the halt filling at the lower of the stop and the first open after it
+  (`executable_fill_price`). Each fill's benchmark runs from the entry open to the fill's
+  date. The listing exchange is taken at decision time: part (3) and the live-input
+  publisher record it on the intent; until then, and whenever it is unknown or OTC, the
+  -55% fill applies. No asset lookup after cessation.
+- Receipts keep every page's full response metadata (status, requested and final URL,
+  redirect chain, retrieval time, headers, content type, body length and hash) so that
+  loading rebuilds the response and re-runs the shared decoders. The rebuild helper lives
+  in `evidence`. A receipt's retrieval times lie within its attempt; a non-200 response,
+  a redirect or a broken page chain is recorded as a failed receipt that never settles; a
+  page-count cap bounds a chain. "No bars" for a symbol is decided only by a complete
+  chain. Alpaca answers `{"bars":{}}` when no requested symbol has bars and omits a symbol
+  without bars from a response that has others (measured September 28 for TWTR after its
+  delisting); a `"bars": null` response fails the shared decoder and so the receipt. A
+  bar whose timestamp is not an XNYS session fails the receipt.
+- Re-collection stops. A pending gap unit is collected daily until it settles; an
+  unresolvable or overdue one weekly until 90 days past its deadline, then it is frozen
+  (a manual rerun can still supersede it).
+- Reuse without coupling. `sources/alpaca_corporate_actions.py` is used unchanged (one
+  retry, no raise on status, so the collector records failures). The research collector
+  (`swing/datasets/corporate_action_collection.py`, pinned by corrected-outcome evidence)
+  is neither imported nor edited; its patterns are copied. Real pages from
+  `data/raw/swing_full_cohort_corporate_actions` serve as classification fixtures.
+- The monitoring lease is a new module on `locking.file_lock`, not an edit of the pinned
+  `heavy_jobs.py`. Registration, collection, maturation and reporting share it with a
+  bounded wait, so a nightly step waits for the previous one instead of failing.
+- Added tests: receipts that differ by an adjustment factor; a settled cessation that never
+  makes the route not ready; window pending without unresolvable intents; a merger
+  processed after the grace; a failed or truncated chain; a no-data response; receipt or
+  body tampering and a missing body; lease contention; the re-collection stop rule; the
+  halt corroboration; recorded real corporate-action pages.
+
 The September 20 user instruction explicitly extends the completed HTTP/CLI and
 TradingFlow cleanup to all remaining Market Predictor implementation. This is a
 changed requirement, not a reopening of previously passed tests without cause.
