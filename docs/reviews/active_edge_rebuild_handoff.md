@@ -1,7 +1,7 @@
 # Active Edge Rebuild Handoff
 
 Status: active
-Last updated: 2026-09-28
+Last updated: 2026-09-29
 Repository: `C:\project\market-predictor`
 Branch: `main`
 Last verified publisher implementation: `cb70f81`, following `ebe5dfb`.
@@ -73,10 +73,10 @@ Main integration receipt (September 28): the user explicitly authorized merging
 both projects into main and pushing to their configured GitHub remotes. Market
 Predictor main fast-forwarded to `bb88f75` and was pushed, including publisher commits
 `ebe5dfb`/`cb70f81` and all monitoring commits. TradingFlow main includes
-`e3b6734` locally. Market Predictor's earlier publication blocker is resolved.
-Automatic approval review rejected the TradingFlow push because private source and
-documentation require explicit approval for that exact payload and configured GitHub
-destination. A payload-specific approval question is pending; no retry was attempted.
+`e3b6734` on its remote main. On September 29 the user renewed publication approval
+after the exact payload/destination questions. Both pushes succeeded: Market Predictor
+through `8d6a9c6` and TradingFlow through `e3b6734`. Publication blockers are resolved;
+the original TradingFlow dirty checkout and running app remain unchanged.
 
 TradingFlow's predictor integration was isolated onto committed main, including the
 required evidence records, signal display and Web/Android projections. Only
@@ -1428,9 +1428,7 @@ the frozen numeric training boundary or authorize promotion.
 Exact next checkpoint: obtain approved production canonical stock/benchmark bars,
 point-in-time membership and catalyst authority paths with independent pins, then run
 the verified nightly publisher. Verify a promoted release before session registration.
-Source implementation is complete and Market Predictor main is pushed. TradingFlow's
-verified main commit awaits payload-specific push approval; do not retry before it
-arrives. Do not reimplement the
+Source implementation is complete and both main branches are pushed. Do not reimplement the
 publisher or API v4 migration. TradingFlow's running original checkout remains dirty
 and unchanged; reconcile its unrelated work separately before any runtime deployment.
 Do not advance to part (4) inference/curve/rank or part (6) replay until the current

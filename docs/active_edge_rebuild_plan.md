@@ -2,7 +2,7 @@
 
 Status: active
 
-Last updated: 2026-09-28
+Last updated: 2026-09-29
 
 Repository: `C:\project\market-predictor`
 
@@ -50,8 +50,7 @@ outside this repository.
 
 Current checkpoint: **Nightly live-input publisher and API v4 consumer** (`in progress`).
 Monitoring and publisher software is verified and pushed on main. The reviewed
-API v4 consumer integration is also committed on TradingFlow main, with its push awaiting
-payload-specific approval after automatic review rejection. The current checkpoint
+API v4 consumer integration is also committed and pushed on TradingFlow main. The current checkpoint
 remains environment_pending for approved live inputs and promoted-release registration;
 no further publisher or consumer implementation is planned absent a concrete defect.
 Nightly live-input publisher freeze (September 28, user requested implementation):
@@ -110,10 +109,10 @@ Main integration receipt (September 28): the user explicitly authorized merging
 both projects into main and pushing to their configured GitHub remotes. Market
 Predictor main fast-forwarded to `bb88f75` and was pushed, including publisher commits
 `ebe5dfb`/`cb70f81` and all monitoring commits. TradingFlow main includes
-`e3b6734` locally. Market Predictor's earlier publication blocker is resolved.
-Automatic approval review rejected the TradingFlow push because private source and
-documentation require explicit approval for that exact payload and configured GitHub
-destination. A payload-specific approval question is pending; no retry was attempted.
+`e3b6734` on its remote main. On September 29 the user renewed publication approval
+after the exact payload/destination questions. Both pushes succeeded: Market Predictor
+through `8d6a9c6` and TradingFlow through `e3b6734`. Publication blockers are resolved;
+the original TradingFlow dirty checkout and running app remain unchanged.
 
 TradingFlow's predictor integration was isolated onto committed main, including the
 required evidence records, signal display and Web/Android projections. Only
