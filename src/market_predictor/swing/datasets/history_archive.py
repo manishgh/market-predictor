@@ -135,6 +135,7 @@ class _VerifiedPlan:
     universe_sha256: str
     adjustment: str
     provider_symbols: dict[str, str] | None
+    scope: str | None
 
 
 def collect_swing_history_plan(
@@ -357,7 +358,8 @@ def load_complete_swing_history_collection(
         or request.get("price_feed") != PRICE_FEED
         or request.get("adjustment") != plan.adjustment
         or type(request.get("transport_receipts_required", False)) is not bool
-        or (plan.adjustment == "raw" and request.get("transport_receipts_required") is not True)
+        or ((plan.adjustment == "raw" or plan.scope == "initial_fit_adjusted_history")
+            and request.get("transport_receipts_required") is not True)
         or int(request.get("workers", -1)) != MAXIMUM_WORKERS
         or float(request.get("maximum_memory_gib", -1.0)) != MAXIMUM_MEMORY_GIB
         or manifest.get("schema") != COLLECTION_SCHEMA
@@ -451,6 +453,7 @@ def _load_verified_plan(directory: Path, *, expected_plan_authority_sha256: str 
         raise DataReadinessError("feature plan snapshot cannot authorize another acquisition scope")
     if scope != manifest.get("scope") or scope not in {
         None, "initial_fit_raw_share_acquisition", "historical_symbol_correction", "corrected_adjusted_feature_history",
+        "initial_fit_adjusted_history",
     }:
         raise DataReadinessError("swing acquisition request/manifest scope differs or is unsupported")
     if scope is not None and expected_plan_authority_sha256 is None:
@@ -521,6 +524,15 @@ def _load_verified_plan(directory: Path, *, expected_plan_authority_sha256: str 
         validate_feature_history_collection_plan(directory=directory, request=request, manifest=manifest, units=units,
             implementation_snapshot=feature_plan_snapshot)
         provider_symbols = dict(cast(dict[str, str], request["provider_symbols"]))
+    if scope == "initial_fit_adjusted_history":
+        from market_predictor.swing.datasets.initial_fit_adjusted_history import (
+            validate_initial_fit_adjusted_history_collection_plan,
+        )
+
+        validate_initial_fit_adjusted_history_collection_plan(
+            directory=directory, request=request, manifest=manifest, units=units,
+        )
+        provider_symbols = dict(cast(dict[str, str], request["provider_symbols"]))
     _validate_plan_unit_coverage(units, manifest=manifest, daily_bars=units_record)
     hashes = {"request_sha256": request_sha256, "manifest_sha256": manifest_sha256,
         "authority_sha256": authority_sha256, "units_sha256": units_sha256}
@@ -531,6 +543,7 @@ def _load_verified_plan(directory: Path, *, expected_plan_authority_sha256: str 
         universe_sha256=universe_sha256,
         adjustment=str(units_record["adjustment"]),
         provider_symbols=provider_symbols,
+        scope=scope,
     )
 
 
@@ -615,6 +628,10 @@ def _validate_plan_unit_coverage(
         return
     if manifest.get("scope") == "corrected_adjusted_feature_history":
         # The owner replay permits exactly two adjusted stock streams, not a panel.
+        return
+    if manifest.get("scope") == "initial_fit_adjusted_history":
+        # The owner replay reproduces each independently pinned benchmark start;
+        # an accepted pre-inception prefix is outside its acquisition window.
         return
     benchmark_units = units[units["role"].eq("benchmark")]
     benchmark_tickers = set(benchmark_units["ticker"].astype(str))

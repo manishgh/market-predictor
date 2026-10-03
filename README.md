@@ -341,6 +341,23 @@ then verifies the publication before exposing the new directory. Provider bytes 
 retrieval timestamps are preserved; derived ingestion timestamps describe the new
 materialization. Both reconstruction commands publish source-only evidence.
 
+For development adjusted history, use
+`python -m market_predictor.swing.datasets.initial_fit_adjusted_history`
+with `publish-plan`, `collect`, or `offline`, `--config`,
+`--expected-policy-sha256` and `--plan-dir`. Collection requires `--out-dir`
+and an independently saved `--expected-plan-sha256`; `--max-units` bounds each
+resumable run (default one). Completed offline replay also requires
+`--expected-archive-sha256`. Partial collection stays in private resumable staging;
+the final directory appears after all unit normalization, benchmark coverage and
+source-hash checks pass. The plan preserves the accepted initial-fit identities,
+expands only source-query warm-up, and records reviewed FI/SATS mappings separately
+from historical membership. Collection captures exact SIP daily adjusted responses.
+The authority-bound adjusted-source reader uses the shared bar normalizer, retains
+missing/invalid stock sessions explicitly and rejects incomplete benchmarks. The
+historical close-plus-15-minute availability rule is a research assumption; actual
+collection timestamps remain separate. These sources do not authorize training or
+promotion by themselves.
+
 Windows adapter and scheduler installation:
 
 ```powershell

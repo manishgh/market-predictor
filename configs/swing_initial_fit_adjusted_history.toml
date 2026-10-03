@@ -1,0 +1,10 @@
+schema_version = "market_predictor.initial_fit_adjusted_history_policy"
+parent_plan_authority = { path = "data/research/swing_initial_fit_raw_price_requirements/_authority.json", sha256 = "e5f81597594f85485eaa83e75cd81b5f849e20c63dc3ab3f89b3cbb85c6baf5b" }
+reviewed_feature_history_policy = { path = "configs/swing_corrected_feature_history.toml", sha256 = "c63314cb9daebcee5142395e766a5932ba7854596a7707060e7ea5602f528818" }
+warmup_start = "2018-05-29"
+decision_start = "2019-07-09"
+numeric_end = "2024-05-28"
+adjustment = "all"
+benchmark_start_policy = "inherit_pinned_contiguous_prefix"
+minimum_benchmark_warmup_sessions = 253
+purpose = "source_queries_only_preserve_parent_decision_population"
