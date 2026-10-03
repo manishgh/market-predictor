@@ -68,12 +68,19 @@ training, source publication, promotion, deployment or TradingFlow operation occ
 README now states these limits and the completed monitoring/replay behavior.
 
 Current checkpoint: **Investment dataset policy and source admission** (`in progress`).
-Pending user clarification: may investment research use retrospective horizon-close
-maturity when original historical capture timestamps are unavailable, provided all
-corporate-event accounting is complete? This would remain research-only and would
-not prove historical source availability or authorize serving. The alternative is
-verified historical availability only. The current target contract retains unknown
-clocks as unavailable; do not silently change it while the question is pending.
+October 3 clarification: the prior timestamp question was premature and is withdrawn.
+No row-level 63/252 dataset audit established a missing-timestamp count. The new
+projection's ability to reject unknown clocks is a software rule, not evidence that
+the actual dataset has that defect. Repeated collection and completed swing research
+must not be described as failed on that basis. The current feature acceptance audit
+explicitly says technical fixed-horizon research does not require historical news
+receipt proof; it uses independently usable matured labels and causal features.
+Next, inspect the actual permitted source/feature/label metadata, distinguish market
+or event time, retrieval time, historical availability and research label maturity,
+and report exact affected fields/rows if a gap exists. Reuse established applicable
+research rules; do not request blanket timestamp assumptions without measured evidence.
+The user has not approved any new assumption, and this clarification changes no code,
+source clock, trained artifact, admission rule or historical research result.
 
 Concrete remaining implementation: independent feature-only/source admission and
 immutable horizon-specific dataset publication; frozen investment training requests,
