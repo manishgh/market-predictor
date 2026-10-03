@@ -260,7 +260,35 @@ admission. Next publisher must check all unit/query/body/clock evidence against 
 fresh plan and rebuild separate current-schema bars/receipts, then round-trip the
 strict current reader. No missing-transport or redownload claim is supported here.
 
-Remaining work: reconstruct initial-fit raw, corrected-symbol/adjusted, warm-up and
+
+
+Historical raw-price reconstruction completed with the canonical collector in
+implementation `2216a2d` (pushed):
+`data/raw/swing_initial_fit_raw_share_canonical` contains 564 observed units / 564
+terminal pages / 601,834 rows. The normal current reader passed; zero failed or
+unattempted units. All declared retained pages were consumed, original source hashes
+still matched and the fresh plan remained unchanged before publication. Original
+provider entity bytes and retrieval clocks are preserved. Derived wrappers, paths,
+bars and ingestion times record this actual reconstruction, not an old capture.
+Independent collection authority:
+`3cd0699a090208dcd3455bb0be33cd0243ce303ce1cc3af1cd48f2f4ef758c28`;
+manifest `3ca4a734da1b957f24e4c424a3a69d22f8b5631936a4e6910ac139ab86ebe4ef`;
+reconstruction receipt
+`d8726f10680ca6d48952085ee202becd91bf2457c2fbc36db6c21fd852924424`.
+All 44 daily-history tests passed, plus 3 naming/continuity checks. Ruff and strict
+mypy passed the new source. Plan/design and one consolidated code/ML review passed.
+No provider requests, label/evaluation payload reads, training or TF changes.
+
+Next correction dependency: document metadata matches the current contract (9 receipts,
+7 archived documents; unchanged report pin a687402063d6539e524efcdcd88e897a341f6e37adb51451911cfad8d5b44509).
+Rebind only the symbol policy's four parent plan/archive path/hash fields to the fresh
+plan and raw archive above. Rebind the adjusted-history policy's correction-config
+hash, then publish fresh correction plans. Replay the old two-unit raw and adjusted
+archives with the same canonical history publisher into separate unversioned outputs.
+These are source corrections; historical trained models and joined labels remain
+historical and are not admitted by new source receipt hashes.
+
+Remaining work: reconstruct corrected-symbol/adjusted, warm-up and
 post-window source publications from preserved evidence under current collection
 schemas. The combined adjusted-store authority is coupled to the historical panel
 and old strategy semantic identity; a bounded source-only authority path is required

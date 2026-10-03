@@ -10,6 +10,11 @@ Daily/revision replay has no failed or pending units through October 2. Four emp
 capture intents remain unavailable evidence; they do not establish missing daily
 history or missing clocks in downloaded pages. The fresh initial-fit raw-price plan
 and independently pinned replay also pass, reading only permitted identity columns.
+Implementation `2216a2d` also reconstructs all 564 initial-fit raw-price units /
+601,834 rows through the canonical collector and current reader. Original provider
+bytes/retrieval clocks are preserved; derived ingestion timestamps record actual
+materialization. All 44 daily-history tests and lint/types passed; independent review
+passed. No new downloads or feature/label publication/training occurred.
 Exact paths/hashes and the remaining historical source dependency chain are in the
 active handoff. These facts do not admit current-schema model features/targets or
 recertify historical fitted models. The results below remain historical evidence.
