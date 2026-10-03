@@ -205,4 +205,3 @@ def test_duplicate_successful_original_attempt_refused(reconstruction: dict[str,
     _write(duplicate / "receipt.json", receipt)
     with pytest.raises(DataReadinessError, match="duplicate successful"):
         _reconstruct(reconstruction)
-
