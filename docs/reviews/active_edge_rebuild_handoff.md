@@ -17,6 +17,48 @@ The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
 
+Investment target projection completed in `147e5bd` and pushed on main (October 3).
+The additive investment package binds four holding specifications and their source
+identities, verifies next-open entry and exact 63/252 session closes, prohibits ordinary
+sales, and selects the horizon snapshot from the unchanged shared accounting kernel.
+Corporate claims/payment timing remain kernel-owned. Net return deducts the explicit
+20-bps research assumption once; comparisons use matching gross benchmark values.
+Unknown valuation/availability produces unavailable supervision with specific reasons.
+Result flags explicitly refuse training readiness, promotion and production admission;
+source identity matching alone does not establish underlying source authority.
+All four pinned swing accounting/ordinary-holding files remain byte-identical.
+
+Verification: 16 target tests passed; 231 architecture/dependency checks passed (230
+first, one temporary-directory setup error rerun successfully with writable TEMP).
+Ruff clean over investment sources/tests and dependency guard; strict mypy clean on
+all three investment modules. Consolidated code/ML review passed. No real data read,
+training, source publication, promotion, deployment or TradingFlow operation occurred.
+README now states these limits and the completed monitoring/replay behavior.
+
+Current checkpoint: **Investment dataset policy and source admission** (`in progress`).
+Pending user clarification: may investment research use retrospective horizon-close
+maturity when original historical capture timestamps are unavailable, provided all
+corporate-event accounting is complete? This would remain research-only and would
+not prove historical source availability or authorize serving. The alternative is
+verified historical availability only. The current target contract retains unknown
+clocks as unavailable; do not silently change it while the question is pending.
+
+Concrete remaining implementation: independent feature-only/source admission and
+immutable horizon-specific dataset publication; frozen investment training requests,
+purged folds and artifact publication; then separately verified regressor promotion,
+live feature parity, horizon-specific monitoring and forecast API. Existing swing
+research artifacts and the new projection do not implement those stages.
+Reuse the public return estimators/validation primitives where their contracts apply;
+do not call swing-only research orchestration or relabel its non-serving artifacts.
+Preserve the six-spec swing budget, exclusion rules, permitted initial-fit calendar and
+sealed-evidence boundary. An investment experiment needs its own frozen budget/splits.
+
+Other unresolved evidence: part (4b)'s raw per-lot event/cost portfolio curve and
+locked-test threshold comparison; current production membership/catalyst authorities;
+an approved promoted model. Raw Alpaca collection and provider credentials do not
+provide these approvals or ownership/payment facts. No profitable model or full
+training/API readiness is asserted. TradingFlow remains untouched.
+
 Part (4a) completed in `4ba96f6` and pushed on main (October 3).
 Reports now count matured complete decision sessions / horizon, retain verified
 zero-selection exposure, and include unselected scored outcomes in equal-sector
@@ -34,7 +76,7 @@ test or TradingFlow operation. Drift policy pin is
 Part (4b) remains pending raw per-lot corporate-event/cost evidence and a governed
 curve adapter; adjusted monitoring prices cannot satisfy that contract.
 
-Current checkpoint: **Investment 63/252 target contract and shared-kernel projection** (`in progress`).
+Completed checkpoint: **Investment 63/252 target contract and shared-kernel projection**.
 The approved open-ended investment cohort needs separate 63- and 252-XNYS-session
 forecasts. Freeze marked holding value at the horizon, not an enforced liquidation:
 stock gross return, stock net return after the explicit 20-bps prepaid research-cost
@@ -1577,13 +1619,15 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: implement the investment target contract and additive shared-
-kernel 63/252 projection under the current freeze. Replay part (6) and monitoring
-part (4a) are pushed. Part (4b) and live activation retain the exact missing evidence
-listed above. Dataset/training/admission/API follow the target contract; do not call
-the projection training-ready. Preserve pinned swing code and leave TradingFlow alone.
-Files: investment contracts/projection; swing/contracts/holding_accounting.py and
-swing/evaluation/holding_accounting.py (read/call only); focused tests and this freeze.
+Exact next checkpoint: resolve the pending investment research maturity choice,
+then freeze dataset/source/feature admission before implementing its publication.
+The target projection `147e5bd`, monitoring statistics `4ba96f6`, and replay boundary
+`b36778f` are verified and pushed. No trained investment model or investment forecast
+API exists yet. Do not promote research artifacts, infer historical timestamps,
+rewrite pinned swing code or touch TradingFlow.
+Files: investment/contracts.py and targets.py; research/swing_return_inputs.py and
+swing/training/return_{estimators,validation,artifacts}.py (reuse only applicable public
+primitives); current source acceptance audit and the current freeze/receipts above.
 
 Publisher verification uses `.venv/Scripts/python.exe`, `PYTHONDONTWRITEBYTECODE=1`,
 writable TEMP/TMP, `-p no:cacheprovider` and a unique writable `--basetemp`:
