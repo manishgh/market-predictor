@@ -5,7 +5,20 @@ Counterpart: the Market Predictor developer working in `C:\project\market-predic
 The two developers never message each other directly; the user relays, and these files
 are the shared record.
 
-## Action required (2026-09-28 API v4)
+## October 3 producer change; consumer acknowledgement pending
+
+The user says TradingFlow is undergoing separate changes. Do not modify or build it
+from this task. Market Predictor retains API v4 and adds optional model metadata
+`training_labels_available_through_utc`; `training_data_end` now carries the verified
+final-fit decision date. Signals/actions and existing field types are unchanged.
+Replay requires the label timestamp strictly before the actual prediction-row decision,
+and exposes `model_training_labels_available_through_utc` in its response.
+The current producer fixture hash is
+`bc1f5109be83fc2985c28b0c0ded75e0487e34a68c237a1f147babc8e117a08b`.
+The TradingFlow developer must acknowledge and re-pin this fixture before relying on
+the added field. No fresh C# build or consumer acceptance is claimed here.
+
+## Historical action (2026-09-28 API v4; completed below)
 
 Accept only `contract_version = market_predictor.prediction.v4`, retain the `/v1/`
 routes, and re-pin `swing_prediction_response.json` to SHA-256 `96cbcd133b8e96253b034fabba10624be79b0d80550f043f3869905251bec522`.

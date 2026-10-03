@@ -657,6 +657,8 @@ def _edge_swing_model_info(
         resolved_horizon=resolved_horizon,
         bar_timeframe="1Day",
         created_at_utc=bundle.promoted_at_utc.isoformat(),
+        training_data_end=bundle.training_decisions_end_session.isoformat(),
+        training_labels_available_through_utc=bundle.training_labels_available_through_utc,
         label_policy_sha256=swing_outcome_policy_sha256(contract.swing),
         label_policy=swing_outcome_policy(contract.swing),
         execution_policy_sha256=bundle.execution_policy_sha256,

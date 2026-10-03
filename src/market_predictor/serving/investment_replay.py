@@ -4,6 +4,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Literal, Protocol
 
+import exchange_calendars as xcals
 import pandas as pd
 
 from market_predictor.config import Settings
@@ -16,12 +17,6 @@ from market_predictor.core.prediction_contracts import (
 from market_predictor.serving.snapshot_store import PredictionSnapshotStore
 from market_predictor.sources.alpaca import AlpacaSource
 
-ACTIONABLE_SIGNALS = frozenset({
-    "bullish_watch",
-    "bullish_watch_confirmed",
-    "strong_bullish_watch",
-    "strong_bullish_watch_confirmed",
-})
 ReplayReadinessStatus = Literal["valid", "warn", "invalid"]
 ReplayStatus = Literal["completed", "not_entered", "invalid"]
 
@@ -68,13 +63,20 @@ class InvestmentReplayService:
 
     def replay(self, request: InvestmentReplayRequest) -> InvestmentReplayResponse:
         prediction_request, prediction_response, _ = self.snapshot_store.load(request.snapshot_id)
-        decision_time = _utc(prediction_request.as_of or prediction_response.generated_at_utc)
         evaluation_time = _utc(request.evaluation_as_of or self.now())
         ticker_row = next(
             (row for row in prediction_response.predictions if row.ticker == request.ticker),
             None,
         )
         prediction = getattr(ticker_row, request.model_view, None) if ticker_row is not None else None
+        evidence_rows = [
+            row for row in prediction_response.evidence.row_feature_availability
+            if row.ticker == request.ticker and row.view == request.model_view
+        ] if prediction_response.evidence is not None else []
+        # A fallback timestamp is only diagnostic: missing/ambiguous row evidence
+        # always refuses replay below, before any price collection.
+        decision_time = _utc(evidence_rows[0].decision_time_utc if len(evidence_rows) == 1
+            else prediction_request.as_of or prediction_response.generated_at_utc)
         model = prediction_response.models.get(request.model_view)
         signal = prediction.signal if prediction is not None else "missing_prediction"
         readiness_status = prediction.readiness.status if prediction is not None else None
@@ -87,6 +89,8 @@ class InvestmentReplayService:
             prediction_present=prediction is not None,
             prediction_readiness_status=readiness_status,
         )
+        if len(evidence_rows) != 1:
+            reasons.append("snapshot requires exactly one matching prediction row decision timestamp")
         if reasons:
             return _response(
                 request=request,
@@ -99,7 +103,7 @@ class InvestmentReplayService:
                 model=model,
             )
 
-        if not request.force_entry and signal not in ACTIONABLE_SIGNALS:
+        if not request.force_entry and (prediction is None or not prediction.selected_for_policy):
             return _response(
                 request=request,
                 decision_time=decision_time,
@@ -107,7 +111,7 @@ class InvestmentReplayService:
                 signal=signal,
                 readiness_status=readiness_status,
                 status="not_entered",
-                reasons=[f"prediction signal {signal} is not an actionable {request.model_view} entry"],
+                reasons=[f"prediction was not selected by the {request.model_view} policy"],
                 model=model,
             )
 
@@ -209,11 +213,11 @@ class InvestmentReplayService:
             created_at = _parse_utc(model.created_at_utc)
             if created_at > decision_time:
                 reasons.append("model was created after the prediction decision time")
-        training_end = _training_data_available_at(model)
-        if training_end is None:
-            reasons.append("model training-data end timestamp is missing")
-        elif training_end > decision_time:
-            reasons.append("model training data extends beyond the prediction decision time")
+        information_boundary = model.training_labels_available_through_utc
+        if information_boundary is None:
+            reasons.append("model training-label availability timestamp is missing")
+        elif _utc(information_boundary) >= decision_time:
+            reasons.append("model training-label availability must be strictly before the prediction decision time")
         return reasons
 
 
@@ -292,9 +296,11 @@ def _prepare_bars(bars: pd.DataFrame, *, timeframe: str) -> pd.DataFrame:
         if "date" not in frame.columns:
             raise ValueError("daily price bars are missing date")
         dates = pd.to_datetime(frame["date"].astype(str).str.slice(0, 10), errors="coerce")
-        local = dates.dt.tz_localize("America/New_York", ambiguous="NaT", nonexistent="shift_forward")
-        frame["_entry_time"] = (local + pd.Timedelta(hours=9, minutes=30)).dt.tz_convert("UTC")
-        frame["_close_time"] = (local + pd.Timedelta(hours=16)).dt.tz_convert("UTC")
+        calendar = xcals.get_calendar("XNYS")
+        if dates.isna().any() or not dates.isin(calendar.sessions).all():
+            raise ValueError("daily price bars contain an invalid or non-XNYS session date")
+        frame["_entry_time"] = pd.to_datetime(dates.map(calendar.opens), utc=True)
+        frame["_close_time"] = pd.to_datetime(dates.map(calendar.closes), utc=True)
     else:
         timestamp_col = "timestamp" if "timestamp" in frame.columns else "date"
         timestamps = pd.to_datetime(frame[timestamp_col], errors="coerce", utc=True)
@@ -310,16 +316,6 @@ def _bar_duration(timestamps: pd.Series) -> pd.Timedelta:
     if usable.empty:
         raise ValueError("cannot infer replay bar duration")
     return usable.median()
-
-
-def _training_data_available_at(model: ModelInfo) -> datetime | None:
-    if not model.training_data_end:
-        return None
-    if model.bar_timeframe == "1Day":
-        date_text = str(model.training_data_end)[:10]
-        local = pd.Timestamp(date_text, tz="America/New_York") + pd.Timedelta(hours=16)
-        return _timestamp_datetime(local.tz_convert("UTC"))
-    return _parse_utc(model.training_data_end)
 
 
 def _response(
@@ -343,6 +339,7 @@ def _response(
         model_path=model.path if model else None,
         model_artifact_sha256=model.artifact_sha256 if model else None,
         model_training_data_end=model.training_data_end if model else None,
+        model_training_labels_available_through_utc=(model.training_labels_available_through_utc if model else None),
         decision_time=decision_time,
         evaluation_time=evaluation_time,
         prediction_signal=signal,

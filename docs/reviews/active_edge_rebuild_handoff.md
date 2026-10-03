@@ -17,6 +17,33 @@ The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
 
+October 3 continuation freeze (current user instruction supersedes the earlier
+activation-first ordering): complete pending software while real publication remains
+environment_pending. TradingFlow is undergoing separate development: do not edit its
+files, branches, builds or processes. Its prior migration receipt is historical.
+
+Current checkpoint: **Part (6): verified replay information boundary**.
+Problem: replay expects retired signal names and substitutes a training decision date
+for the time when all labels influencing the model became known. This can reject valid
+v4 snapshots or admit a historical simulation using future information.
+Scope: derive candidate decision-end and maximum label-availability timestamps across
+fit, calibration, threshold-selection and promotion-test populations; bind them through
+verified promotion into ModelInfo and replay. Replay uses the row decision timestamp,
+selected_for_policy, and actual XNYS open/close times, including early closes. Keep the
+public prediction v4 contract and pinned historical evidence unchanged; additions are
+explicitly documented. No model fit, promotion, deployment or TradingFlow edits.
+Invariants: the information boundary is strictly earlier than promotion and replay
+decision; required metadata is hash-bound and agrees across candidate and bundle.
+Exit gates: missing/mismatched/future metadata refused; equality refused; row time wins
+over request time; selected positive_setup accepted; early-close and holiday fixtures;
+affected candidate/promotion/serving/replay/API contract tests, Ruff and strict mypy.
+Rollback: missing or old metadata refuses replay/admission, never infers an earlier
+boundary from a date. Preserve old immutable artifacts; no compatibility fabrication.
+One consolidated final code/ML review follows tests. Subsequent software steps are
+part (4) monitoring statistics/curve/rank, demonstrated part (5) scale gaps, then separate
+63/252 investment contracts, training and APIs. Real source/promotion evidence cannot
+be replaced by passing software tests.
+
 October 3 operational receipt: provider access is verified with bounded read-only
 requests (Alpaca SIP daily bars/news, Finviz Elite export, SEC submissions: HTTP 200
 with expected response shape). Finviz credentials are available under FINVIZ_API_KEY;
@@ -67,10 +94,9 @@ escapes, partial publication and reader cache invalidation; Ruff/strict mypy, co
 tests, one consolidated review. Real-data registration is environment_pending until
 verified current source paths/pins and a promoted release are available.
 
-TradingFlow migration is newly authorized by the user's current request, superseding
-the earlier separate-developer-only boundary for this narrow API task. Preserve its
-existing dirty work. API v4 parser/fixture/reason display only, advisory isolation
-unchanged; independent plan/code review and fresh focused C# build/tests required.
+Historical September 28 authorization covered the completed TradingFlow API migration.
+The latest user instruction supersedes it: leave TradingFlow untouched while its
+separate development continues.
 
 Publisher software is locally implemented in `ebe5dfb`, with final metadata bounds
 in `cb70f81`. `publish-swing-live-inputs` is the production-only entry point. It verifies
@@ -1451,20 +1477,16 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: obtain approved production canonical stock/benchmark bars,
-point-in-time membership and catalyst authority paths with independent pins, then run
-the verified nightly publisher. Verify a promoted release before session registration.
-Source implementation is complete and both main branches are pushed. Do not reimplement the
-publisher or API v4 migration. TradingFlow's running original checkout remains dirty
-and unchanged; reconcile its unrelated work separately before any runtime deployment.
-Do not advance to part (4) inference/curve/rank or part (6) replay until the current
-environment-dependent checkpoint closes.
+Exact next checkpoint: implement and verify part (6), the replay information
+boundary, under the October 3 freeze above. Then close its implementation and docs
+commits before advancing to monitoring part (4). The earlier instruction to wait for
+real activation before software work is superseded by the user's renewed request.
+Publisher software and API v4 consumer migration remain closed; real activation still
+needs production source authorities and a promoted model. Do not touch TradingFlow.
 
-Files to read: AGENTS.md; this current receipt and the active plan; README publisher
-instructions; `serving/live_input_publication.py`, `serving/swing_features.py`,
-`serving/session_registration.py`, `commands/session_monitoring.py` (source paths under
-`src/market_predictor`); `docs/contracts/tradingflow_handoff.md`; TradingFlow main's
-AGENTS.md and `docs/integration/market-predictor-handoff.md`.
+Files to read: AGENTS.md; current plan/handoff; edge_rebuild/swing_training.py;
+governance/promotion; core/prediction_contracts.py; serving/investment_replay.py and
+serving/prediction_service.py, plus affected candidate/promotion/API/replay tests.
 
 Publisher verification uses `.venv/Scripts/python.exe`, `PYTHONDONTWRITEBYTECODE=1`,
 writable TEMP/TMP, `-p no:cacheprovider` and a unique writable `--basetemp`:

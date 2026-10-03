@@ -156,6 +156,7 @@ class ModelInfo(_PredictionContract):
     created_at_utc: str | None = None
     training_data_start: str | None = None
     training_data_end: str | None = None
+    training_labels_available_through_utc: datetime | None = None
     label_policy_sha256: str | None = Field(
         default=None,
         pattern=r"^[0-9a-f]{64}$",
@@ -178,6 +179,13 @@ class ModelInfo(_PredictionContract):
         default=None,
         pattern=r"^[0-9a-f]{64}$",
     )
+
+    @field_validator("training_labels_available_through_utc")
+    @classmethod
+    def validate_information_boundary(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.utcoffset() is None:
+            raise ValueError("training label availability must include an explicit timezone")
+        return value.astimezone(UTC) if value is not None else None
 
 
 class FeatureArtifactIdentity(_PredictionContract):
@@ -501,6 +509,7 @@ class InvestmentReplayResponse(_PredictionContract):
     model_path: str | None = None
     model_artifact_sha256: str | None = None
     model_training_data_end: str | None = None
+    model_training_labels_available_through_utc: datetime | None = None
     decision_time: datetime
     evaluation_time: datetime
     prediction_signal: str

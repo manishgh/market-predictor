@@ -23,7 +23,21 @@ from market_predictor.promotion_attestation import (
 )
 from market_predictor.swing.contracts.model_artifact import (
     SWING_CANDIDATE_MODEL_SCHEMA,
+    candidate_training_information_boundary,
 )
+
+
+def validate_promoted_model_information_boundary(
+    payload: Mapping[str, object], bundle: PromotedSwingBundle,
+) -> None:
+    """Bind replay clocks to the verified model bytes, not bundle declarations alone."""
+
+    boundary = candidate_training_information_boundary(payload)
+    if (
+        boundary.training_decisions_end_session != bundle.training_decisions_end_session
+        or boundary.training_labels_available_through_utc != bundle.training_labels_available_through_utc
+    ):
+        raise ArtifactIntegrityError("promoted model training information boundary differs from its bundle")
 
 
 def validate_file_backed_promoted_bundle(

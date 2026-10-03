@@ -52,9 +52,12 @@ Every field below is always present. "non-null" means TradingFlow may rely on a 
 | `snapshot_id`, `snapshot_sha256` | string or null | set when the server persists the response |
 
 Model (`models.swing`): `status`, `model_type`, `schema_version`, `target`,
-`artifact_sha256` are non-null. `training_data_end` is null today (promoted swing
-artifacts do not yet record it; see Pending changes). `path` is server-internal and
-must not be used.
+`artifact_sha256` are non-null. `training_data_end` is the final-fit decision-end
+session date, not the time when the model's information became available. The optional
+`training_labels_available_through_utc` is the latest label availability across fit,
+calibration, selection and promotion-test populations. The promoted serving path
+requires both values to match the verified model artifact. `path` is server-internal
+and must not be used.
 
 Ticker prediction (`predictions[]`):
 
@@ -131,15 +134,26 @@ has fewer eligible peers than the frozen ranking floor. An input failure which
 causes a sector to fall below that floor remains `live_inputs_incomplete` and counts
 toward the input-failure ceiling. Neither abstention carries a fabricated model score.
 
-## Pending changes (designed, not yet in code)
+## Historical replay information boundary
 
-From the swing monitoring and replay correctness design, under review:
-- `models.swing.training_data_end` will hold the last training decision session date
-  (`YYYY-MM-DD`), and a new optional `models.swing.training_labels_available_through_utc`
-  (ISO-8601 UTC) the instant the training labels became available. Both stay null until
-  a promoted model records them.
+`POST /v1/replays/investment` remains a historical simulation of a swing snapshot;
+it does not forecast the 63- or 252-session investment horizons. Replay requires the
+model's label-information boundary to be strictly earlier than the matching typed
+prediction row's decision timestamp. Missing or ambiguous row evidence refuses replay.
+The request's as-of and `training_data_end` cannot replace these timestamps.
+The response exposes `model_training_labels_available_through_utc`. Entry selection
+uses `selected_for_policy`, and daily bar execution uses actual XNYS opens and closes,
+including early closes. Historical snapshots without the boundary cannot be replayed.
 
 ## Change log
+
+- 2026-10-03: API v4 adds optional `models.swing.training_labels_available_through_utc`
+  (ISO-8601 UTC) and populates nullable `training_data_end` from verified promoted
+  metadata. Existing field types, signal names and actions are unchanged. Replay adds
+  the corresponding `model_training_labels_available_through_utc` field and refuses
+  missing or future model information. TradingFlow remains untouched; its fixture
+  acknowledgement is pending before it relies on the new optional field. Fixture
+  SHA-256: `bc1f5109be83fc2985c28b0c0ded75e0487e34a68c237a1f147babc8e117a08b`.
 
 - 2026-09-28: API v4 adds `sector_peer_floor` for effective members in naturally
   thin sectors and removes unused `evidence.row_feature_availability[].decision_atr`.

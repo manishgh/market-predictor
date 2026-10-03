@@ -48,6 +48,9 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
     assert direct.evidence is not None
     assert direct.evidence.identity_status == "complete"
     model = direct.models["swing"]
+    assert model.training_data_end == "2026-01-05"
+    assert model.training_labels_available_through_utc is not None
+    assert model.training_labels_available_through_utc.isoformat() == "2026-01-20T21:00:00+00:00"
     assert model.prediction_policy is not None
     assert model.prediction_policy_sha256 == direct.evidence.view_prediction_policy_sha256["swing"]
     assert model.prediction_policy["minimum_probability"] == 0.60
@@ -136,9 +139,9 @@ _REQUIRED_SWING = ("probability", "decision_score", "signal", "rank", "return_1d
 _REQUIRED_READINESS = ("status", "reasons", "price_feed", "benchmark_status", "market_context_status", "model_status", "source_status")
 _REQUIRED_CATALYST = ("status", "direction", "score", "event_count", "relevance", "reasons")
 _REQUIRED_GLOBAL = ("net_impact", "active_flashpoints")
-# Promoted swing artifacts do not yet record their training end, so the model field may be null.
+# Metadata stays nullable on the wire; the promoted serving path requires verified values.
 _NULLABLE = {"readiness": ("latest_price_date",), "catalyst": ("minutes_since_latest",)}
-_NULLABLE_MODEL = ("training_data_end",)
+_NULLABLE_MODEL = ("training_data_end", "training_labels_available_through_utc")
 
 
 def _require(payload: dict[str, object], fields: tuple[str, ...], where: str) -> None:

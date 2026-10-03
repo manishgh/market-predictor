@@ -354,6 +354,7 @@ def _validate_swing_model_payload(
         raise ArtifactIntegrityError("promoted model strategy contract binding differs")
     if payload.get("execution_policy_sha256") != bundle.execution_policy_sha256:
         raise ArtifactIntegrityError("promoted model execution policy binding differs")
+    _promotion_verification.validate_promoted_model_information_boundary(payload, bundle)
     features = tuple(str(value) for value in _required_sequence(payload, "feature_columns"))
     if features != bundle.ordered_feature_columns:
         raise SchemaMismatchError("promoted model feature order differs from its bundle")

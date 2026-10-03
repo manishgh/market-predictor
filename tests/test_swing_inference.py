@@ -109,6 +109,8 @@ def test_swing_inference_rejects_missing_or_unbound_thresholds(
     feature_reference = _feature_reference(features)
     payload: dict[str, object] = {
         "schema": SWING_CANDIDATE_MODEL_SCHEMA,
+        "training_decisions_end_session": "2026-01-05",
+        "training_labels_available_through_utc": "2026-01-20T21:00:00+00:00",
         "status": "candidate",
         "promotion_permitted": False,
         "candidate_id": bundle.model_id,
@@ -172,6 +174,8 @@ def _base_bundle() -> dict[str, object]:
         "promotion_gate_policy_sha256": TEST_GATE_POLICY_SHA256,
         "approved_by_principal_id": "test-approver",
         "promoted_at_utc": NOW,
+        "training_decisions_end_session": "2026-01-05",
+        "training_labels_available_through_utc": "2026-01-20T21:00:00+00:00",
         "ordered_feature_columns": features,
         "ordered_feature_sha256": ordered_values_sha256(features),
         "strategy_contract_schema_version": CONTRACT.schema_version,
@@ -206,6 +210,43 @@ def test_default_serving_hash_matches_frozen_swing_gate_policy() -> None:
     assert canonical_payload_sha256(policy) == default["prediction_serving"]["promotion_gate_policy_sha256"]
 
 
+@pytest.mark.parametrize("field", ("training_decisions_end_session", "training_labels_available_through_utc"))
+def test_promoted_bundle_requires_training_information_boundary(field: str) -> None:
+    payload = _base_bundle()
+    del payload[field]
+    with pytest.raises(SchemaMismatchError, match=field):
+        validate_promoted_bundle(payload, strategy_contract=CONTRACT)
+
+
+@pytest.mark.parametrize("timestamp", ("2026-08-01T12:00:00Z", "2026-08-02T12:00:00Z", "2026-01-20T21:00:00"))
+def test_promoted_bundle_refuses_unknown_or_future_information(timestamp: str) -> None:
+    payload = _base_bundle()
+    payload["training_labels_available_through_utc"] = timestamp
+    with pytest.raises(SchemaMismatchError, match="label|timezone"):
+        validate_promoted_bundle(payload, strategy_contract=CONTRACT)
+
+
+@pytest.mark.parametrize("field,value", (
+    ("training_decisions_end_session", "2026-01-06"),
+    ("training_labels_available_through_utc", "2026-01-21T21:00:00Z"),
+    ("training_labels_available_through_utc", None),
+))
+def test_model_admission_binds_training_information_to_candidate(field: str, value: object) -> None:
+    bundle = validate_promoted_bundle(_base_bundle(), strategy_contract=CONTRACT)
+    payload = {
+        "schema": SWING_CANDIDATE_MODEL_SCHEMA,
+        "status": "candidate", "promotion_permitted": False,
+        "candidate_id": bundle.model_id, "model_family": bundle.model_family,
+        "strategy_contract_sha256": bundle.strategy_contract_sha256,
+        "execution_policy_sha256": bundle.execution_policy_sha256,
+        "training_decisions_end_session": "2026-01-05",
+        "training_labels_available_through_utc": "2026-01-20T21:00:00+00:00",
+        field: value,
+    }
+    with pytest.raises((ArtifactIntegrityError, DataReadinessError), match="training information boundary"):
+        serving_module._validate_swing_model_payload(payload, bundle)
+
+
 def _publish_signed_swing_generation(
     repository: Path,
     *,
@@ -220,6 +261,8 @@ def _publish_signed_swing_generation(
     feature_reference = _feature_reference(features)
     payload = {
         "schema": SWING_CANDIDATE_MODEL_SCHEMA,
+        "training_decisions_end_session": "2026-01-05",
+        "training_labels_available_through_utc": "2026-01-20T21:00:00+00:00",
         "status": "candidate",
         "promotion_permitted": False,
         "candidate_id": candidate_id,

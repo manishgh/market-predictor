@@ -26,6 +26,7 @@ from market_predictor.core.errors import (
     SchemaMismatchError,
 )
 from market_predictor.modeling.strategy_contract import StrategyContract
+from market_predictor.swing.contracts.model_artifact import TrainingInformationBoundary
 from market_predictor.swing.features.catalyst_decision_authority import (
     REQUIRED_MODEL_SOURCE_FAMILIES,
     TRACKED_SOURCE_FAMILIES,
@@ -156,7 +157,7 @@ class _PromotedBundleBase(_FrozenModel):
         return canonical_payload_sha256(self.model_dump(mode="json"))
 
 
-class PromotedSwingBundle(_PromotedBundleBase):
+class PromotedSwingBundle(_PromotedBundleBase, TrainingInformationBoundary):
     """Governed identity for a promoted ten-session swing model."""
 
     mode: Literal["swing"]
@@ -168,6 +169,8 @@ class PromotedSwingBundle(_PromotedBundleBase):
 
     @model_validator(mode="after")
     def validate_swing_schema(self) -> PromotedSwingBundle:
+        if self.training_labels_available_through_utc >= self.promoted_at_utc:
+            raise ValueError("training label availability must strictly precede promotion")
         if self.feature_schema_version != SWING_FEATURE_PANEL_SCHEMA:
             raise ValueError(f"swing bundle requires feature schema {SWING_FEATURE_PANEL_SCHEMA}")
         if self.model_family == "swing_baseline":

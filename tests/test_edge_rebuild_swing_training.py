@@ -374,6 +374,53 @@ def test_candidate_authority_rejects_tampering(
         load_swing_candidate_authority(output)
 
 
+@pytest.mark.parametrize("poison_selection_clock", (False, True))
+def test_candidate_information_boundary_covers_selection_and_test_without_fitting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, poison_selection_clock: bool,
+) -> None:
+    technical = _profile(_contract())
+    schedule = _test_schedule(technical.frame)
+    # The early row is absent from final refit/test; this proves the first
+    # selection profile's information clock survives its memory release.
+    if poison_selection_clock:
+        technical.frame.loc[technical.frame.index[0], "label_available_at_utc"] = pd.Timestamp("2027-01-01T21:00:00Z")
+    _patch_inputs(monkeypatch, _binding(tmp_path), technical)
+    monkeypatch.setattr(swing_training, "_evaluate_validation_candidate", lambda spec, *_args: {
+        "candidate_id": spec.candidate_id, "candidate_eligible": True, "selected_probability_threshold": 0.6,
+    })
+    monkeypatch.setattr(swing_training, "_selection_key", lambda _record: (1.0,))
+    monkeypatch.setattr(swing_training, "_fit_candidate", lambda *_args: {"test_only": "no estimator fit"})
+    monkeypatch.setattr(swing_training, "_predict_probability", lambda _fit, frame, _cols: np.zeros(len(frame)))
+    monkeypatch.setattr(swing_training, "_evaluation_metrics", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(swing_training, "_overlap_audit", lambda *_args, **_kwargs: {})
+    result = train_swing_edge_candidate(
+        tmp_path / "panel", tmp_path / "candidate", strategy_contract=_contract(), config=_config(),
+        temporal_policy_path=tmp_path / "temporal.toml",
+    )
+    replay = load_swing_candidate_authority(tmp_path / "candidate")
+    expected = technical.frame["label_available_at_utc"].max().isoformat()
+    for record in (result.model_card, result.evaluation, replay["manifest"]):
+        assert record["training_decisions_end_session"] == schedule.final_refit_sessions[-1].isoformat()
+        assert pd.Timestamp(record["training_labels_available_through_utc"]) == pd.Timestamp(expected)
+    # Even after ordinary file hashes are recomputed, contradictory metadata
+    # must not be accepted as a coherent candidate authority.
+    output = tmp_path / "candidate"
+    manifest = json.loads((output / "_manifest.json").read_text())
+    manifest["training_labels_available_through_utc"] = "2028-01-01T21:00:00Z"
+    (output / "_manifest.json").write_text(json.dumps(manifest))
+    authority = json.loads((output / "_authority.json").read_text())
+    authority["artifact_sha256"] = file_sha256(output / "_manifest.json")
+    (output / "_authority.json").write_text(json.dumps(authority))
+    with pytest.raises(DataReadinessError, match="training information boundary differs"):
+        load_swing_candidate_authority(output)
+
+
+@pytest.mark.parametrize("clocks", ([], [None], ["2026-01-20T21:00:00"], ["invalid"]))
+def test_candidate_information_boundary_refuses_missing_or_naive_label_clocks(clocks: list[object]) -> None:
+    with pytest.raises(DataReadinessError, match="label"):
+        swing_training._latest_label_availability(pd.DataFrame({"label_available_at_utc": clocks}))
+
+
 def test_validation_selection_is_unchanged_when_only_final_test_is_poisoned(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

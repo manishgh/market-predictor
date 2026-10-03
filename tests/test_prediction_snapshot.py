@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from market_predictor.core.prediction_contracts import (
     GlobalContextInfo,
+    ModelInfo,
     PredictionConflictError,
     PredictionEvidence,
     PredictionRequest,
@@ -19,6 +20,12 @@ from market_predictor.serving.snapshot_store import PredictionSnapshotStore
 
 
 class PredictionSnapshotStoreTests(unittest.TestCase):
+    def test_model_information_boundary_requires_explicit_timezone(self) -> None:
+        with self.assertRaises(ValidationError):
+            ModelInfo(path="model", status="promoted", training_labels_available_through_utc="2026-01-20T21:00:00")
+        model = ModelInfo(path="model", status="promoted", training_labels_available_through_utc="2026-01-20T22:00:00+01:00")
+        self.assertEqual(model.training_labels_available_through_utc, datetime(2026, 1, 20, 21, tzinfo=UTC))
+
     def test_prediction_contracts_reject_non_finite_numbers(self) -> None:
         with self.assertRaises(ValidationError):
             GlobalContextInfo(net_impact=float("nan"))

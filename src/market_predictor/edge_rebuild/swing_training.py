@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import asdict, fields
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, cast
 
 import joblib
 import pandas as pd
@@ -70,7 +70,11 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.swing.contracts.model_artifact import SWING_CANDIDATE_MODEL_SCHEMA
+from market_predictor.swing.contracts.model_artifact import (
+    SWING_CANDIDATE_MODEL_SCHEMA,
+    TrainingInformationBoundary,
+    candidate_training_information_boundary,
+)
 from market_predictor.swing.contracts.research import assert_unexposed_swing_test
 from market_predictor.swing.features.panel import (
     MANAGED_PATH_COST_POLICY,
@@ -249,6 +253,9 @@ def train_swing_edge_candidate(
         sessions=model_sessions,
     )
     profile_identity = profile_data.decision_ids_sha256
+    # Retain the selection/calibration information clock before releasing the
+    # development profile. Evaluation projections deliberately omit label clocks.
+    selection_labels_available = _latest_label_availability(profile_data.frame)
     for spec in specs:
         validation_records.append(
             _evaluate_validation_candidate(
@@ -379,6 +386,12 @@ def train_swing_edge_candidate(
         selected_data.frame["session_date_et"].isin(final_refit_sessions),
         development_columns,
     ].copy()
+    information_boundary = TrainingInformationBoundary(
+        training_decisions_end_session=date.fromisoformat(str(development["session_date_et"].max())),
+        training_labels_available_through_utc=max(
+            selection_labels_available, _latest_label_availability(selected_data.frame),
+        ),
+    ).model_dump(mode="json")
     _assert_label_purge(development, final_test, "final development/test")
 
     unseen_development = selected_data.frame.loc[
@@ -440,6 +453,7 @@ def train_swing_edge_candidate(
     _guard(config, "swing final test", peak=True)
 
     evaluation: dict[str, Any] = {
+        **information_boundary,
         "schema": EVALUATION_SCHEMA,
         "status": "candidate_only",
         "model_family": "swing_baseline",
@@ -519,6 +533,7 @@ def train_swing_edge_candidate(
         feature_reference_profile
     )
     model_card: dict[str, Any] = {
+        **information_boundary,
         "schema": MODEL_CARD_SCHEMA,
         "model_schema": SWING_CANDIDATE_MODEL_SCHEMA,
         "status": "candidate",
@@ -562,6 +577,7 @@ def train_swing_edge_candidate(
         ],
     }
     payload: dict[str, Any] = {
+        **information_boundary,
         "schema": SWING_CANDIDATE_MODEL_SCHEMA,
         "status": "candidate",
         "model_family": "swing_baseline",
@@ -593,6 +609,22 @@ def train_swing_edge_candidate(
         evaluation=evaluation,
         model_card=model_card,
     )
+
+
+def _latest_label_availability(frame: pd.DataFrame) -> datetime:
+    """Use every influencing row, including validation and locked-test labels."""
+
+    if frame.empty or "label_available_at_utc" not in frame:
+        raise DataReadinessError("training information boundary requires every influencing label clock")
+    try:
+        timestamps = pd.DatetimeIndex(frame["label_available_at_utc"])
+    except (TypeError, ValueError) as exc:
+        raise DataReadinessError("training label availability timestamps are invalid") from exc
+    if timestamps.hasnans or timestamps.tz is None:
+        raise DataReadinessError("training label availability must be complete and timezone-aware")
+    # Datetime contracts have microsecond precision. Round upward so a provider
+    # clock with finer precision can never become an earlier replay boundary.
+    return cast(datetime, timestamps.max().ceil("us").to_pydatetime().astimezone(UTC))
 
 
 def _candidate_specs(
@@ -789,6 +821,11 @@ def _publish_immutable(
             "created_at_utc": datetime.now(UTC).isoformat(),
             "files": artifacts,
         }
+        if candidate is not None:
+            boundary = candidate_training_information_boundary(candidate)
+            if any(candidate_training_information_boundary(record) != boundary for record in (evaluation, model_card)):
+                raise DataReadinessError("candidate training information boundary differs across publication evidence")
+            manifest.update(boundary.model_dump(mode="json"))
         _write_json(temporary / _MANIFEST_NAME, manifest)
         authority = {
             "schema": OUTPUT_AUTHORITY_SCHEMA,
@@ -869,6 +906,9 @@ def load_swing_candidate_authority(directory: Path) -> dict[str, Any]:
     payload = joblib.load(root / _CANDIDATE_NAME)
     if not isinstance(payload, Mapping):
         raise DataReadinessError("swing candidate payload is not an object")
+    boundary = candidate_training_information_boundary(payload)
+    if any(candidate_training_information_boundary(record) != boundary for record in (manifest, evaluation, model_card)):
+        raise DataReadinessError("candidate training information boundary differs across immutable evidence")
     identities = {
         evaluation.get("selected_bundle_id"),
         model_card.get("candidate_id"),

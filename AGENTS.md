@@ -42,6 +42,25 @@ Communicate directly and precisely. Do not hide a data, modeling, or economic fa
 behind unexplained metrics or specialist terminology. State what failed, how it was
 measured, what system behavior it affects, and what evidence would resolve it.
 
+### Explain Issues In Concrete Words
+
+Never describe a situation using vague terminology or unexplained technical labels.
+Words such as "correctness", "readiness", "integrity", "validation" or "blocked"
+must not substitute for an explanation. Use plain, specific language and explain any
+technical term that is necessary, immediately where it appears.
+
+When reporting a problem, limitation or reason to stop, explain what was observed,
+what is missing or failing, which exact action it prevents, why that action would
+produce an incorrect or misleading result, and what concrete step resolves it.
+State what work can still continue. Distinguish missing credentials from missing
+data, failed checks, resource limits and missing model approval. Give enough detail
+for the user to understand the situation without having to decode jargon.
+
+For example, do not say "correctness blocks publication". Say: "This membership
+snapshot was captured after the prediction's decision time. Using it would give the
+prediction information unavailable at that time. We need a snapshot observed before
+that decision; collecting data for future decisions can continue."
+
 ## 2. Source-Of-Truth Order
 
 When instructions disagree, use this order:

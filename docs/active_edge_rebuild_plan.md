@@ -34,8 +34,9 @@ The existing research horizons are:
   SPY, QQQ, and the point-in-time sector benchmark.
 - **Historical intraday:** thirty-minute artifacts are historical research, not
   the unified product. Their raw evidence and hash-bound provenance are retained.
-- **Investment:** holding is open-ended, but a finite forecast/label horizon still
-  requires approval; do not substitute the swing model or invent a sell deadline.
+- **Investment:** separate 63- and 252-session forecast/label horizons were approved
+  September 25. Holding remains open-ended; allocation/risk budgets remain undecided.
+  Do not substitute swing predictions or interpret the label horizon as a sell deadline.
 
 This repository produces predictions, abstentions, explanations, benchmark
 comparisons, and matured outcomes. It does not produce alerts, orders, positions,
@@ -47,6 +48,33 @@ portfolio management: alerts, orders, final position sizing, and execution remai
 outside this repository.
 
 ## Unified Product Implementation
+
+October 3 continuation freeze (current user instruction supersedes the earlier
+activation-first ordering): complete pending software while real publication remains
+environment_pending. TradingFlow is undergoing separate development: do not edit its
+files, branches, builds or processes. Its prior migration receipt is historical.
+
+Current checkpoint: **Part (6): verified replay information boundary** (`in progress`).
+Problem: replay expects retired signal names and substitutes a training decision date
+for the time when all labels influencing the model became known. This can reject valid
+v4 snapshots or admit a historical simulation using future information.
+Scope: derive candidate decision-end and maximum label-availability timestamps across
+fit, calibration, threshold-selection and promotion-test populations; bind them through
+verified promotion into ModelInfo and replay. Replay uses the row decision timestamp,
+selected_for_policy, and actual XNYS open/close times, including early closes. Keep the
+public prediction v4 contract and pinned historical evidence unchanged; additions are
+explicitly documented. No model fit, promotion, deployment or TradingFlow edits.
+Invariants: the information boundary is strictly earlier than promotion and replay
+decision; required metadata is hash-bound and agrees across candidate and bundle.
+Exit gates: missing/mismatched/future metadata refused; equality refused; row time wins
+over request time; selected positive_setup accepted; early-close and holiday fixtures;
+affected candidate/promotion/serving/replay/API contract tests, Ruff and strict mypy.
+Rollback: missing or old metadata refuses replay/admission, never infers an earlier
+boundary from a date. Preserve old immutable artifacts; no compatibility fabrication.
+One consolidated final code/ML review follows tests. Subsequent software steps are
+part (4) monitoring statistics/curve/rank, demonstrated part (5) scale gaps, then separate
+63/252 investment contracts, training and APIs. Real source/promotion evidence cannot
+be replaced by passing software tests.
 
 October 3 operational receipt: provider access is verified with bounded read-only
 requests (Alpaca SIP daily bars/news, Finviz Elite export, SEC submissions: HTTP 200
@@ -74,7 +102,7 @@ current snapshot cannot be backdated to a prior decision. The publisher and cons
 software remain closed; no permissive admission or source-family change is needed.
 
 
-Current checkpoint: **Nightly live-input publisher and API v4 consumer** (`in progress`).
+Prior checkpoint: **Nightly live-input publisher and API v4 consumer** (software complete).
 Monitoring and publisher software is verified and pushed on main. The reviewed
 API v4 consumer integration is also committed and pushed on TradingFlow main. The current checkpoint
 remains environment_pending for approved live inputs and promoted-release registration;
