@@ -129,7 +129,7 @@ def test_missing_session_grace_is_exact_and_failed_days_only_warn():
     report = case._report(samples=20)
     failed = report["session_coverage"][0]["expected_sessions"][:10]
     warning = case._evaluate(_coverage_changed(report, failed=failed))
-    assert (warning.state, warning.actionability) == ("warning", "actionable")
+    assert (warning.state, warning.actionability) == ("unavailable", "not_ready")
     assert "monitoring_registered_session_share_low" in warning.reasons
     warming = case._evaluate(_coverage_changed(case._report(samples=5), failed=failed))
     assert (warming.state, warming.actionability) == ("warming", "rank_only")

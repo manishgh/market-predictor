@@ -103,5 +103,5 @@ def test_tolerated_failures_use_exact_arithmetic() -> None:
     # leaving 60 - 5 - 6 = 49 < 50. In floats (1 - 0.9) * 60 is 5.999..., which floors to 5
     # and would wrongly leave 50.
     assert fewest_sessions_in_window(94) == 60
-    policy = DriftPolicy(minimum_registered_session_share=0.9, minimum_independent_decision_groups=5)
+    policy = DriftPolicy(minimum_registered_session_share=0.9, minimum_effective_decision_periods=5)
     assert not policy.lookback_supports_minimum(94, "10b")

@@ -118,7 +118,7 @@ smallcap_momentum = [
 [prediction_serving]
 attestation_trust_store = "configs/attestation_trust_store.json"
 promotion_gate_policy_sha256 = "680a0fe8368e77ca1d7e8c2b2b8c8f9ca53ea341c525b665d685cb53e797866e"
-drift_policy_sha256 = "1d21b757196621266fac263489eb5023904790ce4cba54656fca81a02a4405cd"
+drift_policy_sha256 = "09069c085acf87622987434a271e2f4905447696283105e5a969b01fb18527e1"
 
 [prediction_serving.swing_live]
 input_directory = "data/live/edge_rebuild/swing"

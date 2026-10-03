@@ -28,6 +28,11 @@ from market_predictor.governance.outcomes.contracts import (
     refuse_retired_intraday,
     swing_horizon_sessions,
 )
+from market_predictor.governance.outcomes.monitoring_statistics import (
+    exchange_session_ordinals,
+    mean_statistics,
+    ratio_statistics,
+)
 from market_predictor.governance.outcomes.repository import OutcomeRepository
 from market_predictor.governance.outcomes.session_coverage import SessionCoverage, build_session_coverage
 from market_predictor.governance.outcomes.session_records import SessionRecord, SessionRecordStore, expected_sessions
@@ -103,7 +108,29 @@ class SelectedPolicyCohort(BaseModel):
     oldest_pending_decision_session_et: date | None = None
     # Over every stored intent of the route, not only this window: nothing leaves monitoring uncounted.
     route_oldest_pending_decision_session_et: date | None = None
-    independent_decision_groups: int = Field(ge=0)
+    matured_decision_sessions: int = Field(ge=0)
+    effective_decision_periods: float = Field(ge=0)
+    rank_usable_outcomes: int = Field(ge=0)
+    rank_unavailable_outcomes: int = Field(ge=0)
+    rank_decision_sessions: int = Field(ge=0)
+    rank_effective_periods: float = Field(ge=0)
+    rank_mean: float | None
+    rank_standard_error: float | None = Field(ge=0)
+    rank_t_statistic: float | None
+    rank_standard_error_method: Literal["hansen_hodrick", "newey_west"] | None
+    per_session_excess_return_vs_spy: float | None
+    per_session_excess_return_vs_spy_standard_error: float | None = Field(ge=0)
+    per_session_excess_return_vs_spy_t_statistic: float | None
+    per_session_excess_return_vs_spy_standard_error_method: Literal["hansen_hodrick", "newey_west"] | None
+    per_session_excess_return_vs_qqq: float | None
+    per_session_excess_return_vs_qqq_standard_error: float | None = Field(ge=0)
+    per_session_excess_return_vs_qqq_t_statistic: float | None
+    per_session_excess_return_vs_qqq_standard_error_method: Literal["hansen_hodrick", "newey_west"] | None
+    per_session_excess_return_vs_sector: float | None
+    per_session_excess_return_vs_sector_standard_error: float | None = Field(ge=0)
+    per_session_excess_return_vs_sector_t_statistic: float | None
+    per_session_excess_return_vs_sector_standard_error_method: Literal["hansen_hodrick", "newey_west"] | None
+    portfolio_curve_status: Literal["unavailable_accounting_evidence"]
     evidence_status: Literal["sufficient", "insufficient_evidence"]
     selection_rate: float = Field(ge=0, le=1)
     actionable_rate: float = Field(ge=0, le=1)
@@ -148,6 +175,23 @@ class SelectedPolicyCohort(BaseModel):
 
     @model_validator(mode="after")
     def validate_semantics(self) -> Self:
+        horizon = swing_horizon_sessions(self.horizon)
+        if (
+            not math.isclose(self.effective_decision_periods, self.matured_decision_sessions / horizon, abs_tol=1e-12)
+            or not math.isclose(self.rank_effective_periods, self.rank_decision_sessions / horizon, abs_tol=1e-12)
+            or self.rank_usable_outcomes + self.rank_unavailable_outcomes > self.total_predictions
+            or self.matured_decision_sessions > self.total_predictions
+            or self.rank_usable_outcomes < 5 * self.rank_decision_sessions
+        ):
+            raise ValueError("selected-policy effective periods or rank coverage are inconsistent")
+        if self.cumulative_net_return is not None or self.max_drawdown is not None:
+            raise ValueError("portfolio statistics require admitted accounting evidence")
+        if self.rank_decision_sessions == 0 and any(value is not None for value in (
+            self.rank_mean, self.rank_standard_error, self.rank_t_statistic, self.rank_standard_error_method,
+        )):
+            raise ValueError("rank statistics require usable decision sessions")
+        if self.rank_decision_sessions > 0 and self.rank_mean is None:
+            raise ValueError("usable rank sessions require a rank mean")
         if not (
             self.actionable_predictions
             <= self.selected_predictions
@@ -223,9 +267,7 @@ class SelectedPolicyCohort(BaseModel):
             self.average_excess_return_vs_spy,
             self.average_excess_return_vs_qqq,
             self.average_excess_return_vs_sector,
-            self.cumulative_net_return,
             self.win_rate,
-            self.max_drawdown,
             self.last_matured_outcome_utc,
         )
         if self.matured_selected_samples == 0:
@@ -397,7 +439,7 @@ def build_performance_cohorts(
             else None
         )
         outcome = (
-            _matured_selected_outcome(
+            _matured_outcome(
                 repository,
                 intent,
                 generated_at=generated,
@@ -637,14 +679,12 @@ def _fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
-def _matured_selected_outcome(
+def _matured_outcome(
     repository: OutcomeRepository,
     intent: PredictionMaturationIntent,
     *,
     generated_at: datetime,
 ) -> MaturedOutcome | None:
-    if not intent.actionable:
-        return None
     if not repository.has_outcome(intent.maturation_key, intent.decision_session_et):
         return None
     # The repository checks the outcome against this intent as it loads it.
@@ -716,7 +756,7 @@ def _route_oldest_pending(
         if deciding is not None:
             source_attempt_ids.add(deciding.attempt_id)
             route_attempt_ids[route].add(deciding.attempt_id)
-        outcome = _matured_selected_outcome(repository, intent, generated_at=generated)
+        outcome = _matured_outcome(repository, intent, generated_at=generated)
         if outcome is not None:
             route_outcome_ids[route].add(outcome.outcome_id)
             continue
@@ -767,6 +807,9 @@ def _monitoring_record(
         "excess_return_vs_sector": (
             outcome.excess_return_vs_sector if outcome is not None else None
         ),
+        "holding_sessions": outcome.holding_sessions if outcome is not None else None,
+        "fixed_horizon_net_return": outcome.fixed_horizon_net_return if outcome is not None else None,
+        "fixed_horizon_excess_return_vs_sector": outcome.fixed_horizon_excess_return_vs_sector if outcome is not None else None,
         "exit_time_utc": outcome.exit_time_utc if outcome is not None else None,
         "matured_at_utc": (
             outcome.matured_at_utc if outcome is not None else None
@@ -810,9 +853,11 @@ def _cohort_row(
         ordered.loc[ordered["maturation_key"].notna(), "maturation_key"].astype(str)
     )
     observation_ids = sorted(ordered["observation_id"].astype(str))
-    outcome_ids = sorted(matured["outcome_id"].astype(str))
+    outcome_ids = sorted(ordered.loc[ordered["outcome_id"].notna(), "outcome_id"].astype(str))
     score_metrics = _score_metrics(selected)
     outcome_metrics = _outcome_metrics(matured)
+    horizon = swing_horizon_sessions(str(identity["horizon"]))
+    complete_sessions = _complete_matured_sessions(ordered, horizon=horizon, generated=window_end)
     content: dict[str, object] = {
         **{
             column: str(identity[column])
@@ -858,9 +903,8 @@ def _cohort_row(
             if cohort_type == "all" and (route_oldest_pending is not None or not pending.empty)
             else None
         ),
-        "independent_decision_groups": int(
-            matured["decision_group_id"].nunique()
-        ),
+        "matured_decision_sessions": len(complete_sessions),
+        "effective_decision_periods": len(complete_sessions) / horizon,
         "evidence_status": (
             "sufficient"
             if matured_count >= minimum_samples
@@ -870,6 +914,9 @@ def _cohort_row(
         "actionable_rate": actionable_count / total,
         **score_metrics,
         **outcome_metrics,
+        **_rank_metrics(ordered, horizon=horizon, generated=window_end),
+        **_per_session_economics(matured, horizon=horizon, complete_sessions=complete_sessions),
+        "portfolio_curve_status": "unavailable_accounting_evidence",
         "first_decision_time_utc": _timestamp_text(
             ordered["decision_time_utc"].min()
         ),
@@ -878,6 +925,74 @@ def _cohort_row(
         ),
     }
     return {**content, "cohort_id": content_sha256(content)}
+
+
+def _complete_matured_sessions(group: pd.DataFrame, *, horizon: int, generated: datetime) -> list[date]:
+    complete: list[date] = []
+    for session, rows in group.groupby("decision_session_et", sort=True):
+        if not rows["probability"].notna().any():
+            continue
+        if horizon_last_close(session, horizon, through=generated) is None:
+            continue
+        selected = rows.loc[rows["selected_for_policy"].astype(bool)]
+        if selected["outcome_id"].notna().all():
+            complete.append(session)
+    return complete
+
+
+def _rank_metrics(group: pd.DataFrame, *, horizon: int, generated: datetime) -> dict[str, object]:
+    scored = group.loc[group["probability"].notna()]
+    usable = scored.loc[
+        scored["outcome_id"].notna() & scored["fixed_horizon_net_return"].notna()
+        & scored["fixed_horizon_excess_return_vs_sector"].notna() & scored["sector"].notna()
+    ]
+    daily: dict[date, list[float]] = defaultdict(list)
+    used = 0
+    for (session, _sector), rows in usable.groupby(["decision_session_et", "sector"], sort=True):
+        if horizon_last_close(session, horizon, through=generated) is None:
+            continue
+        if len(rows) < 5 or rows["probability"].nunique() < 2 or rows["fixed_horizon_excess_return_vs_sector"].nunique() < 2:
+            continue
+        correlation = rows["probability"].astype(float).rank().corr(rows["fixed_horizon_excess_return_vs_sector"].astype(float).rank())
+        if not math.isfinite(correlation):
+            continue
+        daily[session].append(float(correlation))
+        used += len(rows)
+    result: dict[str, object] = {
+        "rank_usable_outcomes": used,
+        "rank_unavailable_outcomes": len(scored) - used,
+        "rank_decision_sessions": len(daily),
+        "rank_effective_periods": len(daily) / horizon,
+        "rank_mean": None, "rank_standard_error": None, "rank_t_statistic": None,
+        "rank_standard_error_method": None,
+    }
+    if daily:
+        sessions = sorted(daily)
+        estimate = mean_statistics(exchange_session_ordinals(sessions), [float(np.mean(daily[day])) for day in sessions],
+                                   horizon_sessions=horizon)
+        result.update(rank_mean=estimate.mean, rank_standard_error=estimate.standard_error,
+                      rank_t_statistic=estimate.t_statistic, rank_standard_error_method=estimate.method)
+    return result
+
+
+def _per_session_economics(matured: pd.DataFrame, *, horizon: int, complete_sessions: list[date]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    sessions = sorted(set(complete_sessions) | set(matured["decision_session_et"]))
+    for benchmark in ("spy", "qqq", "sector"):
+        name = f"per_session_excess_return_vs_{benchmark}"
+        result.update({name: None, f"{name}_standard_error": None, f"{name}_t_statistic": None,
+                       f"{name}_standard_error_method": None})
+        if matured.empty:
+            continue
+        daily = matured.groupby("decision_session_et", sort=True)[[f"excess_return_vs_{benchmark}", "holding_sessions"]].sum()
+        daily = daily.reindex(sessions, fill_value=0.0)
+        estimate = ratio_statistics(
+            exchange_session_ordinals(sessions), daily[f"excess_return_vs_{benchmark}"].tolist(),
+            daily["holding_sessions"].tolist(), horizon_sessions=horizon,
+        )
+        result.update({name: estimate.mean, f"{name}_standard_error": estimate.standard_error,
+                       f"{name}_t_statistic": estimate.t_statistic, f"{name}_standard_error_method": estimate.method})
+    return result
 
 
 def _score_metrics(selected: pd.DataFrame) -> dict[str, float | None]:
@@ -931,23 +1046,6 @@ def _outcome_metrics(matured: pd.DataFrame) -> dict[str, object]:
     if matured.empty:
         return empty
     returns = matured["net_return"].to_numpy(float)
-    period_returns = (
-        matured.groupby(
-            ["decision_time_utc", "decision_group_id"],
-            sort=True,
-        )["net_return"]
-        .mean()
-        .to_numpy(float)
-    )
-    equity = np.cumprod(1.0 + period_returns)
-    equity_with_origin = np.concatenate(([1.0], equity))
-    peak = np.maximum.accumulate(equity_with_origin)
-    drawdown = 1.0 - np.divide(
-        equity_with_origin,
-        peak,
-        out=np.ones_like(equity_with_origin),
-        where=peak != 0,
-    )
     result: dict[str, object] = {
         **empty,
         "average_net_return": float(np.mean(returns)),
@@ -960,11 +1058,7 @@ def _outcome_metrics(matured: pd.DataFrame) -> dict[str, object]:
         "average_excess_return_vs_sector": float(
             matured["excess_return_vs_sector"].mean()
         ),
-        "cumulative_net_return": float(
-            np.prod(1.0 + period_returns) - 1.0
-        ),
         "win_rate": float(np.mean(returns > 0)),
-        "max_drawdown": float(np.max(drawdown, initial=0.0)),
         "last_matured_outcome_utc": _timestamp_text(
             matured["matured_at_utc"].max()
         ),

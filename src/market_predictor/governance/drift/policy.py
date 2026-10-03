@@ -50,7 +50,7 @@ class DriftPolicy(BaseModel):
         "market_predictor.drift_policy"
     )
     minimum_matured_samples: int = Field(default=30, ge=1)
-    minimum_independent_decision_groups: int = Field(default=10, ge=1)
+    minimum_effective_decision_periods: int = Field(default=10, ge=1)
     maximum_report_age_minutes: int = Field(default=1_440, ge=1)
     maximum_last_matured_age_minutes: int = Field(default=10_080, ge=1)
     # Calendar days after the close of a prediction's last horizon session before it is overdue.
@@ -70,8 +70,8 @@ class DriftPolicy(BaseModel):
     standardized_shift_severe: float = Field(default=4.0, gt=0)
     missing_rate_delta_warning: float = Field(default=0.20, gt=0, le=1)
     missing_rate_delta_severe: float = Field(default=0.50, gt=0, le=1)
-    warning_min_excess_return: float = -0.001
-    severe_min_excess_return: float = -0.005
+    warning_min_excess_return_per_session: float = -0.0001
+    severe_min_excess_return_per_session: float = -0.0005
     warning_max_drawdown: float = Field(default=0.15, ge=0, le=1)
     severe_max_drawdown: float = Field(default=0.25, ge=0, le=1)
     feature_drift_required: bool = True
@@ -110,7 +110,7 @@ class DriftPolicy(BaseModel):
             re.fullmatch(SWING_HORIZON_PATTERN, horizon) is None for horizon in self.evidence_horizons
         ):
             raise ValueError("evidence horizons must be exchange-session counts such as 10b")
-        if self.warning_min_excess_return < self.severe_min_excess_return:
+        if self.warning_min_excess_return_per_session < self.severe_min_excess_return_per_session:
             raise ValueError(
                 "warning excess-return threshold cannot be below severe threshold"
             )
@@ -139,7 +139,7 @@ class DriftPolicy(BaseModel):
         pending = most_sessions_in_window(max(1, self.pending_grace_days))
         tolerated_failures = math.floor((1 - Fraction(str(self.minimum_registered_session_share))) * sessions)
         usable = sessions - pending - tolerated_failures
-        return usable >= self.minimum_independent_decision_groups * swing_horizon_sessions(horizon)
+        return usable >= self.minimum_effective_decision_periods * swing_horizon_sessions(horizon)
 
 
 class DriftAssessment(BaseModel):
@@ -193,7 +193,7 @@ class DriftAssessment(BaseModel):
     total_predictions: int = Field(ge=0)
     selected_predictions: int = Field(ge=0)
     matured_samples: int = Field(ge=0)
-    independent_decision_groups: int = Field(ge=0)
+    effective_decision_periods: float = Field(ge=0)
     last_matured_outcome_utc: datetime | None = None
 
     @field_validator("evaluated_at_utc", "last_matured_outcome_utc")
@@ -435,13 +435,13 @@ def evaluate_drift(
             if row is not None
             else 0
         ),
-        "independent_decision_groups": (
-            _as_int(
-                row["independent_decision_groups"],
-                "independent_decision_groups",
+        "effective_decision_periods": (
+            _as_float(
+                row["effective_decision_periods"],
+                "effective_decision_periods",
             )
             if row is not None
-            else 0
+            else 0.0
         ),
         "last_matured_outcome_utc": (
             row.get("last_matured_outcome_utc")
@@ -604,13 +604,13 @@ def _performance_state(
         row.get("matured_selected_samples"),
         "matured_selected_samples",
     )
-    groups = _as_int(
-        row.get("independent_decision_groups"),
-        "independent_decision_groups",
+    periods = _as_float(
+        row.get("effective_decision_periods"),
+        "effective_decision_periods",
     )
     if (
         samples < policy.minimum_matured_samples
-        or groups < policy.minimum_independent_decision_groups
+        or periods < policy.minimum_effective_decision_periods
         or row.get("evidence_status") != "sufficient"
     ):
         reasons.append("selected_policy_evidence_insufficient")
@@ -634,46 +634,60 @@ def _performance_state(
         return "stale", "not_ready"
     excess_by_benchmark = {
         "spy": _as_float(
-            row.get("average_excess_return_vs_spy"),
-            "average_excess_return_vs_spy",
+            row.get("per_session_excess_return_vs_spy"),
+            "per_session_excess_return_vs_spy",
         ),
         "qqq": _as_float(
-            row.get("average_excess_return_vs_qqq"),
-            "average_excess_return_vs_qqq",
+            row.get("per_session_excess_return_vs_qqq"),
+            "per_session_excess_return_vs_qqq",
         ),
         "sector": _as_float(
-            row.get("average_excess_return_vs_sector"),
-            "average_excess_return_vs_sector",
+            row.get("per_session_excess_return_vs_sector"),
+            "per_session_excess_return_vs_sector",
         ),
     }
     weakest_excess = min(excess_by_benchmark.values())
-    drawdown = _as_float(row.get("max_drawdown"), "max_drawdown")
+    rank_periods = _as_float(row.get("rank_effective_periods"), "rank_effective_periods")
+    rank_sufficient = rank_periods >= policy.minimum_effective_decision_periods and row.get("rank_mean") is not None
+    rank_mean = None if row.get("rank_mean") is None else _as_float(row["rank_mean"], "rank_mean")
+    rank_t = None if row.get("rank_t_statistic") is None else _as_float(row["rank_t_statistic"], "rank_t_statistic")
+    rank_severe = rank_sufficient and rank_t is not None and rank_t <= -2.0
+    rank_warning = rank_sufficient and rank_mean is not None and rank_mean <= 0
+    if rank_warning:
+        reasons.append("fixed_horizon_rank_mean_nonpositive")
+    if rank_severe:
+        reasons.append("fixed_horizon_rank_severe")
     severe = (
-        weakest_excess <= policy.severe_min_excess_return
-        or drawdown >= policy.severe_max_drawdown
+        weakest_excess <= policy.severe_min_excess_return_per_session
+        or rank_severe
     )
     if severe:
         reasons.extend(
             f"selected_policy_{benchmark}_excess_return_severe"
             for benchmark, value in excess_by_benchmark.items()
-            if value <= policy.severe_min_excess_return
+            if value <= policy.severe_min_excess_return_per_session
         )
         reasons.append("selected_policy_performance_severe")
         return "severe", "not_ready"
+    if not rank_sufficient:
+        reasons.append("rank_evidence_insufficient")
+        return "warming", "rank_only"
     warning = (
         coverage_warning
-        or weakest_excess <= policy.warning_min_excess_return
-        or drawdown >= policy.warning_max_drawdown
+        or weakest_excess <= policy.warning_min_excess_return_per_session
+        or rank_warning
     )
     if warning:
         reasons.extend(
             f"selected_policy_{benchmark}_excess_return_warning"
             for benchmark, value in excess_by_benchmark.items()
-            if value <= policy.warning_min_excess_return
+            if value <= policy.warning_min_excess_return_per_session
         )
         reasons.append("selected_policy_performance_warning")
-        return "warning", "actionable"
-    return "stable", "actionable"
+    # Adjusted-price cohort returns cannot prove cash-funded portfolio drawdown.
+    # No report currently carries the raw holding/event/cost evidence to supply it.
+    reasons.append("portfolio_curve_evidence_unavailable")
+    return "unavailable", "not_ready"
 
 
 def _timestamp(value: object, name: str) -> datetime:

@@ -44,7 +44,7 @@ class DriftPolicyTests(unittest.TestCase):
         self.feature_names_sha = feature_reference_names_sha256(["x"])
         self.policy = DriftPolicy(
             minimum_matured_samples=10,
-            minimum_independent_decision_groups=5,
+            minimum_effective_decision_periods=5,
         )
 
     def test_settlement_must_end_before_the_grace(self) -> None:
@@ -58,27 +58,78 @@ class DriftPolicyTests(unittest.TestCase):
         # Before evidence suffices the ceiling does not apply: outcomes of one stock cluster.
         warming = self._evaluate(self._report(samples=5, unresolvable=2))
 
-        self.assertEqual((within.state, within.actionability), ("stable", "actionable"))
+        self.assertEqual((within.state, within.actionability), ("unavailable", "not_ready"))
         self.assertEqual(beyond.actionability, "not_ready")
         self.assertIn("unresolvable_share_exceeded", beyond.reasons)
         self.assertNotIn("unresolvable_share_exceeded", warming.reasons)
 
-    def test_stable_and_warning_performance_remain_actionable(self) -> None:
+    def test_healthy_and_warning_returns_need_portfolio_accounting_evidence(self) -> None:
         stable = self._evaluate(self._report(samples=20))
-        warning = self._evaluate(self._report(samples=20, drawdown=0.20))
+        warning = self._evaluate(self._report(samples=20, excess=-0.002))
 
         self.assertEqual(
             (stable.state, stable.actionability),
-            ("stable", "actionable"),
+            ("unavailable", "not_ready"),
         )
         self.assertEqual(
             (warning.state, warning.actionability),
-            ("warning", "actionable"),
+            ("unavailable", "not_ready"),
         )
+        self.assertIn("portfolio_curve_evidence_unavailable", stable.reasons)
+        self.assertIn("portfolio_curve_evidence_unavailable", warning.reasons)
+        self.assertIn("selected_policy_spy_excess_return_warning", warning.reasons)
+
+    def test_daily_sessions_are_not_independent_ten_session_periods(self) -> None:
+        report = self._change_cohort(self._report(samples=20), matured_decision_sessions=10, effective_decision_periods=1.0)
+        assessment = self._evaluate(report)
+        self.assertEqual((assessment.state, assessment.actionability), ("warming", "rank_only"))
+        self.assertEqual(assessment.effective_decision_periods, 1.0)
+
+    def test_rank_requires_its_own_effective_periods(self) -> None:
+        report = self._change_cohort(self._report(samples=20), rank_decision_sessions=10,
+            rank_effective_periods=1.0, rank_usable_outcomes=50, rank_unavailable_outcomes=450)
+        assessment = self._evaluate(report)
+        self.assertIn("rank_evidence_insufficient", assessment.reasons)
+        self.assertEqual(assessment.actionability, "rank_only")
+
+    def test_wrong_signed_fixed_horizon_rank_is_severe(self) -> None:
+        report = self._change_cohort(self._report(samples=20), rank_mean=-0.2,
+            rank_standard_error=0.05, rank_t_statistic=-4.0)
+        assessment = self._evaluate(report)
+        self.assertEqual((assessment.state, assessment.actionability), ("severe", "not_ready"))
+        self.assertIn("fixed_horizon_rank_severe", assessment.reasons)
+
+    def test_constant_negative_rank_is_warning_without_infinite_t(self) -> None:
+        report = self._change_cohort(self._report(samples=20), rank_mean=-0.2,
+            rank_standard_error=0.0, rank_t_statistic=None)
+        assessment = self._evaluate(report)
+        self.assertIn("fixed_horizon_rank_mean_nonpositive", assessment.reasons)
+        self.assertNotIn("fixed_horizon_rank_severe", assessment.reasons)
+        self.assertEqual(assessment.actionability, "not_ready")
+
+    def test_missing_rank_does_not_hide_known_severe_economic_loss(self) -> None:
+        report = self._change_cohort(self._report(samples=20, excess=-0.006), rank_decision_sessions=0,
+            rank_effective_periods=0.0, rank_usable_outcomes=0, rank_unavailable_outcomes=500,
+            rank_mean=None, rank_standard_error=None, rank_t_statistic=None, rank_standard_error_method=None)
+        self.assertEqual(self._evaluate(report).state, "severe")
+
+    def test_old_report_without_portfolio_evidence_status_is_refused(self) -> None:
+        report = self._report(samples=20)
+        del report["rows"][0]["portfolio_curve_status"]
+        with self.assertRaises(ValidationError):
+            self._evaluate(report)
+
+    @staticmethod
+    def _change_cohort(report, **changes):
+        row = report["rows"][0]
+        row.update(changes)
+        row["cohort_id"] = content_sha256({key: value for key, value in row.items() if key != "cohort_id"})
+        report["report_id"] = content_sha256({key: value for key, value in report.items() if key != "report_id"})
+        return report
 
     def test_insufficient_severe_stale_and_unavailable_fail_closed(self) -> None:
         insufficient = self._evaluate(self._report(samples=5))
-        severe = self._evaluate(self._report(samples=20, drawdown=0.30))
+        severe = self._evaluate(self._report(samples=20, excess=-0.006))
         stale = self._evaluate(
             self._report(
                 samples=20,
@@ -132,7 +183,7 @@ class DriftPolicyTests(unittest.TestCase):
         pending = self._evaluate(self._report(samples=20, oldest_pending=on_holiday_eve))
 
         self.assertIn("selected_policy_outcomes_overdue", overdue.reasons)
-        self.assertEqual((pending.state, pending.actionability), ("stable", "actionable"))
+        self.assertEqual((pending.state, pending.actionability), ("unavailable", "not_ready"))
         deadline = tenth_close + timedelta(days=7)
         self.assertFalse(self.policy.outcome_overdue("10b", date(2026, 7, 2), deadline))
         self.assertTrue(
@@ -580,7 +631,6 @@ class DriftPolicyTests(unittest.TestCase):
         excess: float = 0.01,
         qqq_excess: float = 0.01,
         sector_excess: float = 0.01,
-        drawdown: float = 0.05,
         generated_at: datetime | None = None,
         horizon: str = "10b",
         oldest_pending: datetime | None = None,
@@ -591,7 +641,8 @@ class DriftPolicyTests(unittest.TestCase):
         generated = generated_at or self.now
         window_start = generated - timedelta(days=lookback_days)
         pending_count = int(oldest_pending is not None)
-        total_predictions = samples + pending_count + unresolvable
+        selected_predictions = samples + pending_count + unresolvable
+        total_predictions = 500 + pending_count + unresolvable
         route = MonitoringRoute(
             model_release_id=self.release_id, model_artifact_sha256=self.model_sha,
             prediction_policy_sha256=self.prediction_policy_sha, label_policy_sha256=self.label_policy_sha,
@@ -622,8 +673,8 @@ class DriftPolicyTests(unittest.TestCase):
             "window_end_utc": generated.isoformat().replace("+00:00", "Z"),
             "total_predictions": total_predictions,
             "eligible_predictions": total_predictions,
-            "selected_predictions": total_predictions,
-            "actionable_predictions": total_predictions,
+            "selected_predictions": selected_predictions,
+            "actionable_predictions": selected_predictions,
             "matured_selected_samples": samples,
             "pending_selected_samples": pending_count,
             "unresolvable_selected_samples": unresolvable,
@@ -647,12 +698,21 @@ class DriftPolicyTests(unittest.TestCase):
                 if (route_oldest_pending or oldest_pending) is not None
                 else None
             ),
-            "independent_decision_groups": samples,
+            "matured_decision_sessions": 100,
+            "effective_decision_periods": 100 / int(horizon[:-1]),
+            "rank_usable_outcomes": 500,
+            "rank_unavailable_outcomes": pending_count + unresolvable,
+            "rank_decision_sessions": 100,
+            "rank_effective_periods": 100 / int(horizon[:-1]),
+            "rank_mean": 0.2,
+            "rank_standard_error": 0.1,
+            "rank_t_statistic": 2.0,
+            "rank_standard_error_method": "hansen_hodrick",
             "evidence_status": (
                 "sufficient" if samples >= 10 else "insufficient_evidence"
             ),
-            "selection_rate": 1.0,
-            "actionable_rate": 1.0,
+            "selection_rate": selected_predictions / total_predictions,
+            "actionable_rate": selected_predictions / total_predictions,
             "mean_probability": 0.60,
             "probability_p10": 0.50,
             "probability_p50": 0.60,
@@ -667,9 +727,10 @@ class DriftPolicyTests(unittest.TestCase):
             "average_excess_return_vs_spy": excess,
             "average_excess_return_vs_qqq": qqq_excess,
             "average_excess_return_vs_sector": sector_excess,
-            "cumulative_net_return": 0.10,
+            "portfolio_curve_status": "unavailable_accounting_evidence",
+            "cumulative_net_return": None,
             "win_rate": 0.55,
-            "max_drawdown": drawdown,
+            "max_drawdown": None,
             "first_decision_time_utc": (oldest_pending or generated).isoformat().replace(
                 "+00:00",
                 "Z",
@@ -683,6 +744,10 @@ class DriftPolicyTests(unittest.TestCase):
                 "Z",
             ),
         }
+        for benchmark, excess_value in (("spy", excess), ("qqq", qqq_excess), ("sector", sector_excess)):
+            prefix = f"per_session_excess_return_vs_{benchmark}"
+            row_identity.update({prefix: excess_value / 10, f"{prefix}_standard_error": 0.0001,
+                f"{prefix}_t_statistic": excess_value / 0.001, f"{prefix}_standard_error_method": "hansen_hodrick"})
         row = {
             **row_identity,
             "cohort_id": content_sha256(row_identity),

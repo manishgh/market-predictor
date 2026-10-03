@@ -5,6 +5,7 @@ import unittest
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
+import pandas as pd
 from pydantic import ValidationError
 
 from market_predictor.core.prediction_contracts import PredictionConflictError
@@ -28,6 +29,7 @@ from market_predictor.governance.outcomes.performance import (
     write_performance_report,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
+from market_predictor.governance.outcomes.sessions import session_after, session_close
 from tests.support.monitoring import commit_test_population
 from tests.test_outcome_repository import _attempt, _evidence, _intent, _outcome
 
@@ -48,6 +50,52 @@ def build_performance_cohorts(repository, **kwargs):
 
 
 class PerformanceMonitoringTests(unittest.TestCase):
+    def test_rank_uses_unselected_fixed_targets_and_equal_sector_means(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            # Five positively ranked tech names and six negatively ranked energy
+            # names: equal sector means are zero despite unequal security counts.
+            for sector, size, sign in (("Technology", 5, 1), ("Energy", 6, -1)):
+                for index in range(size):
+                    intent = _intent_variant(f"{sector[:2].upper()}{index}", "1", probability=0.1 + index / 10,
+                                             selected=index == 0, sector=sector)
+                    _record(repository, intent, target=1, net_return=0.02, excess_return=0.01,
+                            fixed_excess=sign * index / 100)
+            missing = _intent_variant("MISSING", "1", probability=0.8, selected=False)
+            _record(repository, missing, target=1, net_return=0.02, excess_return=0.01, fixed_available=False)
+            report = build_performance_cohorts(repository, generated_at=datetime(2026, 8, 10, tzinfo=UTC))
+            row = next(item for item in report["rows"] if item["cohort_type"] == "all")
+            self.assertEqual((row["rank_usable_outcomes"], row["rank_unavailable_outcomes"]), (11, 1))
+            self.assertEqual((row["rank_decision_sessions"], row["rank_effective_periods"]), (1, 0.1))
+            self.assertAlmostEqual(row["rank_mean"], 0.0)
+            self.assertEqual(len(report["source_outcome_ids"]), 12)
+            self.assertEqual(row["source_outcome_ids_sha256"], content_sha256(report["source_outcome_ids"]))
+            energy = next(item for item in report["rows"] if item["cohort_type"] == "sector" and item["cohort_value"] == "Energy")
+            self.assertAlmostEqual(energy["rank_mean"], -1.0)
+
+    def test_per_session_economics_uses_actual_unequal_durations(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            for ticker, excess, duration in (("FAST", 0.04, 2), ("SLOW", -0.01, 10)):
+                _record(repository, _intent_variant(ticker, "1", probability=0.8), target=1,
+                        net_return=excess + 0.01, excess_return=excess, holding_sessions=duration)
+            report = build_performance_cohorts(repository, generated_at=datetime(2026, 8, 10, tzinfo=UTC))
+            row = next(item for item in report["rows"] if item["cohort_type"] == "all")
+            for benchmark in ("spy", "qqq", "sector"):
+                self.assertAlmostEqual(row[f"per_session_excess_return_vs_{benchmark}"], 0.03 / 12)
+                self.assertEqual(row[f"per_session_excess_return_vs_{benchmark}_standard_error"], 0.0)
+
+    def test_effective_periods_count_mature_zero_exposure_but_not_failed_or_pending_sessions(self) -> None:
+        from market_predictor.governance.outcomes.performance import _complete_matured_sessions
+        group = pd.DataFrame([
+            {"decision_session_et": date(2026, 7, 20), "probability": 0.4, "selected_for_policy": False, "outcome_id": None},
+            {"decision_session_et": date(2026, 7, 21), "probability": None, "selected_for_policy": False, "outcome_id": None},
+            {"decision_session_et": date(2026, 7, 22), "probability": 0.8, "selected_for_policy": True, "outcome_id": None},
+            {"decision_session_et": date(2026, 8, 7), "probability": 0.4, "selected_for_policy": False, "outcome_id": None},
+        ])
+        self.assertEqual(_complete_matured_sessions(group, horizon=10, generated=datetime(2026, 8, 10, tzinfo=UTC)),
+                         [date(2026, 7, 20)])
+
     def test_rejects_outcome_entered_on_its_decision_session(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repository = OutcomeRepository(Path(temp_dir))
@@ -126,9 +174,13 @@ class PerformanceMonitoringTests(unittest.TestCase):
             self.assertAlmostEqual(row["average_net_return"], 0.025)
             self.assertAlmostEqual(row["average_excess_return_vs_spy"], 0.01)
             self.assertAlmostEqual(row["win_rate"], 0.5)
-            self.assertAlmostEqual(row["max_drawdown"], 0.05)
+            self.assertIsNone(row["max_drawdown"])
+            self.assertIsNone(row["cumulative_net_return"])
+            self.assertEqual(row["portfolio_curve_status"], "unavailable_accounting_evidence")
+            self.assertEqual(row["matured_decision_sessions"], 2)
+            self.assertEqual(row["effective_decision_periods"], 0.2)
             self.assertEqual(len(report["source_intent_ids"]), 3)
-            self.assertEqual(len(report["source_outcome_ids"]), 2)
+            self.assertEqual(len(report["source_outcome_ids"]), 3)
 
     def test_excludes_noncanonical_repeated_snapshot_occurrence(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -204,7 +256,7 @@ class PerformanceMonitoringTests(unittest.TestCase):
                 if item["cohort_type"] == "all"
             )
 
-            self.assertAlmostEqual(row["max_drawdown"], 0.0)
+            self.assertIsNone(row["max_drawdown"])
 
     def test_pending_selection_and_rolling_window_are_explicit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -633,6 +685,7 @@ def _intent_variant(
     decision_time: datetime | None = None,
     selected: bool = True,
     release: str = "a" * 64,
+    sector: str = "Technology",
 ) -> PredictionMaturationIntent:
     base = _intent().model_dump(
         mode="python",
@@ -644,6 +697,7 @@ def _intent_variant(
             "ticker": ticker,
             "canonical_security_id": f"security:{ticker}",
             "model_release_id": release,
+            "sector": sector,
             "probability": probability,
             "calibration_bin": min(9, int(probability * 10)),
             "decision_time_utc": decision,
@@ -676,6 +730,9 @@ def _record(
     target: int,
     net_return: float,
     excess_return: float,
+    fixed_excess: float | None = None,
+    fixed_available: bool = True,
+    holding_sessions: int = 10,
 ) -> None:
     evidence = _evidence(intent, maturation_key=intent.maturation_key)
     base = _outcome(intent, evidence).model_dump(
@@ -701,6 +758,14 @@ def _record(
             "evidence_sha256": content_sha256(evidence),
         }
     )
+    base["holding_sessions"] = holding_sessions
+    base["exit_time_utc"] = session_close(session_after(intent.decision_session_et, holding_sessions))
+    if fixed_excess is not None:
+        base["fixed_horizon_excess_return_vs_sector"] = fixed_excess
+        base["fixed_horizon_net_return"] = fixed_excess + 0.01
+    if not fixed_available:
+        base["fixed_horizon_excess_return_vs_sector"] = None
+        base["fixed_horizon_net_return"] = None
     outcome = MaturedOutcome.model_validate(
         {**base, "outcome_id": content_sha256(base)}
     )

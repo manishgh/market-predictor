@@ -302,7 +302,7 @@ def drift_assessment(
         "total_predictions": 50,
         "selected_predictions": 10,
         "matured_samples": 10,
-        "independent_decision_groups": 10,
+        "effective_decision_periods": 10.0,
         "last_matured_outcome_utc": stamp,
     }
     return DriftAssessment.model_validate({**content, "assessment_id": content_sha256(content)})
