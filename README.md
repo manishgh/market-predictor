@@ -71,6 +71,22 @@ Intraday/unified prediction routes are removed, not redirected. Investment repla
 is a historical swing-prediction simulation, not a long-term investment forecast;
 its public `model_view` must be `swing`. The research workbench lists only swing.
 
+The investment research target layer projects marked holding values after 63 or 252
+XNYS sessions through the existing raw-share accounting kernel. It includes corporate
+claims and benchmark comparisons, preserves unknown values, and records the actual
+full-horizon label-availability clock. Its explicit research cost assumption is 20 bps
+prepaid at entry; the horizon does not force a sale. This target calculation does not
+yet supply an accepted investment dataset, trained investment model or forecast API.
+Existing swing accounting source pins and historical artifacts remain unchanged.
+
+Swing monitoring reports effective holding periods and within-sector fixed-horizon
+rank evidence, including scored stocks that were not selected. Portfolio return and
+drawdown remain unavailable until raw per-lot holdings, corporate payments and costs
+are reconciled; overlapping trade returns are no longer compounded as a portfolio.
+Such reports cannot authorize actionable predictions. Replay uses verified model label
+availability strictly before the actual prediction-row decision, never a training date
+as a substitute for that timestamp.
+
 TradingFlow owns screening/UI, watchlists, holdings, final risk, approvals and
 execution. Its current client consumes ten-session swing evidence. An unavailable
 or research-only model never becomes an order recommendation through integration.

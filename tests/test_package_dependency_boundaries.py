@@ -18,6 +18,7 @@ PRODUCTION_PACKAGES = (
     "catalysts",
     "modeling",
     "swing",
+    "investment",
     "intraday",
     "governance",
     "serving",
@@ -25,6 +26,7 @@ PRODUCTION_PACKAGES = (
 FORBIDDEN_DEPENDENCIES = ("market_predictor.research", "market_predictor.commands")
 MODELING_FORBIDDEN_DEPENDENCIES = (
     "market_predictor.swing",
+    "market_predictor.investment",
     "market_predictor.intraday",
 )
 GOVERNANCE_FORBIDDEN_DEPENDENCIES = (
@@ -38,6 +40,9 @@ INTRADAY_FORBIDDEN_DEPENDENCIES = ("market_predictor.governance",)
 SERVING_FORBIDDEN_DEPENDENCIES = ("market_predictor.edge_rebuild",)
 # Governance maturation calls into swing evaluation; any swing import of governance would form a cycle.
 SWING_FORBIDDEN_DEPENDENCIES = ("market_predictor.edge_rebuild", "market_predictor.governance")
+INVESTMENT_FORBIDDEN_DEPENDENCIES = (
+    "market_predictor.edge_rebuild", "market_predictor.governance", "market_predictor.serving",
+)
 UNIVERSE_ALLOWED_DEPENDENCIES = (
     "market_predictor.core",
     "market_predictor.evidence",
@@ -300,6 +305,7 @@ def test_modeling_package_is_horizon_neutral() -> None:
         ("intraday", INTRADAY_FORBIDDEN_DEPENDENCIES),
         ("serving", SERVING_FORBIDDEN_DEPENDENCIES),
         ("swing", SWING_FORBIDDEN_DEPENDENCIES),
+        ("investment", INVESTMENT_FORBIDDEN_DEPENDENCIES),
     ),
 )
 def test_production_dependency_direction_is_enforced(
