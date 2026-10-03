@@ -43,8 +43,12 @@ Original evidence is unchanged. The new receipts prove reconstruction provenance
 announcement availability, absence, ownership and accounting admission remain false.
 Selected overlapping source/evidence/CLI/architecture tests, Ruff, strict mypy and
 consolidated review passed as recorded in the handoff. No labels or model fit were
-produced. The next code-only join change separates target action bindings from the
-unchanged feature decision policy; actual target publication remains subsequent.
+produced. Implementation `12baec5` separates target action bindings from the unchanged feature
+decision policy and requires exact typed equivalence/target lineage/monthly metadata.
+28 helper, 13 CLI, 410 pre-fix integration and final 249 join/direct-consumer checks
+passed (overlapping); one string-dtype review finding is fixed with an actual canonical
+ID/Parquet roundtrip regression. Ruff/types and review passed. Actual target publication
+is now frozen privately, with pilot/full replay and independent audit before exposure.
 
 ## Current Canonical Technical Feature Publication
 
@@ -69,7 +73,7 @@ strict mypy passed affected sources. Resource retries preserved all saved files;
 unused-buffer cleanup plus `ARROW_DEFAULT_MEMORY_POOL=system` completed assembly
 without changing thresholds or feature formulas. Full suite, full real numerical
 replay, training and promotion were not run. Exact pins, resource observations and
-the next frozen target-config separation slice are in the current handoff.
+the next frozen private target publication slice are in the current handoff.
 
 ## Current Long-Only Swing Campaign
 

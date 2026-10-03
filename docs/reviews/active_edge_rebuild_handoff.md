@@ -18,7 +18,7 @@ current-schema reconstruction is still required before reuse.
 
 ## Current State
 
-Latest implementation: `635ebdb`, following `b97ad60` (both pushed). Canonical source reconstructions and
+Latest implementation: `12baec5` (pushed), following `635ebdb`/`b97ad60`. Canonical source reconstructions and
 standalone adjusted collection are complete; technical predictors now also have a
 complete independently audited feature-only publication.
 Exact pins and the next feature dependency are below. TradingFlow remains untouched.
@@ -333,25 +333,53 @@ No full suite, provider request, target calculation, model fit, main merge or TF
 Task-workspace logs: corporate-action-canonical-complete.log,
 corporate-action-output-audit.log and corporate-action-offline-final.log.
 
-Next sub-slice frozen: separate target configuration and prove identical price/decision
-semantics in the research join, using synthetic data only. Add
-`configs/swing_canonical_targets.toml`; change only action archive, audit and scope
-bindings from the immutable feature-pinned outcome policy. Keep all feature-pinned
-configs and predictor-fingerprinted modules unchanged. A typed helper independently
-loads both pinned policies, rejects any other field difference and hashes the shared
-price/decision fields. Require separate target-config pins in the join and CLI;
-predictors retain the decision config, while target lineage must match the target
-config, source selection and action audit exactly. Bind both policies and helper
-implementation/proof into request and resume identity. Compare full expected monthly
-decision metadata, including session/sector/benchmark and parent identity, with target
-metadata even on resumed months; identical IDs/counts alone are insufficient.
-Exit tests: three-field-only config change; all other changes rejected; unchanged
-corrected IDs; metadata poisoning with unchanged IDs; missing/wrong pins; resume/input
-mutation; CLI forwarding; exact outcome-replay config rejection. Run focused direct
-consumer/causality/architecture checks, Ruff, strict mypy and one consolidated review.
-Failure rejects publication; no compatibility fallback. Actual target publication is
-the following separately frozen checkpoint. News reconstruction, joins, training and
-untouched-test assessment remain pending; software checks establish no SPY edge.
+Target-config separation and join proof completed in `12baec5` (pushed).
+`configs/swing_canonical_targets.toml` has SHA
+`ec90490445c88b0d4225130903de74c6361565ec96104d18f5f6043fe15bb940`;
+only the three action bindings differ. Existing feature/decision configs remain
+byte-identical. The typed proof hashes every other policy field. Join/CLI require
+independent target pins; predictors retain their decision pin; targets bind exact
+config/source-selection/action-audit lineage. Both policies, proof and helper code
+enter request/resume identity. Every target month and resumed profile compares all
+canonical decision metadata and parent/context fields, not IDs/counts alone.
+
+Verification: 28 helper tests, 13 CLI tests and exact replay-config regression pass;
+410 affected integration/replay/architecture/CLI checks passed before the one review
+fix. Review reproduced nullable-string versus inferred-string ID dtype rejection.
+Normalize only validated nonempty text, preserving exact clocks/values; actual
+canonical stamping -> target dictionary -> Parquet -> fresh/resume regression passes.
+85 focused dtype/metadata checks passed; final 249 full join/direct-consumer checks
+passed in 186.90s. Overlapping sets are not summed. Final changed-file Ruff, strict
+mypy over three sources and staged diff check passed. Consolidated review closed
+its single P2. No real target/news/model/test values, training, promotion or TF work.
+Task-workspace logs: target-join-integration.log and target-join-final.log.
+
+Next sub-slice frozen: materialize and independently replay initial-fit targets using
+that exact new policy. All 28 checked dependency/document pins match; research and
+simulation contracts parse; the QQQ receipt-based report matches its reviewed hash.
+59 ordered decision months span July 2019-May 2024; selected raw price segments end
+no later than May 28, 2024. Read future prices only for targets whose ten-session
+horizon matures by that cutoff. Retain terminal-immature and unsupported-action rows
+with null targets/reasons, all 586,305 decisions and the approved population; no fills,
+extra exclusions, news/test/model reads or feature rebuild. This is retrospective
+research supervision, not historical announcement availability or production admission.
+
+The unchanged outcome producer writes its final manifest before source-context exit;
+therefore run entirely in private `data/labels/.swing_initial_fit_targets.materializing`.
+No production source edits are needed. Under unchanged shared-lease/5-GiB/85%-system
+memory guards and `ARROW_DEFAULT_MEMORY_POOL=system`, build one month, independently
+replay that month using its external checkpoint pin, then resume the remaining months.
+Fully replay all 59 months and compare target/specification bytes. Independently audit
+all declared source/implementation/output pins, exact monthly metadata/parent IDs,
+unique 586,305 decisions, unavailable/maturity counts and false training/promotion/
+managed flags. Only after successful return/source-context exit, reacquire the shared
+lease, recheck all frozen input/output bytes and atomically rename to
+`data/labels/swing_initial_fit_targets`. Normal final-path resume with the manifest
+pin must then pass. Preserve original labels and archives. Any failed check leaves
+this publication private; resource stops resume only with the exact saved checkpoint.
+Source admission, numerical replay and measured availability counts close this stage;
+no model fit, SPY outperformance, main merge, promotion or TradingFlow operation.
+Actual news/join/training and untouched-test assessment remain subsequent checkpoints.
 
 Queued checkpoint: **Investment dataset policy and source admission**.
 October 3 clarification: the prior timestamp question was premature and is withdrawn.
@@ -1944,12 +1972,14 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: implement the code-only target-config separation and typed
-price/decision equivalence proof frozen above. Keep feature-pinned configs unchanged;
-require exact target lineage and complete monthly metadata equality, including resume.
-The source checkpoint is closed in `b97ad60`/`635ebdb`; do not repeat its general
-review or full tests. No real target/news/test/model values, training, TF writes,
-main merge or promotion in this code-only slice.
+Exact next checkpoint: run the frozen initial-fit target materialization above,
+privately. One month -> independently pinned one-month replay -> remaining months ->
+full numerical/specification replay -> independent population/source/output audit ->
+leased final rechecks/atomic rename -> normal final-path resume verification. Config
+SHA is ec90490445c88b0d4225130903de74c6361565ec96104d18f5f6043fe15bb940.
+The code-only join checkpoint is closed in `12baec5`; do not repeat its general review
+or full tests. Keep feature-pinned sources/configs unchanged. No news/test/model reads,
+training, TF writes, main merge or promotion in this target publication slice.
 
 Publisher verification uses `.venv/Scripts/python.exe`, `PYTHONDONTWRITEBYTECODE=1`,
 writable TEMP/TMP, `-p no:cacheprovider` and a unique writable `--basetemp`:
