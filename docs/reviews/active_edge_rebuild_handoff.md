@@ -17,12 +17,63 @@ The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
 
+Part (6) completed in `b36778f` and pushed on main (October 3).
+Candidate, evaluation, model card and manifest now agree on final-fit decision end
+and the maximum label availability across selection and final-access populations.
+Promotion requires that clock before promotion; serving compares model and bundle.
+Replay requires the unique typed row decision time strictly after label availability,
+selected_for_policy, and actual XNYS opens/closes. The public v4 contract adds nullable
+metadata; the producer fixture is regenerated and documented. TradingFlow was not
+edited or built; acknowledgement of the optional field remains its developer's work.
+Verification: 57 API/service/snapshot/continuity tests; 246 architecture/dependency/
+registration/intent tests; nine replay tests; 39 inference tests; 31 synthetic trainer
+tests (one optional memory test deselected).
+Ruff and strict mypy passed on all eight changed source modules; one consolidated
+code/ML review found no actionable issue. No real fit, source read, promotion or
+deployment. The opt-in realistic memory benchmark and full release suite were not run.
+
+Current checkpoint: **Part (4a): overlap-aware monitoring and unavailable portfolio evidence** (`in progress`).
+Problem: reports treat overlapping trades as sequential full-capital investments,
+count daily decisions as independent holding periods, and omit unselected scored
+stocks from rank evaluation. Their current drawdown must not authorize predictions.
+Scope: use verified committed population and as-of outcomes; count complete matured
+decision sessions (including scored zero-selection sessions) / horizon; keep a separate
+minimum matured-trade count. Include all scored fixed-horizon outcomes in within-sector
+Spearman correlations (at least five varied observations), equal-sector daily averages.
+Persist rank usable/unavailable coverage and rank-specific effective periods. Use HH
+N-1 equal-weight covariance, NW 2N Bartlett fallback; exchange-session gaps remain gaps.
+For each benchmark calculate sum excess / sum actual holding sessions, with matching
+ratio-estimator uncertainty; policy thresholds become explicitly per-session units
+(-0.0001 warning, -0.0005 severe). Retire raw independent-group fields throughout
+internal reports/drift. Internal new fields are required; old reports fail parsing.
+
+Concrete accounting conflict with the older plan: stored maturation bars are adjusted,
+whereas the admitted event ledger needs raw-share entitlements/payment/cash evidence;
+current per-outcome execution costs also exceed the ledger's uniform-cost interface.
+Last-close sensitivity fills are diagnostics, not admitted daily holdings marks.
+Therefore remove overlapping sequential compounding; cumulative portfolio return and
+drawdown are null with portfolio_curve_status=unavailable_accounting_evidence. Drift
+must never become actionable from these reports. No replacement ledger, artificial
+marks, accounting-policy weakening, protected-file edit or sealed-test access.
+Part (4b), admitted portfolio curve, remains pending a separate evidence interface
+binding every selected intent, raw holding/event evidence and per-lot costs, plus
+locked-test threshold comparison. This conflict does not block statistics software.
+
+Exit gates: hand-computed overlap/HAC cases, gaps, zero-selection and all-abstained
+sessions, unselected rank inclusion, sector aggregation, wrong-signed rank, missing
+fixed paths, unequal durations, consumed outcome hash binding, required curve status,
+and otherwise healthy evidence unable to authorize output without portfolio evidence.
+Run affected performance/drift/registration/CLI tests, Ruff and strict mypy; one
+consolidated code/ML review. Rollback/failure behavior: incomplete statistics remain
+unavailable; incomplete portfolio evidence always refuses actionable authorization.
+TradingFlow remains untouched. No model fits, real-data activation or profit claims.
+
 October 3 continuation freeze (current user instruction supersedes the earlier
 activation-first ordering): complete pending software while real publication remains
 environment_pending. TradingFlow is undergoing separate development: do not edit its
 files, branches, builds or processes. Its prior migration receipt is historical.
 
-Current checkpoint: **Part (6): verified replay information boundary**.
+Completed checkpoint: **Part (6): verified replay information boundary**.
 Problem: replay expects retired signal names and substitutes a training decision date
 for the time when all labels influencing the model became known. This can reject valid
 v4 snapshots or admit a historical simulation using future information.
@@ -1477,16 +1528,12 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: implement and verify part (6), the replay information
-boundary, under the October 3 freeze above. Then close its implementation and docs
-commits before advancing to monitoring part (4). The earlier instruction to wait for
-real activation before software work is superseded by the user's renewed request.
-Publisher software and API v4 consumer migration remain closed; real activation still
-needs production source authorities and a promoted model. Do not touch TradingFlow.
-
-Files to read: AGENTS.md; current plan/handoff; edge_rebuild/swing_training.py;
-governance/promotion; core/prediction_contracts.py; serving/investment_replay.py and
-serving/prediction_service.py, plus affected candidate/promotion/API/replay tests.
+Exact next checkpoint: implement part (4a), overlap-aware statistics and the
+explicit unavailable-portfolio gate, under the current freeze. Part (6) is complete.
+Part (4b) needs admitted raw holding/event/cost evidence; live activation needs current
+production authorities and a promoted model. Do not touch TradingFlow.
+Files: governance/outcomes/performance.py, governance/drift/policy.py, monitoring
+statistics helper, configs/drift_policy.toml/default.toml and their focused tests.
 
 Publisher verification uses `.venv/Scripts/python.exe`, `PYTHONDONTWRITEBYTECODE=1`,
 writable TEMP/TMP, `-p no:cacheprovider` and a unique writable `--basetemp`:
