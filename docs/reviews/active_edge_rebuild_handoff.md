@@ -1,7 +1,7 @@
 # Active Edge Rebuild Handoff
 
 Status: active
-Last updated: 2026-09-29
+Last updated: 2026-10-03
 Repository: `C:\project\market-predictor`
 Branch: `main`
 Last verified publisher implementation: `cb70f81`, following `ebe5dfb`.
@@ -16,6 +16,32 @@ Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
+
+October 3 operational receipt: provider access is verified with bounded read-only
+requests (Alpaca SIP daily bars/news, Finviz Elite export, SEC submissions: HTTP 200
+with expected response shape). Finviz credentials are available under FINVIZ_API_KEY;
+the Python production setting is FINVIZ_ELITE_AUTH. No secret value was printed or
+persisted by this check, and no persistent credential configuration was changed.
+
+The Alpaca incremental archive's prior status was paused_memory. A guarded one-unit
+run succeeded; a subsequent run capped at 250 units fetched all 209 remaining units.
+`data/raw/swing_incremental_alpaca/status.json` now reports complete through 2026-10-02,
+zero pending units, zero failed units and zero integrity failures. The command was
+`python -m market_predictor.swing.datasets.alpaca_incremental --config
+configs/swing_incremental_collection.toml --through 2026-10-02 --max-units 250`.
+Request pin: `40853beab759eded1326fca9b8faa5b22831119e64f56cd4714edc35d6362ab1`.
+Existing archives were reused and preserved; the shared lease and original memory
+guards remained enabled. This is source acquisition, not serving admission:
+active_membership_authority, issuer_attribution and training_ready remain false;
+retrieved-now news revisions do not prove historical first availability. No sealed SEC
+files, model training/promotion, runtime deployment or serving activation was performed.
+
+Credentials are not a continuation blocker. Next preparation must establish independently
+observed current memberships and issuer/catalyst authority, then canonicalize/audit the
+needed stock/benchmark inputs with truthful availability clocks and saved pins. A
+current snapshot cannot be backdated to a prior decision. The publisher and consumer
+software remain closed; no permissive admission or source-family change is needed.
+
 
 Nightly live-input publisher freeze (September 28, user requested implementation):
 publish prepared, independently pinned production canonical stock bars, benchmark bars,
