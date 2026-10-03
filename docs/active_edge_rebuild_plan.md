@@ -308,32 +308,86 @@ provider call, label evaluation, model fit or TF operation.
 Five downstream outcome/issuer/news/legacy-proof configs still bind the old policy;
 they require actual reconstruction before admission, not blind hash replacement.
 
-Next source sub-slice frozen: standalone initial-fit adjusted history.
-Problem: the old combined adjusted store is coupled to the full historical panel and
-old strategy semantic identity. The old warmup request lacks transport-required
-proof and a sampled page lacks HTTP entity bytes/receipt; later daily collection has
-no canonical complete unit authority and extends through July 2026. Do not invent
-receipts or accept an old normal reader. Build an independent development source
-plan/authority, collect exact Alpaca SIP all-adjusted daily responses only within
-2018-05-29..2024-05-28, and normalize through the shared canonical bar adapter.
-Keep the accepted 564 windows (551 stock ticker windows / 545 securities and 13
-benchmarks), original window ends/asof, explicit mapping to parent windows, reviewed
-full FI/SATS streams and unchanged decision population. Extend query starts to the
-established 2018-05-29 warmup (279 sessions before first decision, covering the
-current 250-session/253-position requirement). Other aliases remain separate.
-Query coverage never grants historical membership or historical receipt availability.
-Missing stock sessions/IPO history remain explicit feature abstentions; missing or
-invalid transport/benchmark data cannot authorize feature inputs. New output is
-private/partial until canonical plan, transport and source round trips pass.
-Exit gates: reproduced units/provider mappings/population, poison tests for changed
-pins/window/adjustment/corrections, preserved raw evidence, bounded normalization,
-focused tests/lint/types and one consolidated review. No labels/model training,
-later-period numerical reads, TF changes, promotion or main merge in this sub-slice.
+Standalone adjusted-source sub-slice completed in `ce1d07c` (pushed). Canonical
+requirements/publication and an authority-bound shared-normalization reader now replace
+the need for old combined-panel source authority in the next feature implementation.
+The plan preserves all 564 parent query windows (551 stock windows / 545 securities,
+13 benchmarks), recorded decision identities and reviewed FI/SATS mappings. Other
+aliases remain independent; query history never becomes membership evidence.
+The pinned original benchmark coverage gives XLC a June 19, 2018 start, with 264
+sessions before the first decision; all others start May 29, 2018. Every benchmark
+meets the existing 253-session minimum. Source reads end May 28, 2024.
 
-Remaining feature work: bind predictor and relationship consumers to the independent
-adjusted source authority and rebuild actual features. The relationship assembler
-reads joined labels as well as features, so its publication belongs in an explicitly
-frozen development-only feature/label stage. Never claim old models were retrained.
+Publication now stays private until every unit normalizes and source/plan hashes
+still match. Partials resume in `.<output-name>.collecting`; a rejected plan remains
+private in `.<plan-name>.planning`. No failed gate exposes the final authority.
+Required benchmark gaps/invalid observations reject; stock gaps/invalid candles remain
+explicit for per-decision feature abstentions, with no population exclusions or fills.
+Actual provider retrieval and derived ingestion times remain distinct from the
+established historical close-plus-15-minute feature-availability assumption.
+
+Real Alpaca SIP collection and independent completed offline replay both passed:
+`data/raw/swing_initial_fit_adjusted_canonical` has 564 observed units / 564 terminal
+pages / 794,279 raw candle rows, zero failed, unattempted or wholly unavailable units.
+All benchmark units passed their required session coverage and observation checks.
+Stock query windows have 16,170 absent session dates and 582 unusable candles;
+these counts include query warmup/alias/IPO scope, not a claim that every absent date
+was an eligible membership/decision date. The feature consumer must calculate the
+actual affected decisions. No prices imputed, decisions dropped or exclusion added.
+Canonical normalized bars omit those unusable candles and report their dates explicitly.
+
+Independent pins:
+- Config `configs/swing_initial_fit_adjusted_history.toml`:
+  `684376fbde1b83e78f208dcedf32d67c13ce02d982b4aa0b071df46878f0e24f`.
+- Plan `data/research/swing_initial_fit_adjusted_price_requirements/_authority.json`:
+  `2c1e5d141e5f17f93f0977c2a98e3f69aa7751425b6e23bb583ede3f08a64d73`.
+- Archive authority: `e1095ace476c4bca02511b857be5b377e99dee224936751c92915150ad4dcabc`.
+- Archive manifest: `a624b48016cdffaffbd89daeed9878f022353a0770b74996158320c500cb399d`.
+- Archive request file: `d9ed5abda2075d6e28aef16c42e6502d3c523763587b39454312d9be3a1eae3c`.
+Logs in task workspace: adjusted-live-probe.log, adjusted-live-complete.log and
+adjusted-offline-final.log. The one-unit probe exited incomplete as expected;
+full collection and offline replay exited zero. Collection metadata records peak
+working set 0.177 GiB before final normalization; do not represent this as a measured
+whole-job peak. Four-GiB runtime guards remained active.
+Verification: 35 plan/publication tests after review fixes; 33 adapter tests;
+277 direct collector/architecture/package/continuity tests before the narrow
+publication fixes. Changed-file Ruff and strict mypy over all three source files
+passed after final fixes. One consolidated code/ML review found and closed missing
+benchmark normalization and publication-before-source-recheck gates; poison tests
+cover each. No full-suite repeat, label/feature publication, model fit, promotion,
+main merge or TF operation. Original archives remain untouched.
+
+Next sub-slice frozen: bind and reconstruct technical predictors from canonical
+price/identity sources, without target calculation or corporate-action target admission.
+Replace `ResearchFeaturePolicy` old panel/combined and special two-issuer dependencies
+with one independent adjusted plan/archive pair. Keep strategy and decision-source
+configuration bound. Extract the shared raw-price/identity context from
+`verified_corrected_research_sources`; the outcome wrapper must retain all action
+checks. Feature construction needs raw volume, decisions and memberships, never its
+`action_index`. Rebind only the verified corrected raw selection and symbol policy
+in the future-build decision config, not old action receipts or model artifacts.
+
+Map decisions to exactly one adjusted query unit through `parent_window_mapping`,
+original security/ticker/window and bounded decision time. Group by unit ID; no
+adjusted-history splice, ticker-only fallback or inferred alias. Preserve every
+canonical/parent decision ID and complete monthly population, including missing
+feature rows. Clip bars to independently membership-derived history, carry actual
+stock missing/invalid sessions into existing warmup abstentions and retain XLC's
+accepted benchmark bound. Bind/recheck all canonical source hashes through publication.
+Remove obsolete combined/special-issuer readers from the active predictor path;
+update relationship source consumers consistently, with no old-format acceptance.
+Exit gates: source-only raw/membership/current-reader replay, query-unit ownership
+poison/rename/multiple-window tests, exact population/cutoff preservation, no future
+or target payload reads, bounded real one-group pilot then resumable full features,
+focused integration/causality tests, lint/types and one consolidated review.
+No targets, training, later-period values, TF operations or promotion in this sub-slice.
+
+Later label-stage dependency: the retained 570-query corporate-action archive binds
+the old raw selection. The current offline command verifies matching requests; it
+cannot reconstruct changed bindings. Build an explicit retained-response producer
+that verifies original query/body evidence before publishing a new bound authority.
+Do not just change archive hashes or claim it was recollected. Actual corrected-label
+and research/relationship joins follow in a separately frozen development-only stage.
 
 Cleanup requirement and scope retained for review:
 User clarified that V1 is the initial complete collect/clean/features/targets/train/

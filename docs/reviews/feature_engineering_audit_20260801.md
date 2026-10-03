@@ -22,7 +22,15 @@ observations remain explicit, with no imputation/exclusions or label admission.
 All 203 affected tests and consolidated review passed. The next independent adjusted
 source publication requires complete transport receipts; sampled old warmup/later
 source metadata cannot establish those receipts. Alpaca SIP credentials are configured.
-Exact paths/hashes and the remaining historical source dependency chain are in the
+Standalone adjusted acquisition/normalization completed in `ce1d07c`: 564 observed
+units / 794,279 raw candles, exact SIP receipts and current offline replay pass.
+All 13 benchmarks meet required session coverage; stock queries retain 16,170 absent
+dates and 582 unusable candles for feature abstentions. These are query-window counts,
+not counts of missing eligible decision inputs. No feature/target reconstruction or
+training is claimed. The two publication findings are fixed, with private resumption
+and full normalization/hash checks before final exposure. 35 plan, 33 adapter and
+277 affected component checks passed at the stages recorded in the active handoff;
+final Ruff/types passed. Exact paths/hashes and remaining dependencies are in the
 active handoff. These facts do not admit current-schema model features/targets or
 recertify historical fitted models. The results below remain historical evidence.
 
