@@ -46,14 +46,14 @@ from market_predictor.universe.sp500.membership_authority import (
     require_sp500_membership_authority,
 )
 
-COMBINED_REQUEST_SCHEMA: Final = "edge_rebuild.swing_combined_daily_request.v5"
-COMBINED_MANIFEST_SCHEMA: Final = "edge_rebuild.swing_combined_daily_manifest.v5"
-COMBINED_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_combined_daily_authority.v5"
-COMBINED_TICKER_SCHEMA: Final = "edge_rebuild.swing_combined_daily_ticker.v5"
-COVERAGE_AUDIT_SCHEMA: Final = "edge_rebuild.swing_combined_daily_coverage.v4"
-SESSION_GAP_AUDIT_SCHEMA: Final = "edge_rebuild.swing_session_gap_audit.v1"
-POST_REQUEST_SCHEMA: Final = "swing.daily_history_collection.v1"
-POST_MANIFEST_SCHEMA: Final = "swing.daily_history_manifest.v1"
+COMBINED_REQUEST_SCHEMA: Final = "edge_rebuild.swing_combined_daily_request"
+COMBINED_MANIFEST_SCHEMA: Final = "edge_rebuild.swing_combined_daily_manifest"
+COMBINED_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_combined_daily_authority"
+COMBINED_TICKER_SCHEMA: Final = "edge_rebuild.swing_combined_daily_ticker"
+COVERAGE_AUDIT_SCHEMA: Final = "edge_rebuild.swing_combined_daily_coverage"
+SESSION_GAP_AUDIT_SCHEMA: Final = "edge_rebuild.swing_session_gap_audit"
+POST_REQUEST_SCHEMA: Final = "swing.daily_history_collection"
+POST_MANIFEST_SCHEMA: Final = "swing.daily_history_manifest"
 PRE_END_DATE: Final = date(2019, 7, 8)
 POST_START_DATE: Final = date(2019, 7, 9)
 MAXIMUM_EXCLUSION_FRACTION: Final = 0.05
@@ -1533,7 +1533,7 @@ def _canonicalize(frame: pd.DataFrame, *, ticker: str, calendar: Any) -> pd.Data
             "price_feed": "sip",
             "adjustment": "all",
             "availability_policy": "market_interval_close",
-            "schema_version": "market_data.v1",
+            "schema_version": "market_data",
         }
     )
 

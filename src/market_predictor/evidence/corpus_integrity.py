@@ -30,7 +30,7 @@ import pandas as pd
 
 from market_predictor.core.errors import DataReadinessError
 
-CORPUS_INTEGRITY_SCHEMA = "edge_rebuild.corpus_integrity.v1"
+CORPUS_INTEGRITY_SCHEMA = "edge_rebuild.corpus_integrity"
 MAXIMUM_SECURITY_EXCLUSION_FRACTION = 0.05
 REGULAR_SEGMENT = "regular"
 EXTENDED_SEGMENTS = frozenset({"premarket", "postmarket"})

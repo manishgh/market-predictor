@@ -61,7 +61,7 @@ from market_predictor.resources import (
     release_process_memory,
 )
 
-POLICY_SCHEMA: Final = "market_predictor.swing_event_family_authority.v2"
+POLICY_SCHEMA: Final = "market_predictor.swing_event_family_authority"
 FAMILY_ASSIGNMENT_EXTRA_COLUMNS: Final = (
     "event_family",
     "original_source_family",

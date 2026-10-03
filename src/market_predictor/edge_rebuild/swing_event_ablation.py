@@ -48,16 +48,16 @@ from market_predictor.swing.features.panel import (
     swing_model_feature_columns,
 )
 
-POLICY_SCHEMA: Final = "market_predictor.swing_analyst_revision_ablation.v1"
-REQUEST_SCHEMA: Final = "edge_rebuild.swing_analyst_revision_ablation_request.v2"
-MANIFEST_SCHEMA: Final = "edge_rebuild.swing_analyst_revision_ablation_manifest.v2"
-AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_analyst_revision_ablation_authority.v2"
+POLICY_SCHEMA: Final = "market_predictor.swing_analyst_revision_ablation"
+REQUEST_SCHEMA: Final = "edge_rebuild.swing_analyst_revision_ablation_request"
+MANIFEST_SCHEMA: Final = "edge_rebuild.swing_analyst_revision_ablation_manifest"
+AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_analyst_revision_ablation_authority"
 TECHNICAL_PROFILE: Final = "analyst_revision_technical_only"
 EVENT_PROFILE: Final = "analyst_revision_event_only"
 COMBINED_PROFILE: Final = "analyst_revision_technical_plus_event"
 PROFILES: Final = (TECHNICAL_PROFILE, EVENT_PROFILE, COMBINED_PROFILE)
 SUBTYPE_POLICY: Final = {
-    "implementation": "issuer_event_precision_audit.issuer_event_rule_variant.v1",
+    "implementation": "issuer_event_precision_audit.issuer_event_rule_variant",
     "admitted": ("bare_upgrade", "bare_downgrade", "coverage"),
     "diagnostic_only": (
         "price_target_up",

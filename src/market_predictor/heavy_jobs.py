@@ -46,7 +46,7 @@ def heavy_job_lease(
     try:
         with file_lock(lock_target, timeout=0.0):
             owner = {
-                "schema": "market_predictor.heavy_job_owner.v1",
+                "schema": "market_predictor.heavy_job_owner",
                 "run_id": uuid4().hex,
                 "command": command,
                 "pid": os.getpid(),

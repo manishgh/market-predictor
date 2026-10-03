@@ -688,7 +688,7 @@ def _technical_rows() -> pd.DataFrame:
             "ticker": f"T{index:03d}",
             "session_date_et": DECISION_TIME.tz_convert("America/New_York").date(),
             "decision_time_utc": DECISION_TIME,
-            "prediction_cutoff_policy_id": "xnys_1800_america_new_york_v1",
+            "prediction_cutoff_policy_id": "xnys_1800_america_new_york",
             "timeframe": "1d",
             "bar_start_utc": pd.Timestamp("2026-07-08T13:30:00Z"),
             "sector": "Technology",

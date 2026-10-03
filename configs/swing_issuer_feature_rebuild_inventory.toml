@@ -223,9 +223,9 @@ status = "implemented_reviewed_not_executed_on_real_sources"
 instructions_only = true
 module = "market_predictor.swing.datasets.issuer_news_preparation"
 api = "prepare_initial_fit_monthly_lineages(*, root, config_path, expected_config_sha256, output_directory, expected_existing_manifest_sha256=None, estimate_only=False)"
-input_schema = "swing.initial_fit_monthly_lineage_preparation.v1"
+input_schema = "swing.initial_fit_monthly_lineage_preparation"
 input_keys = ["schema", "decisions", "policy", "sources"]
-publication_config_schema = "swing.monthly_catalyst_publication.v1"
+publication_config_schema = "swing.monthly_catalyst_publication"
 planned_config = "data/research/swing_initial_fit_monthly_lineage_preparation_v1.json"
 planned_output = "data/research/swing_initial_fit_monthly_lineage_inputs_v1"
 planned_index = "data/research/swing_initial_fit_catalyst_months_v1"
@@ -282,7 +282,7 @@ $prepOut = 'data/research/swing_initial_fit_monthly_lineage_inputs_v1'
 $indexOut = 'data/research/swing_initial_fit_catalyst_months_v1'
 # This object is the exact reviewed JSON configuration shape. No extra keys.
 $prepInput = [ordered]@{
-    schema = 'swing.initial_fit_monthly_lineage_preparation.v1'
+    schema = 'swing.initial_fit_monthly_lineage_preparation'
     decisions = @{ path = 'configs/swing_corrected_outcomes.toml'; sha256 = $outcomeConfigSha }
     policy = @{ path = 'configs/catalyst_lineage.toml'; sha256 = $lineagePolicySha }
     sources = [ordered]@{

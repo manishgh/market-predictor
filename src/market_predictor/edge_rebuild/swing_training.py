@@ -71,6 +71,9 @@ from market_predictor.resources import (
     release_process_memory,
 )
 from market_predictor.swing.contracts.model_artifact import (
+    EVALUATION_SCHEMA,
+    MODEL_CARD_SCHEMA,
+    OUTPUT_AUTHORITY_SCHEMA,
     SWING_CANDIDATE_MODEL_SCHEMA,
     TrainingInformationBoundary,
     candidate_training_information_boundary,
@@ -83,10 +86,6 @@ from market_predictor.swing.features.panel import (
     swing_baseline_feature_columns,
 )
 
-TRAINING_SCHEMA: Final = "edge_rebuild.swing_training.v5"
-EVALUATION_SCHEMA: Final = "edge_rebuild.swing_evaluation.v7"
-MODEL_CARD_SCHEMA: Final = "edge_rebuild.swing_model_card.v7"
-OUTPUT_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_candidate_authority.v5"
 SWING_BASELINE_BUNDLE_PREFIX: Final = "swing_baseline_bundle."
 DECISION_START_DATE: Final = date(2019, 7, 9)
 HORIZON_SESSIONS: Final = 10
@@ -716,7 +715,7 @@ def _swing_outcome_contract(
     strategy_contract: StrategyContract,
 ) -> dict[str, Any]:
     return {
-        "schema": "edge_rebuild.swing_outcome_contract.v1",
+        "schema": "edge_rebuild.swing_outcome_contract",
         "horizon": "ten exact exchange sessions",
         "entry": strategy_contract.swing.entry_reference,
         "managed_exit": strategy_contract.swing.exit_rule,

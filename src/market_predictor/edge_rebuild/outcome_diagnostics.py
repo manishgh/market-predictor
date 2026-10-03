@@ -10,7 +10,7 @@ from sklearn.metrics import average_precision_score, roc_auc_score
 
 from market_predictor.core.errors import DataReadinessError
 
-OUTCOME_DIAGNOSTIC_SCHEMA: Final = "edge_rebuild.outcome_diagnostics.v1"
+OUTCOME_DIAGNOSTIC_SCHEMA: Final = "edge_rebuild.outcome_diagnostics"
 
 
 def binary_outcome_diagnostic(

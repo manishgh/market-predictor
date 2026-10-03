@@ -335,7 +335,7 @@ def _compare_funded_accounts(
         "research_contract_sha256": research_contract.sha256(),
     }
     return {
-        "schema_version": "market_predictor.swing_funded_accounting.v1",
+        "schema_version": "market_predictor.swing_funded_accounting",
         "status": "price_ratio_diagnostics" if basis_status == "price_basis_pending" else "event_accounting_diagnostics",
         "eligible": False,
         "price_basis_status": basis_status, "eligibility_blockers": [basis_status],

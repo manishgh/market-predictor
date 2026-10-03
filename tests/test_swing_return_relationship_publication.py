@@ -78,7 +78,7 @@ def _collection_fixture(root: Path, family: str) -> dict[str, Any]:
     if family == "pre_collection":
         plan_hashes = dict(request_sha256="1" * 64, manifest_sha256="2" * 64,
             authority_sha256="3" * 64, units_sha256="4" * 64)
-        payload = dict(schema="edge_rebuild.swing_history_collection.v1", provider="alpaca", timeframe="1Day",
+        payload = dict(schema="edge_rebuild.swing_history_collection", provider="alpaca", timeframe="1Day",
             adjustment="all", price_feed="sip", plan_hashes=plan_hashes, universe_sha256="7" * 64,
             plan_directory=str(root / "synthetic-pre-plan"), plan_schema="edge_rebuild.swing_history_plan.v1",
             provider_unit_set_sha256=json_sha256([]), provider_symbols={}, transport_receipts_required=True,
@@ -90,14 +90,14 @@ def _collection_fixture(root: Path, family: str) -> dict[str, Any]:
             request_sha256=identity, plan_hashes=plan_hashes, universe_sha256=payload["universe_sha256"],
             failed_units=[], unattempted_units=[], unavailable_units=[], unavailable_security_fraction=0.0,
             requested_units=0, terminal_units=0, observed_units=0, unit_artifacts=[], total_rows=0, unit_set_sha256=unit_set))
-        authority_pin = _json(path / "_authority.json", dict(schema="edge_rebuild.swing_history_collection_authority.v1",
+        authority_pin = _json(path / "_authority.json", dict(schema="edge_rebuild.swing_history_collection_authority",
             state="complete", artifact="_manifest.json", artifact_sha256=manifest_pin, request_sha256=identity,
             plan_authority_sha256=plan_hashes["authority_sha256"], plan_units_sha256=plan_hashes["units_sha256"],
             universe_sha256=payload["universe_sha256"], unit_set_sha256=unit_set))
         return dict(directory=str(path), request_sha256=request_pin, manifest_sha256=manifest_pin,
             authority_sha256=authority_pin, unit_set_sha256=unit_set, universe_sha256=payload["universe_sha256"])
     assert family == "post_collection"
-    payload = dict(schema="swing.daily_history_collection.v1", source="alpaca", timeframe="1d",
+    payload = dict(schema="swing.daily_history_collection", source="alpaca", timeframe="1d",
         adjustment="all", price_feed="sip", start_date="2019-07-09", end_date="2026-07-08")
     identity = hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
     request_pin = _json(path / "_request.json", {**payload, "request_sha256": identity})
@@ -106,7 +106,7 @@ def _collection_fixture(root: Path, family: str) -> dict[str, Any]:
         requested_start_utc=pd.Timestamp("2019-07-09", tz="UTC"), requested_end_utc=pd.Timestamp("2026-07-08", tz="UTC"),
         status="observed_empty", row_count=0)]).to_parquet(ledger, index=False)
     ledger_pin = file_sha256(ledger)
-    status = dict(schema="swing.daily_history_manifest.v1", status="complete_with_gaps", request_sha256=identity,
+    status = dict(schema="swing.daily_history_manifest", status="complete_with_gaps", request_sha256=identity,
         requested_symbols=1, observed_symbols=0, unavailable_symbols=["AAA"], failed_symbols={}, skipped_symbols=[],
         source_collections_sha256=ledger_pin)
     status_pin = _json(path / "_status.json", status)
@@ -133,7 +133,7 @@ def _combined(root: Path, strategy: Any, sessions: tuple[date, ...]) -> dict[str
         frame["ticker"] = ticker
         frame["high"] = frame.close * 1.01
         frame["low"] = frame.open * 0.99
-        frame["schema_version"] = "market_data.v1"
+        frame["schema_version"] = "market_data"
         path = combined / f"{ticker}.parquet"
         _canonical(frame, path, "bars", combined_sha)
         artifacts.append(dict(ticker=ticker, path=path.name, sha256=file_sha256(path), rows=len(frame),
@@ -224,11 +224,11 @@ def publication_fixture(evidence: dict[str, Any], monkeypatch: pytest.MonkeyPatc
     observation = root / "data/reports/failure_observation.json"
     wtw = next(item for item in combined["artifacts"] if item["ticker"] == "WTW")
     wtw_pin = _pin(root, directory / "combined_daily" / wtw["path"])
-    _json(observation, dict(schema="market_predictor.predictor_source_failure_observations.v1",
+    _json(observation, dict(schema="market_predictor.predictor_source_failure_observations",
         numeric_first="2018-05-29", numeric_last="2024-05-28", observations=[dict(security_id="unavailable-wtw", ticker="WTW",
             source_path=wtw_pin["path"], source_sha256=wtw_pin["sha256"], invalid_rows=[])]))
     facts_path = config_dir / "failures.json"
-    _json(facts_path, dict(schema_version="market_predictor.predictor_failure_facts.v1", parent_checkpoint_sha256="1" * 64,
+    _json(facts_path, dict(schema_version="market_predictor.predictor_failure_facts", parent_checkpoint_sha256="1" * 64,
         parent_request_sha256="2" * 64, decision_config=_pin(root, config_dir / "swing_corrected_outcomes.toml"),
         feature_config=_pin(root, feature), observations=_pin(root, observation), parent_run_finished=True,
         approval_scope="causal_prefix_replay_and_nullable_completion_only", reviewed_by="Synthetic unit test",

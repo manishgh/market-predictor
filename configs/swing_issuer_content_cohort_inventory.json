@@ -2,7 +2,7 @@
   "schema": "market_predictor.issuer_content_cohort_inventory_config",
   "monthly_news_config": {
     "path": "configs/swing_initial_fit_monthly_news.json",
-    "sha256": "2a9ac2ae30bcddc75b89ce713d811a8d8fe59e3ed186d5e90f81115df901b2b1"
+    "sha256": "f046dd90bef19019f057bf19b821fc575c7ac443ab2f6782c4744296287a9ebe"
   },
   "identity_manifest": {
     "path": "data/research/swing_initial_fit_source_proven_news/_manifest.json",

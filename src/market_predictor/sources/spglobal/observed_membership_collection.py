@@ -28,7 +28,7 @@ from market_predictor.sources.spglobal.archive import (
     parse_spglobal_archive_search_inventory,
 )
 
-RAW_UNIT_SCHEMA: Final = "edge_rebuild.sp500_observed_http_unit.v1"
+RAW_UNIT_SCHEMA: Final = "edge_rebuild.sp500_observed_http_unit"
 ANCHOR_URL: Final = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 SEC_IDENTITY_URL: Final = "https://www.sec.gov/files/company_tickers.json"
 SEC_SUBMISSIONS_URL: Final = "https://data.sec.gov/submissions/CIK{cik}.json"

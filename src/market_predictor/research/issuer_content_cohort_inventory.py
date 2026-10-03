@@ -104,7 +104,7 @@ def _derived_units(root: Path, name: str, spec: dict[str, Any], source: dict[str
     pins[f"{directory.relative_to(root).as_posix()}/_manifest.json"] = spec["manifest_sha256"]
     resolution = manifest["source_path_resolution"]
     declared = resolution.get("repository_root")
-    _require(resolution.get("policy") == "explicit_repository_base_authority_containment_v1" and isinstance(declared, str)
+    _require(resolution.get("policy") == "explicit_repository_base_authority_containment" and isinstance(declared, str)
              and Path(declared).resolve() == root, "derived source must be read from its declared repository root")
     children = {_anchored(root, declared, key): pin for key, pin in
                 pinned_object(directory / "_source_children.json", manifest["inventory"]["_source_children.json"]).items()}

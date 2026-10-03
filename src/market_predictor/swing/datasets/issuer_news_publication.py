@@ -19,7 +19,7 @@ from market_predictor.core.system_memory import assert_system_memory_available
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.heavy_jobs import heavy_job_lease
 
-CONFIG_SCHEMA = "swing.monthly_catalyst_publication.v1"
+CONFIG_SCHEMA = "swing.monthly_catalyst_publication"
 INDEX_SCHEMA = "market_predictor.initial_fit_catalyst_months"
 _KEYS = ["decision_id", "security_id", "ticker", "decision_time_utc"]
 _DECISION_COLUMNS = [*_KEYS, "timeframe", "bar_start_utc", "prediction_cutoff_policy_id"]

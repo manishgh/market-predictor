@@ -1,4 +1,4 @@
-schema_version = "market_predictor.strategy_research_governance.v1"
+schema_version = "market_predictor.strategy_research_governance"
 maximum_development_experiments_per_strategy_version = 12
 maximum_estimator_families_per_strategy_version = 4
 maximum_feature_profiles_per_strategy_version = 3
@@ -34,11 +34,11 @@ minimum_intraday_embargo_sessions = 1
 
 [contract_bindings.swing_dataset]
 path = "configs/swing_dataset.toml"
-sha256 = "b534f23719762637885647fff21bf658c21658b281e48c71a2be69fbf3a58168"
+sha256 = "1564f70970b41014bf57e30f46eb7b0f6b0f3b38003bd018d2364bb81c734e43"
 
 [contract_bindings.edge_rebuild_strategy_contract]
 path = "configs/edge_rebuild_strategy_contract.toml"
-sha256 = "02a087be6b9eff4971770026ca75dce3978f8f9e2028c1f21d027daefec9c0e7"
+sha256 = "428fa7c5580c91e3b1736c929d33a19d6baba30d376a3fca90ab21f32f52f860"
 
 [contract_bindings.edge_rebuild_swing_training]
 path = "configs/edge_rebuild_swing_training.toml"
@@ -46,16 +46,16 @@ sha256 = "b0cd00c2dd6f2cf665f2dd0cabc9682839497a6377d07bb662cb09bc7d710e84"
 
 [contract_bindings.intraday_dataset]
 path = "configs/intraday_dataset.toml"
-sha256 = "9dc02ff7a745ba25ead3f62c570dbe1869e5e13de8ea7ed542ef7b1174db8d52"
+sha256 = "dd0e95eb5fab5a9a26d6ed46420d26c865f7f496444c85b279f9cb77a905a8cc"
 
 [contract_bindings.intraday_training]
 path = "configs/intraday_training.toml"
-sha256 = "976038236cf4bdbc1257eec6a97f10b68b30a8d92f59463ad7d61c763ddd610a"
+sha256 = "6b8c91b0c4c5aebe850c3a515abe00717fc8ca74a88a83313d55e300805423da"
 
 [contract_bindings.intraday_promotion]
 path = "configs/intraday_promotion.toml"
 sha256 = "a1430a4205623b6dc1b6cb267fe13efa5792e042adaf765cec42eb66ae3b3ea9"
 
 [execution_policy]
-policy_id = "market_predictor.execution_policy.v1"
-sha256 = "2249656b0c0943003864850de6b2254e0fa091e45106ac3dd7ae23eddc425e2d"
+policy_id = "market_predictor.execution_policy"
+sha256 = "7c5128dc5cd9872f171a79f698b4c446f80b82523d388e5bca1536c11159b82e"

@@ -960,7 +960,7 @@ def _patch_inputs(
     policy.write_text("test temporal policy\n", encoding="utf-8")
     schedule = _test_schedule(technical.frame)
     temporal = SimpleNamespace(
-        schema_version="edge_rebuild.temporal_manifest.v2",
+        schema_version="edge_rebuild.temporal_manifest",
         modeled_decision_start=date(2019, 7, 9),
         validation_embargo_expected_sessions=10,
         final_embargo_expected_sessions=10,

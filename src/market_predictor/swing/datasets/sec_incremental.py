@@ -48,7 +48,7 @@ from market_predictor.resources import assert_memory_budget
 from market_predictor.sources.http import HttpClient
 from market_predictor.sources.sec import SecRawResponse, SecRequestGovernor, SecSource, SecSourceResponseError, validate_sec_user_agent
 
-SCHEMA = "market_predictor.sec_incremental.v1"
+SCHEMA = "market_predictor.sec_incremental"
 _DAY = timedelta(days=1)
 _FILES = {
     "events": "filing_events.parquet",

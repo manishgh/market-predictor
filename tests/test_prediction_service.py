@@ -137,7 +137,7 @@ def test_retired_fields_are_refused_not_dropped(
         ReadinessInfo(status="valid", intraday_bar_count=10)
 
 
-def test_superseded_response_and_evidence_versions_are_refused(
+def test_only_initial_public_api_version_and_unversioned_internal_evidence_are_accepted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     serving = swing_serving(tmp_path, monkeypatch, enforce_drift=False)
@@ -147,9 +147,18 @@ def test_superseded_response_and_evidence_versions_are_refused(
     evidence = response.evidence.model_dump(mode="json")
 
     assert PredictionResponse.model_validate(payload) == response
-    for version in ("market_predictor.prediction.v1", "market_predictor.prediction.v2"):
+    assert response.contract_version == "market_predictor.prediction.v1"
+    for version in (
+        "market_predictor.prediction.v2",
+        "market_predictor.prediction.v3",
+        "market_predictor.prediction.v4",
+        "market_predictor.prediction",
+    ):
         with pytest.raises(ValidationError):
             PredictionResponse.model_validate({**payload, "contract_version": version})
+    unversioned = {key: value for key, value in payload.items() if key != "contract_version"}
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        PredictionResponse.model_validate({**unversioned, "contract": "market_predictor.prediction"})
     for version in ("market_predictor.prediction_evidence.v2", "market_predictor.prediction_evidence.v3"):
         with pytest.raises(ValidationError):
             PredictionEvidence.model_validate({**evidence, "contract": version})

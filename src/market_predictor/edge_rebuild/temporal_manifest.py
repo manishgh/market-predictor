@@ -23,13 +23,13 @@ from market_predictor.resources import (
     assert_peak_memory_budget,
     memory_audit,
 )
-
-TEMPORAL_MANIFEST_SCHEMA = "edge_rebuild.temporal_manifest.v2"
-TEMPORAL_AUTHORITY_SCHEMA = "edge_rebuild.temporal_manifest_authority.v2"
-SWING_PANEL_MANIFEST_SCHEMA = "edge_rebuild.swing_panel_materialization.v1"
-SWING_PANEL_AUTHORITY_SCHEMA = (
-    "edge_rebuild.swing_panel_materialization_authority.v1"
+from market_predictor.swing.contracts.materialization import (
+    SWING_MATERIALIZATION_AUTHORITY_SCHEMA,
+    SWING_MATERIALIZATION_MANIFEST_SCHEMA,
 )
+
+TEMPORAL_MANIFEST_SCHEMA = "edge_rebuild.temporal_manifest"
+TEMPORAL_AUTHORITY_SCHEMA = "edge_rebuild.temporal_manifest_authority"
 CAUSAL_MODELED_DECISION_START = date(2019, 7, 9)
 
 
@@ -113,7 +113,7 @@ class TemporalManifestConfig(BaseModel):
             raise ValueError("final embargo must cover the complete label horizon")
         if self.unseen_security_holdout_fraction != 0.20:
             raise ValueError("unseen-security holdout fraction must remain 20%")
-        if self.unseen_security_assignment != "sha256_threshold_security_id_v1":
+        if self.unseen_security_assignment != "sha256_threshold_security_id":
             raise ValueError("unseen-security assignment algorithm is not frozen")
         if self.memory_guard_headroom_gib >= self.maximum_process_memory_gib:
             raise ValueError("memory guard headroom must be below the hard budget")
@@ -467,12 +467,12 @@ def _load_panel_coverage(
     panel_directory: Path,
     config: TemporalManifestConfig,
 ) -> PanelCoverage:
-    root = panel_directory / "final" if (panel_directory / "final").is_dir() else panel_directory
+    root = panel_directory / "final"
     authority_path = root / "_authority.json"
     manifest_path = root / "_manifest.json"
     authority = _read_json(authority_path)
     if (
-        authority.get("schema") != SWING_PANEL_AUTHORITY_SCHEMA
+        authority.get("schema") != SWING_MATERIALIZATION_AUTHORITY_SCHEMA
         or authority.get("state") != "complete"
         or authority.get("artifact") != "_manifest.json"
     ):
@@ -480,14 +480,13 @@ def _load_panel_coverage(
     if authority.get("artifact_sha256") != file_sha256(manifest_path):
         raise DataReadinessError("swing panel manifest hash does not match authority")
     manifest = _read_json(manifest_path)
-    if manifest.get("schema") != SWING_PANEL_MANIFEST_SCHEMA:
+    if manifest.get("schema") != SWING_MATERIALIZATION_MANIFEST_SCHEMA:
         raise DataReadinessError("swing panel manifest schema is unsupported")
     records = manifest.get("files")
     if not isinstance(records, list) or not records:
         raise DataReadinessError("swing panel manifest has no partitions")
 
     observed_sessions: set[date] = set()
-    query_sessions: dict[str, date] = {}
     for record in records:
         if not isinstance(record, dict):
             raise DataReadinessError("swing panel partition record is invalid")
@@ -496,16 +495,16 @@ def _load_panel_coverage(
             raise DataReadinessError(f"swing panel partition hash mismatch: {path}")
         frame = pd.read_parquet(
             path,
-            columns=["session_date_et", "decision_group_id"],
+            columns=["session_date_et", "decision_time_utc"],
         )
         sessions = pd.to_datetime(frame["session_date_et"], errors="coerce").dt.date
-        groups = frame["decision_group_id"].astype("string").str.strip()
-        if bool(sessions.isna().any()) or bool(groups.isna().any()) or bool(groups.eq("").any()):
-            raise DataReadinessError("swing panel has invalid session or decision group")
-        for group, session in zip(groups, sessions, strict=True):
-            prior = query_sessions.setdefault(str(group), session)
-            if prior != session:
-                raise DataReadinessError("a decision_group_id spans multiple sessions")
+        decisions = pd.to_datetime(frame["decision_time_utc"], utc=True, errors="coerce")
+        if (
+            bool(sessions.isna().any())
+            or bool(decisions.isna().any())
+            or bool(decisions.dt.tz_convert("America/New_York").dt.date.ne(sessions).any())
+        ):
+            raise DataReadinessError("swing panel has invalid session or decision timestamp")
         observed_sessions.update(sessions)
         del frame
         _guard(config, f"temporal-manifest partition {path.name}")

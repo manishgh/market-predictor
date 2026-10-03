@@ -66,8 +66,8 @@ class SwingEventAttributionHistoryTests(unittest.TestCase):
                     load_event_attribution_history(authority)
 
     def test_persisted_schema_identities_are_frozen(self) -> None:
-        self.assertEqual(ATTRIBUTION_REQUEST_SCHEMA, "swing.event_attribution_request.v1")
-        self.assertEqual(ATTRIBUTION_MANIFEST_SCHEMA, "swing.event_attribution_manifest.v1")
+        self.assertEqual(ATTRIBUTION_REQUEST_SCHEMA, "swing.event_attribution_request")
+        self.assertEqual(ATTRIBUTION_MANIFEST_SCHEMA, "swing.event_attribution_manifest")
 
     def test_publishes_hash_bound_relation_chunks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

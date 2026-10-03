@@ -26,8 +26,8 @@ from market_predictor.resources import (
     release_process_memory,
 )
 
-ORDERING_SCHEMA: Final = "edge_rebuild.swing_ordering_audit.v1"
-ORDERING_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_ordering_audit_authority.v1"
+ORDERING_SCHEMA: Final = "edge_rebuild.swing_ordering_audit"
+ORDERING_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_ordering_audit_authority"
 
 
 class SwingOrderingConfig(BaseModel):
@@ -49,7 +49,7 @@ class SwingOrderingConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_score(self) -> Self:
-        if self.schema_version != "edge_rebuild.swing_ordering.v1":
+        if self.schema_version != "edge_rebuild.swing_ordering":
             raise ValueError("unsupported swing ordering config schema")
         if not self.score_features or len(self.score_features) != len(
             self.score_directions

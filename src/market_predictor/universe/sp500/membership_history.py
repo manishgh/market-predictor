@@ -968,7 +968,7 @@ def _build_point_in_time_sp500_universe(
         cutoff_date=cutoff_date,
     )
     audit = {
-        "schema": "ml_v3.sp500_point_in_time_universe.v1",
+        "schema": "market_predictor.sp500_point_in_time_universe",
         "generated_at_utc": datetime.now(UTC).isoformat(),
         "start_date": start_date.isoformat(),
         "cutoff_date": cutoff_date.isoformat(),

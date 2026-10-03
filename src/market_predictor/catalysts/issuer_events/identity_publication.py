@@ -47,7 +47,7 @@ class _Issuer(_Strict):
 
 
 class _Policy(_Strict):
-    schema_version: Literal["market_predictor.issuer_identity_publication.v1"]
+    schema_version: Literal["market_predictor.issuer_identity_publication"]
     correction_policy: str
     correction_policy_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     query_scope: str

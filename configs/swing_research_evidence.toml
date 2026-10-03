@@ -1,5 +1,5 @@
 # Metadata identity only: never follow payload paths or infer source replay.
-schema_version = "market_predictor.swing_research_evidence.v1"
+schema_version = "market_predictor.swing_research_evidence"
 feature_count = 120
 # evidence.hashing.sequence_sha256: ordered UTF-8 names, each followed by NUL.
 feature_order_sha256 = "59125158f03acc0dcfef11a42da14914475c1bdd7c72af1bbb750df40ed3391e"
@@ -78,7 +78,7 @@ counts = { classified_event_rows = 26370, assignment_rows = 90136, coverage_rows
 
 # These are retained manifest entries, not 60 unique or lifetime experiments.
 [[artifacts]]
-id = "broker_v1"
+id = "broker_trials_7fd046e0"
 path = "data/models/swing_broker_action_specialists_dev_20260812_v1/_manifest.json"
 sha256 = "7fd046e0bce1583e14a01cb9a9125396513dcf7bee080ee95aa41a0f1fc48150"
 bytes = 144088
@@ -86,7 +86,7 @@ kind = "trials"
 counts = { recorded_trials = 12 }
 
 [[artifacts]]
-id = "broker_v2"
+id = "broker_trials_b08aa401"
 path = "data/models/swing_broker_action_specialists_dev_20260812_v2/_manifest.json"
 sha256 = "b08aa401651d996f161d7e5e6f2015304a4feea9ebf9455e55c7aac0eb782295"
 bytes = 144088
@@ -94,7 +94,7 @@ kind = "trials"
 counts = { recorded_trials = 12 }
 
 [[artifacts]]
-id = "broker_v3"
+id = "broker_trials_a3192a42"
 path = "data/models/swing_broker_action_specialists_dev_20260812_v3/_manifest.json"
 sha256 = "a3192a42573753afde5aaa21fc7bca2702f000b8f4163cdab34e21ae3dae08be"
 bytes = 5767057
@@ -102,7 +102,7 @@ kind = "trials"
 counts = { recorded_trials = 12 }
 
 [[artifacts]]
-id = "broker_v4"
+id = "broker_trials_ae8e2156"
 path = "data/models/swing_broker_action_specialists_dev_20260812_v4/_manifest.json"
 sha256 = "ae8e21565642dad7c278075d8f211a59606215f45f7f8642943fd215b6bc89a7"
 bytes = 5767055
@@ -110,7 +110,7 @@ kind = "trials"
 counts = { recorded_trials = 12 }
 
 [[artifacts]]
-id = "directional_v1"
+id = "directional_trials_2d5c081b"
 path = "data/models/swing_directional_broker_action_specialists_dev_20260820_v1/_manifest.json"
 sha256 = "2d5c081be385124b54e0e9133d4bcb9273b06ec52353e125954a8ca38bfbf7b9"
 bytes = 5726840

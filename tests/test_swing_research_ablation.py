@@ -33,7 +33,7 @@ def _authority(expected: pd.DataFrame, unknown: bool = False) -> CatalystDecisio
         "coverage_state": "failed_or_unobserved" if unknown else "observed_empty",
         "missingness_known": not unknown, "training_eligible": not unknown,
         "zero_event_semantics": "unknown_failed" if unknown else "known_zero_events",
-        "schema_version": "swing.catalyst_source_coverage.v1",
+        "schema_version": "swing.catalyst_source_coverage",
     } for identity, ticker, cutoff in zip(expected.security_id, expected.ticker, expected.decision_time_utc, strict=True)
         for family in RANKING_SOURCE_FAMILIES])
     return CatalystDecisionAuthority(Path("test-only"), events, coverage, {"production_ready": False}, {})

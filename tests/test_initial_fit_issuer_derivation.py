@@ -85,11 +85,11 @@ def _saved_authority(tmp_path: Path, *, repository_relative_records: bool = Fals
               "collection_manifest_sha256": file_sha256(collection / "_manifest.json"),
               "collection_audit_path": str(audit), "collection_audit_sha256": file_sha256(audit),
               "collection_request_sha256": ch, "excluded_security_ids": ["security:b"], "production_ready": False}
-    ar = {**common, "schema": "swing.event_attribution_request.v1", "attribution_policy_version": ATTRIBUTION_POLICY_VERSION,
+    ar = {**common, "schema": "swing.event_attribution_request", "attribution_policy_version": ATTRIBUTION_POLICY_VERSION,
           "attribution_policy_sha256": ATTRIBUTION_POLICY_SHA256, "business_labels_path": labels["path"],
           "business_labels_sha256": labels["sha256"], "security_identities_path": identities["path"],
           "security_identities_sha256": identities["sha256"]}
-    sr = {**common, "schema": "swing.event_sentiment_request.v1", "model_name": "ProsusAI/finbert", "model_revision": FINBERT_REVISION}
+    sr = {**common, "schema": "swing.event_sentiment_request", "model_name": "ProsusAI/finbert", "model_revision": FINBERT_REVISION}
     ah, sh = json_sha256(ar), json_sha256(sr)
     _json(attribution / "_request.json", {**ar, "request_sha256": ah})
     _json(sentiment / "_request.json", {**sr, "request_sha256": sh})
@@ -118,15 +118,15 @@ def _saved_authority(tmp_path: Path, *, repository_relative_records: bool = Fals
             {"sentiment_request_sha256": sh, "source_event_artifact_sha256": r["sha256"], "chunk_id": r["chunk_id"]})
         rr.append({**relation_record, "chunk_id": r["chunk_id"]})
         ss.append({**score_record, "chunk_id": r["chunk_id"]})
-    for root, schema, request_hash, rows in ((attribution, "swing.event_attribution_manifest.v1", ah, rr),
-                                            (sentiment, "swing.event_sentiment_manifest.v1", sh, ss)):
+    for root, schema, request_hash, rows in ((attribution, "swing.event_attribution_manifest", ah, rr),
+                                            (sentiment, "swing.event_sentiment_manifest", sh, ss)):
         _json(root / "_manifest.json", {"schema": schema, "status": "complete", "production_ready": False,
               "failed_chunks": {}, "request_sha256": request_hash, "excluded_security_ids": ["security:b"], "artifacts": rows})
     if repository_relative_records:
         for directory in (collection, sentiment):
             parent = json.loads((directory / "_manifest.json").read_text())
             if directory == collection:
-                parent["schema"] = "swing.alpaca_news_history_manifest.v1"
+                parent["schema"] = "swing.alpaca_news_history_manifest"
                 parent["source_collections_path"] = str(Path(parent["source_collections_path"]).relative_to(tmp_path))
             for child in parent["artifacts"]:
                 path = Path(child["path"])
@@ -365,7 +365,7 @@ def test_derivation_feeds_current_lineage_and_family_publishers(saved: SavedIssu
     _write_frame(pd.DataFrame({"security_id": ["security:a"], "ticker": ["AAA"], "timeframe": ["1d"],
         "decision_time_utc": pd.to_datetime(["2024-05-28T22:00:00Z"], utc=True),
         "bar_start_utc": pd.to_datetime(["2024-05-28T13:30:00Z"], utc=True),
-        "prediction_cutoff_policy_id": ["xnys_1800_america_new_york_v1"]}), decisions, "decisions", {})
+        "prediction_cutoff_policy_id": ["xnys_1800_america_new_york"]}), decisions, "decisions", {})
     policy = tmp_path / "lineage.toml"
     policy.write_text(_policy_text(), encoding="utf-8")
     namespace = "market_predictor.swing.datasets.initial_fit_issuer_news."

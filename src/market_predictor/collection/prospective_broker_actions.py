@@ -58,20 +58,20 @@ from market_predictor.universe.sp500.observed_membership_authority import (
 )
 from market_predictor.universe.sp500.observed_membership_authority import load_observed_sp500_membership_authority
 
-POLL_REQUEST_SCHEMA: Final = "edge_rebuild.prospective_broker_action_poll_request.v1"
-POLL_MANIFEST_SCHEMA: Final = "edge_rebuild.prospective_broker_action_poll_manifest.v1"
-POLL_AUTHORITY_SCHEMA: Final = "edge_rebuild.prospective_broker_action_poll_authority.v1"
-OBSERVATION_SCHEMA: Final = "edge_rebuild.prospective_broker_action_observation.v1"
-IDENTITY_AUDIT_SCHEMA: Final = "edge_rebuild.prospective_security_identity_audit.v1"
-GENERATION_REQUEST_SCHEMA: Final = "edge_rebuild.prospective_broker_action_generation_request.v1"
-GENERATION_MANIFEST_SCHEMA: Final = "edge_rebuild.prospective_broker_action_generation_manifest.v1"
-GENERATION_AUTHORITY_SCHEMA: Final = "edge_rebuild.prospective_broker_action_generation_authority.v1"
+POLL_REQUEST_SCHEMA: Final = "edge_rebuild.prospective_broker_action_poll_request"
+POLL_MANIFEST_SCHEMA: Final = "edge_rebuild.prospective_broker_action_poll_manifest"
+POLL_AUTHORITY_SCHEMA: Final = "edge_rebuild.prospective_broker_action_poll_authority"
+OBSERVATION_SCHEMA: Final = "edge_rebuild.prospective_broker_action_observation"
+IDENTITY_AUDIT_SCHEMA: Final = "edge_rebuild.prospective_security_identity_audit"
+GENERATION_REQUEST_SCHEMA: Final = "edge_rebuild.prospective_broker_action_generation_request"
+GENERATION_MANIFEST_SCHEMA: Final = "edge_rebuild.prospective_broker_action_generation_manifest"
+GENERATION_AUTHORITY_SCHEMA: Final = "edge_rebuild.prospective_broker_action_generation_authority"
 GENERATION_STAGING_OWNER_SCHEMA: Final = (
-    "edge_rebuild.prospective_broker_action_generation_staging_owner.v1"
+    "edge_rebuild.prospective_broker_action_generation_staging_owner"
 )
-REVISION_SCHEMA: Final = "edge_rebuild.prospective_broker_action_revision.v1"
-SECURITY_NAMESPACE_SCHEMA: Final = "edge_rebuild.a43_security_identity_namespace.v1"
-ATTEMPT_SCHEMA: Final = "edge_rebuild.prospective_broker_action_attempt.v1"
+REVISION_SCHEMA: Final = "edge_rebuild.prospective_broker_action_revision"
+SECURITY_NAMESPACE_SCHEMA: Final = "edge_rebuild.a43_security_identity_namespace"
+ATTEMPT_SCHEMA: Final = "edge_rebuild.prospective_broker_action_attempt"
 MAX_PAGES_PER_BATCH: Final = 200
 MAX_BYTES_PER_BATCH: Final = 32 * 1024 * 1024
 MAX_BYTES_PER_POLL: Final = 64 * 1024 * 1024
@@ -1929,12 +1929,12 @@ def _load_a43_security_namespace(
     request_sha256 = json_sha256(request_payload)
     parent_lineage = request.get("parent_lineage")
     if (
-        request.get("schema") != "edge_rebuild.intraday_bar_dataset.v1"
+        request.get("schema") != "edge_rebuild.intraday_bar_dataset"
         or request.get("request_sha256") != request_sha256
-        or manifest.get("schema") != "edge_rebuild.intraday_bar_dataset.v1"
+        or manifest.get("schema") != "edge_rebuild.intraday_bar_dataset"
         or manifest.get("state") != "complete"
         or manifest.get("request_sha256") != request_sha256
-        or authority.get("schema") != "edge_rebuild.intraday_bar_dataset_authority.v1"
+        or authority.get("schema") != "edge_rebuild.intraday_bar_dataset_authority"
         or authority.get("state") != "complete"
         or authority.get("artifact") != "_manifest.json"
         or authority.get("artifact_sha256") != file_sha256(manifest_path)
@@ -2433,7 +2433,7 @@ def _claim_poll_cutoff(
     observed = _required_utc(request, "observed_at_utc")
     claim_path, _ = _registry_paths(root, observed)
     payload: dict[str, object] = {
-        "schema": "edge_rebuild.prospective_broker_action_cutoff_claim.v1",
+        "schema": "edge_rebuild.prospective_broker_action_cutoff_claim",
         "cutoff_utc": observed.isoformat(),
         "poll_output_directory": str(output),
         "poll_request_sha256": request["request_sha256"],
@@ -2476,7 +2476,7 @@ def _commit_poll_cutoff(root: Path, *, poll_root: Path) -> None:
     ):
         raise DataReadinessError("prospective cutoff claim does not match the published poll")
     payload = {
-        "schema": "edge_rebuild.prospective_broker_action_cutoff_commit.v1",
+        "schema": "edge_rebuild.prospective_broker_action_cutoff_commit",
         "cutoff_utc": request["observed_at_utc"],
         "poll_output_directory": str(poll_root),
         "poll_request_sha256": request["request_sha256"],
@@ -2522,7 +2522,7 @@ def _verify_poll_registry(
     previous_record = request.get("previous_poll")
     expected_previous_authority = previous_record.get("authority_sha256") if isinstance(previous_record, Mapping) else None
     if (
-        claim.get("schema") != "edge_rebuild.prospective_broker_action_cutoff_claim.v1"
+        claim.get("schema") != "edge_rebuild.prospective_broker_action_cutoff_claim"
         or claim.get("record_sha256") != json_sha256(claim_payload)
         or claim.get("cutoff_utc") != request.get("observed_at_utc")
         or claim.get("poll_output_directory") != str(poll_root)
@@ -2539,7 +2539,7 @@ def _verify_poll_registry(
         commit is None
         or commit_payload is None
         or commit.get("schema")
-        != "edge_rebuild.prospective_broker_action_cutoff_commit.v1"
+        != "edge_rebuild.prospective_broker_action_cutoff_commit"
         or commit.get("record_sha256") != json_sha256(commit_payload)
         or commit.get("claim_file_sha256") != file_sha256(claim_path)
         or commit.get("poll_output_directory") != str(poll_root)

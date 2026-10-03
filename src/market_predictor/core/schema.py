@@ -4,7 +4,7 @@ import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-CROSS_SECTIONAL_SCHEMA_VERSION = "ml_v3.v1"
+CROSS_SECTIONAL_SCHEMA_VERSION = "market_predictor.cross_sectional_features"
 
 _SCHEMA_TOKEN = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)*$")
 

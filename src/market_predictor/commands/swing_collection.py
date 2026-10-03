@@ -145,7 +145,7 @@ def register_swing_collection_commands(app: typer.Typer, console: Any) -> None:
     def collect_edge_rebuild_swing_history_command(
         plan_dir: Path = typer.Option(
             ...,
-            help="Complete swing_history_acquisition_plan.v2 authority directory.",
+            help="Complete swing_history_acquisition_plan authority directory.",
         ),
         out_dir: Path = typer.Option(
             ...,

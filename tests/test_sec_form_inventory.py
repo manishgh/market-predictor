@@ -48,7 +48,7 @@ SAVED_URL = "https://www.sec.gov/Archives/edgar/data/1/000000000119000001/a-earn
 
 
 def _relation(security: str, ticker: str, cik: str, start: str = "2019-07-09T04:00:00Z", end: str | None = None,
-              policy: str = "latest_sec_ticker_propagated_within_stable_security_id_v1") -> dict[str, Any]:
+              policy: str = "latest_sec_ticker_propagated_within_stable_security_id") -> dict[str, Any]:
     return {"security_id": security, "ticker": ticker, "sec_cik": cik, "effective_from_utc": pd.Timestamp(start),
             "effective_to_utc": pd.Timestamp(end) if end else pd.NaT, "available_at_utc": pd.Timestamp(start),
             "identity_policy": policy}
@@ -58,7 +58,7 @@ def _relations() -> pd.DataFrame:
     frame = pd.DataFrame([
         _relation("cik:0000000001", "AAA", A),
         _relation("cik:0000000002:ticker:BBA", "BBA", B),
-        _relation("cik:0000000002:ticker:BBB", "BBB", B, policy="reviewed_official_sec_filing_override_v1"),
+        _relation("cik:0000000002:ticker:BBB", "BBB", B, policy="reviewed_official_sec_filing_override"),
         _relation("cik:0000000003", "CCC", C, start="2021-01-04T05:00:00Z"),
         _relation("cik:0000000004", "DDD", D),
         _relation("cik:0000000005", "EEE", E),
@@ -232,8 +232,8 @@ def test_inventory_attribution_timing_items_and_documents(world: dict[str, Any])
     shared = filings.xs("0000000002-20-000001", level="accession_number")
     assert set(shared.index) == {"cik:0000000002:ticker:BBA", "cik:0000000002:ticker:BBB"}
     assert shared.issuer_cohort_securities.eq(2).all()
-    assert set(shared.identity_policy) == {"latest_sec_ticker_propagated_within_stable_security_id_v1",
-                                           "reviewed_official_sec_filing_override_v1"}
+    assert set(shared.identity_policy) == {"latest_sec_ticker_propagated_within_stable_security_id",
+                                           "reviewed_official_sec_filing_override"}
     assert "0000000004-20-000001" not in set(filings.index.get_level_values("accession_number"))
     assert "0000000003-20-000001" not in set(filings.index.get_level_values("accession_number"))
     assert totals["cik_identity_outside_relation_rows"] == 1

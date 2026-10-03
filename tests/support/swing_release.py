@@ -11,7 +11,7 @@ from tests.r4_fixtures import authorize_candidate_for_test, synthetic_identity_m
 
 # The retired day-trading model identity, as historical candidate manifests record it.
 RETIRED_INTRADAY_MODEL_TYPE = "canonical_intraday"
-RETIRED_INTRADAY_SCHEMA_VERSION = "intraday.model.v1"
+RETIRED_INTRADAY_SCHEMA_VERSION = "intraday.model"
 RETIRED_INTRADAY_EVIDENCE_SCHEMA = "intraday_training_evidence.v1"
 
 

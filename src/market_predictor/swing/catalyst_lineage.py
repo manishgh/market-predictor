@@ -44,12 +44,12 @@ from market_predictor.swing.news_source_inventory import (
     build_source_news_shard_inventory,
 )
 
-CATALYST_LINEAGE_REQUEST_SCHEMA = "swing.catalyst_lineage_request.v2"
-CATALYST_LINEAGE_MANIFEST_SCHEMA = "swing.catalyst_lineage_manifest.v2"
-CATALYST_EVENT_SCHEMA = "swing.catalyst_event.v1"
-CATALYST_COVERAGE_SCHEMA = "swing.catalyst_source_coverage.v1"
-FEATURE_INVENTORY_SCHEMA = "swing.catalyst_feature_inventory.v1"
-_EXPECTED_POLICY_SCHEMA = "market_predictor.catalyst_lineage.v1"
+CATALYST_LINEAGE_REQUEST_SCHEMA = "swing.catalyst_lineage_request"
+CATALYST_LINEAGE_MANIFEST_SCHEMA = "swing.catalyst_lineage_manifest"
+CATALYST_EVENT_SCHEMA = "swing.catalyst_event"
+CATALYST_COVERAGE_SCHEMA = "swing.catalyst_source_coverage"
+FEATURE_INVENTORY_SCHEMA = "swing.catalyst_feature_inventory"
+_EXPECTED_POLICY_SCHEMA = "market_predictor.catalyst_lineage"
 _SUPPORTED_CHANNELS = frozenset({"direct_issuer", "business_exposure", "sector_context"})
 _TRAINING_ELIGIBLE_CHANNELS = frozenset({"direct_issuer"})
 _RESEARCH_ONLY_CHANNELS = _SUPPORTED_CHANNELS - _TRAINING_ELIGIBLE_CHANNELS

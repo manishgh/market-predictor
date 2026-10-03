@@ -1,7 +1,7 @@
 # Prediction API Contract
 
 Owner: Market Predictor (producer). Consumer: TradingFlow (`MarketPredictorHttpClient`).
-Current version: `market_predictor.prediction.v4`. The API is the only versioned name:
+Current version: `market_predictor.prediction.v1`. The API is the only versioned name:
 models are not final, so internal records and nested policies carry no version.
 Golden fixture: `tests/fixtures/contracts/swing_prediction_response.json`, a real served
 response kept equal to the code by
@@ -38,7 +38,7 @@ Every field below is always present. "non-null" means TradingFlow may rely on a 
 
 | Path | Type | Notes |
 | --- | --- | --- |
-| `contract_version` | string | `market_predictor.prediction.v4` |
+| `contract_version` | string | `market_predictor.prediction.v1` |
 | `request_id` | string, non-null | |
 | `generated_at_utc` | ISO-8601 UTC, non-null | |
 | `mode` | `swing`, non-null | |
@@ -125,8 +125,11 @@ Non-200 responses carry `{"error": {"code", "message", "correlation_id", "retrya
 - Every change adds a Change log entry (date, what changes, compatibility, the new
   fixture SHA-256) before the code lands, and the fixture is regenerated with
   `MARKET_PREDICTOR_WRITE_CONTRACT_FIXTURE=1`.
-- A field removal, a type or nullability change, a new enum value or a meaning change
-  bumps `contract_version`. Adding an optional field does not, but still gets an entry.
+- This is the initial pre-production V1 system. Implementation iterations do not
+  increment API/data/model versions. Update the canonical schema and both consumers
+  together, recording fixture changes; no compatibility aliases are required. A later
+  major version requires explicit acceptance of an improved system and coordinated
+  migration. V1 is not evidence of a trained, promoted or SPY-beating model.
 - TradingFlow acknowledges an entry in its notes file before relying on it.
 
 `sector_peer_floor` means the ticker is a verified member, but its sector naturally
@@ -147,6 +150,18 @@ including early closes. Historical snapshots without the boundary cannot be repl
 
 ## Change log
 
+- 2026-10-03 (current, explicit user reset): public contract is
+  `market_predictor.prediction.v1` on unchanged `/v1/` routes. Internal schema and
+  policy identifiers are descriptive and unversioned, with no legacy acceptance
+  paths. Payload field structure remains current; model/policy/evidence hashes change
+  where their canonical identities changed. Regenerated served fixture SHA-256:
+  `59288471c249b0422443f0a68ce7623f4b03956826877ad1158dc79ebf1fea51`.
+  This is a pre-production reset, not backwards compatibility with historical V1
+  payloads and not a new model admission. TradingFlow's current working checkout
+  expects `contract: market_predictor.prediction`; its owner must change to
+  `contract_version`, accept only the current V1 payload and pin this fixture.
+  No TradingFlow acceptance test or build was run by this task.
+
 - 2026-10-03: API v4 adds optional `models.swing.training_labels_available_through_utc`
   (ISO-8601 UTC) and populates nullable `training_data_end` from verified promoted
   metadata. Existing field types, signal names and actions are unchanged. Replay adds
@@ -165,7 +180,7 @@ including early closes. Historical snapshots without the boundary cannot be repl
 
 Entries are append-only history, newest first; the newest entry is the current contract.
 
-- 2026-09-27 (correction, current): the user clarified that the public API stays
+- 2026-09-27 (historical correction): the user clarified that the public API stays
   versioned. The response field is `contract_version` again, value
   `market_predictor.prediction.v3`; routes stay under `/v1/`. This reverses the
   response-level change in the entry below. The nested records keep that entry's

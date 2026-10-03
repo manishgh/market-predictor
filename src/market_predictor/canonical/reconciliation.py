@@ -21,7 +21,7 @@ DEFAULT_EVENT_WINDOWS: Mapping[str, pd.Timedelta] = {
     "1d": pd.Timedelta(days=1),
     "3d": pd.Timedelta(days=3),
 }
-ASSIGNMENT_SCHEMA_VERSION = "event_assignment.v3"
+ASSIGNMENT_SCHEMA_VERSION = "event_assignment"
 ASSIGNMENT_STATUSES: tuple[str, ...] = (
     "assigned",
     "duplicate_event_id",

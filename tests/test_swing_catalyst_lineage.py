@@ -835,7 +835,7 @@ def _decisions() -> pd.DataFrame:
 
 def _policy_text() -> str:
     return """
-schema_version = "market_predictor.catalyst_lineage.v1"
+schema_version = "market_predictor.catalyst_lineage"
 production_ready = false
 availability_policy = "provider_publication_proxy_plus_fixed_inference_latency"
 training_eligible_channels = ["direct_issuer"]

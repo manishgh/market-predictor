@@ -62,7 +62,7 @@ class _PromotedBundleBase(_FrozenModel):
     feature_schema_version: str = Field(min_length=1)
     ordered_feature_columns: tuple[str, ...] = Field(min_length=1)
     ordered_feature_sha256: str = Field(pattern=_SHA256_PATTERN)
-    strategy_contract_schema_version: Literal["edge_rebuild.strategy_contract.v2"]
+    strategy_contract_schema_version: Literal["edge_rebuild.strategy_contract"]
     strategy_contract_sha256: str = Field(pattern=_SHA256_PATTERN)
     execution_policy_sha256: str = Field(pattern=_SHA256_PATTERN)
     market_data_provider: Literal["alpaca"]

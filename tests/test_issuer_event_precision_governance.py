@@ -986,7 +986,7 @@ minimum_joint_lcb = 0.0
 """.strip()
         )
     return (
-        """schema_version = "market_predictor.issuer_event_precision_audit.v2"
+        """schema_version = "market_predictor.issuer_event_precision_audit"
 confidence_level = 0.95
 reviewers_per_item = 2
 unresolved_policy = "failure"

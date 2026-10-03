@@ -285,7 +285,7 @@ class PredictionApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         metrics = response.json()
-        self.assertEqual(metrics["schema"], "market_predictor.runtime_metrics.v1")
+        self.assertEqual(metrics["schema"], "market_predictor.runtime_metrics")
         self.assertEqual(metrics["requests"]["POST /v1/predictions/swing"]["count"], 1)
         self.assertEqual(metrics["predictions"]["swing"]["requests"], 1)
         self.assertEqual(metrics["prediction_outcomes"]["not_entered"], 1)

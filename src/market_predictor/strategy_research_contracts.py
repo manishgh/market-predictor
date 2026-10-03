@@ -82,7 +82,7 @@ class ExecutionPolicyBinding(FrozenContract):
 
 
 class StrategyResearchGovernance(FrozenContract):
-    schema_version: Literal["market_predictor.strategy_research_governance.v1"]
+    schema_version: Literal["market_predictor.strategy_research_governance"]
     maximum_development_experiments_per_strategy_version: int = Field(
         ge=1,
         le=100,
@@ -181,7 +181,7 @@ class ResearchHypothesis(FrozenContract):
 
 
 class ResearchHypothesisRegistry(FrozenContract):
-    schema_version: Literal["market_predictor.strategy_hypothesis_registry.v1"]
+    schema_version: Literal["market_predictor.strategy_hypothesis_registry"]
     research_policy: FileBinding
     hypotheses: tuple[ResearchHypothesis, ...] = Field(min_length=1)
 
@@ -219,7 +219,7 @@ class ReferenceModel(FrozenContract):
 
 
 class ReferenceModelInventory(FrozenContract):
-    schema_version: Literal["market_predictor.reference_model_inventory.v1"]
+    schema_version: Literal["market_predictor.reference_model_inventory"]
     models: tuple[ReferenceModel, ...] = Field(min_length=1)
 
     @model_validator(mode="after")

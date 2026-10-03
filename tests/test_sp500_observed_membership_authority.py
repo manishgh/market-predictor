@@ -793,7 +793,7 @@ def _large_observed_membership_fixture() -> tuple[pd.DataFrame, bytes, bytes]:
                 "universe_snapshot_id": "closed",
                 "source": "spglobal_official_point_in_time",
                 "availability_policy": "provider_publication_proxy",
-                "schema_version": "market_data.v1",
+                "schema_version": "market_data",
             }
         )
         anchor_rows.append(f"<tr><td>{ticker}</td><td>{ticker} Company</td><td>Industrials</td><td>Machinery</td><td>{cik}</td></tr>")

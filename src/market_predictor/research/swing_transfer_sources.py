@@ -167,7 +167,7 @@ def prepare_transfer_replay_request(root: Path, config_path: Path) -> dict[str, 
     bound: dict[str, str] = {}
     checked_transfer_file(root, str(config_path), file_sha256(config_path), bound)
     control = _object(checked_transfer_file(root, config.control_receipt, config.control_receipt_sha256, bound))
-    if (control.get("schema_version") != "market_predictor.swing_accounting_control.v1"
+    if (control.get("schema_version") != "market_predictor.swing_accounting_control"
             or control.get("status") != "blocked" or control.get("validation_or_test_outcomes_read") is not False
             or control.get("scope") != "initial_fit_deterministic_control_not_out_of_sample"):
         raise DataReadinessError("transfer replay requires the frozen initial-fit blocked control")

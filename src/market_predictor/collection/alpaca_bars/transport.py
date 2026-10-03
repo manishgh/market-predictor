@@ -28,12 +28,9 @@ from market_predictor.resources import (
 )
 from market_predictor.sources.alpaca import AlpacaBarsPage, AlpacaSource
 
-HISTORY_COLLECTION_SCHEMA = "edge_rebuild.intraday_history_collection.v1"
-HISTORY_UNIT_SCHEMA = "edge_rebuild.intraday_history_unit.v1"
-HISTORY_AUTHORITY_SCHEMA = "edge_rebuild.intraday_history_authority.v1"
-EXACT_HISTORY_COLLECTION_SCHEMA = "edge_rebuild.intraday_history_collection.v2"
-EXACT_HISTORY_UNIT_SCHEMA = "edge_rebuild.intraday_history_unit.v2"
-EXACT_HISTORY_AUTHORITY_SCHEMA = "edge_rebuild.intraday_history_authority.v2"
+HISTORY_COLLECTION_SCHEMA = "edge_rebuild.intraday_history_collection"
+HISTORY_UNIT_SCHEMA = "edge_rebuild.intraday_history_unit"
+HISTORY_AUTHORITY_SCHEMA = "edge_rebuild.intraday_history_authority"
 _SAFE_RATE_HEADERS = {
     "retry-after",
     "x-ratelimit-limit",
@@ -81,7 +78,7 @@ def collect_alpaca_bars(
         raise DataReadinessError("ER1A plan contains duplicate units")
     plan_fingerprint = str(plan["plan_fingerprint"])
     request_payload: dict[str, Any] = {
-        "schema": EXACT_HISTORY_COLLECTION_SCHEMA,
+        "schema": HISTORY_COLLECTION_SCHEMA,
         "plan_schema": str(plan.get("schema", "")),
         "plan_path": str(plan_directory),
         "plan_fingerprint": plan_fingerprint,
@@ -176,7 +173,7 @@ def collect_alpaca_bars(
     unattempted = len(units) - len(completed) - len(failures)
     transport_complete = not failures and unattempted == 0
     status: dict[str, Any] = {
-        "schema": EXACT_HISTORY_COLLECTION_SCHEMA,
+        "schema": HISTORY_COLLECTION_SCHEMA,
         "updated_at_utc": datetime.now(UTC).isoformat(),
         "request_sha256": request_sha256,
         "plan_fingerprint": plan_fingerprint,
@@ -239,7 +236,7 @@ def collect_alpaca_bars(
     _atomic_json(
         output_directory / "_authority.json",
         {
-            "schema": EXACT_HISTORY_AUTHORITY_SCHEMA,
+            "schema": HISTORY_AUTHORITY_SCHEMA,
             "state": "complete",
             "artifact": "_manifest.json",
             "artifact_sha256": file_sha256(
@@ -318,26 +315,13 @@ def load_complete_bar_collection(
         for key, value in request.items()
         if key != "request_sha256"
     }
-    expected_authority_schema = (
-        EXACT_HISTORY_AUTHORITY_SCHEMA
-        if manifest.get("schema") == EXACT_HISTORY_COLLECTION_SCHEMA
-        else HISTORY_AUTHORITY_SCHEMA
-    )
-    expected_request_schema = (
-        EXACT_HISTORY_COLLECTION_SCHEMA
-        if manifest.get("schema") == EXACT_HISTORY_COLLECTION_SCHEMA
-        else HISTORY_COLLECTION_SCHEMA
-    )
     if (
-        request.get("schema") != expected_request_schema
+        request.get("schema") != HISTORY_COLLECTION_SCHEMA
         or _json_sha256(payload) != request_sha256
-        or manifest.get("schema") not in {
-            EXACT_HISTORY_COLLECTION_SCHEMA,
-            HISTORY_COLLECTION_SCHEMA,
-        }
+        or manifest.get("schema") != HISTORY_COLLECTION_SCHEMA
         or manifest.get("status") != "transport_complete"
         or manifest.get("request_sha256") != request_sha256
-        or authority.get("schema") != expected_authority_schema
+        or authority.get("schema") != HISTORY_AUTHORITY_SCHEMA
         or authority.get("state") != "complete"
         or authority.get("artifact") != "_manifest.json"
         or authority.get("artifact_sha256")
@@ -357,14 +341,9 @@ def load_complete_bar_collection(
             raise DataReadinessError(
                 "ER1A history unit record is malformed"
             )
-        expected_unit_schema = (
-            EXACT_HISTORY_UNIT_SCHEMA
-            if manifest.get("schema") == EXACT_HISTORY_COLLECTION_SCHEMA
-            else HISTORY_UNIT_SCHEMA
-        )
-        if raw.get("schema") != expected_unit_schema:
+        if raw.get("schema") != HISTORY_UNIT_SCHEMA:
             raise DataReadinessError(
-                "history collection mixes authority schema generations"
+                "history collection unit schema is unsupported"
             )
         path = _resolve_inside(directory, str(raw.get("path", "")))
         sidecar = path.with_suffix(".manifest.json")
@@ -378,22 +357,20 @@ def load_complete_bar_collection(
                 f"ER1A history unit does not verify: {path}"
             )
         _verify_raw_pages(directory, raw)
-        if raw.get("schema") == EXACT_HISTORY_UNIT_SCHEMA:
-            _verify_exact_unit_replay(directory, raw, path)
-    if manifest.get("schema") == EXACT_HISTORY_COLLECTION_SCHEMA:
-        expected_inventory = manifest.get("raw_page_inventory")
-        referenced_inventory = _referenced_raw_page_inventory(
-            directory,
-            cast(list[Mapping[str, Any]], raw_artifacts),
+        _verify_exact_unit_replay(directory, raw, path)
+    expected_inventory = manifest.get("raw_page_inventory")
+    referenced_inventory = _referenced_raw_page_inventory(
+        directory,
+        cast(list[Mapping[str, Any]], raw_artifacts),
+    )
+    if (
+        not isinstance(expected_inventory, list)
+        or expected_inventory != referenced_inventory
+        or referenced_inventory != _raw_page_inventory(directory)
+    ):
+        raise DataReadinessError(
+            "exact raw provider page inventory changed"
         )
-        if (
-            not isinstance(expected_inventory, list)
-            or expected_inventory != referenced_inventory
-            or referenced_inventory != _raw_page_inventory(directory)
-        ):
-            raise DataReadinessError(
-                "exact raw provider page inventory changed"
-            )
     return manifest
 
 
@@ -554,7 +531,7 @@ def _collect_unit(
         path.parent.mkdir(parents=True, exist_ok=True)
         _atomic_parquet(bars, path)
         record: dict[str, Any] = {
-            "schema": EXACT_HISTORY_UNIT_SCHEMA,
+        "schema": HISTORY_UNIT_SCHEMA,
             "unit_id": unit_id,
             "plan_fingerprint": plan_fingerprint,
             "request_sha256": request_sha256,
@@ -671,10 +648,7 @@ def _load_existing_unit(
     start = _aware_datetime(expected_unit["requested_start_utc"])
     end = _aware_datetime(expected_unit["requested_end_utc"])
     if (
-        manifest.get("schema") not in {
-            EXACT_HISTORY_UNIT_SCHEMA,
-            HISTORY_UNIT_SCHEMA,
-        }
+        manifest.get("schema") != HISTORY_UNIT_SCHEMA
         or manifest.get("unit_id") != expected_unit["unit_id"]
         or manifest.get("plan_fingerprint") != plan_fingerprint
         or manifest.get("request_sha256") != request_sha256
@@ -693,8 +667,7 @@ def _load_existing_unit(
             f"ER1A collected unit integrity failed: {path}"
         )
     _verify_raw_pages(root, manifest)
-    if manifest.get("schema") == EXACT_HISTORY_UNIT_SCHEMA:
-        _verify_exact_unit_replay(root, manifest, path)
+    _verify_exact_unit_replay(root, manifest, path)
     frame = pd.read_parquet(
         path,
         columns=[
@@ -749,25 +722,24 @@ def _verify_raw_pages(root: Path, unit: Mapping[str, Any]) -> None:
             raise DataReadinessError(
                 f"collected raw provider page failed integrity: {path}"
             )
-        if unit.get("schema") == EXACT_HISTORY_UNIT_SCHEMA:
-            sidecar = _resolve_inside(
-                root,
-                str(raw.get("raw_sidecar_path", "")),
+        sidecar = _resolve_inside(
+            root,
+            str(raw.get("raw_sidecar_path", "")),
+        )
+        if not sidecar.is_file():
+            raise DataReadinessError(
+                f"collected raw provider sidecar is missing: {sidecar}"
             )
-            if not sidecar.is_file():
-                raise DataReadinessError(
-                    f"collected raw provider sidecar is missing: {sidecar}"
-                )
-            expected_sidecar = {
-                str(key): value
-                for key, value in raw.items()
-                if key != "rows"
-            }
-            if _load_json(sidecar) != expected_sidecar:
-                raise DataReadinessError(
-                    f"collected raw provider sidecar changed: {sidecar}"
-                )
-            _verify_exact_page_body(path, raw)
+        expected_sidecar = {
+            str(key): value
+            for key, value in raw.items()
+            if key != "rows"
+        }
+        if _load_json(sidecar) != expected_sidecar:
+            raise DataReadinessError(
+                f"collected raw provider sidecar changed: {sidecar}"
+            )
+        _verify_exact_page_body(path, raw)
 
 
 def _transport_timeframe(config: AlpacaTransportConfig) -> str:

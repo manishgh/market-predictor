@@ -96,7 +96,7 @@ def build_source_news_shard_inventory(
             raise DataReadinessError(f"empty source shard unexpectedly has events: {chunk_id}")
         empty_evidence_sha256 = _sha256_json(
             {
-                "schema": "swing.empty_news_source_evidence.v1",
+                "schema": "swing.empty_news_source_evidence",
                 "collection_request_sha256": collection["request_sha256"],
                 "source_collections_sha256": ledger_sha256,
                 "chunk_id": chunk_id,

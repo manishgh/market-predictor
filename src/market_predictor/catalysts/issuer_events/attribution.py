@@ -11,7 +11,7 @@ import pandas as pd
 
 from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
 
-ATTRIBUTION_POLICY_VERSION = "swing.event_attribution.v3"
+ATTRIBUTION_POLICY_VERSION = "swing.event_attribution"
 RelationChannel = Literal["direct_issuer", "business_exposure", "sector_context"]
 LabelType = Literal["offering", "driver", "end_market"]
 RelationUse = Literal["exposure", "context"]

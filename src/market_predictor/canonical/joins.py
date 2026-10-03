@@ -25,8 +25,8 @@ MEMBERSHIP_VALUE_COLUMNS = (
     "source",
 )
 DecisionMode = Literal["swing-nightly", "intraday-bar-availability", "research-bar-availability"]
-INTRADAY_BAR_AVAILABILITY_POLICY_ID = "intraday_bar_available_at_v1"
-RESEARCH_BAR_AVAILABILITY_POLICY_ID = "research_bar_available_at_v1"
+INTRADAY_BAR_AVAILABILITY_POLICY_ID = "intraday_bar_available_at"
+RESEARCH_BAR_AVAILABILITY_POLICY_ID = "research_bar_available_at"
 
 
 def decisions_from_completed_bars(bars: pd.DataFrame, *, mode: DecisionMode) -> pd.DataFrame:

@@ -79,5 +79,5 @@
       "view": "intraday"
     }
   ],
-  "schema_version": "market_predictor.reference_model_inventory.v1"
+  "schema_version": "market_predictor.reference_model_inventory"
 }

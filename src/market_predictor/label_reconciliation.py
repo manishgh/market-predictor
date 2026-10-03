@@ -19,7 +19,7 @@ from market_predictor.swing.contracts import (
     swing_target_column,
 )
 
-LABEL_RECONCILIATION_SCHEMA = "label_source_reconciliation.v1"
+LABEL_RECONCILIATION_SCHEMA = "label_source_reconciliation"
 LABEL_IDENTITY_COLUMNS = ("ticker", "decision_time_utc")
 _HASH_CHUNK_ROWS = 20_000
 

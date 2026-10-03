@@ -63,12 +63,12 @@ from market_predictor.swing.selection import (
     select_constrained_swing_portfolio,
 )
 
-POLICY_SCHEMA: Final = "market_predictor.swing_broker_action_specialists.v1"
-REQUEST_SCHEMA: Final = "edge_rebuild.swing_broker_specialist_request.v1"
-MANIFEST_SCHEMA: Final = "edge_rebuild.swing_broker_specialist_manifest.v1"
-AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_broker_specialist_authority.v1"
-CAPACITY_SCHEMA: Final = "edge_rebuild.swing_broker_specialist_capacity.v1"
-MODEL_SCHEMA: Final = "edge_rebuild.swing_broker_specialist_model.v1"
+POLICY_SCHEMA: Final = "market_predictor.swing_broker_action_specialists"
+REQUEST_SCHEMA: Final = "edge_rebuild.swing_broker_specialist_request"
+MANIFEST_SCHEMA: Final = "edge_rebuild.swing_broker_specialist_manifest"
+AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_broker_specialist_authority"
+CAPACITY_SCHEMA: Final = "edge_rebuild.swing_broker_specialist_capacity"
+MODEL_SCHEMA: Final = "edge_rebuild.swing_broker_specialist_model"
 
 RATING_SPECIALIST: Final = "rating_change"
 COVERAGE_SPECIALIST: Final = "coverage_initiation"
@@ -1179,7 +1179,7 @@ def _canonical_single_scope_metrics(
                 target, probability, weight
             ),
             "minimum_required_roc_auc": policy.minimum_validation_roc_auc,
-            "portfolio_evaluator": "canonical_swing_evaluation_metrics_v5",
+            "portfolio_evaluator": "canonical_swing_evaluation_metrics",
         }
     )
     return metrics

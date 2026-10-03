@@ -102,7 +102,7 @@ def fit_disjoint_calibrator(
     after = evaluation["calibrated_probability"].to_numpy(dtype=float)
     target = evaluation["target"].to_numpy(dtype=int)
     report: dict[str, Any] = {
-        "schema": "ml_v3.calibration_audit.v1",
+        "schema": "market_predictor.calibration_audit",
         "family": family,
         "model_run_id": calibrator.model_run_id,
         "method": method,
@@ -284,7 +284,7 @@ def evaluate_ranking_economics(
         seed=config.bootstrap_seed,
     )
     report: dict[str, Any] = {
-        "schema": "ml_v3.ranking_economics_audit.v1",
+        "schema": "market_predictor.ranking_economics_audit",
         "config": config.model_dump(mode="json"),
         "ranking_groups": int(sum(len(values) for values in ndcg_by_session.values())),
         "selected_trades": len(selected),

@@ -1,4 +1,4 @@
-"""Structural verification for retained issuer-family v2 evidence envelopes."""
+"""Structural verification for issuer-family evidence envelopes."""
 
 from __future__ import annotations
 
@@ -17,14 +17,14 @@ from market_predictor.canonical.store import (
 )
 from market_predictor.core.errors import DataReadinessError
 
-AUTHORITY_SCHEMA: Final = "edge_rebuild.issuer_event_family_authority.v2"
-MANIFEST_SCHEMA: Final = "edge_rebuild.issuer_event_family_manifest.v2"
+AUTHORITY_SCHEMA: Final = "edge_rebuild.issuer_event_family_authority"
+MANIFEST_SCHEMA: Final = "edge_rebuild.issuer_event_family_manifest"
 FAMILY_EVENTS_ARTIFACT_TYPE: Final = "issuer_event_family_events"
 FAMILY_ASSIGNMENTS_ARTIFACT_TYPE: Final = "issuer_event_family_assignments"
 FAMILY_COVERAGE_ARTIFACT_TYPE: Final = "issuer_event_family_coverage"
 COHORT_AUDIT_ARTIFACT_TYPE: Final = "issuer_event_family_cohort_audit"
 UNCLASSIFIED_EVENTS_ARTIFACT_TYPE: Final = "issuer_event_family_unclassified_events"
-NEUTRAL_PROJECTION_SCHEMA: Final = "market_predictor.issuer_family_neutral_projection.v1"
+NEUTRAL_PROJECTION_SCHEMA: Final = "market_predictor.issuer_family_neutral_projection"
 
 ARTIFACT_SPECIFICATIONS: Final = {
     "events": ("family_events.parquet", FAMILY_EVENTS_ARTIFACT_TYPE),

@@ -139,7 +139,7 @@ class RuntimeTelemetry:
             last_health = self._last_health
             last_models = dict(self._last_models)
         return {
-            "schema": "market_predictor.runtime_metrics.v1",
+            "schema": "market_predictor.runtime_metrics",
             "generated_at_utc": datetime.now(UTC).isoformat(),
             "started_at_utc": self.started_at.isoformat(),
             "requests": requests,

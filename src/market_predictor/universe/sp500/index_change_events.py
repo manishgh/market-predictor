@@ -26,10 +26,10 @@ from market_predictor.universe.sp500.membership_history import (
     parse_sp500_changes,
 )
 
-EVENT_REQUEST_SCHEMA = "ml_v3.spglobal_event_extraction_request.v1"
-EVENT_MANIFEST_SCHEMA = "ml_v3.spglobal_event_extraction_manifest.v1"
-EVENT_AUTHORITY_SCHEMA = "ml_v3.spglobal_event_extraction_authority.v1"
-EVENT_PARSER_SCHEMA = "ml_v3.spglobal_membership_event_parser.v1"
+EVENT_REQUEST_SCHEMA = "market_predictor.spglobal_event_extraction_request"
+EVENT_MANIFEST_SCHEMA = "market_predictor.spglobal_event_extraction_manifest"
+EVENT_AUTHORITY_SCHEMA = "market_predictor.spglobal_event_extraction_authority"
+EVENT_PARSER_SCHEMA = "market_predictor.spglobal_membership_event_parser"
 
 
 def extract_spglobal_events(

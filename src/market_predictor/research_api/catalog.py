@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
 
-CATALOG_SCHEMA = "market_predictor.research_model_catalog.v1"
+CATALOG_SCHEMA = "market_predictor.research_model_catalog"
 EXPECTED_MODEL_IDS = frozenset(
     {
         "swing_technical_with_catalyst",

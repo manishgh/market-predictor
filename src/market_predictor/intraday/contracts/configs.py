@@ -6,9 +6,9 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-INTRADAY_FEATURE_SCHEMA_VERSION = "intraday.features.v2"
+INTRADAY_FEATURE_SCHEMA_VERSION = "intraday.features"
 
-INTRADAY_MODEL_SCHEMA_VERSION = "intraday.model.v1"
+INTRADAY_MODEL_SCHEMA_VERSION = "intraday.model"
 
 INTRADAY_MODEL_TYPE = "canonical_intraday"
 
@@ -201,7 +201,7 @@ class IntradayDatasetConfig(FrozenConfig):
         """Complete reproducible intraday path and cost semantics."""
 
         return {
-            "policy": "intraday_label.v2",
+            "policy": "intraday_label",
             "horizon_minutes": self.horizon_minutes,
             "decision_bar_minutes": self.decision_bar_minutes,
             "execution_bar_minutes": self.execution_bar_minutes,

@@ -44,6 +44,20 @@ measured, what system behavior it affects, and what evidence would resolve it.
 
 ### Explain Issues In Concrete Words
 
+Public API naming (user, October 3): keep communicating APIs at V1 during current
+development. Do not increment to V2/V3/V4 for implementation iterations or imply that
+an API version denotes a successfully trained or approved model. Use unversioned
+internal model/feature/class names. No compatibility aliases or old-format acceptance
+paths are required for this pre-production project. Preserve original raw evidence;
+reconstruct derived artifacts when contracts change instead of claiming an unperformed
+replay by changing hashes. Third-party provider API versions remain provider-defined.
+Work on new branches. V1 covers the initial full collection-to-prediction system;
+experiment iterations do not create V2/V3. A later product/API major version requires
+explicit acceptance of measured improvement and a coordinated consumer migration.
+Validation supports iteration; repeatedly inspected test periods are development
+evidence, never an untouched final test. Software checks alone do not prove that a
+model beats SPY or authorize merging an experimental model as an improvement.
+
 Never describe a situation using vague terminology or unexplained technical labels.
 Words such as "correctness", "readiness", "integrity", "validation" or "blocked"
 must not substitute for an explanation. Use plain, specific language and explain any

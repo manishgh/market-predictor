@@ -39,10 +39,10 @@ from market_predictor.universe.sp500.transition_authority import (
     require_sp500_transition_authority,
 )
 
-MEMBERSHIP_REQUEST_SCHEMA: Final = "edge_rebuild.sp500_membership_request.v1"
-MEMBERSHIP_MANIFEST_SCHEMA: Final = "edge_rebuild.sp500_membership_manifest.v1"
-MEMBERSHIP_AUTHORITY_SCHEMA: Final = "edge_rebuild.sp500_membership_authority.v1"
-MEMBERSHIP_RECONSTRUCTION_SCHEMA: Final = "edge_rebuild.sp500_membership_reconstruction.v1"
+MEMBERSHIP_REQUEST_SCHEMA: Final = "edge_rebuild.sp500_membership_request"
+MEMBERSHIP_MANIFEST_SCHEMA: Final = "edge_rebuild.sp500_membership_manifest"
+MEMBERSHIP_AUTHORITY_SCHEMA: Final = "edge_rebuild.sp500_membership_authority"
+MEMBERSHIP_RECONSTRUCTION_SCHEMA: Final = "edge_rebuild.sp500_membership_reconstruction"
 MEMBERSHIP_FILE: Final = "memberships.parquet"
 EXCLUSION_FILE: Final = "security_exclusions.json"
 MAXIMUM_SECURITY_EXCLUSION_FRACTION: Final = 0.05
@@ -1090,7 +1090,7 @@ def _load_extension_parent(
     ):
         raise DataReadinessError("base S&P membership semantic identity is invalid")
     return memberships, {
-        "schema": "edge_rebuild.sp500_membership_extension_parent.v1",
+        "schema": "edge_rebuild.sp500_membership_extension_parent",
         "start_date": start_date.isoformat(),
         "cutoff_date": base_cutoff.isoformat(),
         "authority_sha256": file_sha256(authority_path),

@@ -55,7 +55,7 @@ from market_predictor.swing.datasets.issuer_news_publication import (
     _pin,
 )
 
-SCHEMA = "swing.initial_fit_monthly_lineage_preparation.v1"
+SCHEMA = "swing.initial_fit_monthly_lineage_preparation"
 FIRST = pd.Timestamp("2019-07-09T00:00:00Z")
 BATCH_ROWS = 5000
 BATCH_BYTES = 64 * 1024 * 1024
@@ -485,7 +485,7 @@ def _project_source_impl(root: Path, source: dict[str, Any], directory: Path, mo
             "coverage_blindspot_security_ids": sorted(state["blind"]), "excluded_security_ids": [], "source_coverage_admitted": False}
         for name, key in (("collection", "events"), ("attribution", "relations"), ("sentiment", "scores")):
             manifest = {**shared, "artifacts": sink.records[key], "total_rows": sum(row["rows"] for row in sink.records[key]),
-                "verified_logical_chunk_ids": sorted(state["logical_chunks"]), "physical_layout": "bounded_compact_batches_v1"}
+                "verified_logical_chunk_ids": sorted(state["logical_chunks"]), "physical_layout": "bounded_compact_batches"}
             if name == "collection":
                 manifest.update(source_collections_path=coverage["path"], source_collections_sha256=coverage["sha256"])
             _write_json(view / name / "_manifest.json", manifest)

@@ -1,4 +1,4 @@
-schema_version = "edge_rebuild.selected_session_benchmark_one_minute.v1"
+schema_version = "edge_rebuild.selected_session_benchmark_one_minute"
 provider = "alpaca"
 calendar = "XNYS"
 required_price_feed = "sip"

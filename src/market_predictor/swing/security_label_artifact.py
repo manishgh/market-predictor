@@ -30,7 +30,7 @@ from market_predictor.security_labels import (
     profile_terms_from_text,
 )
 
-SECURITY_LABEL_ARTIFACT_SCHEMA = "security.business_label_artifact.v1"
+SECURITY_LABEL_ARTIFACT_SCHEMA = "security.business_label_artifact"
 RelationUse = Literal["exposure", "context"]
 
 ASSIGNMENT_COLUMNS = (

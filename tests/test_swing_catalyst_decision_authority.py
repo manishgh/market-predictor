@@ -30,10 +30,10 @@ DECISION_TIME = pd.Timestamp("2025-01-10T21:00:00Z")
 
 
 def test_persisted_catalyst_decision_authority_identities_are_frozen() -> None:
-    assert LINEAGE_MANIFEST_SCHEMA == "swing.catalyst_lineage_manifest.v2"
-    assert DECISION_REQUEST_SCHEMA == "edge_rebuild.catalyst_decision_request.v3"
-    assert DECISION_AUTHORITY_SCHEMA == "edge_rebuild.catalyst_decision_authority.v7"
-    assert DECISION_MANIFEST_SCHEMA == "edge_rebuild.catalyst_decision_manifest.v7"
+    assert LINEAGE_MANIFEST_SCHEMA == "swing.catalyst_lineage_manifest"
+    assert DECISION_REQUEST_SCHEMA == "edge_rebuild.catalyst_decision_request"
+    assert DECISION_AUTHORITY_SCHEMA == "edge_rebuild.catalyst_decision_authority"
+    assert DECISION_MANIFEST_SCHEMA == "edge_rebuild.catalyst_decision_manifest"
     assert DECISION_ARTIFACT_TYPE == "edge_rebuild_catalyst_decisions"
     assert COVERAGE_ARTIFACT_TYPE == "edge_rebuild_catalyst_coverage"
 
@@ -463,7 +463,7 @@ def _lineage(
     (root / "events").mkdir()
     (root / "assignments").mkdir()
     request = {
-        "schema": "swing.catalyst_lineage_request.v2",
+        "schema": "swing.catalyst_lineage_request",
         "generation": generation,
         "scope_policy": "observed_articles_not_coverage_admission",
         "coverage_blindspot_security_ids": [],
@@ -560,7 +560,7 @@ def _lineage(
         production_ready=production_ready,
     )
     inventory = {
-        "schema": "swing.catalyst_feature_inventory.v1",
+        "schema": "swing.catalyst_feature_inventory",
         "request_sha256": request_sha256,
         "training_eligible_channels": ["direct_issuer"],
         "production_ready": production_ready,
@@ -587,7 +587,7 @@ def _lineage(
         "feature_inventory": inventory,
     }
     manifest = {
-        "schema": "swing.catalyst_lineage_manifest.v2",
+        "schema": "swing.catalyst_lineage_manifest",
         "scope_policy": "observed_articles_not_coverage_admission",
         "coverage_blindspot_security_ids": [],
         "source_coverage_admitted": False,
@@ -643,7 +643,7 @@ def _assignments(*, optional_direct_source: str | None = None) -> pd.DataFrame:
                     "status": "assigned",
                     "sentiment_numeric": 0.5,
                     "relevance": 0.8,
-                    "schema_version": "event_assignment.v3",
+                    "schema_version": "event_assignment",
                 }
             )
     return pd.DataFrame.from_records(records, columns=ASSIGNMENT_COLUMNS)
@@ -725,7 +725,7 @@ def _coverage(
                         }[state]
                     ),
                     "training_eligible": False if unknown else True,
-                    "schema_version": "swing.catalyst_source_coverage.v1",
+                    "schema_version": "swing.catalyst_source_coverage",
                 }
             )
     return pd.DataFrame(rows)

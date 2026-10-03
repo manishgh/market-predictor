@@ -7,7 +7,7 @@ import pandas as pd
 
 from market_predictor.core.errors import DataReadinessError
 
-RELEVANCE_POLICY_VERSION = "swing.event_relevance.v1"
+RELEVANCE_POLICY_VERSION = "swing.event_relevance"
 _TOKEN = re.compile(r"[a-z0-9]+")
 _GENERIC_PATTERNS = (
     "biggest stock movers",

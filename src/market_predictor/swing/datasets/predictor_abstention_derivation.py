@@ -61,7 +61,7 @@ from market_predictor.swing.features.adjusted_source import (
 from market_predictor.swing.features.panel import TECHNICAL_RANKING_FEATURES
 from market_predictor.swing.features.research_join import DECISION_KEYS
 
-SCHEMA = "market_predictor.predictor_abstention_derivation.v1"
+SCHEMA = "market_predictor.predictor_abstention_derivation"
 PIN_MAPS = ("declared_source_files", "source_files", "implementation_files", "adjusted_source_files")
 PREFIX_IMPLEMENTATION_FILES = ("swing/datasets/action_evidence.py", "swing/datasets/holding_raw_sources.py")
 
@@ -93,7 +93,7 @@ class ReviewedPredictorFailure(HoldingContract):
 
 
 class PredictorFailureFacts(HoldingContract):
-    schema_version: Literal["market_predictor.predictor_failure_facts.v1"]
+    schema_version: Literal["market_predictor.predictor_failure_facts"]
     parent_checkpoint_sha256: Sha256
     parent_request_sha256: Sha256
     decision_config: SourcePin
@@ -123,7 +123,7 @@ def _pin(root: Path, path: Path, digest: str) -> dict[str, str]:
 
 def _observation(root: Path, facts: PredictorFailureFacts, fact: ReviewedPredictorFailure) -> dict[str, Any]:
     report = pinned_object(inside(root, facts.observations.path), facts.observations.sha256)
-    if (report.get("schema") != "market_predictor.predictor_source_failure_observations.v1"
+    if (report.get("schema") != "market_predictor.predictor_source_failure_observations"
             or report.get("numeric_first") != str(WARMUP_START) or report.get("numeric_last") != str(NUMERIC_END)):
         raise DataReadinessError("reviewed observations escape the frozen numeric window")
     records = [item for item in report["observations"] if item["security_id"] == fact.security_id and item["ticker"] == fact.symbol]

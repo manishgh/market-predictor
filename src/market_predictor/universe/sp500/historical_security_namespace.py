@@ -26,9 +26,9 @@ from market_predictor.universe.sp500.observed_membership_authority import (
     load_observed_sp500_membership_authority,
 )
 
-_DATASET_SCHEMA: Final = "edge_rebuild.intraday_bar_dataset.v1"
-_AUTHORITY_SCHEMA: Final = "edge_rebuild.intraday_bar_dataset_authority.v1"
-_SECURITY_NAMESPACE_SCHEMA: Final = "edge_rebuild.a43_security_identity_namespace.v1"
+_DATASET_SCHEMA: Final = "edge_rebuild.intraday_bar_dataset"
+_AUTHORITY_SCHEMA: Final = "edge_rebuild.intraday_bar_dataset_authority"
+_SECURITY_NAMESPACE_SCHEMA: Final = "edge_rebuild.a43_security_identity_namespace"
 _REQUEST_KEYS: Final = frozenset(
     {
         "benchmark_collection_directory",

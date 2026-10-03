@@ -43,9 +43,9 @@ from market_predictor.swing.news_source_inventory import (
     build_source_news_shard_inventory,
 )
 
-SENTIMENT_REQUEST_SCHEMA = "swing.event_sentiment_request.v1"
-SENTIMENT_MANIFEST_SCHEMA = "swing.event_sentiment_manifest.v1"
-SENTIMENT_SCHEMA_VERSION = "swing.event_sentiment.v1"
+SENTIMENT_REQUEST_SCHEMA = "swing.event_sentiment_request"
+SENTIMENT_MANIFEST_SCHEMA = "swing.event_sentiment_manifest"
+SENTIMENT_SCHEMA_VERSION = "swing.event_sentiment"
 SENTIMENT_AVAILABILITY_POLICY = (
     "provider_publication_proxy_plus_fixed_inference_latency"
 )

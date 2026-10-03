@@ -43,10 +43,10 @@ from market_predictor.swing.features.catalyst_decision_identity import (
     verify_decision_keys,
 )
 
-LINEAGE_MANIFEST_SCHEMA: Final = "swing.catalyst_lineage_manifest.v2"
-DECISION_REQUEST_SCHEMA: Final = "edge_rebuild.catalyst_decision_request.v3"
-DECISION_AUTHORITY_SCHEMA: Final = "edge_rebuild.catalyst_decision_authority.v7"
-DECISION_MANIFEST_SCHEMA: Final = "edge_rebuild.catalyst_decision_manifest.v7"
+LINEAGE_MANIFEST_SCHEMA: Final = "swing.catalyst_lineage_manifest"
+DECISION_REQUEST_SCHEMA: Final = "edge_rebuild.catalyst_decision_request"
+DECISION_AUTHORITY_SCHEMA: Final = "edge_rebuild.catalyst_decision_authority"
+DECISION_MANIFEST_SCHEMA: Final = "edge_rebuild.catalyst_decision_manifest"
 TEXT_DUPLICATE_POLICY: Final = "exact_event_integrity_earliest_available_text_instance"
 DECISION_ARTIFACT_TYPE: Final = "edge_rebuild_catalyst_decisions"
 COVERAGE_ARTIFACT_TYPE: Final = "edge_rebuild_catalyst_coverage"

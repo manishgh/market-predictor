@@ -33,7 +33,7 @@ from market_predictor.swing.datasets.corrected_outcomes import load_corrected_ou
 from market_predictor.swing.datasets.feature_history_plan import verify_feature_plan_replay
 from market_predictor.swing.datasets.symbol_corrections import pinned_object
 
-SCHEMA = "market_predictor.predictor_implementation_replay.v1"
+SCHEMA = "market_predictor.predictor_implementation_replay"
 
 
 @dataclass(frozen=True, slots=True)

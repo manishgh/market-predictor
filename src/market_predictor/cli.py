@@ -713,7 +713,7 @@ def export_ohlcv_artifacts(
         summary_frame = _merge_ohlcv_manifest(existing, summary_frame, symbols=symbols, timeframes=requested)
     summary_frame.to_csv(summary_path, index=False)
     contract: dict[str, object] = {
-        "schema_version": "ohlcv.v1",
+        "schema_version": "ohlcv",
         "generated_at_utc": datetime.now(UTC).isoformat(),
         "columns": [
             "symbol",

@@ -16,4 +16,4 @@ l2_regularization = 1.0
 random_seed = 42
 max_training_memory_gb = 4.0
 memory_guard_headroom_gb = 0.75
-schema_version = "intraday.model.v1"
+schema_version = "intraday.model"

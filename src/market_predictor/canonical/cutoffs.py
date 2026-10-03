@@ -20,7 +20,7 @@ class SwingPredictionCutoffPolicy:
 
 
 SWING_NIGHTLY_CUTOFF = SwingPredictionCutoffPolicy(
-    policy_id="xnys_1800_america_new_york_v1",
+    policy_id="xnys_1800_america_new_york",
     calendar_name="XNYS",
     local_cutoff=time(hour=18),
 )

@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
 
-EXECUTION_POLICY_ID = "market_predictor.execution_policy.v1"
+EXECUTION_POLICY_ID = "market_predictor.execution_policy"
 
 
 class ExecutionCostPolicy(BaseModel):

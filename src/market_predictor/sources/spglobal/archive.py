@@ -39,12 +39,12 @@ ARCHIVE_QUERY = {"keywords": "s & p 500 index", "l": "100", "s": "2429"}
 
 _SOURCE_TIMEZONE = ZoneInfo("America/New_York")
 
-ARCHIVE_REQUEST_SCHEMA = "ml_v3.spglobal_official_archive_request.v1"
-ARCHIVE_STATUS_SCHEMA = "ml_v3.spglobal_official_archive_status.v1"
-ARCHIVE_MANIFEST_SCHEMA = "ml_v3.spglobal_official_archive_manifest.v2"
-ARCHIVE_AUTHORITY_SCHEMA = "ml_v3.spglobal_official_archive_authority.v2"
-ARCHIVE_UNIT_SCHEMA = "ml_v3.spglobal_official_archive_unit.v1"
-DISCOVERY_SCHEMA = "ml_v3.spglobal_official_archive_discovery.v1"
+ARCHIVE_REQUEST_SCHEMA = "market_predictor.spglobal_official_archive_request"
+ARCHIVE_STATUS_SCHEMA = "market_predictor.spglobal_official_archive_status"
+ARCHIVE_MANIFEST_SCHEMA = "market_predictor.spglobal_official_archive_manifest"
+ARCHIVE_AUTHORITY_SCHEMA = "market_predictor.spglobal_official_archive_authority"
+ARCHIVE_UNIT_SCHEMA = "market_predictor.spglobal_official_archive_unit"
+DISCOVERY_SCHEMA = "market_predictor.spglobal_official_archive_discovery"
 DISCOVERY_START = date(2018, 4, 14)
 DISCOVERY_END = date(2026, 7, 8)
 EXPECTED_SEED_URLS = 83
@@ -55,8 +55,8 @@ MAXIMUM_MEMORY_GIB = 4.0
 MEMORY_HEADROOM_GIB = 0.75
 MAXIMUM_RESPONSE_BYTES = 16 * 1024 * 1024
 MAXIMUM_DECODED_BYTES = 4 * 1024 * 1024
-SOURCE_AUDIT_SCHEMA = "ml_v3.sp500_point_in_time_universe.v1"
-SOURCE_MANIFEST_SCHEMA = "ml_v3.sp500_change_sources.v1"
+SOURCE_AUDIT_SCHEMA = "market_predictor.sp500_point_in_time_universe"
+SOURCE_MANIFEST_SCHEMA = "market_predictor.sp500_change_sources"
 
 _PUBLISHED_DATE = re.compile(r"/(20\d{2}-\d{2}-\d{2})-")
 _MEMBERSHIP_TITLE = re.compile(

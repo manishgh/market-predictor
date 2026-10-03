@@ -51,7 +51,7 @@ def return_relationship_profile_sha256(
     if len(baseline) != 120 or len(set(baseline)) != 120 or set(baseline).intersection(RETURN_RELATIONSHIP_COLUMNS):
         raise ValueError("return relationships require 120 distinct unchanged baseline columns")
     return json_sha256({
-        "schema": "market_predictor.return_relationship_profile.v1",
+        "schema": "market_predictor.return_relationship_profile",
         "profile": RETURN_RELATIONSHIP_PROFILE,
         "baseline_columns": baseline,
         "additional_columns": RETURN_RELATIONSHIP_COLUMNS,

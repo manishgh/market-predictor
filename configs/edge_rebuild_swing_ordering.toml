@@ -1,4 +1,4 @@
-schema_version = "edge_rebuild.swing_ordering.v1"
+schema_version = "edge_rebuild.swing_ordering"
 
 # Frozen before this audit reads an outcome. Every input is a same-session
 # centred rank, so scale and market-wide level cannot dominate the composite.

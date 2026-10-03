@@ -30,7 +30,7 @@ _AUTHORITY_COLUMNS = (
 )
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _CIK = re.compile(r"cik:([0-9]{10})(?::ticker:([A-Z0-9.-]{1,16}))?")
-_SCHEMA = "market_predictor.issuer_news_identity.v1"
+_SCHEMA = "market_predictor.issuer_news_identity"
 
 
 @dataclass(frozen=True)

@@ -506,7 +506,7 @@ def _daily_rows(
             "price_feed": "sip",
             "adjustment": "all",
             "availability_policy": "market_interval_close",
-            "schema_version": "market_data.v1",
+            "schema_version": "market_data",
             "session_date_et": sessions.date,
         }
     )

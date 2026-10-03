@@ -167,7 +167,7 @@ class CanonicalCliTests(unittest.TestCase):
             self.assertEqual(decision_frame.loc[0, "decision_time_utc"], pd.Timestamp("2026-07-21T22:00:00Z"))
             self.assertEqual(
                 decision_frame.loc[0, "prediction_cutoff_policy_id"],
-                "xnys_1800_america_new_york_v1",
+                "xnys_1800_america_new_york",
             )
             self.assertLessEqual(
                 decision_frame.loc[0, "latest_event_feature_available_at_utc"],

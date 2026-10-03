@@ -1,5 +1,5 @@
 {
-  "schema_version": "market_predictor.predictor_failure_facts.v1",
+  "schema_version": "market_predictor.predictor_failure_facts",
   "parent_checkpoint_sha256": "ea89823d27d323b46cf38d060c313c54d75f480a791c71c936a91b736e3edf45",
   "parent_request_sha256": "be8a6236b162aa0bff0d0ebeb1dff1974e0cccfe4863b56aaf51edf6ccd4204a",
   "decision_config": {

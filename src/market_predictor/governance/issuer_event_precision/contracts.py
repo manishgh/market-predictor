@@ -28,11 +28,11 @@ from market_predictor.resources import (
     assert_memory_budget,
 )
 
-POLICY_SCHEMA: Final = "market_predictor.issuer_event_precision_audit.v2"
-SAMPLE_AUTHORITY_SCHEMA: Final = "edge_rebuild.issuer_event_precision_sample_authority.v2"
-SAMPLE_MANIFEST_SCHEMA: Final = "edge_rebuild.issuer_event_precision_sample_manifest.v2"
-FINAL_AUTHORITY_SCHEMA: Final = "edge_rebuild.issuer_event_precision_audit_authority.v2"
-FINAL_MANIFEST_SCHEMA: Final = "edge_rebuild.issuer_event_precision_audit_manifest.v2"
+POLICY_SCHEMA: Final = "market_predictor.issuer_event_precision_audit"
+SAMPLE_AUTHORITY_SCHEMA: Final = "edge_rebuild.issuer_event_precision_sample_authority"
+SAMPLE_MANIFEST_SCHEMA: Final = "edge_rebuild.issuer_event_precision_sample_manifest"
+FINAL_AUTHORITY_SCHEMA: Final = "edge_rebuild.issuer_event_precision_audit_authority"
+FINAL_MANIFEST_SCHEMA: Final = "edge_rebuild.issuer_event_precision_audit_manifest"
 SAMPLE_ARTIFACT_TYPE: Final = "issuer_event_precision_sample"
 REVIEWS_ARTIFACT_TYPE: Final = "issuer_event_precision_reviews"
 METRICS_ARTIFACT_TYPE: Final = "issuer_event_precision_family_metrics"

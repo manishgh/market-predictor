@@ -15,7 +15,7 @@ from market_predictor.canonical.contracts import CANONICAL_SCHEMA_VERSION
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.locking import file_lock
 
-CANONICAL_MANIFEST_SCHEMA = "market_data.artifact_manifest.v1"
+CANONICAL_MANIFEST_SCHEMA = "market_data.artifact_manifest"
 
 
 def manifest_path_for(path: Path) -> Path:

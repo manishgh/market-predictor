@@ -105,7 +105,7 @@ def _fixture(root: Path, decisions: tuple[str, ...] = ("2023-11-22",)) -> Transf
     })
     return TransferFixture(
         root, {"selected": selected, "membership": membership, "relations": membership.assign(sec_cik="0000000001"), "bars": bars},
-        {"schema_version": "market_predictor.swing_accounting_control.v1", "status": "blocked",
+        {"schema_version": "market_predictor.swing_accounting_control", "status": "blocked",
          "validation_or_test_outcomes_read": False, "scope": "initial_fit_deterministic_control_not_out_of_sample",
          "selected_decision_ids": [f"selected-{day}" for day in decisions], "decision_sessions": list(decisions),
          "valuation_sessions": [day.date().isoformat() for day in sessions]},

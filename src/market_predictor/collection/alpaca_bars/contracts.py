@@ -16,10 +16,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from market_predictor.core.errors import DataReadinessError
 
-REGULAR_BAR_HISTORY_SCHEMA = "edge_rebuild.intraday_history.v1"
-REGULAR_BAR_HISTORY_PLAN_SCHEMA = "edge_rebuild.intraday_history_plan.v1"
-SESSION_BENCHMARK_SCHEMA = "edge_rebuild.selected_session_benchmark_one_minute.v1"
-SESSION_BENCHMARK_PLAN_SCHEMA = "edge_rebuild.selected_session_benchmark_one_minute_plan.v1"
+REGULAR_BAR_HISTORY_SCHEMA = "edge_rebuild.intraday_history"
+REGULAR_BAR_HISTORY_PLAN_SCHEMA = "edge_rebuild.intraday_history_plan"
+SESSION_BENCHMARK_SCHEMA = "edge_rebuild.selected_session_benchmark_one_minute"
+SESSION_BENCHMARK_PLAN_SCHEMA = "edge_rebuild.selected_session_benchmark_one_minute_plan"
 REGULAR_SEGMENT = "regular"
 
 

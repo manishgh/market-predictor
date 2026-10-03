@@ -1964,8 +1964,8 @@ def _membership_authority(
         "transition_set_sha256": "8" * 64,
     }
     request_payload: dict[str, Any] = {
-        "schema": "edge_rebuild.sp500_membership_request.v1",
-        "reconstruction_schema": "edge_rebuild.sp500_membership_reconstruction.v1",
+        "schema": "edge_rebuild.sp500_membership_request",
+        "reconstruction_schema": "edge_rebuild.sp500_membership_reconstruction",
         "start_date": "2020-01-01",
         "cutoff_date": cutoff_date,
         "parent_lineage": parent_lineage,
@@ -1999,7 +1999,7 @@ def _membership_authority(
     )
     universe_sha256 = membership_sha256(memberships)
     manifest = {
-        "schema": "edge_rebuild.sp500_membership_manifest.v1",
+        "schema": "edge_rebuild.sp500_membership_manifest",
         "status": "complete",
         "request_sha256": request_sha256,
         "start_date": "2020-01-01",
@@ -2024,7 +2024,7 @@ def _membership_authority(
     _write_json(
         root / "_authority.json",
         {
-            "schema": "edge_rebuild.sp500_membership_authority.v1",
+            "schema": "edge_rebuild.sp500_membership_authority",
             "state": "membership_complete",
             "artifact": manifest_path.name,
             "artifact_sha256": file_sha256(manifest_path),
@@ -2078,7 +2078,7 @@ def _a43_dataset(membership: Path) -> Path:
     }
     transformation = {"name": "recorded_intraday_bar_transformation", "sha256": "e" * 64}
     request_payload = {
-        "schema": "edge_rebuild.intraday_bar_dataset.v1",
+        "schema": "edge_rebuild.intraday_bar_dataset",
         "benchmark_collection_directory": str(membership.resolve()),
         "decision_clock": "fixed_five_minute_cohort_after_activation",
         "feature_schema_version": "edge_rebuild.intraday_bar_features.v1",
@@ -2148,7 +2148,7 @@ def _a43_dataset(membership: Path) -> Path:
     _write_json(
         root / "_authority.json",
         {
-            "schema": "edge_rebuild.intraday_bar_dataset_authority.v1",
+            "schema": "edge_rebuild.intraday_bar_dataset_authority",
             "state": "complete",
             "artifact": "_manifest.json",
             "artifact_sha256": file_sha256(root / "_manifest.json"),

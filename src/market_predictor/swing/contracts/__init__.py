@@ -8,8 +8,8 @@ from typing import Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 MINIMUM_SWING_DECISION_DATE = date(2019, 7, 9)
-SWING_FEATURE_SCHEMA_VERSION = "swing.features.v3"
-SWING_MODEL_SCHEMA_VERSION = "swing.model.v1"
+SWING_FEATURE_SCHEMA_VERSION = "swing.features"
+SWING_MODEL_SCHEMA_VERSION = "swing.model"
 SWING_MODEL_TYPE = "canonical_swing"
 SWING_VALIDATION_SPLIT = "session_purged_walk_forward_and_ticker_holdout"
 SWING_REQUIRED_MARKET_REGIMES = ("risk_on", "neutral", "risk_off")

@@ -38,8 +38,8 @@ from market_predictor.catalysts.issuer_events.news_history_contracts import (
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.resources import assert_memory_budget, release_process_memory
 
-ATTRIBUTION_REQUEST_SCHEMA = "swing.event_attribution_request.v1"
-ATTRIBUTION_MANIFEST_SCHEMA = "swing.event_attribution_manifest.v1"
+ATTRIBUTION_REQUEST_SCHEMA = "swing.event_attribution_request"
+ATTRIBUTION_MANIFEST_SCHEMA = "swing.event_attribution_manifest"
 ATTRIBUTION_SCOPE_POLICY = "observed_articles_not_coverage_admission"
 _RELATION_CHANNELS = (
     "direct_issuer",

@@ -662,7 +662,7 @@ class CanonicalJoinAndAuditTests(unittest.TestCase):
                 "relevance": [1.0],
                 "availability_policy": [policy],
                 "raw_sha256": ["b" * 64],
-                "schema_version": ["market_data.v1"],
+                "schema_version": ["market_data"],
             }
         )
 

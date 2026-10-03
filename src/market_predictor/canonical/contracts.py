@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from market_predictor.core.symbols import normalized_ticker
 
-CANONICAL_SCHEMA_VERSION = "market_data.v1"
+CANONICAL_SCHEMA_VERSION = "market_data"
 AvailabilityPolicy = Literal["observed", "market_interval_close", "provider_publication_proxy"]
 SourceCollectionStatus = Literal["observed", "observed_empty", "partial", "failed", "disabled", "not_collected"]
 

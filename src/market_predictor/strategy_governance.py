@@ -256,7 +256,7 @@ class CatalogEntry(FrozenContract):
 
 
 class StrategyExecutionLedger(FrozenContract):
-    schema_version: Literal["market_predictor.strategy_execution_ledger.v1"]
+    schema_version: Literal["market_predictor.strategy_execution_ledger"]
     plan: PlanBinding
     checkpoints: tuple[StrategyCheckpoint, ...] = Field(min_length=1)
     catalog: tuple[CatalogEntry, ...] = Field(min_length=1)

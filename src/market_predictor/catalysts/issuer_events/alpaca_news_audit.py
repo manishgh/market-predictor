@@ -255,7 +255,7 @@ def audit_alpaca_news_history(
         headroom_gib=memory_headroom_gib,
     ).to_record()
     summary: dict[str, Any] = {
-        "schema": "swing.alpaca_news_history_audit.v1",
+        "schema": "swing.alpaca_news_history_audit",
         "collection_dir": str(collection_dir),
         "request_sha256": request_identity,
         "passed": not errors,

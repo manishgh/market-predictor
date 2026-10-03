@@ -197,7 +197,7 @@ def test_reviewed_override_resolves_absent_ticker_with_exact_security_interval()
     )
 
     assert relations.loc[0, "sec_cik"] == "0000000042"
-    assert relations.loc[0, "identity_policy"] == "reviewed_official_sec_filing_override_v1"
+    assert relations.loc[0, "identity_policy"] == "reviewed_official_sec_filing_override"
     assert coverage.loc[0, "status"] == "resolved"
     assert summary["coverage_passed"] is True
 

@@ -27,7 +27,7 @@ def _historical(root: Path, name: str, *, declared: bool = True) -> tuple[dict[s
     pins = {name: file_sha256(path)}
     if declared:
         request = root / "data/replay/_request.json"
-        _json(request, dict(schema="market_predictor.predictor_implementation_replay.v1.request",
+        _json(request, dict(schema="market_predictor.predictor_implementation_replay.request",
             current_implementation_files=dict(pins)))
         pins[request.relative_to(root).as_posix()] = file_sha256(request)
     policy = SimpleNamespace(parent_publication=SimpleNamespace(sha256="1" * 64))
@@ -78,7 +78,7 @@ def test_mismatched_authority_digest_is_not_a_historical_exemption(tmp_path: Pat
     declared, policy = _historical(tmp_path, name)
     authority = tmp_path / "data/replay/_request.json"
     declared[authority.relative_to(tmp_path).as_posix()] = _json(authority,
-        dict(schema="market_predictor.predictor_implementation_replay.v1.request", current_implementation_files={name: "f" * 64}))
+        dict(schema="market_predictor.predictor_implementation_replay.request", current_implementation_files={name: "f" * 64}))
     (tmp_path / name).write_bytes(b"changed\n")
     with pytest.raises(DataReadinessError, match="source changed"):
         _historical_sources(tmp_path, declared, policy)

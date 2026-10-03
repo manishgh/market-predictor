@@ -1,5 +1,5 @@
-schema_version = "market_predictor.swing_broker_action_specialists.v1"
-source_artifact_schema = "edge_rebuild.swing_analyst_revision_ablation_manifest.v2"
+schema_version = "market_predictor.swing_broker_action_specialists"
+source_artifact_schema = "edge_rebuild.swing_analyst_revision_ablation_manifest"
 source_event_family = "analyst_revision"
 
 # These dates are copied from the governed swing temporal manifest. The locked

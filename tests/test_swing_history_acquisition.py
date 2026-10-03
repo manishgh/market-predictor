@@ -127,7 +127,7 @@ def _fixture(
     temporal = tmp_path / "temporal"
     temporal.mkdir()
     temporal_manifest = {
-        "schema": "edge_rebuild.temporal_manifest.v2",
+        "schema": "edge_rebuild.temporal_manifest",
         "status": "insufficient_history",
         "coverage": {
             "outcomes_read": False,
@@ -145,7 +145,7 @@ def _fixture(
     _write_json(
         temporal / "_authority.json",
         {
-            "schema": "edge_rebuild.temporal_manifest_authority.v2",
+            "schema": "edge_rebuild.temporal_manifest_authority",
             "state": "complete",
             "artifact": "_manifest.json",
             "artifact_sha256": file_sha256(temporal / "_manifest.json"),
@@ -199,7 +199,7 @@ def _fixture(
     ledger = daily / "ledger.parquet"
     pd.DataFrame({"collection_id": ["daily-1"]}).to_parquet(ledger, index=False)
     request_payload = {
-        "schema": "swing.daily_history_collection.v1",
+        "schema": "swing.daily_history_collection",
         "start_date": "2019-07-09",
         "end_date": "2026-07-08",
         "source": "alpaca",
@@ -213,7 +213,7 @@ def _fixture(
     _write_json(
         daily / "_status.json",
         {
-            "schema": "swing.daily_history_manifest.v1",
+            "schema": "swing.daily_history_manifest",
             "status": "complete",
             "request_sha256": request_hash,
             "source_collections_path": "daily/ledger.parquet",
@@ -223,7 +223,7 @@ def _fixture(
     _write_json(
         daily / "_manifest.json",
         {
-            "schema": "swing.daily_history_manifest.v1",
+            "schema": "swing.daily_history_manifest",
             "status": "complete",
             "request_sha256": request_hash,
             "total_rows": 1_000,

@@ -17,7 +17,7 @@ import pandas as pd
 
 from market_predictor.core.errors import DataReadinessError
 
-EVENT_FAMILY_POLICY_VERSION: Final = "swing.issuer_event_family.v2"
+EVENT_FAMILY_POLICY_VERSION: Final = "swing.issuer_event_family"
 EVENT_FAMILIES: Final = (
     "earnings",
     "guidance",

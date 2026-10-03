@@ -1,4 +1,4 @@
-schema_version = "edge_rebuild.temporal_manifest.v2"
+schema_version = "edge_rebuild.temporal_manifest"
 calendar = "XNYS"
 modeled_decision_start = 2019-07-09
 initial_fit_start = 2019-07-09
@@ -23,6 +23,6 @@ warmup_sessions = 250
 label_horizon_sessions = 10
 unseen_security_holdout_fraction = 0.20
 unseen_security_hash_seed = 42
-unseen_security_assignment = "sha256_threshold_security_id_v1"
+unseen_security_assignment = "sha256_threshold_security_id"
 maximum_process_memory_gib = 4.0
 memory_guard_headroom_gib = 0.75

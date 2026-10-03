@@ -79,7 +79,7 @@ def load_config(path: Path) -> tuple[Config, Path, dict[str, Any]]:
         raise ValueError("invalid or excessive archival symbols")
     mapping = {symbol: provider_symbol(symbol, PROVIDER_ALPACA) for symbol in sorted(symbols)}
     request: dict[str, Any] = {
-        "schema": "market_predictor.alpaca_incremental.v1",
+        "schema": "market_predictor.alpaca_incremental",
         "start": config.start.isoformat(), "symbols": sorted(set(mapping.values())),
         "archival_symbol_mapping": mapping, "provenance": pins,
         "batch_size": config.batch_size, "bars_limit": config.bars_limit,

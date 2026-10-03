@@ -41,7 +41,7 @@ def _historical_sources(root: Path, declared: dict[str, str], policy: ReturnRela
     authorities = {
         "market_predictor.research_predictor_request": "implementation_files",
         "market_predictor.outcome_implementation_replay_request": "current_implementation_files",
-        "market_predictor.predictor_implementation_replay.v1.request": "current_implementation_files",
+        "market_predictor.predictor_implementation_replay.request": "current_implementation_files",
     }
     for name, digest in source.items():
         if not name.endswith("/_request.json"):

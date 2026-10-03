@@ -87,7 +87,7 @@ def _quarantine(root: Path, inputs: Inputs, ticker: str, boundary: int | None) -
     record = _combined(root, frame)
     source = SourcePin(path=record["path"], sha256=record["sha256"])
     report = root / "observations.json"
-    _json(report, dict(schema="market_predictor.predictor_source_failure_observations.v1",
+    _json(report, dict(schema="market_predictor.predictor_source_failure_observations",
         numeric_first="2018-05-29", numeric_last="2024-05-28", observations=[dict(security_id=identity,
             ticker=ticker, source_path=source.path, source_sha256=source.sha256, bounded_rows=len(frame), invalid_rows=invalid)]))
     observation = SourcePin(path=report.name, sha256=file_sha256(report))

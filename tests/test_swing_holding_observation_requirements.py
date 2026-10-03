@@ -100,10 +100,10 @@ def inventory(tmp_path: Path) -> dict[str, Any]:
             {"path": "january.parquet", "partition_month": "2024-01", "feature_profile": "technical_market"},
             {"path": "february.parquet", "partition_month": "2024-02", "feature_profile": "technical_market"}]},
         "parent": {"decision_start_date": "2024-01-02", "combined_daily_inputs": {"post_collection": {}}},
-        "raw_request": {"schema": "swing.daily_history_collection.v1", "source": "alpaca", "price_feed": "sip",
+        "raw_request": {"schema": "swing.daily_history_collection", "source": "alpaca", "price_feed": "sip",
                         "adjustment": "all", "timeframe": "1d", "start_date": "2024-01-02", "end_date": "2024-02-02",
                         "symbols": ["AAA", "BBB", "CCC", "DDD"]},
-        "raw_manifest": {"schema": "swing.daily_history_manifest.v1", "artifact_count": 1, "artifacts": [
+        "raw_manifest": {"schema": "swing.daily_history_manifest", "artifact_count": 1, "artifacts": [
             {"ticker": "AAA", "price_feed": "sip", "adjustment": "all", "path": "raw/NEVER_OPEN.parquet",
              "sha256": "1" * 64}]},
         "cohort": {"schema_version": "market_predictor.swing_research_cohort", "scope": "retrospective_development_restriction",

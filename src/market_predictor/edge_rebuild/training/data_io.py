@@ -44,10 +44,6 @@ from market_predictor.swing.features.panel import (
     swing_model_feature_columns,
 )
 
-TRAINING_SCHEMA: Final = "edge_rebuild.swing_training.v5"
-EVALUATION_SCHEMA: Final = "edge_rebuild.swing_evaluation.v7"
-MODEL_CARD_SCHEMA: Final = "edge_rebuild.swing_model_card.v7"
-OUTPUT_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_candidate_authority.v5"
 SWING_BASELINE_BUNDLE_PREFIX: Final = "swing_baseline_bundle."
 DECISION_START_DATE: Final = date(2019, 7, 9)
 HORIZON_SESSIONS: Final = 10

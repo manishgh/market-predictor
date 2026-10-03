@@ -117,8 +117,8 @@ def _raw_inventory(
     identity = hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
     if identity != _digest(post["request_identity_sha256"]) or request.get("request_sha256") != identity:
         raise DataReadinessError("holding requirements daily collection request hash differs")
-    if (request.get("schema") != "swing.daily_history_collection.v1"
-            or manifest.get("schema") != "swing.daily_history_manifest.v1"
+    if (request.get("schema") != "swing.daily_history_collection"
+            or manifest.get("schema") != "swing.daily_history_manifest"
             or manifest.get("request_sha256") != request["request_sha256"]
             or request.get("source") != "alpaca" or request.get("price_feed") != "sip"
             or request.get("adjustment") != "all" or request.get("timeframe") != "1d"

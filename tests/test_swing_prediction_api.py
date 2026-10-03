@@ -267,6 +267,6 @@ def test_all_thin_members_abstain_without_estimator_and_keep_decision_cutoff(tmp
 def test_peer_floor_is_distinct_from_nonmembership_in_public_response(tmp_path, monkeypatch):
     serving = swing_serving(tmp_path, monkeypatch, enforce_drift=False, peer_floor_tickers=("THIN",))
     response = serving.service.predict(PredictionRequest(tickers=["THIN", "UNKNOWN"], mode="swing", as_of=NOW))
-    assert response.contract_version == "market_predictor.prediction.v4"
+    assert response.contract_version == "market_predictor.prediction.v1"
     assert response.predictions[0].swing.abstention_reasons == ["sector_peer_floor"]
     assert response.predictions[1].swing.abstention_reasons == ["out_of_universe"]

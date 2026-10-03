@@ -23,11 +23,11 @@ def _raw() -> dict[str, Any]:
 def test_frozen_contract_loads_and_is_hashable() -> None:
     contract = load_strategy_contract(CONTRACT_PATH)
 
-    assert STRATEGY_CONTRACT_SCHEMA == "edge_rebuild.strategy_contract.v2"
+    assert STRATEGY_CONTRACT_SCHEMA == "edge_rebuild.strategy_contract"
     assert StrategyContract.__module__ == "market_predictor.modeling.strategy_contract"
     assert contract.swing.strategy_id == "swing"
     assert contract.intraday.strategy_id == "intraday"
-    assert contract.sha256() == "39213ad6bd5c1f09f30065f737ffecadf05bbb0ae81b81f2ffda7a343967e972"
+    assert contract.sha256() == "7215893c067d5adc0f8dfe7be0215d5d9dd3a85eab0ae4efc52781edb4e6979c"
     # The same content must always hash the same, or the contract cannot be bound
     # to the evidence produced under it.
     assert contract.sha256() == load_strategy_contract(CONTRACT_PATH).sha256()

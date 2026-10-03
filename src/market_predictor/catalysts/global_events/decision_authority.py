@@ -37,9 +37,9 @@ from market_predictor.resources import (
     release_process_memory,
 )
 
-GLOBAL_EVENT_AUTHORITY_SCHEMA: Final = "edge_rebuild.global_event_authority.v2"
-GLOBAL_EVENT_MANIFEST_SCHEMA: Final = "edge_rebuild.global_event_manifest.v2"
-GLOBAL_EVENT_REQUEST_SCHEMA: Final = "edge_rebuild.global_event_request.v2"
+GLOBAL_EVENT_AUTHORITY_SCHEMA: Final = "edge_rebuild.global_event_authority"
+GLOBAL_EVENT_MANIFEST_SCHEMA: Final = "edge_rebuild.global_event_manifest"
+GLOBAL_EVENT_REQUEST_SCHEMA: Final = "edge_rebuild.global_event_request"
 GLOBAL_DECISION_ARTIFACT_TYPE: Final = "edge_rebuild_global_event_decisions"
 GLOBAL_COVERAGE_ARTIFACT_TYPE: Final = "edge_rebuild_global_source_coverage"
 GLOBAL_TICKER: Final = "MARKET"

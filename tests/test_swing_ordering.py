@@ -14,7 +14,7 @@ from market_predictor.edge_rebuild.swing_ordering import (
 
 def _policy(path: Path) -> None:
     path.write_text(
-        """schema_version = "edge_rebuild.swing_ordering.v1"
+        """schema_version = "edge_rebuild.swing_ordering"
 score_features = ["signal_xs_rank"]
 score_directions = [1]
 top_quantile = 0.10

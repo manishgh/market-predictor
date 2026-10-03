@@ -357,7 +357,7 @@ def test_collection_preserves_frozen_transport_and_lineage_identity(
         "fffda4358a7061552d96d59b62d5c90684cef4863e3c718dd53527e4d7efb9da"
     )
     assert collection.manifest["request"] == {
-        "schema": "edge_rebuild.gdelt_global_collection_request.v2",
+        "schema": "edge_rebuild.gdelt_global_collection_request",
         "source_family": "gdelt",
         "global_identity": {"ticker": "MARKET", "security_id": "market:global"},
         "queries": list(QUERIES),
@@ -371,8 +371,9 @@ def test_collection_preserves_frozen_transport_and_lineage_identity(
         "scorer_identity": "fixture-finbert|revision=fixture-v1",
         "scorer_batch_size": 16,
     }
+    # The canonical request schema changes its identity; raw provider bytes stay identical.
     assert collection.manifest["collection_request_sha256"] == (
-        "ebcd130dfa29d148357f2e6dcd6980402b7412f753b5f38695ee4f3364e4b674"
+        "7ccd4be88dcbf54b41d02e4e3521914e4115d0ccd4628409c4263eb0ef6bd5a1"
     )
     assert collection.manifest["raw_response_sha256"] == fetched.raw_response_sha256
     assert collection.events.loc[0, "raw_sha256"] == (

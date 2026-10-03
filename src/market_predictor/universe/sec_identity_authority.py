@@ -33,11 +33,11 @@ from market_predictor.universe.sp500.transition_authority import (
     require_sp500_transition_authority,
 )
 
-SEC_IDENTITY_REQUEST_SCHEMA: Final = "edge_rebuild.sec_identity_request.v2"
-SEC_IDENTITY_MANIFEST_SCHEMA: Final = "edge_rebuild.sec_identity_manifest.v2"
-SEC_IDENTITY_AUTHORITY_SCHEMA: Final = "edge_rebuild.sec_identity_authority.v2"
-SEC_IDENTITY_RELATION_SCHEMA: Final = "edge_rebuild.sec_identity_relations.v2"
-SEC_IDENTITY_COVERAGE_SCHEMA: Final = "edge_rebuild.sec_identity_coverage.v2"
+SEC_IDENTITY_REQUEST_SCHEMA: Final = "edge_rebuild.sec_identity_request"
+SEC_IDENTITY_MANIFEST_SCHEMA: Final = "edge_rebuild.sec_identity_manifest"
+SEC_IDENTITY_AUTHORITY_SCHEMA: Final = "edge_rebuild.sec_identity_authority"
+SEC_IDENTITY_RELATION_SCHEMA: Final = "edge_rebuild.sec_identity_relations"
+SEC_IDENTITY_COVERAGE_SCHEMA: Final = "edge_rebuild.sec_identity_coverage"
 RELATION_FILE: Final = "sec_identity_relations.parquet"
 COVERAGE_FILE: Final = "sec_identity_coverage.csv"
 DEFAULT_RELATION_START: Final = date(2019, 7, 9)
@@ -291,9 +291,9 @@ def build_sec_identity_relations(
                         "proof_ticker": latest_ticker,
                         "proof_company_name": str(proof.get("issuer_name", proof.get("company_name", ""))),
                         "identity_policy": (
-                            "reviewed_official_sec_filing_override_v1"
+                            "reviewed_official_sec_filing_override"
                             if override is not None
-                            else "latest_sec_ticker_propagated_within_stable_security_id_v1"
+                            else "latest_sec_ticker_propagated_within_stable_security_id"
                         ),
                         "schema_version": SEC_IDENTITY_RELATION_SCHEMA,
                     }
@@ -759,7 +759,7 @@ def _request_payload(parent: Mapping[str, object], config: SecIdentityConfig) ->
         "relation_end_date": config.relation_end_date.isoformat(),
         "membership_start_date": config.membership_start_date.isoformat(),
         "maximum_whole_security_exclusion_fraction": config.maximum_whole_security_exclusion_fraction,
-        "identity_policy": "official_sec_mapping_plus_reviewed_filing_overrides_v2",
+        "identity_policy": "official_sec_mapping_plus_reviewed_filing_overrides",
         "ticker_reuse_policy": "never_cross_security_id",
         "parent_lineage": parent,
     }

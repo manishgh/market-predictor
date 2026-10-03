@@ -32,8 +32,8 @@ _MAX_FILE_BYTES = 8 * 1024 * 1024
 _MAX_TOTAL_BYTES = 32 * 1024 * 1024
 _REQUIRED_IDS = {
     "strategy", "temporal", "legacy_training", "panel_request", "panel", "matched",
-    "sec", "issuer_early", "issuer_late", "broker_v1", "broker_v2", "broker_v3",
-    "broker_v4", "directional_v1", "exposed_evaluation",
+    "sec", "issuer_early", "issuer_late", "broker_trials_7fd046e0", "broker_trials_b08aa401", "broker_trials_a3192a42",
+    "broker_trials_ae8e2156", "directional_trials_2d5c081b", "exposed_evaluation",
 }
 _COUNT_FIELDS = {
     "rows", "securities", "modeled_security_count", "sessions", "rows_per_profile",
@@ -57,7 +57,7 @@ class _Artifact(_StrictModel):
 
 
 class _Inventory(_StrictModel):
-    schema_version: Literal["market_predictor.swing_research_evidence.v1"]
+    schema_version: Literal["market_predictor.swing_research_evidence"]
     feature_count: Literal[120]
     feature_order_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     retained_trial_manifests: Literal[5]

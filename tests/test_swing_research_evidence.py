@@ -97,6 +97,17 @@ def test_feature_mapping_covers_exact_order() -> None:
     assert mapping["ordered_features"] == list(columns)
 
 
+def test_retained_trial_ids_bind_distinct_unchanged_artifacts() -> None:
+    inventory = tomllib.loads((ROOT / "configs/swing_research_evidence.toml").read_text(encoding="utf-8"))
+    trials = [artifact for artifact in inventory["artifacts"] if artifact["kind"] == "trials"]
+    assert len(trials) == len({artifact["id"] for artifact in trials}) == 5
+    assert sum(artifact["counts"]["recorded_trials"] for artifact in trials) == 60
+    for artifact in trials:
+        family = "directional_trials" if "directional" in artifact["path"] else "broker_trials"
+        assert artifact["id"] == f"{family}_{artifact['sha256'][:8]}"
+    assert {artifact["id"] for artifact in inventory["artifacts"]} == evidence._REQUIRED_IDS
+
+
 @pytest.mark.parametrize("mutation", ["hash", "size", "count", "feature_order", "missing_identity", "access_parse", "escape"])
 def test_inventory_rejects_tampering(
     fixture_inventory: tuple[Path, dict[str, Any]], mutation: str,

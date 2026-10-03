@@ -36,7 +36,7 @@ from market_predictor.swing.selection import select_constrained_swing_portfolio
 
 class _Policy(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
-    schema_version: Literal["market_predictor.swing_accounting_control.v1"]
+    schema_version: Literal["market_predictor.swing_accounting_control"]
     panel_directory: Literal["data/features/edge_rebuild_swing_technical_panel_20190709_20260708_v1"]
     panel_request_sha256: Literal["d0e093ce2192f8511547b5c5466ac90b892fbd44d4939b002242555a8b19a4ed"]
     panel_manifest_sha256: Literal["891bb547cff304661153661b1c18acf57ec824e6c5c7ddd1eed7346a9a13886c"]

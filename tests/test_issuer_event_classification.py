@@ -42,8 +42,8 @@ def _events(*rows: dict[str, object]) -> pd.DataFrame:
 
 
 def test_classifier_policy_identity_is_frozen() -> None:
-    assert EVENT_FAMILY_POLICY_VERSION == "swing.issuer_event_family.v2"
-    assert EVENT_FAMILY_POLICY_SHA256 == "fa43938d4dc7cb07d62b2e1e24a40cbe004d9d76cc8c7bf21b7c3cd8ef366d7d"
+    assert EVENT_FAMILY_POLICY_VERSION == "swing.issuer_event_family"
+    assert EVENT_FAMILY_POLICY_SHA256 == "6e925ab4d8b03e3ba4a7d154b6548ce5a24b0dcdecf0329557031f4579d7abbd"
 
 
 @pytest.mark.parametrize(
@@ -148,7 +148,7 @@ def test_classifies_each_supported_family(
         "product_event",
     }
     assert family in set(classified["event_family"])
-    assert EVENT_FAMILY_POLICY_VERSION == "swing.issuer_event_family.v2"
+    assert EVENT_FAMILY_POLICY_VERSION == "swing.issuer_event_family"
     assert classified["event_feature_available_at_utc"].eq(
         pd.Timestamp(_AVAILABLE_AT)
     ).all()

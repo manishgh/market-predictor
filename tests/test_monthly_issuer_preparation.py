@@ -17,6 +17,7 @@ from market_predictor.catalysts.issuer_events.attribution_history import ATTRIBU
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.heavy_jobs import HeavyJobBusyError
+from market_predictor.swing.catalyst_lineage import load_catalyst_lineage_policy
 from market_predictor.swing.datasets.initial_fit_issuer_news import FINBERT_REVISION, _write_frame
 from market_predictor.swing.datasets.issuer_news_preparation import (
     SCHEMA,
@@ -36,6 +37,24 @@ from market_predictor.swing.features.catalyst_decision_authority import load_cat
 from tests.test_initial_fit_issuer_derivation import _run as derive_fixture
 from tests.test_initial_fit_issuer_derivation import saved as saved_fixture
 from tests.test_swing_catalyst_lineage import _policy_text, _relations, _sentiments
+
+
+def test_current_monthly_build_configs_bind_current_policy_without_reading_archives() -> None:
+    root = Path(__file__).resolve().parents[1]
+    config_path = root / "configs/swing_initial_fit_monthly_news.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    policy_path = root / config["policy"]["path"]
+    assert file_sha256(policy_path) == config["policy"]["sha256"]
+    load_catalyst_lineage_policy(policy_path)
+    for name in (
+        "swing_issuer_content_cohort_inventory.json",
+        "swing_issuer_content_cohort_inventory_with_legacy_proofs.json",
+        "swing_legacy_query_identity_proofs.json",
+    ):
+        consumer = json.loads((root / "configs" / name).read_text(encoding="utf-8"))
+        binding = consumer["monthly_news_config"]
+        assert root / binding["path"] == config_path
+        assert binding["sha256"] == file_sha256(config_path)
 
 
 def _json(path: Path, value: dict) -> str:  # type: ignore[type-arg]
@@ -108,7 +127,7 @@ def prepared_inputs(tmp_path: Path):  # type: ignore[no-untyped-def]
     for month, dates in (("2024-04", ["2024-04-30"]), ("2024-05", ["2024-05-01", "2024-05-28"])):
         rows = [{"security_id": security, "ticker": ticker, "timeframe": "1d",
             "decision_time_utc": pd.Timestamp(date + "T22:00:00Z"), "bar_start_utc": pd.Timestamp(date + "T13:30:00Z"),
-            "prediction_cutoff_policy_id": "xnys_1800_america_new_york_v1"}
+            "prediction_cutoff_policy_id": "xnys_1800_america_new_york"}
             for date in dates for security, ticker in (("security:a", "AAA"), ("security:zero", "ZERO"), ("security:unknown", "UNK"))]
         partitions.append((month, stamp_canonical_decision_ids(pd.DataFrame(rows))))
     metadata_path = tmp_path / "synthetic-decision-source.json"

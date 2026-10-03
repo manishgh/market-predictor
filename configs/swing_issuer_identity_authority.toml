@@ -1,4 +1,4 @@
-schema_version = "market_predictor.issuer_identity_publication.v1"
+schema_version = "market_predictor.issuer_identity_publication"
 correction_policy = "configs/swing_symbol_corrections.toml"
 correction_policy_sha256 = "be63ad9460f80cf87a377b903971c5415bcfefdf5d457308a9a9028d2b5488e3"
 query_scope = "configs/swing_issuer_news_corrections.json"

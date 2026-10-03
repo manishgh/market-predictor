@@ -49,7 +49,7 @@ from market_predictor.swing.features.panel import (
 SWING_MATERIALIZATION_REQUEST_SCHEMA: Final = (
     "market_predictor.swing_panel_materialization.research_population"
 )
-SWING_STAGE_ONE_SHARD_SCHEMA: Final = "edge_rebuild.swing_panel_stage_one_shard.v8"
+SWING_STAGE_ONE_SHARD_SCHEMA: Final = "edge_rebuild.swing_panel_stage_one_shard"
 SWING_MATERIALIZATION_PROFILES: Final = (SWING_FEATURE_PROFILE,)
 
 

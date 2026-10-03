@@ -21,10 +21,10 @@ from market_predictor.universe.sp500.membership_authority import (
     require_sp500_membership_authority,
 )
 
-TEMPORAL_SCHEMA = "edge_rebuild.temporal_manifest.v2"
-TEMPORAL_AUTHORITY_SCHEMA = "edge_rebuild.temporal_manifest_authority.v2"
-DAILY_REQUEST_SCHEMA = "swing.daily_history_collection.v1"
-DAILY_MANIFEST_SCHEMA = "swing.daily_history_manifest.v1"
+TEMPORAL_SCHEMA = "edge_rebuild.temporal_manifest"
+TEMPORAL_AUTHORITY_SCHEMA = "edge_rebuild.temporal_manifest_authority"
+DAILY_REQUEST_SCHEMA = "swing.daily_history_collection"
+DAILY_MANIFEST_SCHEMA = "swing.daily_history_manifest"
 MAX_MEMORY_GIB = 4.0
 MEMORY_HEADROOM_GIB = 0.75
 ANNOUNCEMENT_LEAD_DAYS = 45

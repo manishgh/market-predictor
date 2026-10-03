@@ -11,6 +11,10 @@ from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, mo
 from market_predictor.core.errors import DataReadinessError
 
 SWING_CANDIDATE_MODEL_SCHEMA: Final = "edge_rebuild.swing_candidate"
+TRAINING_SCHEMA: Final = "edge_rebuild.swing_training"
+EVALUATION_SCHEMA: Final = "edge_rebuild.swing_evaluation"
+MODEL_CARD_SCHEMA: Final = "edge_rebuild.swing_model_card"
+OUTPUT_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_candidate_authority"
 
 
 class TrainingInformationBoundary(BaseModel):

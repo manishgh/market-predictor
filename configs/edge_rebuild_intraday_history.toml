@@ -1,4 +1,4 @@
-schema_version = "edge_rebuild.intraday_history.v1"
+schema_version = "edge_rebuild.intraday_history"
 provider = "alpaca"
 calendar = "XNYS"
 required_price_feed = "sip"

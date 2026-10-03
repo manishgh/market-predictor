@@ -54,8 +54,8 @@ from market_predictor.sources.sec import (
     _rows,
 )
 
-SEC_COLLECTION_SCHEMA: Final = "edge_rebuild.sec_filing_collection.v2"
-SEC_COLLECTION_MANIFEST_SCHEMA: Final = "edge_rebuild.sec_filing_collection_manifest.v2"
+SEC_COLLECTION_SCHEMA: Final = "edge_rebuild.sec_filing_collection"
+SEC_COLLECTION_MANIFEST_SCHEMA: Final = "edge_rebuild.sec_filing_collection_manifest"
 SEC_SOURCE_FAMILY: Final = "sec"
 SEC_EVENT_ARTIFACT_TYPE: Final = "sec_issuer_filing_events"
 SEC_COVERAGE_ARTIFACT_TYPE: Final = "sec_issuer_source_collections"

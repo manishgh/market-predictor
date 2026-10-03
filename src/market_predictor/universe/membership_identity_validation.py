@@ -41,7 +41,7 @@ from market_predictor.canonical.store import (
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.corpus_integrity import IntegrityThresholds
 
-MEMBERSHIP_IDENTITY_SCHEMA = "edge_rebuild.membership_identity.v1"
+MEMBERSHIP_IDENTITY_SCHEMA = "edge_rebuild.membership_identity"
 REQUIRED_MEMBERSHIP_COLUMNS = (
     "ticker",
     "security_id",

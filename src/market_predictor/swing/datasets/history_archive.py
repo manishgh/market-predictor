@@ -38,9 +38,9 @@ from market_predictor.swing.datasets.history_plan_publication import (
     PLAN_SCHEMA,
 )
 
-COLLECTION_SCHEMA: Final = "edge_rebuild.swing_history_collection.v1"
-COLLECTION_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_history_collection_authority.v1"
-UNIT_SCHEMA: Final = "edge_rebuild.swing_history_collection_unit.v1"
+COLLECTION_SCHEMA: Final = "edge_rebuild.swing_history_collection"
+COLLECTION_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_history_collection_authority"
+UNIT_SCHEMA: Final = "edge_rebuild.swing_history_collection_unit"
 TIMEFRAME: Final = "1Day"
 PRICE_FEED: Final = "sip"
 SUPPORTED_ADJUSTMENTS: Final = frozenset({"raw", "all"})
@@ -146,7 +146,7 @@ def collect_swing_history_plan(
     maximum_units_this_run: int | None = None,
     expected_plan_authority_sha256: str | None = None,
 ) -> dict[str, Any]:
-    """Collect every exact v2 plan unit with immutable per-unit resume."""
+    """Collect every exact plan unit with immutable per-unit resume."""
 
     if maximum_units_this_run is not None and maximum_units_this_run < 1:
         raise ValueError("maximum_units_this_run must be positive")

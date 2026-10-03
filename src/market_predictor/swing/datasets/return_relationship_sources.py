@@ -78,12 +78,12 @@ def _collection_metadata(root: Path, record: dict[str, Any], family: str) -> tup
     if pre:
         authority = metadata["_authority.json"]
         plan_hashes = request.get("plan_hashes")
-        if (request.get("schema") != "edge_rebuild.swing_history_collection.v1"
+        if (request.get("schema") != "edge_rebuild.swing_history_collection"
                 or manifest.get("schema") != request["schema"]
                 or manifest.get("status") not in {"complete", "complete_with_unavailable"}
                 or manifest.get("failed_units") != [] or manifest.get("unattempted_units") != []
                 or not isinstance(plan_hashes, dict) or manifest.get("plan_hashes") != plan_hashes
-                or authority.get("schema") != "edge_rebuild.swing_history_collection_authority.v1"
+                or authority.get("schema") != "edge_rebuild.swing_history_collection_authority"
                 or authority.get("state") != "complete" or authority.get("artifact") != "_manifest.json"
                 or authority.get("artifact_sha256") != record["manifest_sha256"]
                 or authority.get("request_sha256") != identity):
@@ -98,10 +98,10 @@ def _collection_metadata(root: Path, record: dict[str, Any], family: str) -> tup
             raise DataReadinessError("relationship pre-collection request universe differs")
     else:
         status = metadata["_status.json"]
-        if request.get("schema") != "swing.daily_history_collection.v1" or record.get("request_identity_sha256") != identity:
+        if request.get("schema") != "swing.daily_history_collection" or record.get("request_identity_sha256") != identity:
             raise DataReadinessError("relationship post-collection request identity differs")
         for terminal in (status, manifest):
-            if (terminal.get("schema") != "swing.daily_history_manifest.v1"
+            if (terminal.get("schema") != "swing.daily_history_manifest"
                     or terminal.get("status") not in {"complete", "complete_with_gaps"}
                     or terminal.get("request_sha256") != identity or terminal.get("failed_symbols") != {}
                     or terminal.get("source_collections_sha256") != record["source_collections_sha256"]):

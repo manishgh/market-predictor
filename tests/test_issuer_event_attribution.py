@@ -17,10 +17,10 @@ _EVENT_TIME = pd.Timestamp("2026-01-20T15:00:00Z")
 
 class SwingEventAttributionTests(unittest.TestCase):
     def test_attribution_policy_identity_is_frozen(self) -> None:
-        self.assertEqual(ATTRIBUTION_POLICY_VERSION, "swing.event_attribution.v3")
+        self.assertEqual(ATTRIBUTION_POLICY_VERSION, "swing.event_attribution")
         self.assertEqual(
             ATTRIBUTION_POLICY_SHA256,
-            "d6670bf47f870441d79cb61f10405cee6f2e23a879cedcb79f24983b0ecfa217",
+            "d7efcb9cbc991b2b4c4f48d15d33c18cd0eb97a93afede6f3fcafc6a0a76502f",
         )
 
     def test_lunr_oil_headline_has_no_false_issuer_association(self) -> None:

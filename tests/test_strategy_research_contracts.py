@@ -18,6 +18,7 @@ from market_predictor.strategy_research_contracts import (
     ReferenceModelInventory,
     ResearchHypothesisRegistry,
     StrategyResearchGovernance,
+    _validate_contract_bindings,
     validate_strategy_research_contracts,
 )
 from market_predictor.swing.contracts import (
@@ -32,6 +33,13 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 class StrategyResearchContractTests(unittest.TestCase):
+    def test_current_governance_binds_current_configs_and_execution_policy(self) -> None:
+        payload = tomllib.loads(
+            (REPOSITORY_ROOT / "configs/strategy_research_governance.toml").read_text(encoding="utf-8")
+        )
+        policy = StrategyResearchGovernance.model_validate(payload)
+        _validate_contract_bindings(REPOSITORY_ROOT, policy)
+
     def test_swing_decision_start_fails_closed_before_verified_history(self) -> None:
         self.assertEqual(
             SwingDatasetConfig().decision_start_date,

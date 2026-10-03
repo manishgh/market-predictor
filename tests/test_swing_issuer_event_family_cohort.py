@@ -57,14 +57,14 @@ class _Inputs:
 
 
 def test_retained_issuer_family_envelope_identities_are_frozen() -> None:
-    assert AUTHORITY_SCHEMA == "edge_rebuild.issuer_event_family_authority.v2"
-    assert MANIFEST_SCHEMA == "edge_rebuild.issuer_event_family_manifest.v2"
+    assert AUTHORITY_SCHEMA == "edge_rebuild.issuer_event_family_authority"
+    assert MANIFEST_SCHEMA == "edge_rebuild.issuer_event_family_manifest"
     assert FAMILY_EVENTS_ARTIFACT_TYPE == "issuer_event_family_events"
     assert FAMILY_ASSIGNMENTS_ARTIFACT_TYPE == "issuer_event_family_assignments"
     assert FAMILY_COVERAGE_ARTIFACT_TYPE == "issuer_event_family_coverage"
     assert COHORT_AUDIT_ARTIFACT_TYPE == "issuer_event_family_cohort_audit"
     assert UNCLASSIFIED_EVENTS_ARTIFACT_TYPE == "issuer_event_family_unclassified_events"
-    assert NEUTRAL_PROJECTION_SCHEMA == "market_predictor.issuer_family_neutral_projection.v1"
+    assert NEUTRAL_PROJECTION_SCHEMA == "market_predictor.issuer_family_neutral_projection"
 
 
 def test_publishes_immutable_multilabel_authority(tmp_path: Path) -> None:

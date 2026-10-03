@@ -88,11 +88,11 @@ def saved_authority(root: Path, collection: str, name: str, *, blindspots: tuple
         "collection_audit_path": audit.relative_to(root).as_posix(), "collection_audit_sha256": file_sha256(audit),
         "collection_request_sha256": manifest["request_sha256"], "excluded_security_ids": excluded, "production_ready": False}
     scope: dict[str, Any] = {"scope_policy": ATTRIBUTION_SCOPE_POLICY, "source_coverage_admitted": False} if corrected else {}
-    requests = {"attribution": {**common, **scope, "schema": "swing.event_attribution_request.v1",
+    requests = {"attribution": {**common, **scope, "schema": "swing.event_attribution_request",
         "attribution_policy_version": ATTRIBUTION_POLICY_VERSION, "attribution_policy_sha256": ATTRIBUTION_POLICY_SHA256,
         "business_labels_path": labels["path"], "business_labels_sha256": labels["sha256"],
         "security_identities_path": identities["path"], "security_identities_sha256": identities["sha256"]},
-        "sentiment": {**common, **scope, "schema": "swing.event_sentiment_request.v1", "model_name": "ProsusAI/finbert",
+        "sentiment": {**common, **scope, "schema": "swing.event_sentiment_request", "model_name": "ProsusAI/finbert",
             "model_revision": FINBERT_REVISION}}
     digests = {kind: json_sha256(request) for kind, request in requests.items()}
     for kind, request in requests.items():
@@ -120,7 +120,7 @@ def saved_authority(root: Path, collection: str, name: str, *, blindspots: tuple
             written = _write_frame(frame, base / kind / folder / f"{record['chunk_id']}.parquet", canonical_kind,
                                    {**inputs, key: digests[kind]})
             rows[kind].append({**written, "chunk_id": record["chunk_id"]})
-    for kind, schema in (("attribution", "swing.event_attribution_manifest.v1"), ("sentiment", "swing.event_sentiment_manifest.v1")):
+    for kind, schema in (("attribution", "swing.event_attribution_manifest"), ("sentiment", "swing.event_sentiment_manifest")):
         extra = {**scope, "coverage_blindspot_security_ids": list(blindspots)} if corrected else {}
         _json(base / kind / "_manifest.json", {"schema": schema, "status": "complete", "production_ready": False,
             "failed_chunks": {}, "request_sha256": digests[kind], "excluded_security_ids": excluded, "artifacts": rows[kind], **extra})

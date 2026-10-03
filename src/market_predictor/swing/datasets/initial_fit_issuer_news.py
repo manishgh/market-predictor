@@ -30,7 +30,7 @@ from market_predictor.heavy_jobs import heavy_job_lease
 if TYPE_CHECKING:
     from market_predictor.swing.datasets.issuer_event_family_cohort import SwingIssuerFamilyCohort
 
-SCHEMA = "swing.initial_fit_issuer_derivation.v1"
+SCHEMA = "swing.initial_fit_issuer_derivation"
 FINBERT_REVISION = "4556d13015211d73dccd3fdd39d39232506f3e43"
 LAST_INITIAL_FIT_CUTOFF = pd.Timestamp("2024-05-28T22:00:00Z")
 
@@ -108,16 +108,16 @@ def _saved_headers(source: SavedIssuerAuthority, *, repository_root: Path | None
     _pin(aroot / "_manifest.json", source.attribution_manifest_sha256)
     _pin(sroot / "_manifest.json", source.sentiment_manifest_sha256)
     attribution, sentiment = _json(aroot / "_manifest.json"), _json(sroot / "_manifest.json")
-    for value, schema in ((attribution, "swing.event_attribution_manifest.v1"),
-                          (sentiment, "swing.event_sentiment_manifest.v1")):
+    for value, schema in ((attribution, "swing.event_attribution_manifest"),
+                          (sentiment, "swing.event_sentiment_manifest")):
         if (value.get("schema") != schema or value.get("status") != "complete"
                 or value.get("production_ready") is not False or value.get("failed_chunks") != {}):
             raise DataReadinessError("saved issuer authority is not complete research evidence")
     ar, sr = _request(aroot, attribution), _request(sroot, sentiment)
-    if (ar.get("scope_policy") is not None or ar.get("schema") != "swing.event_attribution_request.v1"
+    if (ar.get("scope_policy") is not None or ar.get("schema") != "swing.event_attribution_request"
             or ar.get("attribution_policy_sha256") != ATTRIBUTION_POLICY_SHA256
             or ar.get("attribution_policy_version") != ATTRIBUTION_POLICY_VERSION
-            or sr.get("schema") != "swing.event_sentiment_request.v1"
+            or sr.get("schema") != "swing.event_sentiment_request"
             or sr.get("model_name") != "ProsusAI/finbert" or sr.get("model_revision") != FINBERT_REVISION):
         raise DataReadinessError("derivation requires the explicitly pinned old strict policy and exact FinBERT revision")
     for key in ("collection_manifest_sha256", "collection_audit_sha256", "collection_request_sha256"):
@@ -199,7 +199,7 @@ def _write_json(path: Path, value: Mapping[str, Any]) -> None:
 
 
 def _validate_selected_scores(frame: pd.DataFrame) -> None:
-    # event_relevance.v1 is an additive heuristic in [0.1, 2.0], not a probability.
+    # event_relevance is an additive heuristic in [0.1, 2.0], not a probability.
     for column, lower, upper in (("sentiment_numeric", -1.0, 1.0), ("sentiment_confidence", 0.0, 1.0), ("relevance", 0.1, 2.0)):
         if column not in frame:
             raise DataReadinessError(f"saved selected scores lack {column}")
@@ -371,7 +371,7 @@ def _derive(source: SavedIssuerAuthority, root: Path, start_utc: str, cutoff_utc
     _write_json(root / "_source_children.json", source_children)
     inventory = {p.relative_to(root).as_posix(): file_sha256(p) for p in root.rglob("*") if p.is_file()}
     manifest = {**shared, "schema": SCHEMA, "request": request, "inventory": inventory,
-                "source_path_resolution": {"policy": "explicit_repository_base_authority_containment_v1",
+                "source_path_resolution": {"policy": "explicit_repository_base_authority_containment",
                     "repository_root": str(repository_root) if repository_root is not None else None},
                 "unavailable_chunks": gaps, "source_events": sum(r["rows"] for r in source_rows),
                 "relations": sum(r["rows"] for r in relation_rows), "scored_events": sum(r["rows"] for r in score_rows)}
@@ -413,7 +413,7 @@ def load_initial_fit_issuer_inputs(directory: Path, *, expected_manifest_sha256:
     for key in ("attribution_dir", "sentiment_dir"):
         source[key] = Path(source[key])
     resolution = manifest.get("source_path_resolution", {})
-    if resolution.get("policy") != "explicit_repository_base_authority_containment_v1":
+    if resolution.get("policy") != "explicit_repository_base_authority_containment":
         raise DataReadinessError("issuer derivation lacks its declared source path resolution")
     repository_root = Path(resolution["repository_root"]) if resolution.get("repository_root") is not None else None
     if repository_root is not None and not repository_root.is_absolute():
@@ -499,7 +499,7 @@ def main() -> None:
         config = args.config if args.config.is_absolute() else root / args.config
         _pin(config, args.expected_config_sha256)
         policy = tomllib.loads(config.read_text(encoding="utf-8"))
-        if policy.get("schema") != "swing.initial_fit_issuer_derivation_config.v1":
+        if policy.get("schema") != "swing.initial_fit_issuer_derivation_config":
             raise DataReadinessError("unsupported explicit issuer derivation config")
         fields = {**policy["source_identity"], **policy["sources"][args.generation]}
         for key in ("attribution_dir", "sentiment_dir"):

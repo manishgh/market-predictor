@@ -46,7 +46,7 @@ def monthly(saved: SavedIssuerAuthority, tmp_path: Path, request: pytest.Fixture
         "security_id": ["security:a", "security:no-news"], "ticker": [ticker, "ZZZ"], "timeframe": ["1d", "1d"],
         "decision_time_utc": pd.to_datetime([day + "T22:00:00Z"] * 2, utc=True),
         "bar_start_utc": pd.to_datetime([day + "T13:30:00Z"] * 2, utc=True),
-        "prediction_cutoff_policy_id": ["xnys_1800_america_new_york_v1"] * 2,
+        "prediction_cutoff_policy_id": ["xnys_1800_america_new_york"] * 2,
     }))
     decision_path = tmp_path / "decisions.parquet"
     _write_frame(decisions, decision_path, "decisions", {})

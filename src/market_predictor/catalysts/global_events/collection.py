@@ -40,9 +40,9 @@ from market_predictor.sources.gdelt import (
     validate_gdelt_document_request,
 )
 
-GDELT_COLLECTION_SCHEMA: Final = "edge_rebuild.gdelt_global_collection.v2"
-GDELT_COLLECTION_MANIFEST_SCHEMA: Final = "edge_rebuild.gdelt_global_collection_manifest.v2"
-GDELT_COLLECTION_REQUEST_SCHEMA: Final = "edge_rebuild.gdelt_global_collection_request.v2"
+GDELT_COLLECTION_SCHEMA: Final = "edge_rebuild.gdelt_global_collection"
+GDELT_COLLECTION_MANIFEST_SCHEMA: Final = "edge_rebuild.gdelt_global_collection_manifest"
+GDELT_COLLECTION_REQUEST_SCHEMA: Final = "edge_rebuild.gdelt_global_collection_request"
 GLOBAL_TICKER: Final = "MARKET"
 GLOBAL_SECURITY_ID: Final = "market:global"
 SOURCE_FAMILY: Final = "gdelt"

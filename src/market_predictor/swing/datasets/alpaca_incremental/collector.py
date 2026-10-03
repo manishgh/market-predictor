@@ -314,7 +314,7 @@ def _run(config_path: Path, through: date, cutoff: datetime, max_units: int | No
     status = ("paused_memory" if run.paused else "integrity_failed" if run.integrity_failures else
         "partial_failures" if failed else "bounded_incomplete" if pending or (through == cutoff.date() and not partial_capture_count)
         else "verified" if offline else "complete")
-    summary: dict[str, Any] = {"schema": "market_predictor.alpaca_incremental_status.v1", "status": status,
+    summary: dict[str, Any] = {"schema": "market_predictor.alpaca_incremental_status", "status": status,
         "request_sha256": request["request_sha256"], "through": through.isoformat(), "cutoff_utc": cutoff.isoformat(),
         "complete_through_utc_date": watermark.isoformat() if watermark else None,
         "today_complete": False, "attempted_units": run.attempted, "fetched_units": run.fetched,

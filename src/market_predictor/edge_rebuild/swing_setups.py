@@ -1,10 +1,10 @@
-"""ER3 deterministic setup population for ``SWING.SECTOR_RESIDUAL_MOMENTUM.10D.V1``.
+"""Deterministic sector-residual momentum swing setup population.
 
 This module builds the population that
 :mod:`market_predictor.edge_rebuild.setup_economics` admits or rejects. No
-estimator is involved and none may be: V1 and V2 both fitted models on
-populations that had no gross edge before any model existed, and the V2 intraday
-setup averaged a negative gross return *before* costs. ER3 inverts that order.
+estimator is involved and none may be: earlier experiments fitted models on
+populations that had no gross edge before any model existed, and the historical
+intraday setup averaged a negative gross return *before* costs. Test that premise first.
 
 Nothing here is reimplemented. The causal feature history, the exact next-open to
 horizon-close label path, the point-in-time membership join, and the deterministic
@@ -134,7 +134,7 @@ from market_predictor.swing.features.panel import swing_dataset_config
 from market_predictor.swing.features.pipeline import SetupComponentsStep
 from market_predictor.swing.labels import add_exact_swing_labels
 
-SWING_SETUP_SCHEMA = "edge_rebuild.swing_setups.v1"
+SWING_SETUP_SCHEMA = "edge_rebuild.swing_setups"
 SWING_SETUP_FEATURE_PROFILE = "technical_market"
 SWING_SESSION_SEGMENT = "post_close"
 SWING_HOLDOUT_SEED = 42

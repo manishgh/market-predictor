@@ -3,7 +3,7 @@
 Thresholds are picked once, from trading rationale and a design window that is
 kept separate from evaluation. After that they are immutable. Adjusting a
 threshold after seeing how validation turned out converts a random result into
-an apparent discovery, and that is the specific mistake behind the rejected V2
+an apparent discovery, and that is the specific mistake behind the rejected historical
 strategies.
 
 The contract also caps how many variants may be tried. Testing enough ideas
@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from market_predictor.core.errors import DataReadinessError
 
-STRATEGY_CONTRACT_SCHEMA = "edge_rebuild.strategy_contract.v2"
+STRATEGY_CONTRACT_SCHEMA = "edge_rebuild.strategy_contract"
 
 
 class FrozenModel(BaseModel):

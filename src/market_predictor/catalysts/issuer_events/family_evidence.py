@@ -91,7 +91,7 @@ def load_issuer_family_evidence(
     expected_authority_sha256: str | None = None,
     verify_unclassified_semantics: bool = True,
 ) -> IssuerFamilyEvidence:
-    """Strictly project neutral evidence from a retained combined v2 envelope."""
+    """Strictly project neutral evidence from a combined envelope."""
 
     envelope = verify_issuer_family_combined_envelope(
         directory,

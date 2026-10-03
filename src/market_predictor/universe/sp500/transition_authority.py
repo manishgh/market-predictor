@@ -37,10 +37,10 @@ from market_predictor.universe.sp500.index_change_events import (
     require_spglobal_event_reconstruction_ready,
 )
 
-TRANSITION_REQUEST_SCHEMA: Final = "edge_rebuild.sp500_transition_request.v1"
-TRANSITION_MANIFEST_SCHEMA: Final = "edge_rebuild.sp500_transition_manifest.v1"
-TRANSITION_AUTHORITY_SCHEMA: Final = "edge_rebuild.sp500_transition_authority.v1"
-TRANSITION_TABLE_SCHEMA: Final = "edge_rebuild.sp500_transitions.v1"
+TRANSITION_REQUEST_SCHEMA: Final = "edge_rebuild.sp500_transition_request"
+TRANSITION_MANIFEST_SCHEMA: Final = "edge_rebuild.sp500_transition_manifest"
+TRANSITION_AUTHORITY_SCHEMA: Final = "edge_rebuild.sp500_transition_authority"
+TRANSITION_TABLE_SCHEMA: Final = "edge_rebuild.sp500_transitions"
 TRANSITION_FILE: Final = "transitions.parquet"
 
 _REVIEWED_COLUMNS: Final = {

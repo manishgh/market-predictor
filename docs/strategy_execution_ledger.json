@@ -1184,5 +1184,5 @@
     "remote_ref": "origin/r3-lineage",
     "sha256": "8d434e4beb94edf30247650f144149cfc1cf33be31f7bf0d783233abd5b3bdc5"
   },
-  "schema_version": "market_predictor.strategy_execution_ledger.v1"
+  "schema_version": "market_predictor.strategy_execution_ledger"
 }

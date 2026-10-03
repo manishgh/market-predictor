@@ -1062,9 +1062,9 @@ def _write_source_audit(tmp_path: Path) -> tuple[Path, str, list[str]]:
     path.write_text(
         json.dumps(
             {
-                "schema": "ml_v3.sp500_point_in_time_universe.v1",
+                "schema": "market_predictor.sp500_point_in_time_universe",
                 "source_manifest": {
-                    "schema": "ml_v3.sp500_change_sources.v1",
+                    "schema": "market_predictor.sp500_change_sources",
                     "sources": sources,
                 },
                 "source_urls": urls,

@@ -27,7 +27,7 @@ class CanonicalAuditCheck(CanonicalContract):
 
 
 class CanonicalAuditReport(CanonicalContract):
-    schema_version: str = "market_data.audit.v1"
+    schema_version: str = "market_data.audit"
     checks: tuple[CanonicalAuditCheck, ...]
 
     @property

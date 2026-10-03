@@ -237,7 +237,7 @@ def _write_catalog(root: Path) -> Path:
     path = root / "catalog.toml"
     path.write_text(
         """
-schema = "market_predictor.research_model_catalog.v1"
+schema = "market_predictor.research_model_catalog"
 
 [[models]]
 id = "swing_technical_with_catalyst"

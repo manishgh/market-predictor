@@ -63,10 +63,10 @@ def test_swing_feature_and_default_config_hashes_are_stable() -> None:
         "4d68fd5327f1cc535ba1458a1138cd4faac866a4c129c686c2a48bede0de81fb"
     )
     assert _sha256(contracts.SwingDatasetConfig().model_dump_json()) == (
-        "b09ef6f2d22b48fe31d3e3af1ae16d5ea306ad6276d4f5711c54c992551a189d"
+        "9338624d960afde78a2c2ef1581fa7f8e7c06c2a24f1ecd1061664b296b77e06"
     )
     assert _sha256(contracts.SwingTrainingConfig().model_dump_json()) == (
-        "094c8ae89831338a6e64abc317063852b445546d8fc5619317e16528c8147812"
+        "9d52e0a3bbbbf7529538324e81b3a768c9db0dbf4daad48e8d476bb58176be8e"
     )
     assert _sha256(contracts.SwingPromotionConfig().model_dump_json()) == (
         "491edfa821bd96459690d00cc4a9fdfb7b8f16628314f22d881fdc0d57ccaae5"
@@ -81,10 +81,10 @@ def test_swing_feature_and_default_config_hashes_are_stable() -> None:
 
 def test_swing_materialization_schema_identities_are_stable() -> None:
     assert SWING_MATERIALIZATION_MANIFEST_SCHEMA == (
-        "edge_rebuild.swing_panel_materialization.v12"
+        "edge_rebuild.swing_panel_materialization"
     )
     assert SWING_MATERIALIZATION_AUTHORITY_SCHEMA == (
-        "edge_rebuild.swing_panel_materialization_authority.v12"
+        "edge_rebuild.swing_panel_materialization_authority"
     )
 
 

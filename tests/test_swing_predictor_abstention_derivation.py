@@ -39,7 +39,7 @@ def example(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     evidence = root / "reviewed-observations.json"
     source = root / "adjusted.parquet"
     source.write_bytes(b"not a parquet: source bytes must only be hashed, never decoded")
-    write_json_object(evidence, dict(schema="market_predictor.predictor_source_failure_observations.v1",
+    write_json_object(evidence, dict(schema="market_predictor.predictor_source_failure_observations",
         numeric_first="2018-05-29", numeric_last="2024-05-28", combined_manifest_sha256="c" * 64,
         observations=[dict(security_id="issuer-WTW", ticker="WTW", source_path=source.name,
             source_sha256=file_sha256(source), bounded_rows=1, invalid_rows=[])]))
@@ -94,7 +94,7 @@ def example(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         first_invalid_session=None, boundary_observation_sha256=None,
         source_artifacts=[_pin(root, source).model_dump()], reviewed_evidence=[_pin(root, evidence).model_dump()],
         detail="Entire unverified issuer warmup quarantined; not just its zero-volume rows.")
-    facts = dict(schema_version="market_predictor.predictor_failure_facts.v1",
+    facts = dict(schema_version="market_predictor.predictor_failure_facts",
         parent_checkpoint_sha256=file_sha256(parent / "_checkpoint.json"), parent_request_sha256=checkpoint["request_sha256"],
         decision_config=_pin(root, config).model_dump(), parent_run_finished=True,
         feature_config=_pin(root, feature_config).model_dump(), observations=_pin(root, evidence).model_dump(),
@@ -545,7 +545,7 @@ def _install_prefix_replay(state: dict[str, Any], monkeypatch: pytest.MonkeyPatc
     invalid = dict(session_date_et="2019-08-01", invalid_fields=["volume"],
         ohlcv={name: float(row[name]) for name in ("open", "high", "low", "close", "volume")},
         clocks={name: str(row[name]) for name in ("bar_start_utc", "bar_end_utc", "available_at_utc")})
-    report = dict(schema="market_predictor.predictor_source_failure_observations.v1", review_approval=False,
+    report = dict(schema="market_predictor.predictor_source_failure_observations", review_approval=False,
         numeric_first="2018-05-29", numeric_last="2024-05-28", combined_manifest_sha256=file_sha256(manifest),
         observations=[dict(ticker="WTW", security_id="issuer-WTW", bounded_rows=2, invalid_rows=[invalid],
             source_path=state["source"].relative_to(root).as_posix(), source_sha256=file_sha256(state["source"]))])

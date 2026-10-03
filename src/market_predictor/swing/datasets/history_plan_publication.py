@@ -15,8 +15,8 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.locking import file_lock
 from market_predictor.resources import assert_peak_memory_budget, memory_audit
 
-PLAN_SCHEMA = "edge_rebuild.swing_history_acquisition_plan.v2"
-AUTHORITY_SCHEMA = "edge_rebuild.swing_history_acquisition_plan_authority.v2"
+PLAN_SCHEMA = "edge_rebuild.swing_history_acquisition_plan"
+AUTHORITY_SCHEMA = "edge_rebuild.swing_history_acquisition_plan_authority"
 DAILY_BAR_UNITS_FILE = "daily_bar_units.csv"
 UNIT_COLUMNS = ("security_id", "ticker", "start_date", "end_date", "role")
 

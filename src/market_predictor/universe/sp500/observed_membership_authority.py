@@ -45,16 +45,16 @@ from market_predictor.universe.sp500.membership_history import (
     parse_sp500_changes,
 )
 
-REQUEST_SCHEMA: Final = "edge_rebuild.sp500_observed_membership_request.v2"
-MANIFEST_SCHEMA: Final = "edge_rebuild.sp500_observed_membership_manifest.v2"
-AUTHORITY_SCHEMA: Final = "edge_rebuild.sp500_observed_membership_authority.v2"
+REQUEST_SCHEMA: Final = "edge_rebuild.sp500_observed_membership_request"
+MANIFEST_SCHEMA: Final = "edge_rebuild.sp500_observed_membership_manifest"
+AUTHORITY_SCHEMA: Final = "edge_rebuild.sp500_observed_membership_authority"
 MEMBERSHIP_FILE: Final = "memberships.parquet"
 ANCHOR_FILE: Final = "current_anchor.csv"
 EVENT_FILE: Final = "observed_events.json"
 OUTCOME_FILE: Final = "release_outcomes.json"
 PENDING_FILE: Final = "pending_changes.json"
 NEW_YORK: Final = ZoneInfo("America/New_York")
-MEMBERSHIP_SCHEMA_VERSION: Final = "market_data.v1"
+MEMBERSHIP_SCHEMA_VERSION: Final = "market_data"
 OBSERVED_AVAILABILITY_POLICY: Final = "observed"
 OFFICIAL_MEMBERSHIP_SOURCE: Final = "spglobal_official_point_in_time"
 OBSERVED_IDENTITY_SOURCE: Final = "spglobal_current_anchor_sec_identity"

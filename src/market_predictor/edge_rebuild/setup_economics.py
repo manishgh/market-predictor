@@ -72,7 +72,7 @@ from market_predictor.regime_evidence import (
     session_block_mean_interval,
 )
 
-SETUP_ECONOMICS_SCHEMA = "edge_rebuild.setup_economics.v2"
+SETUP_ECONOMICS_SCHEMA = "edge_rebuild.setup_economics"
 
 WALK_FORWARD_SCOPE = "walk_forward"
 UNSEEN_TICKER_SCOPE = "unseen_ticker"
@@ -826,7 +826,7 @@ def _block_interval(
 
     Naive per-row resampling would treat every overlapping row as new information
     and shrink the interval by roughly the square root of the overlap factor,
-    which is how a population of 101,918 V2 rows that really carried about 125
+    which is how a historical population of 101,918 rows that really carried about 125
     independent blocks produced bounds that looked far tighter than they were.
     """
 

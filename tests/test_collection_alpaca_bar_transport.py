@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -54,10 +55,18 @@ def test_collector_publishes_raw_lineage_and_complete_authority(
     verified = load_complete_bar_collection(output)
 
     assert result["status"] == "transport_complete"
+    assert result["schema"] == "edge_rebuild.intraday_history_collection"
+    assert json.loads((output / "_request.json").read_text(encoding="utf-8"))[
+        "schema"
+    ] == "edge_rebuild.intraday_history_collection"
+    assert json.loads((output / "_authority.json").read_text(encoding="utf-8"))[
+        "schema"
+    ] == "edge_rebuild.intraday_history_authority"
     assert result["completed_units"] == 1
     assert result["total_rows"] == 4
     assert verified["request_sha256"] == result["request_sha256"]
     artifact = result["artifacts"][0]
+    assert artifact["schema"] == "edge_rebuild.intraday_history_unit"
     bars = pd.read_parquet(output / artifact["path"])
     assert set(bars["ticker"]) == {"AAA", "BBB"}
     assert set(bars["timeframe"]) == {"5m"}
@@ -333,8 +342,10 @@ def test_complete_authority_rejects_canonical_availability_mutation(
         load_complete_bar_collection(output)
 
 
-def test_complete_authority_rejects_mixed_schema_generations(
+@pytest.mark.parametrize("retired_version", ["v1", "v2"])
+def test_complete_authority_rejects_retired_unit_schema(
     tmp_path: Path,
+    retired_version: str,
 ) -> None:
     output = tmp_path / "collection"
     result = collect_alpaca_bars(
@@ -345,12 +356,87 @@ def test_complete_authority_rejects_mixed_schema_generations(
         source_factory=_FakeAlpacaSource,
     )
     artifact = result["artifacts"][0]
-    artifact["schema"] = "edge_rebuild.intraday_history_unit.v1"
+    artifact["schema"] = f"edge_rebuild.intraday_history_unit.{retired_version}"
     bars_path = output / artifact["path"]
     _resign_collection_artifact(output, artifact, bars_path)
 
-    with pytest.raises(DataReadinessError, match="mixes authority schema"):
+    with pytest.raises(DataReadinessError, match="unit schema is unsupported"):
         load_complete_bar_collection(output)
+
+
+@pytest.mark.parametrize("retired_version", ["v1", "v2"])
+@pytest.mark.parametrize("record", ["request", "manifest", "authority"])
+def test_complete_authority_rejects_retired_collection_schema(
+    tmp_path: Path,
+    retired_version: str,
+    record: str,
+) -> None:
+    output = tmp_path / "collection"
+    collect_alpaca_bars(
+        plan_directory=_write_plan(tmp_path / "plan"),
+        policy_path=POLICY_PATH,
+        output_directory=output,
+        config=load_regular_bar_history_config(POLICY_PATH),
+        source_factory=_FakeAlpacaSource,
+    )
+    request_path = output / "_request.json"
+    manifest_path = output / "_manifest.json"
+    authority_path = output / "_authority.json"
+    request = json.loads(request_path.read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    authority = json.loads(authority_path.read_text(encoding="utf-8"))
+    payload = {"request": request, "manifest": manifest, "authority": authority}[record]
+    payload["schema"] += f".{retired_version}"
+    if record == "request":
+        request_payload = {key: value for key, value in request.items() if key != "request_sha256"}
+        request["request_sha256"] = hashlib.sha256(
+            json.dumps(request_payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+        ).hexdigest()
+        manifest["request_sha256"] = request["request_sha256"]
+        authority["request_sha256"] = request["request_sha256"]
+    request_path.write_text(json.dumps(request), encoding="utf-8")
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    authority["artifact_sha256"] = file_sha256(manifest_path)
+    authority_path.write_text(json.dumps(authority), encoding="utf-8")
+
+    with pytest.raises(DataReadinessError, match="lacks complete authority"):
+        load_complete_bar_collection(output)
+
+
+@pytest.mark.parametrize("retired_version", ["v1", "v2"])
+def test_collector_rejects_retired_resume_unit_schema(
+    tmp_path: Path,
+    retired_version: str,
+) -> None:
+    plan = _write_plan(tmp_path / "plan")
+    output = tmp_path / "collection"
+    config = load_regular_bar_history_config(POLICY_PATH)
+    result = collect_alpaca_bars(
+        plan_directory=plan,
+        policy_path=POLICY_PATH,
+        output_directory=output,
+        config=config,
+        source_factory=_FakeAlpacaSource,
+    )
+    artifact = result["artifacts"][0]
+    artifact["schema"] = f"edge_rebuild.intraday_history_unit.{retired_version}"
+    (output / artifact["path"]).with_suffix(".manifest.json").write_text(
+        json.dumps(artifact), encoding="utf-8"
+    )
+    (output / "_authority.json").unlink()
+    (output / "_manifest.json").unlink()
+
+    def unexpected_source() -> _FakeAlpacaSource:
+        raise AssertionError("retired units must fail before requesting Alpaca")
+
+    with pytest.raises(DataReadinessError, match="integrity failed"):
+        collect_alpaca_bars(
+            plan_directory=plan,
+            policy_path=POLICY_PATH,
+            output_directory=output,
+            config=config,
+            source_factory=unexpected_source,
+        )
 
 
 def test_complete_authority_rejects_non_alpaca_request_endpoint(

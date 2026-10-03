@@ -5,7 +5,34 @@ Counterpart: the Market Predictor developer working in `C:\project\market-predic
 The two developers never message each other directly; the user relays, and these files
 are the shared record.
 
-## October 3 producer change; consumer acknowledgement pending
+## October 3 V1 reset; consumer adoption pending
+
+User instruction: the initial complete system is V1. Do not increment API, data or
+model versions for implementation iterations. Internal identities are now descriptive
+and unversioned; no compatibility aliases are required. Work is on
+`codex/v1-canonical-cleanup`, not merged to main as a trading-performance improvement.
+
+Market Predictor now serves `contract_version = market_predictor.prediction.v1`
+under the existing `/v1/` routes. Current served fixture SHA-256:
+`59288471c249b0422443f0a68ce7623f4b03956826877ad1158dc79ebf1fea51`.
+Training/policy schema cleanup changes derived hashes, not model approval or results.
+
+Read-only inspection found TradingFlow's separately edited `unified-swing-product`
+checkout uses `JsonPropertyName("contract")` and accepts
+`market_predictor.prediction`. Its developer must change the JSON property to
+`contract_version`, accept V1 only, copy/pin the new fixture and run the deserializer,
+version-rejection and advisory-isolation tests. Missing/incompatible responses must
+remain unavailable. No TradingFlow file, process or build was changed here.
+
+The current candle recommendation and V1 candle-publication boundary are in
+`docs/active_edge_rebuild_plan.md`, section "Shared Candle Flow And V1 API
+Recommendation". Daily model inputs, separate daily/entry warm-up windows and retained
+strategy-specific execution intervals are recommendations, not activated settings.
+No 63/252-session forecast endpoint has been implemented by this cleanup.
+
+All entries below are historical receipts/tasks, superseded by this V1 instruction.
+
+## Earlier October 3 producer change; historical
 
 The user says TradingFlow is undergoing separate changes. Do not modify or build it
 from this task. Market Predictor retains API v4 and adds optional model metadata

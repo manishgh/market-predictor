@@ -57,7 +57,7 @@ def _sec_envelope(root: Path, record: dict[str, Any], pins: dict[str, str]) -> p
     authority_path = _record_path(root, record, pins)
     authority = _object(authority_path)
     directory = authority_path.parent
-    if (authority.get("schema") != "edge_rebuild.sec_identity_authority.v2"
+    if (authority.get("schema") != "edge_rebuild.sec_identity_authority"
             or authority.get("state") != "identity_complete" or authority.get("artifact") != "_manifest.json"):
         raise DataReadinessError("identity alignment requires a completed SEC identity authority")
     manifest_path = directory / "_manifest.json"
@@ -65,8 +65,8 @@ def _sec_envelope(root: Path, record: dict[str, Any], pins: dict[str, str]) -> p
     manifest = _object(manifest_path)
     request_path = directory / "_request.json"
     request = _object(request_path)
-    if (manifest.get("schema") != "edge_rebuild.sec_identity_manifest.v2"
-            or request.get("schema") != "edge_rebuild.sec_identity_request.v2"
+    if (manifest.get("schema") != "edge_rebuild.sec_identity_manifest"
+            or request.get("schema") != "edge_rebuild.sec_identity_request"
             or manifest.get("status") != "complete" or manifest.get("request_sha256") != authority["request_sha256"]
             or request.get("request_sha256") != authority["request_sha256"]
             or json_sha256({k: v for k, v in request.items() if k != "request_sha256"}) != authority["request_sha256"]

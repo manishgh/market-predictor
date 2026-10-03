@@ -1,4 +1,4 @@
-schema = "swing.initial_fit_issuer_derivation_config.v1"
+schema = "swing.initial_fit_issuer_derivation_config"
 start_utc = "2019-07-09T00:00:00Z"
 cutoff_utc = "2024-05-28T22:00:00Z"
 

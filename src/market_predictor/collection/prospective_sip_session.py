@@ -48,9 +48,9 @@ from market_predictor.universe.sp500.observed_membership_authority import (
     load_observed_sp500_membership_authority,
 )
 
-REQUEST_SCHEMA: Final = "edge_rebuild.prospective_sip_session_request.v1"
-MANIFEST_SCHEMA: Final = "edge_rebuild.prospective_sip_session_manifest.v1"
-AUTHORITY_SCHEMA: Final = "edge_rebuild.prospective_sip_session_authority.v1"
+REQUEST_SCHEMA: Final = "edge_rebuild.prospective_sip_session_request"
+MANIFEST_SCHEMA: Final = "edge_rebuild.prospective_sip_session_manifest"
+AUTHORITY_SCHEMA: Final = "edge_rebuild.prospective_sip_session_authority"
 REQUIRED_BENCHMARKS: Final = {
     "SPY",
     "QQQ",

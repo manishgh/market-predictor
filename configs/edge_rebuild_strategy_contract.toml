@@ -1,4 +1,4 @@
-schema_version = "edge_rebuild.strategy_contract.v2"
+schema_version = "edge_rebuild.strategy_contract"
 
 # Frozen once, before any validation outcome is seen. Every number here is
 # chosen from trading rationale and the design window only. Changing one after

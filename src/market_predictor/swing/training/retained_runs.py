@@ -236,7 +236,7 @@ def _verify(root: Path, directory: Path, manifest_sha256: str, request_sha256: s
         source_results.append({"path": name, "expected_sha256": source_pin, "actual_sha256": actual, "status": status})
     for name, digest in roots.items():
         _object(_path(directory, name), digest)
-    return {"schema": "market_predictor.swing_retained_run_integrity.v1", "scope": "historical_integrity_only",
+    return {"schema": "market_predictor.swing_retained_run_integrity", "scope": "historical_integrity_only",
             "status": "historical_integrity_verified", "directory": relative, "root_sha256": roots,
             "verified_units": len(expected_units), "source_files": source_results,
             "source_integrity": "matching" if all(row["status"] == "matching" for row in source_results) else "discrepancies",

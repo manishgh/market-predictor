@@ -15,8 +15,8 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.sources.provider_symbols import provider_symbol
 
-REGULAR_BAR_PLAN_AUTHORITY_SCHEMA = "edge_rebuild.intraday_history_plan_authority.v1"
-SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA = "edge_rebuild.selected_session_benchmark_one_minute_plan_authority.v1"
+REGULAR_BAR_PLAN_AUTHORITY_SCHEMA = "edge_rebuild.intraday_history_plan_authority"
+SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA = "edge_rebuild.selected_session_benchmark_one_minute_plan_authority"
 # The plan layers the retained collectors write; each maps to the only authority schema that may sign it.
 RETAINED_PLAN_SCHEMAS = {
     REGULAR_BAR_HISTORY_PLAN_SCHEMA: REGULAR_BAR_PLAN_AUTHORITY_SCHEMA,

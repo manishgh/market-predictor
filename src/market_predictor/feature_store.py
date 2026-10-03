@@ -21,7 +21,7 @@ from market_predictor.live_features import (
 )
 
 FeatureMode = LiveMode
-LIVE_FEATURE_SCHEMA = "market_predictor.live_feature_snapshot.v1"
+LIVE_FEATURE_SCHEMA = "market_predictor.live_feature_snapshot"
 
 
 @dataclass(frozen=True)
