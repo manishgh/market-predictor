@@ -1,6 +1,18 @@
 # Current Feature Engineering Audit
 
-Last updated: 2026-09-21
+Last updated: 2026-10-03
+
+## Canonical Source Reconstruction
+
+October 3 implementation `86f7d42` reconstructs incremental raw archives using current
+page checks: 6,972 units, 7,228 pages, original bytes/clocks preserved, no downloads.
+Daily/revision replay has no failed or pending units through October 2. Four empty
+capture intents remain unavailable evidence; they do not establish missing daily
+history or missing clocks in downloaded pages. The fresh initial-fit raw-price plan
+and independently pinned replay also pass, reading only permitted identity columns.
+Exact paths/hashes and the remaining historical source dependency chain are in the
+active handoff. These facts do not admit current-schema model features/targets or
+recertify historical fitted models. The results below remain historical evidence.
 
 ## Current Long-Only Swing Campaign
 

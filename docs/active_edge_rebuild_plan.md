@@ -201,15 +201,74 @@ deployment, data reconstruction or C# build is claimed. Full test logs are local
 artifacts, not model evidence. No full-suite rerun was needed after test-assertion fixes.
 
 Current checkpoint: **Canonical data reconstruction and source admission** (`in progress`).
-This checkpoint is at inventory/freeze only: no canonical real dataset has been rebuilt.
-Reconstruct affected derived source/feature metadata from preserved provider bytes under
-the current schemas, starting with the exact dependent config chains recorded in the
-handoff. Verify content, timestamps and source links; do not simply change old receipt
-hashes. Keep original raw records and historical results identifiable. No new provider
-collection, sealed test access, model training or serving promotion is implied by this
-freeze. Exit gates are a concrete input/consumer inventory, independent source admission,
-current-contract producer/reader round trips, and reproducible feature-only publications
-without future outcomes entering decision inputs. Then resume investment dataset policy.
+
+Completed source sub-slice in `86f7d429487934494da9c587ad9536cbf993e2dd`, pushed on
+`codex/v1-canonical-cleanup`: explicit offline reconstruction into
+`data/raw/swing_incremental_alpaca_canonical`. All 6,972 success units / 7,228 pages
+passed current query/body/UTC-clock/pagination/counter checks; 193,248 rows are raw
+unit observations including repeat captures, not unique training rows. Current offline
+collector verified all 6,132 daily/revision units through 2026-10-02 with zero failed,
+pending or altered units. All original 14,054 file hashes still match; compressed
+archives and provider retrieval clocks are unchanged. No provider request was made.
+
+Independent pins:
+- Input inventory `data/evidence/alpaca_incremental_reconstruction/input_inventory.json`:
+  `4ccc387fd3cfb0e4b928c5318f32e88d4a6ab60a1d6a9e828202bb457332f294`.
+- Published `_reconstruction.json`:
+  `fb0513fd5647034759a2514d791f74f1b0bbd27aabc0336882ddcf7ad74d54e4`.
+- Published `status.json`:
+  `da87cb5544f9759aaa715c61dd42a0cb0bae8627b3987a7a041ac8b38e94c850`.
+- Canonical request identity:
+  `f5b16cb5daf661afca5a9f47a0ef84224c82b8e14f86739638bc4cb159a14a5a`.
+
+The original archive has 63 revision and 21 partial capture intents. Of these,
+80 contain complete success archives; four contain none: revision intents for
+September 29/30 and October 1 captured October 2 (42 units each), and partial intent
+`2026-10-02T22:00:15.832848+00:00` (42 units). These 168 unobserved attempt units are
+explicit unavailable evidence in the immutable report, not missing daily history or
+invented retrieval clocks. The explicit `--allow-empty-capture-intents` option retains
+their original hashes and excludes them from completed capture metadata. Missing daily
+units, partially populated captures, changed query policies, altered pages or input
+inventory changes still fail publication. Incomplete staging has no final authority.
+
+Verification: 64 focused incremental/naming/continuity tests passed before the narrow
+revision-day grouping fix; all three empty-partial/same-date-revision/mixed-revision
+regressions passed afterward. Changed-file Ruff and strict mypy passed. Plan/design
+review and consolidated code/ML review found two implemented fixes: bind a frozen
+source-file inventory and match revision scopes by target day plus capture date.
+No full-suite repeat, model fit, promotion, final-test payload access or TF operation.
+
+Fresh historical acquisition plan also produced and independently replayed using
+`configs/swing_initial_fit_raw_share_plan.toml` into
+`data/research/swing_initial_fit_raw_price_requirements`. Authority pin:
+`e5f81597594f85485eaa83e75cd81b5f849e20c63dc3ab3f89b3cbb85c6baf5b`;
+manifest pin `7eada113427c7d74ad81b65f62a708418601e61c19ce2039090500c42afe028d`.
+Its 564 daily raw-price units (551 stock windows / 13 benchmarks) cover 545 in-window
+securities and 586,305 decision identities; 581,455 have ten sessions before the
+initial-fit cutoff. It reads only decision/membership identity columns in
+2019-07-09..2024-05-28; `outcomes_read=false`. Peak memory was 0.391 GiB. All 92 inherited
+source pins matched. This is a source acquisition plan, not admitted price coverage,
+features, target values or a trained model.
+
+Bounded historical transport inspection: the existing initial-fit raw archive reports
+564 observed units / 601,834 rows with `transport_receipts_required=true`. One EVRG
+unit has 1,231 rows and a hash-matched 129,874-byte terminal provider body, original
+retrieval `2026-09-09T14:29:02.594674+00:00`, matching request/final URLs, HTTP 200 and
+no redirects. The daily verifier is `swing/datasets/history_archive.py`; intraday
+transport requirements do not apply. This is sample feasibility, not full archive
+admission. Next publisher must check all unit/query/body/clock evidence against the
+fresh plan and rebuild separate current-schema bars/receipts, then round-trip the
+strict current reader. No missing-transport or redownload claim is supported here.
+
+Remaining work: reconstruct initial-fit raw, corrected-symbol/adjusted, warm-up and
+post-window source publications from preserved evidence under current collection
+schemas. The combined adjusted-store authority is coupled to the historical panel
+and old strategy semantic identity; a bounded source-only authority path is required
+before predictor reconstruction. Simply changing config pins cannot establish that
+replay. The relationship assembler reads joined labels as well as features, so its
+publication belongs in an explicitly frozen development-only feature/label stage.
+Never read later feature/target values or claim old models were retrained. Keep TF
+untouched while its owner changes its consumer; no main merge or SPY edge is claimed.
 
 Cleanup requirement and scope retained for review:
 User clarified that V1 is the initial complete collect/clean/features/targets/train/

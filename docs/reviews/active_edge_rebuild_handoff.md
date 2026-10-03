@@ -13,9 +13,14 @@ Earlier retirement sub-slice (b) closure: `ea93712`, after `7dd6d44`.
 Last completed model-training checkpoint: relationship run on `a8be7cb` (artifact pins below).
 Baseline model-training checkpoint: `07963cc` (pushed; unchanged).
 Source-collection checkpoint: `19698d6` (pushed).
-The combined historical outcome/features delivery is verified and committed.
+The combined historical outcome/features delivery retains its original receipts;
+current-schema reconstruction is still required before reuse.
 
 ## Current State
+
+Latest implementation: `86f7d42` (pushed). Incremental canonical raw reconstruction
+and the fresh historical raw-price plan/replay are complete; exact pins and remaining
+source dependencies are in the current checkpoint below. TradingFlow remains untouched.
 
 Canonical code cleanup completed in `af9e9b4`, pushed on
 `codex/v1-canonical-cleanup`. Main remains at the pre-cleanup state; TradingFlow is
@@ -97,12 +102,74 @@ training, source publication, promotion, deployment or TradingFlow operation occ
 README now states these limits and the completed monitoring/replay behavior.
 
 Current checkpoint: **Canonical data reconstruction and source admission** (`in progress`).
-Inventory/freeze only; no real canonical dataset has been rebuilt. Use the affected
-config chain list above to reconstruct derived metadata/publications from preserved
-provider bytes, independently check source/clock links and round-trip current readers,
-then resume the permitted feature/label audit. Do not rewrite old receipts into claimed
-new runs, access sealed tests, train, promote, or touch TradingFlow as part of this freeze.
-Main must not be merged as a performance improvement on software checks alone.
+
+Completed source sub-slice in `86f7d429487934494da9c587ad9536cbf993e2dd`, pushed on
+`codex/v1-canonical-cleanup`: explicit offline reconstruction into
+`data/raw/swing_incremental_alpaca_canonical`. All 6,972 success units / 7,228 pages
+passed current query/body/UTC-clock/pagination/counter checks; 193,248 rows are raw
+unit observations including repeat captures, not unique training rows. Current offline
+collector verified all 6,132 daily/revision units through 2026-10-02 with zero failed,
+pending or altered units. All original 14,054 file hashes still match; compressed
+archives and provider retrieval clocks are unchanged. No provider request was made.
+
+Independent pins:
+- Input inventory `data/evidence/alpaca_incremental_reconstruction/input_inventory.json`:
+  `4ccc387fd3cfb0e4b928c5318f32e88d4a6ab60a1d6a9e828202bb457332f294`.
+- Published `_reconstruction.json`:
+  `fb0513fd5647034759a2514d791f74f1b0bbd27aabc0336882ddcf7ad74d54e4`.
+- Published `status.json`:
+  `da87cb5544f9759aaa715c61dd42a0cb0bae8627b3987a7a041ac8b38e94c850`.
+- Canonical request identity:
+  `f5b16cb5daf661afca5a9f47a0ef84224c82b8e14f86739638bc4cb159a14a5a`.
+
+The original archive has 63 revision and 21 partial capture intents. Of these,
+80 contain complete success archives; four contain none: revision intents for
+September 29/30 and October 1 captured October 2 (42 units each), and partial intent
+`2026-10-02T22:00:15.832848+00:00` (42 units). These 168 unobserved attempt units are
+explicit unavailable evidence in the immutable report, not missing daily history or
+invented retrieval clocks. The explicit `--allow-empty-capture-intents` option retains
+their original hashes and excludes them from completed capture metadata. Missing daily
+units, partially populated captures, changed query policies, altered pages or input
+inventory changes still fail publication. Incomplete staging has no final authority.
+
+Verification: 64 focused incremental/naming/continuity tests passed before the narrow
+revision-day grouping fix; all three empty-partial/same-date-revision/mixed-revision
+regressions passed afterward. Changed-file Ruff and strict mypy passed. Plan/design
+review and consolidated code/ML review found two implemented fixes: bind a frozen
+source-file inventory and match revision scopes by target day plus capture date.
+No full-suite repeat, model fit, promotion, final-test payload access or TF operation.
+
+Fresh historical acquisition plan also produced and independently replayed using
+`configs/swing_initial_fit_raw_share_plan.toml` into
+`data/research/swing_initial_fit_raw_price_requirements`. Authority pin:
+`e5f81597594f85485eaa83e75cd81b5f849e20c63dc3ab3f89b3cbb85c6baf5b`;
+manifest pin `7eada113427c7d74ad81b65f62a708418601e61c19ce2039090500c42afe028d`.
+Its 564 daily raw-price units (551 stock windows / 13 benchmarks) cover 545 in-window
+securities and 586,305 decision identities; 581,455 have ten sessions before the
+initial-fit cutoff. It reads only decision/membership identity columns in
+2019-07-09..2024-05-28; `outcomes_read=false`. Peak memory was 0.391 GiB. All 92 inherited
+source pins matched. This is a source acquisition plan, not admitted price coverage,
+features, target values or a trained model.
+
+Bounded historical transport inspection: the existing initial-fit raw archive reports
+564 observed units / 601,834 rows with `transport_receipts_required=true`. One EVRG
+unit has 1,231 rows and a hash-matched 129,874-byte terminal provider body, original
+retrieval `2026-09-09T14:29:02.594674+00:00`, matching request/final URLs, HTTP 200 and
+no redirects. The daily verifier is `swing/datasets/history_archive.py`; intraday
+transport requirements do not apply. This is sample feasibility, not full archive
+admission. Next publisher must check all unit/query/body/clock evidence against the
+fresh plan and rebuild separate current-schema bars/receipts, then round-trip the
+strict current reader. No missing-transport or redownload claim is supported here.
+
+Remaining work: reconstruct initial-fit raw, corrected-symbol/adjusted, warm-up and
+post-window source publications from preserved evidence under current collection
+schemas. The combined adjusted-store authority is coupled to the historical panel
+and old strategy semantic identity; a bounded source-only authority path is required
+before predictor reconstruction. Simply changing config pins cannot establish that
+replay. The relationship assembler reads joined labels as well as features, so its
+publication belongs in an explicitly frozen development-only feature/label stage.
+Never read later feature/target values or claim old models were retrained. Keep TF
+untouched while its owner changes its consumer; no main merge or SPY edge is claimed.
 
 Queued checkpoint: **Investment dataset policy and source admission**.
 October 3 clarification: the prior timestamp question was premature and is withdrawn.
@@ -1695,20 +1762,15 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: reconstruct and verify affected canonical source/feature
-publications on codex/v1-canonical-cleanup using preserved provider bytes and the
-explicit config chains above, then resume the permitted source/feature/label audit.
-Code cleanup is closed in af9e9b4; do not repeat its general review. TF V1 consumer
-adoption and the shared candle-flow recommendation remain separate implementation work.
-The previous blanket timestamp question is withdrawn; no measured investment gap
-has been established and no user relaxation is assumed.
-The target projection `147e5bd`, monitoring statistics `4ba96f6`, and replay boundary
-`b36778f` are verified and pushed. No trained investment model or investment forecast
-API exists yet. Do not promote research artifacts, infer historical timestamps,
-rewrite pinned swing code or touch TradingFlow.
-Files: investment/contracts.py and targets.py; research/swing_return_inputs.py and
-swing/training/return_{estimators,validation,artifacts}.py (reuse only applicable public
-primitives); current source acceptance audit and the current freeze/receipts above.
+Exact next checkpoint: reconstruct the preserved initial-fit raw-price archive against
+the fresh plan at `data/research/swing_initial_fit_raw_price_requirements`, authority
+`e5f81597594f85485eaa83e75cd81b5f849e20c63dc3ab3f89b3cbb85c6baf5b`.
+First inspect actual raw-page/transport fields against the current exact-body reader;
+do not fabricate missing fields or add normal-collector historical-schema acceptance.
+Then rebuild corrected-symbol/adjusted plans and the source-only combined-store
+binding before predictors. Incremental reconstruction is closed in `86f7d42`; do not
+repeat its general review or full suite. No model fits, later outcome payload reads,
+TradingFlow writes, main merge or promotion are authorized by this source sub-slice.
 
 Publisher verification uses `.venv/Scripts/python.exe`, `PYTHONDONTWRITEBYTECODE=1`,
 writable TEMP/TMP, `-p no:cacheprovider` and a unique writable `--basetemp`:
