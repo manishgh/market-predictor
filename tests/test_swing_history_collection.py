@@ -28,6 +28,116 @@ from market_predictor.swing.datasets.history_plan_publication import (
     AUTHORITY_SCHEMA as PLAN_AUTHORITY_SCHEMA,
 )
 from market_predictor.swing.datasets.history_plan_publication import PLAN_SCHEMA
+from market_predictor.swing.datasets.history_reconstruction import reconstruct_history
+
+
+def _retained_history(tmp_path: Path) -> tuple[Path, Path]:
+    plan = _plan(tmp_path, adjustment="raw")
+    source = tmp_path / "retained"
+    collect_swing_history_plan(plan_directory=plan, output_directory=source,
+                              source_factory=_FakeSource, provider_symbol_for=lambda ticker: ticker)
+    # Historical identity changes are evidence only; normal readers stay strict.
+    from market_predictor.swing.datasets import history_archive as archive
+    request = _json(source / "_request.json")
+    request["schema"] = "retained-history-query"
+    request["request_sha256"] = archive._json_sha256({k: v for k, v in request.items() if k != "request_sha256"})
+    _write_json(source / "_request.json", request)
+    manifest = _json(source / "_manifest.json")
+    manifest["schema"] = "retained-history-collection"
+    manifest["request_sha256"] = request["request_sha256"]
+    for record in manifest["unit_artifacts"]:
+        path = source / record["unit_manifest_path"]
+        unit = _json(path)
+        unit["schema"] = "retained-history-unit"
+        unit["request_sha256"] = request["request_sha256"]
+        _write_json(path, unit)
+        record["unit_manifest_sha256"] = file_sha256(path)
+    manifest["unit_set_sha256"] = archive._unit_artifact_set_sha256(manifest["unit_artifacts"])
+    _write_json(source / "_manifest.json", manifest)
+    authority = _json(source / "_authority.json")
+    authority["schema"] = "retained-history-authority"
+    authority["request_sha256"] = request["request_sha256"]
+    authority["artifact_sha256"] = file_sha256(source / "_manifest.json")
+    authority["unit_set_sha256"] = manifest["unit_set_sha256"]
+    _write_json(source / "_authority.json", authority)
+    return plan, source
+
+
+def _reconstruct_history_fixture(tmp_path: Path, plan: Path, source: Path) -> dict[str, Any]:
+    return reconstruct_history(root=tmp_path, source_directory=source,
+                               source_authority_sha256=file_sha256(source / "_authority.json"),
+                               plan_directory=plan, plan_authority_sha256=file_sha256(plan / "_authority.json"),
+                               output_directory=tmp_path / "canonical")
+
+
+def test_retained_history_reconstruction_uses_canonical_producer_and_preserves_provider_clocks(tmp_path: Path) -> None:
+    plan, source = _retained_history(tmp_path)
+    before = {p: file_sha256(p) for p in source.rglob("*") if p.is_file()}
+    with pytest.raises(DataReadinessError):
+        load_complete_swing_history_collection(source, plan_directory=plan, expected_adjustment="raw")
+    result = _reconstruct_history_fixture(tmp_path, plan, source)
+    assert result["unit_count"] == result["pages"] == result["rows"] == 22
+    assert result["training_ready"] is False
+    assert before == {p: file_sha256(p) for p in before}
+    output = tmp_path / "canonical"
+    complete = load_complete_swing_history_collection(output, plan_directory=plan, expected_adjustment="raw")
+    assert complete["status"] == "complete"
+    for record in complete["unit_artifacts"]:
+        original = _json(source / record["unit_manifest_path"])
+        rebuilt = _json(output / record["unit_manifest_path"])
+        old_transport = original["pages"][0]["transport"]
+        new_transport = rebuilt["pages"][0]["transport"]
+        assert old_transport["metadata"] == new_transport["metadata"]
+        assert (source / old_transport["body_path"]).read_bytes() == (output / new_transport["body_path"]).read_bytes()
+        bars = pd.read_parquet(output / record["bars_path"])
+        assert (bars.ingested_at_utc > pd.Timestamp(old_transport["metadata"]["retrieved_at_utc"])).all()
+    with pytest.raises(DataReadinessError, match="nonexistent"):
+        _reconstruct_history_fixture(tmp_path, plan, source)
+
+
+@pytest.mark.parametrize("fault", ["query", "body", "missing", "pagination", "source_change"])
+def test_history_reconstruction_rejects_poison_before_output_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fault: str,
+) -> None:
+    from market_predictor.swing.datasets import history_archive as archive
+    plan, source = _retained_history(tmp_path)
+    manifest = _json(source / "_manifest.json")
+    record = manifest["unit_artifacts"][0]
+    path = source / record["unit_manifest_path"]
+    unit = _json(path)
+    if fault == "query":
+        unit["end_date"] = "2020-01-03"
+    elif fault in {"body", "missing"}:
+        body = source / unit["pages"][0]["transport"]["body_path"]
+        if fault == "body":
+            body.write_bytes(b"{}")
+        else:
+            body.unlink()
+    elif fault == "pagination":
+        unit["pages"][0]["next_page_token"] = "truncated"
+    else:
+        original = archive.load_complete_swing_history_collection
+
+        def changed(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            result = original(*args, **kwargs)
+            body = source / unit["pages"][0]["transport"]["body_path"]
+            body.write_bytes(body.read_bytes() + b" ")
+            return result
+
+        monkeypatch.setattr(archive, "load_complete_swing_history_collection", changed)
+    if fault in {"query", "pagination"}:
+        _write_json(path, unit)
+        record["unit_manifest_sha256"] = file_sha256(path)
+        manifest["unit_set_sha256"] = archive._unit_artifact_set_sha256(manifest["unit_artifacts"])
+        _write_json(source / "_manifest.json", manifest)
+        authority = _json(source / "_authority.json")
+        authority["artifact_sha256"] = file_sha256(source / "_manifest.json")
+        authority["unit_set_sha256"] = manifest["unit_set_sha256"]
+        _write_json(source / "_authority.json", authority)
+    with pytest.raises((DataReadinessError, OSError)):
+        _reconstruct_history_fixture(tmp_path, plan, source)
+    assert not (tmp_path / "canonical").exists()
+    assert not list(tmp_path.glob(".canonical.reconstruction-*/_reconstruction.json"))
 
 
 @pytest.mark.parametrize("adjustment", ["all", "raw"])

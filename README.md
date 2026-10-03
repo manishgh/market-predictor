@@ -333,6 +333,14 @@ attempts as unavailable evidence; it does not permit missing daily units or part
 completed captures. Original archives remain untouched. Publication provenance is in
 `_reconstruction.json`; this establishes raw evidence, not model input admission.
 
+For retained planned daily-price archives, use
+`python -m market_predictor.swing.datasets.history_reconstruction` with `--source`,
+`--source-authority-sha256`, `--plan`, `--plan-authority-sha256` and `--output`.
+This feeds exact retained responses into the normal daily collector in private staging,
+then verifies the publication before exposing the new directory. Provider bytes and
+retrieval timestamps are preserved; derived ingestion timestamps describe the new
+materialization. Both reconstruction commands publish source-only evidence.
+
 Windows adapter and scheduler installation:
 
 ```powershell
