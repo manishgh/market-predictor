@@ -322,6 +322,17 @@ snapshot, never complete-day coverage. Use `--offline` to verify existing
 receipts without HTTP. `--max-units` (Alpaca) and `--max-issuers` (SEC) bound new
 attempts without counting verified skips. A bounded incomplete run is not success.
 
+Retained Alpaca pages can be reconstructed explicitly into a separate canonical
+archive with `python -m market_predictor.swing.datasets.alpaca_incremental.reconstruction`.
+Supply `--config`, `--source`, `--through`, `--inventory` and the independently frozen
+`--inventory-sha256`; the config output must not exist. The command verifies query
+settings, exact provider pages, clocks, pagination and counts, copies original archive
+bytes, then verifies the staged output with the normal offline reader. It never calls
+a provider. `--allow-empty-capture-intents` records wholly uncompleted revision/partial
+attempts as unavailable evidence; it does not permit missing daily units or partially
+completed captures. Original archives remain untouched. Publication provenance is in
+`_reconstruction.json`; this establishes raw evidence, not model input admission.
+
 Windows adapter and scheduler installation:
 
 ```powershell
@@ -351,7 +362,7 @@ after checking hashes and exact request bindings. SEC data here means submission
 and filing metadata, not a downloaded body/exhibit for every filing. Historical
 identity relations are query hints, not proof of current ticker ownership.
 
-Progress and results live under `data/raw/swing_incremental_alpaca/` and
+Current Alpaca progress and results live under `data/raw/swing_incremental_alpaca_canonical/` and
 `data/raw/swing_incremental_sec/`; wrapper logs are in
 `data/runtime/collection_logs/`. Successful acquisition does not establish issuer
 attribution, model-ready features, or promotion. Source failures are independent,

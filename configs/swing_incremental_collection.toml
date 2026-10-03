@@ -1,7 +1,7 @@
 # Raw acquisition only. This query inventory is not current S&P membership or
 # proof that a ticker still represents its old issuer. Original archives stay intact.
 start = 2026-07-09
-output = "../data/raw/swing_incremental_alpaca"
+output = "../data/raw/swing_incremental_alpaca_canonical"
 additional_symbols = ["RHT"]
 batch_size = 50
 bars_limit = 10000

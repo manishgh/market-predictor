@@ -24,6 +24,7 @@ from market_predictor.swing.datasets.alpaca_incremental import collect, collecto
 from market_predictor.swing.datasets.alpaca_incremental.__main__ import main
 from market_predictor.swing.datasets.alpaca_incremental.config import load_config
 from market_predictor.swing.datasets.alpaca_incremental.pages import Unit, page_record, validate_record
+from market_predictor.swing.datasets.alpaca_incremental.reconstruction import reconstruct, retained_file_set
 from market_predictor.swing.datasets.alpaca_incremental.storage import IntegrityError, publish, verified
 
 DAY = date(2026, 7, 9)
@@ -101,6 +102,184 @@ def source_with(transport: Transport) -> AlpacaSource:
     client.get_bytes_with_metadata.side_effect = transport
     source.client = client
     return source
+
+
+def retained_archive(tmp_path: Path, *, captures: bool = False) -> tuple[Path, Path]:
+    path = config_file(tmp_path, revision_overlap_days=2 if captures else 0)
+    collect(path, through=NOW.date() if captures else DAY, source=source_with(Transport()))
+    archive = tmp_path / "archive"
+    # Historical identity is test-only evidence, never an accepted runtime schema.
+    from market_predictor.evidence.hashing import json_sha256
+    request = verified(archive / "request.json")
+    request["schema"] = "retained-historical-query-identity"
+    request["request_sha256"] = json_sha256({k: v for k, v in request.items() if k != "request_sha256"})
+    publish(archive / "request.json", request, replace=True)
+    receipts = (list(archive.glob("units/*/success.json")) + list(archive.glob("revision_captures/*.json"))
+                + list(archive.glob("captures/*.json")))
+    for receipt_path in receipts:
+        receipt = verified(receipt_path)
+        receipt["request_sha256"] = request["request_sha256"]
+        publish(receipt_path, receipt, replace=True)
+    path.write_text(path.read_text().replace('output = "archive"', 'output = "canonical"'), encoding="utf-8")
+    freeze_retained(archive)
+    return path, archive
+
+
+def freeze_retained(archive: Path) -> None:
+    keys, files = retained_file_set(archive)
+    (archive.parent / "inventory.json").write_text(json.dumps({
+        "schema": "market_predictor.retained_archive_inventory", "unit_keys": keys,
+        "files": {p: sha256((archive / p).read_bytes()).hexdigest() for p in files},
+    }), encoding="utf-8")
+
+
+def reconstruct_retained(path: Path, archive: Path, through: date) -> dict[str, Any]:
+    inventory = archive.parent / "inventory.json"
+    return reconstruct(path, archive, through=through, inventory=inventory,
+                       inventory_sha256=sha256(inventory.read_bytes()).hexdigest(), root=archive.parent)
+
+
+def test_offline_reconstruction_preserves_original_bytes_clocks_and_all_captures(tmp_path: Path) -> None:
+    path, archive = retained_archive(tmp_path, captures=True)
+    before = {p.relative_to(archive): p.read_bytes() for p in archive.rglob("*") if p.is_file()}
+    result = reconstruct_retained(path, archive, DAY + timedelta(days=1))
+    output = tmp_path / "canonical"
+    assert result["unit_count"] == 15  # 6 daily, 6 revision and 3 partial units.
+    assert result["raw_bytes_preserved"] and result["retrieval_clocks_preserved"]
+    assert result["training_ready"] is False
+    assert before == {p.relative_to(archive): p.read_bytes() for p in archive.rglob("*") if p.is_file()}
+    for original in archive.glob("units/*/*.jsonl.gz"):
+        copied = output / original.relative_to(archive)
+        assert copied.read_bytes() == original.read_bytes()
+        assert copied.stat().st_ino != original.stat().st_ino  # Independent copy, not a hardlink.
+    authority = verified(output / "_reconstruction.json")
+    assert authority["source_request_file_sha256"] == sha256(before[Path("request.json")]).hexdigest()
+    assert collect(path, through=DAY + timedelta(days=1), offline=True, root=tmp_path)["status"] == "verified"
+    with pytest.raises(ValueError, match="nonexistent output"):
+        reconstruct_retained(path, archive, DAY + timedelta(days=1))
+
+
+@pytest.mark.parametrize("alteration", ["scope", "request_hash", "missing_unit", "split", "body", "clock", "pagination", "counters"])
+def test_reconstruction_rejects_altered_evidence_without_publishing(tmp_path: Path, alteration: str) -> None:
+    path, archive = retained_archive(tmp_path)
+    receipt_path = next(archive.glob("units/*/success.json"))
+    receipt = verified(receipt_path)
+    if alteration in {"scope", "request_hash"}:
+        from market_predictor.evidence.hashing import json_sha256
+        request = verified(archive / "request.json")
+        request["bars_limit"] += 1
+        if alteration == "scope":
+            request["request_sha256"] = json_sha256({k: v for k, v in request.items() if k != "request_sha256"})
+        publish(archive / "request.json", request, replace=True)
+    elif alteration == "missing_unit":
+        receipt_path.unlink()
+    elif alteration == "split":
+        publish(receipt_path.parent / "split.json", {})
+    elif alteration == "counters":
+        receipt["rows"] += 1
+        publish(receipt_path, receipt, replace=True)
+    else:
+        original = receipt_path.parent / receipt["archive"]
+        record = json.loads(gzip.decompress(original.read_bytes()))
+        if alteration == "body":
+            record["body_base64"] = base64.b64encode(b"{}").decode()
+        elif alteration == "clock":
+            record["retrieved_at_utc"] = (datetime.combine(DAY, datetime.min.time(), UTC)).isoformat()
+        else:
+            record["next_page_token"] = "unfinished"
+        original.write_bytes(gzip.compress(json.dumps(record).encode() + b"\n", mtime=0))
+        receipt["archive_sha256"] = sha256(original.read_bytes()).hexdigest()
+        publish(receipt_path, receipt, replace=True)
+    # Rehashed provenance must not substitute for a current page replay.
+    freeze_retained(archive)
+    with pytest.raises((IntegrityError, OSError)):
+        reconstruct_retained(path, archive, DAY)
+    assert not (tmp_path / "canonical").exists()
+    assert not list(tmp_path.glob(".canonical.reconstruction-*/_reconstruction.json"))
+
+
+def test_reconstruction_interruption_keeps_only_unpublished_staging(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path, archive = retained_archive(tmp_path)
+    original = collector._replay
+    calls = 0
+
+    def interrupt(*args: Any, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise MemoryBudgetError("test interruption")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(collector, "_replay", interrupt)
+    with pytest.raises(MemoryBudgetError):
+        reconstruct_retained(path, archive, DAY)
+    assert not (tmp_path / "canonical").exists()
+    assert list(tmp_path.glob(".canonical.reconstruction-*/units/*/success.json"))
+    assert not list(tmp_path.glob(".canonical.reconstruction-*/_reconstruction.json"))
+
+
+@pytest.mark.parametrize("empty", ["partial", "revisions", "one_revision"])
+def test_explicit_empty_capture_intent_is_unavailable_and_not_a_completed_capture(tmp_path: Path, empty: str) -> None:
+    path, archive = retained_archive(tmp_path, captures=True)
+    for receipt_path in list(archive.glob("units/*/success.json")):
+        unit = verified(receipt_path)["unit"]
+        if (unit["partial"] if empty == "partial" else unit["capture"].startswith("revision-")
+                and (empty == "revisions" or unit["day"] == DAY.isoformat())):
+            for item in receipt_path.parent.iterdir():
+                item.unlink()
+            receipt_path.parent.rmdir()
+    freeze_retained(archive)
+    with pytest.raises(IntegrityError, match="missing"):
+        reconstruct_retained(path, archive, DAY + timedelta(days=1))
+    inventory = tmp_path / "inventory.json"
+    result = reconstruct(path, archive, through=DAY + timedelta(days=1), inventory=inventory,
+                         inventory_sha256=sha256(inventory.read_bytes()).hexdigest(), root=tmp_path,
+                         allow_empty_capture_intents=True)
+    count = 2 if empty == "revisions" else 1
+    assert result["unit_count"] == 15 - 3 * count and result["complete_capture_count"] == 3 - count
+    assert result["incomplete_capture_intents"][0]["missing_units"] == 3
+    assert result["incomplete_capture_intents"][0]["reason"] == "capture_intent_has_no_successful_unit_archives"
+    assert len(result["incomplete_capture_intents"]) == count
+    assert all(intent["missing_units"] == 3 for intent in result["incomplete_capture_intents"])
+    directory = tmp_path / "canonical" / ("captures" if empty == "partial" else "revision_captures")
+    assert len(list(directory.glob("*.json"))) == (1 if empty == "one_revision" else 0)
+    assert collect(path, through=DAY + timedelta(days=1), offline=True, root=tmp_path)["status"] == "verified"
+
+
+@pytest.mark.parametrize("when", ["before", "during", "final_hash"])
+def test_reconstruction_rejects_capture_inventory_change(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, when: str) -> None:
+    from market_predictor.swing.datasets.alpaca_incremental import reconstruction
+    path, archive = retained_archive(tmp_path)
+    original = collector._run_loaded
+    hashing = False
+
+    def add_capture(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        nonlocal hashing
+        result = original(*args, **kwargs)
+        if when == "during":
+            publish(archive / "captures" / "added.json", {"cutoff": NOW.isoformat()})
+        hashing = True
+        return result
+
+    file_hash = reconstruction.file_sha256
+
+    def add_during_hash(path: Path) -> str:
+        nonlocal hashing
+        if hashing:
+            hashing = False
+            publish(archive / "captures" / "added.json", {"cutoff": NOW.isoformat()})
+        return file_hash(path)
+
+    if when == "before":
+        publish(archive / "captures" / "added.json", {"cutoff": NOW.isoformat()})
+    else:
+        monkeypatch.setattr(collector, "_run_loaded", add_capture)
+        if when == "final_hash":
+            monkeypatch.setattr(reconstruction, "file_sha256", add_during_hash)
+    with pytest.raises(IntegrityError, match="inventory"):
+        reconstruct_retained(path, archive, DAY)
+    assert not (tmp_path / "canonical").exists()
+    assert not list(tmp_path.glob(".canonical.reconstruction-*/_reconstruction.json"))
 
 
 def test_resume_offline_exact_bytes_symbol_counts_and_portable_root(tmp_path: Path) -> None:

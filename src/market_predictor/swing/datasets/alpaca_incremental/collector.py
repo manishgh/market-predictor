@@ -232,6 +232,12 @@ def _run(config_path: Path, through: date, cutoff: datetime, max_units: int | No
          source: AlpacaSource | None) -> dict[str, Any]:
     guard_memory()
     config, output, request = load_config(config_path)
+    return _run_loaded(config, output, request, through, cutoff, max_units, offline, source)
+
+
+def _run_loaded(config: Config, output: Path, request: dict[str, Any], through: date, cutoff: datetime,
+                max_units: int | None, offline: bool, source: AlpacaSource | None) -> dict[str, Any]:
+    """One collection/replay path, also used to verify a staged reconstruction."""
     if through < config.start or through > cutoff.date():
         raise ValueError("through must be between start and today UTC")
     frozen = output / "request.json"
