@@ -15,6 +15,13 @@ Implementation `2216a2d` also reconstructs all 564 initial-fit raw-price units /
 bytes/retrieval clocks are preserved; derived ingestion timestamps record actual
 materialization. All 44 daily-history tests and lint/types passed; independent review
 passed. No new downloads or feature/label publication/training occurred.
+Implementation `fdf2b40` closes both corrected source reconstructions: 1,476 raw
+and 3,020 adjusted rows, unchanged reviewed mappings/documents, current-reader round
+trips. The new raw selection has 602,709 rows; 259 missing sessions and 21 unusable
+observations remain explicit, with no imputation/exclusions or label admission.
+All 203 affected tests and consolidated review passed. The next independent adjusted
+source publication requires complete transport receipts; sampled old warmup/later
+source metadata cannot establish those receipts. Alpaca SIP credentials are configured.
 Exact paths/hashes and the remaining historical source dependency chain are in the
 active handoff. These facts do not admit current-schema model features/targets or
 recertify historical fitted models. The results below remain historical evidence.

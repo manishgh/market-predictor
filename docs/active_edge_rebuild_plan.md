@@ -279,24 +279,61 @@ All 44 daily-history tests passed, plus 3 naming/continuity checks. Ruff and str
 mypy passed the new source. Plan/design and one consolidated code/ML review passed.
 No provider requests, label/evaluation payload reads, training or TF changes.
 
-Next correction dependency: document metadata matches the current contract (9 receipts,
-7 archived documents; unchanged report pin a687402063d6539e524efcdcd88e897a341f6e37adb51451911cfad8d5b44509).
-Rebind only the symbol policy's four parent plan/archive path/hash fields to the fresh
-plan and raw archive above. Rebind the adjusted-history policy's correction-config
-hash, then publish fresh correction plans. Replay the old two-unit raw and adjusted
-archives with the same canonical history publisher into separate unversioned outputs.
-These are source corrections; historical trained models and joined labels remain
-historical and are not admitted by new source receipt hashes.
+Corrected-source sub-slice completed in `fdf2b40` (pushed). The reviewed mapping,
+date intervals and seven issuer documents are unchanged; only the verified parent
+source dependencies changed. Fresh raw correction plan:
+`data/research/swing_symbol_correction_requirements`, authority
+`fcbe0692e3983d9aa97478b5a84cb7e3a6b84e20e583926c64171b9c44e320dd`.
+Fresh adjusted plan: `data/research/swing_adjusted_feature_requirements`, authority
+`2dde2bd9d546e4553b3fc9dbcb23d5017b9b96aedc5b00d291bdcb9e1fed38c7`.
+Current correction-policy hash:
+`259e5328a150eb25f67ab51a55af908f5639744f4b9c0970741d7863bf009fa1`;
+adjusted-policy hash `c63314cb9daebcee5142395e766a5932ba7854596a7707060e7ea5602f528818`.
 
-Remaining work: reconstruct corrected-symbol/adjusted, warm-up and
-post-window source publications from preserved evidence under current collection
-schemas. The combined adjusted-store authority is coupled to the historical panel
-and old strategy semantic identity; a bounded source-only authority path is required
-before predictor reconstruction. Simply changing config pins cannot establish that
-replay. The relationship assembler reads joined labels as well as features, so its
-publication belongs in an explicitly frozen development-only feature/label stage.
-Never read later feature/target values or claim old models were retrained. Keep TF
-untouched while its owner changes its consumer; no main merge or SPY edge is claimed.
+Canonical collector reconstruction/current-reader round trips passed for both
+archives: `data/raw/swing_symbol_corrected_canonical`, two terminal pages / 1,476
+rows, authority `ee0f8bc3c66bb8313ef2a4bc06ae7faea36203a7a1d6e451103ae75fff2a692f`;
+`data/raw/swing_corrected_feature_history_canonical`, two terminal pages / 3,020
+rows, authority `62f1ebe110bcf7306dccdeb0939ed366aee23e783ce2080c9b1882721f49346e`.
+Original bytes/clocks and all original source hashes remain unchanged.
+New source selection `data/research/swing_symbol_corrected_sources.json` hash
+`093f497847532f03e029b213b5f98efb6d2d1c8e927e80c5d78f4b30719119c4`
+selects 602,709 raw rows, discards 601 incorrect ECHO parent rows and retains 259
+missing sessions / 21 unusable observations. No exclusions added or prices filled;
+accounting/label/promotion eligibility remains false. Historical availability is not
+asserted by retrospective collection clocks. All 203 affected policy/collection/CLI/
+issuer-identity/proof tests passed; changed-test Ruff and diff checks passed. One
+consolidated code/ML review passed. No new production code, full-suite repeat,
+provider call, label evaluation, model fit or TF operation.
+Five downstream outcome/issuer/news/legacy-proof configs still bind the old policy;
+they require actual reconstruction before admission, not blind hash replacement.
+
+Next source sub-slice frozen: standalone initial-fit adjusted history.
+Problem: the old combined adjusted store is coupled to the full historical panel and
+old strategy semantic identity. The old warmup request lacks transport-required
+proof and a sampled page lacks HTTP entity bytes/receipt; later daily collection has
+no canonical complete unit authority and extends through July 2026. Do not invent
+receipts or accept an old normal reader. Build an independent development source
+plan/authority, collect exact Alpaca SIP all-adjusted daily responses only within
+2018-05-29..2024-05-28, and normalize through the shared canonical bar adapter.
+Keep the accepted 564 windows (551 stock ticker windows / 545 securities and 13
+benchmarks), original window ends/asof, explicit mapping to parent windows, reviewed
+full FI/SATS streams and unchanged decision population. Extend query starts to the
+established 2018-05-29 warmup (279 sessions before first decision, covering the
+current 250-session/253-position requirement). Other aliases remain separate.
+Query coverage never grants historical membership or historical receipt availability.
+Missing stock sessions/IPO history remain explicit feature abstentions; missing or
+invalid transport/benchmark data cannot authorize feature inputs. New output is
+private/partial until canonical plan, transport and source round trips pass.
+Exit gates: reproduced units/provider mappings/population, poison tests for changed
+pins/window/adjustment/corrections, preserved raw evidence, bounded normalization,
+focused tests/lint/types and one consolidated review. No labels/model training,
+later-period numerical reads, TF changes, promotion or main merge in this sub-slice.
+
+Remaining feature work: bind predictor and relationship consumers to the independent
+adjusted source authority and rebuild actual features. The relationship assembler
+reads joined labels as well as features, so its publication belongs in an explicitly
+frozen development-only feature/label stage. Never claim old models were retrained.
 
 Cleanup requirement and scope retained for review:
 User clarified that V1 is the initial complete collect/clean/features/targets/train/
