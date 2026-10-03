@@ -354,6 +354,30 @@ mypy over three sources and staged diff check passed. Consolidated review closed
 its single P2. No real target/news/model/test values, training, promotion or TF work.
 Task-workspace logs: target-join-integration.log and target-join-final.log.
 
+Real target pilot and independent audit completed; full publication remains in progress.
+Private output `data/labels/.swing_initial_fit_targets.materializing` contains July
+2019 only: 7,884 rows, 6,409 complete stock/benchmark comparisons, 1,475 retained
+unavailable rows, 6,630 holding specifications and zero terminal-immature rows.
+Independent audit consumed the full 586,305-decision metadata projection and checked
+all 5,884 source/implementation pins plus exact published metadata, null/reason flags,
+component references and ten-session maturity. Numerical/specification replay then
+passed for the pilot; checkpoint remains
+`b9b130c7924e4ab38d3a9e6004dd789caf21d23ad8911aba36557497cc2cbaeb`.
+Request file pin:
+`01357a4515158ed7ef9a74a803c923b74243b70b1d4be22eea97c213dc20c2ad`.
+Pilot/replay wall times 403.82/340.35 seconds; process peak working sets
+0.494/0.494 GiB. These are individual-run measurements, not a full-job estimate.
+No final target directory/manifest, training or model/SPY result is published.
+Logs: target-canonical-pilot.log, target-canonical-pilot-audit.log and
+ target-canonical-pilot-replay.log (task workspace). Correct command surface is
+`market_predictor.collection_cli`; the initial research_cli invocation refused the
+command before creating output or reading targets. All subsequent runs use collection_cli.
+
+Unavailable source reasons include unresolved distribution entitlement/payment,
+undated action effects, five official-scope reason hits and eight ownership-gap hits.
+Reason hits overlap, so they cannot be added to count distinct unusable rows.
+No source capture clocks were invented or declared missing by this audit.
+
 Next sub-slice frozen: materialize and independently replay initial-fit targets using
 that exact new policy. All 28 checked dependency/document pins match; research and
 simulation contracts parse; the QQQ receipt-based report matches its reviewed hash.
@@ -1972,14 +1996,14 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: run the frozen initial-fit target materialization above,
-privately. One month -> independently pinned one-month replay -> remaining months ->
-full numerical/specification replay -> independent population/source/output audit ->
-leased final rechecks/atomic rename -> normal final-path resume verification. Config
-SHA is ec90490445c88b0d4225130903de74c6361565ec96104d18f5f6043fe15bb940.
-The code-only join checkpoint is closed in `12baec5`; do not repeat its general review
-or full tests. Keep feature-pinned sources/configs unchanged. No news/test/model reads,
-training, TF writes, main merge or promotion in this target publication slice.
+Exact next checkpoint: resume the remaining 58 initial-fit target months privately
+using collection_cli, the frozen target config and checkpoint
+b9b130c7924e4ab38d3a9e6004dd789caf21d23ad8911aba36557497cc2cbaeb. The pilot and
+its independent metadata/source audit plus numerical/specification replay have passed.
+Then fully replay all 59 months, run the independent complete-population audit,
+perform leased final rechecks/atomic rename and normal final-path resume verification.
+No complete target authority exists yet. Keep feature/source/config bytes unchanged.
+No news/test/model reads, training, TF writes, main merge or promotion in this slice.
 
 Publisher verification uses `.venv/Scripts/python.exe`, `PYTHONDONTWRITEBYTECODE=1`,
 writable TEMP/TMP, `-p no:cacheprovider` and a unique writable `--basetemp`:
