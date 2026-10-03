@@ -18,8 +18,9 @@ current-schema reconstruction is still required before reuse.
 
 ## Current State
 
-Latest implementation: `ce1d07c` (pushed). Incremental, initial-fit raw, corrected
-raw/adjusted replays and standalone adjusted collection/normalization are complete.
+Latest implementation: `f8d266f` (pushed). Canonical source reconstructions and
+standalone adjusted collection are complete; technical predictors now also have a
+complete independently audited feature-only publication.
 Exact pins and the next feature dependency are below. TradingFlow remains untouched.
 
 Canonical code cleanup completed in `af9e9b4`, pushed on
@@ -258,37 +259,86 @@ benchmark normalization and publication-before-source-recheck gates; poison test
 cover each. No full-suite repeat, label/feature publication, model fit, promotion,
 main merge or TF operation. Original archives remain untouched.
 
-Next sub-slice frozen: bind and reconstruct technical predictors from canonical
-price/identity sources, without target calculation or corporate-action target admission.
-Replace `ResearchFeaturePolicy` old panel/combined and special two-issuer dependencies
-with one independent adjusted plan/archive pair. Keep strategy and decision-source
-configuration bound. Extract the shared raw-price/identity context from
-`verified_corrected_research_sources`; the outcome wrapper must retain all action
-checks. Feature construction needs raw volume, decisions and memberships, never its
-`action_index`. Rebind only the verified corrected raw selection and symbol policy
-in the future-build decision config, not old action receipts or model artifacts.
+Canonical technical predictor integration completed in `f8d266f` (pushed).
+One raw-price/identity context now serves feature construction without opening
+corporate-action targets; the outcome wrapper retains all action checks. Adjusted
+histories bind exact original parent windows to independent query units. Shared
+relationship/replay consumers use the same bindings; obsolete combined and special
+issuer readers are removed. Quarantine applies to the exact failed query group,
+not every window of a security. Windows paths preserve equivalent configuration pins.
 
-Map decisions to exactly one adjusted query unit through `parent_window_mapping`,
-original security/ticker/window and bounded decision time. Group by unit ID; no
-adjusted-history splice, ticker-only fallback or inferred alias. Preserve every
-canonical/parent decision ID and complete monthly population, including missing
-feature rows. Clip bars to independently membership-derived history, carry actual
-stock missing/invalid sessions into existing warmup abstentions and retain XLC's
-accepted benchmark bound. Bind/recheck all canonical source hashes through publication.
-Remove obsolete combined/special-issuer readers from the active predictor path;
-update relationship source consumers consistently, with no old-format acceptance.
-Exit gates: source-only raw/membership/current-reader replay, query-unit ownership
-poison/rename/multiple-window tests, exact population/cutoff preservation, no future
-or target payload reads, bounded real one-group pilot then resumable full features,
-focused integration/causality tests, lint/types and one consolidated review.
-No targets, training, later-period values, TF operations or promotion in this sub-slice.
+Real publication: `data/features/swing_initial_fit_technical_inputs` contains all
+586,305 decisions / 551 groups / 59 months, from 2019-07-09 through 2024-05-28.
+564,557 rows have usable technical inputs; 21,748 retain explicit
+`technical_warmup_or_unavailable` reasons. No decisions/exclusions were added or
+removed. The technical contract has 40 ordered feature names. This is feature-only
+reconstruction, with training/promotion false; it does not admit labels or models.
 
-Later label-stage dependency: the retained 570-query corporate-action archive binds
-the old raw selection. The current offline command verifies matching requests; it
-cannot reconstruct changed bindings. Build an explicit retained-response producer
-that verifies original query/body evidence before publishing a new bound authority.
-Do not just change archive hashes or claim it was recollected. Actual corrected-label
-and research/relationship joins follow in a separately frozen development-only stage.
+Independent pins:
+- Feature config: `1a4a3832bd20e8a8ab1aafa734e0de95fa77b7162f43be427c6f91e7aae3cbd7`.
+- Price/decision config: `2be2077ae44a1cddfb02feeac139a23246f481d9159455955a956fd94ecbecdf`.
+- `_request.json`: `338886cc41ec5ec97d513b48b69e36476de9c28fabf8b7e261ccb39dc41f596c`.
+- `_checkpoint.json`: `04f9933ebcb9d1527dd00e4348519242cd1361b57d0e822d60507338487708ad`.
+- `_manifest.json`: `c1601b6683893dcf9d3885b3c7446430dafecd96ef3e06d835c910338d016891`.
+
+Independent output audit checked every declared/source/implementation pin, every
+canonical group/month artifact hash, exact unique IDs/population agreement, parent
+IDs, decision bounds and all non-null availability clocks at/before decision time.
+It did not numerically replay all real feature values. Numerical reconstruction,
+future-poison and tamper checks ran on the affected synthetic integration fixtures.
+Final selected component checks: 59 relationship/publication/input tests (402.03s),
+339 predictor/feature/architecture/CLI tests (136.50s), 68 derivation/review tests
+(27.29s), and 292 memory/source/CLI/architecture tests after the runtime fix (13.37s).
+These overlapping test sets are not summed. Changed-file Ruff passed; strict mypy
+passed the 16 feature/consumer sources and two final runtime modules. One consolidated
+review closed exact-window quarantine and Windows-pin findings; observed memory
+failures justified a narrow runtime reopening, now reviewed and tested.
+
+Resource receipt: initial assembly saved 551 groups/six months before the 85% system
+limit stopped it. Cache-only retries also stopped; no guard was lowered or bypassed.
+Unused Arrow allocations are now reclaimed after the unchanged RSS measurement;
+native trimming is excluded from that guard path. A fresh process with
+`ARROW_DEFAULT_MEMORY_POOL=system` completed the exact saved request/checkpoint.
+Sampled monthly peak was 0.804 GiB, not a whole-job peak claim. Keep this allocator
+setting for the next heavy jobs on this machine. All owned workers exited.
+Task-workspace logs: `canonical-feature-system-pool.log` and
+`canonical-feature-output-audit.log`. No full-suite repeat, model fit, main merge,
+promotion, provider request or TradingFlow operation occurred in this feature slice.
+
+Next sub-slice frozen: reconstruct corporate-action transport with current source
+bindings, without calculating labels, training, or reading model/test values.
+The retained 570-query archive binds the old selection. Create a standalone producer
+and CLI, new source-scope configuration and separate canonical archive; preserve the
+feature-pinned price/decision configuration above byte-for-byte. Original request
+bytes and audit `04553f69998bd4a6034c04ffef95238aad9b516eaa0cf0ad6849dc034fedf40c`
+require independent pins. Reproduce ticker/query sets and every page/token/terminal
+response through current decoding, preserving original provider bodies, transport
+metadata and acquisition clocks. Never feed historical responses into a pretend live
+fetch or merely replace their hashes.
+
+Use private resumable staging under the shared lease, with independently pinned
+checkpoints. Bind an immutable reconstruction proof to fresh receipts; proof records
+original request/audit/input inventory, original receipt mapping and actual current
+reconstruction time. The dependency order is request -> proof -> receipts -> report;
+normal prepared/archived request equality remains strict. Current attempt/report
+checks validate proof substitution and original mapping; action-evidence consumers
+carry those proof/input pins through final publication rechecks. Recheck all admitted
+inputs/outputs before atomic publication and require normal offline round-trip.
+Retain false announcement/absence/ownership/accounting admission flags. Full preserved
+process-date bodies may be decoded solely for transport verification; numerical
+admission remains bounded through 2024-05-28 and is outside this source slice.
+Exit tests: body/metadata/receipt/proof tampering, wrong query/clock/receipt mapping,
+missing/repeated pagination, duplicate success, interrupted resume, input mutation
+before publication, strict offline acceptance and unchanged original bytes/clocks.
+
+Later label/join stage must use a separately pinned target config: changing action
+pins in the feature-pinned decision config would invalidate this publication.
+The current dataset join demands an identical complete config SHA; replace only that
+coupling in the later frozen stage with typed equivalence over decision dates,
+source_selection, parent_config, symbol_corrections and decision_corrections, exact
+corrected monthly identities, and unchanged strategy. Do not weaken action admission
+or change predictor fingerprints. Actual labels, joins, training and untouched-test
+assessment remain pending; software/feature completion establishes no SPY edge.
 
 Queued checkpoint: **Investment dataset policy and source admission**.
 October 3 clarification: the prior timestamp question was premature and is withdrawn.
@@ -1881,14 +1931,13 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: implement the frozen canonical predictor source integration
-above. Extract one shared verified raw-price/identity context, preserve the action
-admission wrapper for outcomes, replace old combined/special-issuer adjusted readers,
-and map decisions through the new plan's parent windows to independent unit streams.
-Run focused source/population/causality tests and a bounded one-group feature pilot,
-then resume actual feature reconstruction with independent checkpoint pins. The
-adjusted-source checkpoint is closed in `ce1d07c`; do not repeat its review/full tests.
-No later outcomes, training, TF writes, main merge or promotion in this source slice.
+Exact next checkpoint: implement the frozen retained corporate-action transport
+reconstruction above. Leave feature-pinned configs and original archives unchanged;
+create fresh scope/config/archive/proof receipts with exact preserved bytes/clocks,
+private resumption, final input/output rechecks and normal offline replay. The feature
+checkpoint is closed in `f8d266f`; do not repeat its general review/full tests. The
+later target-config/decision-semantics join change is a separate bounded checkpoint.
+No label calculation, training, TF writes, main merge or promotion in this source slice.
 
 Publisher verification uses `.venv/Scripts/python.exe`, `PYTHONDONTWRITEBYTECODE=1`,
 writable TEMP/TMP, `-p no:cacheprovider` and a unique writable `--basetemp`:

@@ -34,6 +34,31 @@ final Ruff/types passed. Exact paths/hashes and remaining dependencies are in th
 active handoff. These facts do not admit current-schema model features/targets or
 recertify historical fitted models. The results below remain historical evidence.
 
+## Current Canonical Technical Feature Publication
+
+Implementation `f8d266f` completed the source-only technical reconstruction. Exact
+query-window bindings and independent memberships replace old combined/special
+issuer readers. The price context reads no corporate-action target payloads; its
+outcome wrapper still enforces action admission. Final real output preserves all
+586,305 decisions in 551 groups/59 months: 564,557 usable technical rows and 21,748
+explicit warmup/unavailable rows, no added exclusions. The contract has 40 technical
+feature names. All source/artifact hashes, group/month ID equality, parent IDs,
+2019-07-09..2024-05-28 bounds and feature clocks were independently checked.
+Manifest SHA: `c1601b6683893dcf9d3885b3c7446430dafecd96ef3e06d835c910338d016891`.
+
+| Current canonical profile | Source/batch/order | Fixed-horizon labels | Training/evaluation | Live/API/promotion |
+| --- | --- | --- | --- | --- |
+| technical predictors | Verified real feature-only publication and 40-name contract; targeted numerical/causality/tamper fixtures pass; full real numerical replay not run | Pending new corporate-action authority and corrected-label reconstruction | Not run on this publication; no SPY outperformance established | Not admitted |
+
+Consolidated review's query-window quarantine and Windows-path findings are fixed.
+Selected final test sets (overlapping) passed 59 relationship, 339 predictor/feature/
+architecture/CLI, 68 derivation and 292 runtime/source/architecture checks. Ruff and
+strict mypy passed affected sources. Resource retries preserved all saved files;
+unused-buffer cleanup plus `ARROW_DEFAULT_MEMORY_POOL=system` completed assembly
+without changing thresholds or feature formulas. Full suite, full real numerical
+replay, training and promotion were not run. Exact pins, resource observations and
+the next frozen corporate-action source slice are in the current handoff.
+
 ## Current Long-Only Swing Campaign
 
 Last recorded retention verification: the completed technical return run retains both
