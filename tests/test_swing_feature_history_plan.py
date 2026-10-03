@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import tomllib
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -52,7 +53,7 @@ def evidence(tmp_path: Path) -> dict[str, Any]:
     _write_toml(tmp_path / "corrections.toml", correction, "corrections")
     config = tmp_path / "feature-history.toml"
     config.write_text(CONFIG.read_text(encoding="utf-8").replace("configs/swing_symbol_corrections.toml", "corrections.toml")
-        .replace("be63ad9460f80cf87a377b903971c5415bcfefdf5d457308a9a9028d2b5488e3",
+        .replace(tomllib.loads(CONFIG.read_text(encoding="utf-8"))["correction_policy_sha256"],
             file_sha256(tmp_path / "corrections.toml")), encoding="utf-8")
     return {"root": tmp_path, "config": config, "policy_pin": file_sha256(config), "correction": correction}
 
