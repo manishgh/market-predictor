@@ -24,6 +24,7 @@ from market_predictor.sources.official_documents import (
 )
 from market_predictor.sources.provider_symbols import PROVIDER_ALPACA, provider_symbol
 from market_predictor.swing.datasets.corporate_action_collection import collect_holding_corporate_actions
+from market_predictor.swing.datasets.corporate_action_reconstruction import reconstruct_corporate_actions
 from market_predictor.swing.datasets.history_archive import (
     AlpacaSwingDailyPageSource,
     SwingDailyPageSource,
@@ -115,6 +116,33 @@ def register_swing_collection_commands(app: typer.Typer, console: Any) -> None:
         console.print({key: result[key] for key in (
             "status", "requested_tickers", "acquired_tickers", "action_counts", "audit_sha256", "accounting_eligible",
         )})
+        if result["status"] != "collected_unreviewed":
+            raise typer.Exit(code=2)
+
+    @app.command("reconstruct-swing-corporate-action-sources")
+    def reconstruct_swing_corporate_action_sources_command(
+        original_archive: Path = typer.Option(...),
+        original_request_sha256: str = typer.Option(..., help="Independent original request-file hash."),
+        original_audit_sha256: str = typer.Option(..., help="Independent original acquisition report identity."),
+        config: Path = typer.Option(Path("configs/swing_corporate_action_sources.toml")),
+        expected_config_sha256: str = typer.Option(...),
+        output: Path = typer.Option(Path("data/raw/swing_corporate_action_sources_canonical")),
+        root: Path = typer.Option(Path(".")),
+        expected_checkpoint_sha256: str | None = typer.Option(None),
+        maximum_tickers: int | None = typer.Option(None, min=1),
+    ) -> None:
+        """Reconstruct current source receipts from preserved provider bytes and clocks."""
+        try:
+            result = reconstruct_corporate_actions(root=root, original_archive=original_archive,
+                original_request_sha256=original_request_sha256, original_audit_sha256=original_audit_sha256,
+                config=config, expected_config_sha256=expected_config_sha256, output=output,
+                expected_checkpoint_sha256=expected_checkpoint_sha256, maximum_tickers=maximum_tickers)
+        except HeavyJobBusyError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=HEAVY_JOB_BUSY_EXIT_CODE) from exc
+        console.print({key: result[key] for key in ("status", "requested_tickers", "acquired_tickers",
+            "completed_tickers", "action_counts", "audit_sha256", "checkpoint_sha256",
+            "reconstruction_proof_sha256", "accounting_eligible") if key in result})
         if result["status"] != "collected_unreviewed":
             raise typer.Exit(code=2)
 

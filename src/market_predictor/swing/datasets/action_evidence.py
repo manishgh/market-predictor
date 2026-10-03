@@ -15,6 +15,7 @@ from market_predictor.evidence.io import inside, resolve_inside_authority
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.resources import assert_memory_budget
 from market_predictor.swing.datasets.corporate_action_collection import collect_holding_corporate_actions
+from market_predictor.swing.datasets.corporate_action_provenance import load_reconstruction_proof
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +68,19 @@ def _project(root: Path, directory: Path, report: dict[str, Any], replay: dict[s
         raise DataReadinessError("corporate-action request changed during projection")
     bound = dict(request["bound_files"])
     bound[request_path.relative_to(root).as_posix()] = hashlib.sha256(request_bytes).hexdigest()
+    reconstruction = load_reconstruction_proof(root, directory, request)
+    if reconstruction is not None:
+        if (report.get("reconstruction_proof") != reconstruction.proof_pin
+                or report.get("reconstruction_source_files") != reconstruction.source_files):
+            raise DataReadinessError("corporate-action reconstruction changed during projection")
+        for name, digest in reconstruction.source_files.items():
+            if name in bound and bound[name] != digest:
+                raise DataReadinessError("corporate-action reconstruction source pins conflict")
+            bound[name] = digest
+        proof_path = directory / reconstruction.proof_pin["path"]
+        bound[proof_path.relative_to(root).as_posix()] = reconstruction.proof_pin["sha256"]
+    elif "reconstruction_proof" in report or "reconstruction_source_files" in report:
+        raise DataReadinessError("corporate-action report reconstruction proof is absent")
     records: dict[str, dict[str, list[dict[str, Any]]]] = {}
     missing = []
     for ticker in report["tickers"]:

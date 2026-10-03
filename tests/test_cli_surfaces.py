@@ -148,6 +148,28 @@ class CliSurfaceTests(unittest.TestCase):
             command_names(research_app),
         )
 
+    def test_corporate_action_reconstruction_is_pinned_collection_only(self) -> None:
+        name = "reconstruct-swing-corporate-action-sources"
+        self.assertIn(name, command_names(collection_app))
+        self.assertNotIn(name, command_names(research_app))
+        self.assertNotIn(name, command_names(production_app))
+        args = [name, "--original-archive", "data/raw/original", "--original-request-sha256", "a" * 64,
+            "--original-audit-sha256", "b" * 64, "--expected-config-sha256", "c" * 64,
+            "--expected-checkpoint-sha256", "d" * 64, "--maximum-tickers", "1"]
+        with patch("market_predictor.commands.swing_collection.reconstruct_corporate_actions") as run:
+            run.return_value = {"status": "partial_in_progress", "checkpoint_sha256": "e" * 64}
+            result = CliRunner().invoke(collection_app, args)
+        self.assertEqual(result.exit_code, 2, result.output)
+        run.assert_called_once_with(root=Path("."), original_archive=Path("data/raw/original"),
+            original_request_sha256="a" * 64, original_audit_sha256="b" * 64,
+            config=Path("configs/swing_corporate_action_sources.toml"), expected_config_sha256="c" * 64,
+            output=Path("data/raw/swing_corporate_action_sources_canonical"),
+            expected_checkpoint_sha256="d" * 64, maximum_tickers=1)
+        with patch("market_predictor.commands.swing_collection.reconstruct_corporate_actions") as run:
+            run.side_effect = HeavyJobBusyError("another heavy job")
+            result = CliRunner().invoke(collection_app, args)
+        self.assertEqual(result.exit_code, 75, result.output)
+
     def test_command_surfaces_match_reviewed_inventory(self) -> None:
         inventory_path = Path(__file__).parent / "fixtures" / "cli_command_inventory.json"
         expected = json.loads(inventory_path.read_text(encoding="utf-8"))

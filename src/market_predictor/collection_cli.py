@@ -30,6 +30,7 @@ COLLECTION_COMMANDS = frozenset(
         "download-model",
         "export-ohlcv-artifacts",
         "import-finviz",
+        "reconstruct-swing-corporate-action-sources",
         "swing-universe",
     }
 )

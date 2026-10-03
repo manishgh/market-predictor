@@ -25,6 +25,7 @@
     "export-ohlcv-artifacts",
     "import-finviz",
     "materialize-swing-corrected-outcomes",
+    "reconstruct-swing-corporate-action-sources",
     "replay-swing-corrected-outcomes",
     "swing-universe"
   ],

@@ -29,6 +29,11 @@ from market_predictor.resources import assert_memory_budget, assert_peak_memory_
 from market_predictor.sources.alpaca_corporate_actions import corporate_action_parameters, decode_corporate_actions_page
 from market_predictor.sources.http import HttpByteResponse
 from market_predictor.swing.contracts.research_cohort import Sha256
+from market_predictor.swing.datasets.corporate_action_provenance import (
+    ValidatedReconstruction,
+    load_reconstruction_proof,
+    validate_reconstructed_receipt,
+)
 from market_predictor.swing.datasets.corporate_action_scope import prepare_corporate_action_scope
 
 ActionFetcher = Callable[[dict[str, Any], int], HttpByteResponse]
@@ -98,6 +103,7 @@ def _implementation() -> dict[str, str]:
     return {name: file_sha256(package / name) for name in (
         "swing/datasets/corporate_action_collection.py", "sources/alpaca_corporate_actions.py", "sources/http.py",
         "core/errors.py", "resources.py", "swing/datasets/corporate_action_scope.py", "core/system_memory.py",
+        "swing/datasets/corporate_action_provenance.py",
     )}
 
 
@@ -134,7 +140,9 @@ def _response(body: bytes, metadata: dict[str, Any]) -> HttpByteResponse:
     return HttpByteResponse(**values)
 
 
-def _check_attempt(attempt: Path, request: dict[str, Any], ticker: str) -> dict[str, Any]:
+def _check_attempt(attempt: Path, request: dict[str, Any], ticker: str, *,
+    reconstruction: ValidatedReconstruction | None = None, root: Path | None = None,
+) -> dict[str, Any]:
     receipt = _object(attempt / "receipt.json")
     unsigned = {k: v for k, v in receipt.items() if k != "receipt_sha256"}
     if (receipt.get("receipt_sha256") != json_sha256(unsigned)
@@ -147,6 +155,12 @@ def _check_attempt(attempt: Path, request: dict[str, Any], ticker: str) -> dict[
     if (start.utcoffset() != UTC.utcoffset(None) or end.utcoffset() != UTC.utcoffset(None)
             or not start <= end <= datetime.now(UTC)):
         raise DataReadinessError("corporate-action receipt clock differs")
+    if reconstruction is None and ("reconstruction_proof" in receipt or "original_receipt" in receipt
+            or (attempt.parents[2] / "_reconstruction.json").exists()):
+        if root is None:
+            raise DataReadinessError("corporate-action reconstructed receipt requires its workspace root")
+        reconstruction = load_reconstruction_proof(root, attempt.parents[2], request)
+    validate_reconstructed_receipt(attempt, request, receipt, reconstruction)
     token = None
     seen_tokens: set[str] = set()
     seen_ids: set[str] = set()
@@ -263,13 +277,19 @@ def _collect(output: Path, request: dict[str, Any], ticker: str, fetch: ActionFe
     return pressure
 
 
-def _report(output: Path, request: dict[str, Any]) -> dict[str, Any]:
+def _report(output: Path, request: dict[str, Any], *, root: Path | None = None) -> dict[str, Any]:
     results = []
+    reconstruction = None
+    if (output / "_reconstruction.json").exists():
+        if root is None:
+            raise DataReadinessError("corporate-action reconstruction report requires its workspace root")
+        reconstruction = load_reconstruction_proof(root, output, request)
     if (output / "tickers").exists() and any(path.name not in request["tickers"] for path in (output / "tickers").iterdir()):
         raise DataReadinessError("corporate-action collection contains an unknown ticker")
     for ticker in request["tickers"]:
         parent = output / "tickers" / ticker
-        attempts = [_check_attempt(path, request, ticker) for path in sorted(parent.iterdir())] if parent.exists() else []
+        attempts = [_check_attempt(path, request, ticker, reconstruction=reconstruction, root=root)
+            for path in sorted(parent.iterdir())] if parent.exists() else []
         successes = [row for row in attempts if row["state"] == "acquired"]
         if len(successes) > 1:
             raise DataReadinessError("corporate-action collection contains duplicate successful attempts")
@@ -283,6 +303,9 @@ def _report(output: Path, request: dict[str, Any]) -> dict[str, Any]:
         "status": "collected_unreviewed" if all(row["acquired"] for row in results) else "incomplete",
         "historical_announcement_availability_proven": False, "absence_of_actions_proven": False,
         "ownership_admitted": False, "accounting_eligible": False}
+    if reconstruction is not None:
+        reconstruction.recheck()
+        report.update(reconstruction_proof=reconstruction.proof_pin, reconstruction_source_files=reconstruction.source_files)
     return {**report, "audit_sha256": json_sha256(report)}
 
 
@@ -319,7 +342,7 @@ def collect_holding_corporate_actions(
                 write_json_object(staging / "_request.json", request)
                 os.rename(staging, output)
             request = _archived_request(output, request)
-            report = _report(output, request)
+            report = _report(output, request, root=root)
             _verify_sources(root, request["bound_files"])
             _verify_sources(Path(__file__).resolve().parents[2], replay_implementation)
             if expected_audit_sha256 is not None and report["audit_sha256"] != expected_audit_sha256:
@@ -338,7 +361,7 @@ def collect_holding_corporate_actions(
                         break
             _verify_sources(root, request["bound_files"])
             _verify_sources(Path(__file__).resolve().parents[2], replay_implementation)
-            report = _report(output, request)
+            report = _report(output, request, root=root)
             assert_peak_memory_budget(stage="corporate-action report", hard_budget_gib=5.0, headroom_gib=0.75)
             reports = output / "reports"
             reports.mkdir(exist_ok=True)
