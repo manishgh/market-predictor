@@ -18,7 +18,7 @@ current-schema reconstruction is still required before reuse.
 
 ## Current State
 
-Latest implementation: `f8d266f` (pushed). Canonical source reconstructions and
+Latest implementation: `635ebdb`, following `b97ad60` (both pushed). Canonical source reconstructions and
 standalone adjusted collection are complete; technical predictors now also have a
 complete independently audited feature-only publication.
 Exact pins and the next feature dependency are below. TradingFlow remains untouched.
@@ -305,40 +305,53 @@ Task-workspace logs: `canonical-feature-system-pool.log` and
 `canonical-feature-output-audit.log`. No full-suite repeat, model fit, main merge,
 promotion, provider request or TradingFlow operation occurred in this feature slice.
 
-Next sub-slice frozen: reconstruct corporate-action transport with current source
-bindings, without calculating labels, training, or reading model/test values.
-The retained 570-query archive binds the old selection. Create a standalone producer
-and CLI, new source-scope configuration and separate canonical archive; preserve the
-feature-pinned price/decision configuration above byte-for-byte. Original request
-bytes and audit `04553f69998bd4a6034c04ffef95238aad9b516eaa0cf0ad6849dc034fedf40c`
-require independent pins. Reproduce ticker/query sets and every page/token/terminal
-response through current decoding, preserving original provider bodies, transport
-metadata and acquisition clocks. Never feed historical responses into a pretend live
-fetch or merely replace their hashes.
+Corporate-action source reconstruction completed in `b97ad60` (pushed), with
+hash-bound CRLF whitespace handling fixed in `635ebdb`. New archive:
+`data/raw/swing_corporate_action_sources_canonical`, 570 queries/pages and 14,352
+records. All 1,712 original file hashes, response-body/metadata bytes and acquisition
+clocks match; only current request-bound wrappers and reconstruction provenance are
+new. Independent full output audit and normal final-path offline replay passed.
+Private staging is gone. Historical announcement availability, absence of actions,
+ownership and accounting eligibility remain false: this source receipt admits no labels.
 
-Use private resumable staging under the shared lease, with independently pinned
-checkpoints. Bind an immutable reconstruction proof to fresh receipts; proof records
-original request/audit/input inventory, original receipt mapping and actual current
-reconstruction time. The dependency order is request -> proof -> receipts -> report;
-normal prepared/archived request equality remains strict. Current attempt/report
-checks validate proof substitution and original mapping; action-evidence consumers
-carry those proof/input pins through final publication rechecks. Recheck all admitted
-inputs/outputs before atomic publication and require normal offline round-trip.
-Retain false announcement/absence/ownership/accounting admission flags. Full preserved
-process-date bodies may be decoded solely for transport verification; numerical
-admission remains bounded through 2024-05-28 and is outside this source slice.
-Exit tests: body/metadata/receipt/proof tampering, wrong query/clock/receipt mapping,
-missing/repeated pagination, duplicate success, interrupted resume, input mutation
-before publication, strict offline acceptance and unchanged original bytes/clocks.
+Independent pins:
+- Scope `configs/swing_corporate_action_sources.toml`:
+  `c883953e51df99990523be95504e34c6ae7d5ff48ba20e3951d2d7e8d0262554`.
+- Semantic audit: `a713f53f2169be60ddd5cbf81786be8f772127496d65a93862eb72992f643add`.
+- Report file: `a08278e384c41742015e6c26c8ebca755e53a9e7c9080375c556d7717ffa22af`.
+- Request file: `bc3afc9b2db3389e50764d93ab97be8b944668172603563d08076e8707aeb58b`.
+- Checkpoint: `071b15d28f05ca61f33bfa6faf611765e0da83483ab950c4e3ada0622e041d22`.
+- Reconstruction proof: `66d50cea01b673a35f47526fb0c65ef8c8e40bc347b45300d70e2049a387bdb9`.
 
-Later label/join stage must use a separately pinned target config: changing action
-pins in the feature-pinned decision config would invalidate this publication.
-The current dataset join demands an identical complete config SHA; replace only that
-coupling in the later frozen stage with typed equivalence over decision dates,
-source_selection, parent_config, symbol_corrections and decision_corrections, exact
-corrected monthly identities, and unchanged strategy. Do not weaken action admission
-or change predictor fingerprints. Actual labels, joins, training and untouched-test
-assessment remain pending; software/feature completion establishes no SPY edge.
+Verification: 24 scope/config checks; 87 provenance/collection/evidence/CLI checks
+before the final map guard; 40 producer/provenance/evidence checks after that guard;
+390 affected architecture/provider/scope/CLI checks. Sets overlap, not summed.
+Changed-file Ruff and strict mypy over six sources passed. One consolidated code/ML
+review reported no supported P0/P1/P2 findings. Final whole-checkpoint diff check
+passed after preserving the scope's exact bytes with a path-specific CRLF attribute.
+No full suite, provider request, target calculation, model fit, main merge or TF work.
+Task-workspace logs: corporate-action-canonical-complete.log,
+corporate-action-output-audit.log and corporate-action-offline-final.log.
+
+Next sub-slice frozen: separate target configuration and prove identical price/decision
+semantics in the research join, using synthetic data only. Add
+`configs/swing_canonical_targets.toml`; change only action archive, audit and scope
+bindings from the immutable feature-pinned outcome policy. Keep all feature-pinned
+configs and predictor-fingerprinted modules unchanged. A typed helper independently
+loads both pinned policies, rejects any other field difference and hashes the shared
+price/decision fields. Require separate target-config pins in the join and CLI;
+predictors retain the decision config, while target lineage must match the target
+config, source selection and action audit exactly. Bind both policies and helper
+implementation/proof into request and resume identity. Compare full expected monthly
+decision metadata, including session/sector/benchmark and parent identity, with target
+metadata even on resumed months; identical IDs/counts alone are insufficient.
+Exit tests: three-field-only config change; all other changes rejected; unchanged
+corrected IDs; metadata poisoning with unchanged IDs; missing/wrong pins; resume/input
+mutation; CLI forwarding; exact outcome-replay config rejection. Run focused direct
+consumer/causality/architecture checks, Ruff, strict mypy and one consolidated review.
+Failure rejects publication; no compatibility fallback. Actual target publication is
+the following separately frozen checkpoint. News reconstruction, joins, training and
+untouched-test assessment remain pending; software checks establish no SPY edge.
 
 Queued checkpoint: **Investment dataset policy and source admission**.
 October 3 clarification: the prior timestamp question was premature and is withdrawn.
@@ -1931,13 +1944,12 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: implement the frozen retained corporate-action transport
-reconstruction above. Leave feature-pinned configs and original archives unchanged;
-create fresh scope/config/archive/proof receipts with exact preserved bytes/clocks,
-private resumption, final input/output rechecks and normal offline replay. The feature
-checkpoint is closed in `f8d266f`; do not repeat its general review/full tests. The
-later target-config/decision-semantics join change is a separate bounded checkpoint.
-No label calculation, training, TF writes, main merge or promotion in this source slice.
+Exact next checkpoint: implement the code-only target-config separation and typed
+price/decision equivalence proof frozen above. Keep feature-pinned configs unchanged;
+require exact target lineage and complete monthly metadata equality, including resume.
+The source checkpoint is closed in `b97ad60`/`635ebdb`; do not repeat its general
+review or full tests. No real target/news/test/model values, training, TF writes,
+main merge or promotion in this code-only slice.
 
 Publisher verification uses `.venv/Scripts/python.exe`, `PYTHONDONTWRITEBYTECODE=1`,
 writable TEMP/TMP, `-p no:cacheprovider` and a unique writable `--basetemp`:

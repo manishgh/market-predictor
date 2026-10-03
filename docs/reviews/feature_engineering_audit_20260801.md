@@ -34,6 +34,18 @@ final Ruff/types passed. Exact paths/hashes and remaining dependencies are in th
 active handoff. These facts do not admit current-schema model features/targets or
 recertify historical fitted models. The results below remain historical evidence.
 
+Corporate-action source reconstruction completed in `b97ad60`, followed by the
+hash-preserving whitespace fix `635ebdb`: 570 queries/pages and 14,352 records in
+`data/raw/swing_corporate_action_sources_canonical`. Independent full source/output
+hash and body/metadata/clock comparisons passed; normal final-path offline replay
+passed. Semantic audit `a713f53f2169be60ddd5cbf81786be8f772127496d65a93862eb72992f643add`.
+Original evidence is unchanged. The new receipts prove reconstruction provenance;
+announcement availability, absence, ownership and accounting admission remain false.
+Selected overlapping source/evidence/CLI/architecture tests, Ruff, strict mypy and
+consolidated review passed as recorded in the handoff. No labels or model fit were
+produced. The next code-only join change separates target action bindings from the
+unchanged feature decision policy; actual target publication remains subsequent.
+
 ## Current Canonical Technical Feature Publication
 
 Implementation `f8d266f` completed the source-only technical reconstruction. Exact
@@ -48,7 +60,7 @@ Manifest SHA: `c1601b6683893dcf9d3885b3c7446430dafecd96ef3e06d835c910338d016891`
 
 | Current canonical profile | Source/batch/order | Fixed-horizon labels | Training/evaluation | Live/API/promotion |
 | --- | --- | --- | --- | --- |
-| technical predictors | Verified real feature-only publication and 40-name contract; targeted numerical/causality/tamper fixtures pass; full real numerical replay not run | Pending new corporate-action authority and corrected-label reconstruction | Not run on this publication; no SPY outperformance established | Not admitted |
+| technical predictors | Verified real feature-only publication and 40-name contract; targeted numerical/causality/tamper fixtures pass; full real numerical replay not run | Corporate-action source reconstructed; corrected-label reconstruction pending | Not run on this publication; no SPY outperformance established | Not admitted |
 
 Consolidated review's query-window quarantine and Windows-path findings are fixed.
 Selected final test sets (overlapping) passed 59 relationship, 339 predictor/feature/
@@ -57,7 +69,7 @@ strict mypy passed affected sources. Resource retries preserved all saved files;
 unused-buffer cleanup plus `ARROW_DEFAULT_MEMORY_POOL=system` completed assembly
 without changing thresholds or feature formulas. Full suite, full real numerical
 replay, training and promotion were not run. Exact pins, resource observations and
-the next frozen corporate-action source slice are in the current handoff.
+the next frozen target-config separation slice are in the current handoff.
 
 ## Current Long-Only Swing Campaign
 
