@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -11,14 +12,17 @@ import pytest
 
 import market_predictor.swing.datasets.research_dataset as owner
 from market_predictor.canonical.audits import CanonicalAuditCheck, CanonicalAuditReport
+from market_predictor.canonical.cutoffs import SWING_NIGHTLY_CUTOFF
 from market_predictor.canonical.store import file_sha256, manifest_path_for, write_canonical_artifact
 from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.corrected_decisions import CorrectedDecisionProjection
+from market_predictor.swing.datasets.corrected_outcome_admission import corrected_decisions
 from market_predictor.swing.datasets.outcome_replay import OutcomeReplayVerification
 from market_predictor.swing.datasets.predictor_replay import VerifiedPredictorReplay
 from market_predictor.swing.features.panel import TECHNICAL_RANKING_FEATURES
+from tests.test_swing_decision_price_equivalence import _policy, _write_policy
 from tests.test_swing_features import contract as contract
 from tests.test_swing_research_ablation import _authority
 from tests.test_swing_research_partition import _inputs
@@ -43,7 +47,7 @@ def publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contract: Any) 
     root = tmp_path
     package = root / "src/market_predictor"
     names = ("swing/datasets/research_dataset.py", "swing/datasets/predictor_abstention_derivation.py",
-        "swing/features/research_ablation.py",
+        "swing/datasets/decision_price_equivalence.py", "swing/features/research_ablation.py",
         "swing/features/research_partition.py", "swing/features/research_join.py", "swing/features/catalyst_aggregates.py",
         "swing/features/catalyst_decision_authority.py", "swing/features/catalyst_decision_identity.py",
         "swing/features/cross_sectional.py", "swing/features/pipeline.py")
@@ -52,22 +56,44 @@ def publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contract: Any) 
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# Test-only implementation identity.\n", encoding="ascii")
     monkeypatch.setattr(owner, "__file__", str(package / names[0]))
-    configs = {name: root / f"configs/{name}.json" for name in ("decision_config", "strategy_config")}
-    for path in configs.values():
-        _json(path, {"fixture": path.stem})
-    state: dict[str, Any] = dict(root=root, output=root / "data/features/join", active=False, calls=[],
-        partitions=[], authorities={}, context_error=False, configs=configs)
-    for name, path in configs.items():
-        state[name] = SourcePin(path=path.relative_to(root).as_posix(), sha256=file_sha256(path))
-    source_pins = {pin.path: pin.sha256 for pin in (state["decision_config"], state["strategy_config"])}
+    decision_policy = _policy()
+    target_policy = deepcopy(decision_policy)
+    target_policy.update(
+        action_archive="data/raw/new_actions",
+        action_audit_sha256="f" * 64,
+        action_config=dict(path="configs/new_actions.toml", sha256="e" * 64),
+    )
+    decision_pin = _write_policy(root, "configs/decision.toml", decision_policy)
+    target_pin = _write_policy(root, "configs/target.toml", target_policy)
+    strategy_path = root / "configs/strategy.json"
+    strategy_pin = SourcePin(path="configs/strategy.json", sha256=_json(strategy_path, {"fixture": "strategy"}))
+    configs = {"decision_config": root / decision_pin.path, "target_config": root / target_pin.path, "strategy_config": strategy_path}
+    state: dict[str, Any] = dict(
+        root=root,
+        output=root / "data/features/join",
+        active=False,
+        calls=[],
+        partitions=[],
+        authorities={},
+        context_error=False,
+        configs=configs,
+        decision_policy=decision_policy,
+        target_policy=target_policy,
+        decision_config=decision_pin,
+        target_config=target_pin,
+        strategy_config=strategy_pin,
+    )
+    source_pins = {pin.path: pin.sha256 for pin in (decision_pin, strategy_pin)}
+    target_pins = {**source_pins, target_pin.path: target_pin.sha256}
     dirs = {name: root / f"data/research/{name}" for name in ("predictors", "outcomes", "catalysts")}
     cohort = "c" * 64
     technical_request = dict(schema="market_predictor.research_predictor_request", declared_source_files=source_pins,
         source_files={}, implementation_files={}, adjusted_source_files={}, cohort_sha256=cohort,
         decision_start="2019-07-09", numeric_end="2024-05-28", expected_rows=6)
     target_request = dict(schema="market_predictor.corrected_outcome_request", lineage=dict(
-        config_sha256=state["decision_config"].sha256, source_files=source_pins,
-        implementation_files={}, cohort_sha256=cohort))
+        config_sha256=target_pin.sha256, source_files=target_pins,
+        source_selection_sha256=target_policy["source_selection"]["sha256"],
+        action_audit_sha256=target_policy["action_audit_sha256"],implementation_files={}, cohort_sha256=cohort))
     tech = dict(schema="market_predictor.research_predictors", status="technical_inputs_complete_research_only",
         request_sha256=_json(dirs["predictors"] / "_request.json", technical_request), failed_groups={},
         groups={"fixture": dict(availability_columns={name: "base_available_at" for name in TECHNICAL_RANKING_FEATURES})},
@@ -84,6 +110,17 @@ def publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contract: Any) 
             frame["decision_id"] = frame.decision_id + month
             frame["decision_time_utc"] = pd.Timestamp(f"{day}T23:00:00Z")
             frame["session_date_et"] = pd.Timestamp(day).date()
+            frame["timeframe"] = "1d"
+            frame["bar_start_utc"] = pd.Timestamp(f"{day}T14:30:00Z")
+            frame["prediction_cutoff_policy_id"] = SWING_NIGHTLY_CUTOFF.policy_id
+            frame["parent_ticker"] = frame.ticker
+            frame["parent_decision_id"] = "parent-" + frame.decision_id
+        expected, features, outcomes = (
+            corrected_decisions(frame.drop(columns=["decision_id", "parent_decision_id", "parent_ticker"]), ())
+            for frame in (expected, features, outcomes)
+        )
+        # MonthEngine reconstructs target rows from dictionaries, losing nullable-ID dtype.
+        outcomes = pd.DataFrame(outcomes.to_dict("records"))
         features = features.drop(columns="label_eligible", errors="ignore")
         features["base_available_at"] = features.decision_time_utc - pd.Timedelta(hours=1)
         authority = _authority(expected, unknown=True)
@@ -151,7 +188,7 @@ def _set_news(state: dict[str, Any], month: str, authority: Any) -> None:
 
 
 def _run(state: dict[str, Any], resume: bool = False, **kwargs: Any) -> dict[str, Any]:
-    arguments = {name: state[name] for name in ("root", "output", "decision_config", "strategy_config",
+    arguments = {name: state[name] for name in ("root", "output", "decision_config", "target_config", "strategy_config",
         "predictors", "outcomes", "catalysts")}
     if resume:
         arguments["expected_checkpoint_sha256"] = file_sha256(state["output"] / "_checkpoint.json")
@@ -231,6 +268,12 @@ def test_publish_and_resume_preserve_nullable_population(publication: dict[str, 
             assert not rows.training_eligible.any()
             if profile == "catalyst_full":
                 assert rows.event_count_3d.isna().all()
+    request = owner.pinned_object(publication["output"] / "_request.json",result["request_sha256"])
+    proof = owner.verify_decision_price_equivalence(publication["root"],publication["decision_config"],publication["target_config"])
+    assert request["decision_price_equivalence"] == proof.as_record()
+    assert publication["decision_config"] != publication["target_config"]
+    for pin in (publication["decision_config"],publication["target_config"]):
+        assert request["source_files"][pin.path] == pin.sha256
     original = (publication["output"] / "_manifest.json").read_bytes()
     assert _run(publication, resume=True)["manifest_sha256"] == result["manifest_sha256"]
     assert (publication["output"] / "_manifest.json").read_bytes() == original
@@ -316,9 +359,10 @@ def test_completed_manifest_tamper_rejected(publication: dict[str, Any]) -> None
         _run(publication, resume=True)
 
 
-def test_completed_join_resume_rejects_identity_helper_change(publication: dict[str, Any]) -> None:
+@pytest.mark.parametrize("name",["swing/features/catalyst_decision_identity.py","swing/datasets/decision_price_equivalence.py"])
+def test_completed_join_resume_rejects_identity_helper_change(publication: dict[str, Any], name: str) -> None:
     _run(publication)
-    helper = publication["root"] / "src/market_predictor/swing/features/catalyst_decision_identity.py"
+    helper = publication["root"] / "src/market_predictor" / name
     helper.write_text("# Different test-only implementation.\n", encoding="ascii")
     with pytest.raises(DataReadinessError, match="inputs changed"):
         _run(publication, resume=True)
@@ -452,7 +496,10 @@ def test_resumed_profile_contract_rejected(publication: dict[str, Any], field: s
 
 
 @pytest.mark.parametrize("field,value", [("sector", "Energy"), ("primary_benchmark", "XLE"),
-    ("session_date_et", "2024-01-03")])
+    ("session_date_et", "2024-01-03"), ("security_id","foreign"),("ticker","WRONG"),
+    ("timeframe","15m"),("bar_start_utc",pd.Timestamp("2024-01-02T14:31:00Z")),
+    ("decision_time_utc",pd.Timestamp("2024-01-02T23:00:01Z")),("prediction_cutoff_policy_id","foreign"),
+    ("parent_ticker","FOREIGN"),("parent_decision_id","foreign")])
 def test_outcome_context_poison_rejected(publication: dict[str, Any], field: str, value: Any) -> None:
     path = publication["dirs"]["outcomes"] / "2024-01/targets.parquet"
     rows = pd.read_parquet(path)
@@ -517,3 +564,151 @@ def test_sparse_catalysts_retain_unknown_full_population(publication: dict[str, 
             assert len(rows) == 3 and not rows.training_eligible.any()
             if "event_count_3d" in rows:
                 assert rows.event_count_3d.isna().all()
+
+
+@pytest.mark.parametrize("field", ["config_sha256", "source_selection_sha256", "action_audit_sha256", "target_pin"])
+def test_targets_require_exact_independent_lineage(publication: dict[str, Any], field: str) -> None:
+    path = publication["dirs"]["outcomes"] / "_request.json"
+    request = json.loads(path.read_text())
+    if field == "target_pin":
+        del request["lineage"]["source_files"][publication["target_config"].path]
+    else:
+        request["lineage"][field] = "0" * 64
+    publication["manifests"]["outcomes"]["request_sha256"] = _json(path, request)
+    _repin(publication, "outcomes")
+    with pytest.raises(DataReadinessError, match="target configuration"):
+        _run(publication)
+    assert not publication["output"].exists()
+
+
+def test_changed_target_decision_semantics_rejected_before_join(publication: dict[str, Any]) -> None:
+    policy = deepcopy(publication["target_policy"])
+    policy["source_selection"] = dict(path="data/foreign-selection.json", sha256="9" * 64)
+    publication["target_config"] = _write_policy(publication["root"], "configs/foreign-target.toml", policy)
+    with pytest.raises(DataReadinessError, match="decision/price semantics"):
+        _run(publication)
+    assert not publication["output"].exists()
+
+
+def test_target_config_new_bytes_need_matching_lineage(publication: dict[str, Any]) -> None:
+    pin = publication["target_config"]
+    path = publication["root"] / pin.path
+    path.write_text(path.read_text() + "\n# semantically identical different bytes\n", encoding="utf-8")
+    publication["target_config"] = SourcePin(path=pin.path, sha256=file_sha256(path))
+    with pytest.raises(DataReadinessError, match="target configuration"):
+        _run(publication)
+
+
+def test_resume_projects_metadata_without_numerical_targets(publication: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+    _run(publication)
+    read = pd.read_parquet
+    targets = []
+    profiles = []
+
+    def projected(path: Any, *args: Any, **kwargs: Any) -> pd.DataFrame:
+        name = Path(path).name
+        if name == "targets.parquet":
+            targets.append(name)
+            assert kwargs.get("columns") == list(owner.DECISION_METADATA_COLUMNS)
+        elif name in {"technical_market.parquet", "catalyst_full.parquet"} and kwargs.get("columns"):
+            profiles.append(name)
+            assert kwargs["columns"] == list(owner.DECISION_METADATA_COLUMNS)
+        return read(path, *args, **kwargs)
+
+    monkeypatch.setattr(pd, "read_parquet", projected)
+    assert _run(publication, resume=True)["rows"] == 6
+    assert len(targets) == 2 and len(profiles) == 4
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("parent_ticker", "WRONG"),
+        ("parent_decision_id", "wrong-parent"),
+        ("timeframe", "15m"),
+        ("bar_start_utc", pd.Timestamp("2024-01-02T14:31:00Z")),
+        ("prediction_cutoff_policy_id", "wrong-policy"),
+        ("sector", "wrong-sector"),
+    ],
+)
+def test_resume_rechecks_target_metadata_with_same_decision_ids(publication: dict[str, Any], field: str, value: Any) -> None:
+    _run(publication)
+    expected = publication["partitions"][0][1]
+    expected[field] = value
+    with pytest.raises(DataReadinessError, match="metadata differs from frozen"):
+        _run(publication, resume=True)
+
+
+@pytest.mark.parametrize("profile", ["technical_market", "catalyst_full"])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("parent_ticker", "WRONG"),
+        ("parent_decision_id", "wrong-parent"),
+        ("timeframe", "15m"),
+        ("bar_start_utc", pd.Timestamp("2024-01-02T14:31:00Z")),
+        ("prediction_cutoff_policy_id", "wrong-policy"),
+        ("sector", "wrong-sector"),
+    ],
+)
+def test_rehashed_resumed_profile_metadata_poison_rejected(publication: dict[str, Any], profile: str, field: str, value: Any) -> None:
+    _run(publication)
+    checkpoint_path = publication["output"] / "_checkpoint.json"
+    checkpoint = json.loads(checkpoint_path.read_text())
+    record = checkpoint["months"]["2024-01"]["profiles"][profile]
+    path = publication["output"] / record["path"]
+    rows = pd.read_parquet(path)
+    rows[field] = value
+    updated = _artifact(path, rows, "swing_research_join", {"request_sha256": checkpoint["request_sha256"]})
+    record.update(sha256=updated["sha256"], manifest_sha256=updated["manifest_sha256"])
+    _json(checkpoint_path, checkpoint)
+    with pytest.raises(DataReadinessError, match="metadata differs from frozen"):
+        _run(publication, resume=True)
+
+
+def test_target_config_changed_during_metadata_read_rejected(publication: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+    read = pd.read_parquet
+
+    def mutate(path: Any, *args: Any, **kwargs: Any) -> pd.DataFrame:
+        rows = read(path, *args, **kwargs)
+        if Path(path).name == "targets.parquet":
+            config = publication["root"] / publication["target_config"].path
+            config.write_bytes(config.read_bytes() + b"\n# changed while joining\n")
+        return rows
+
+    monkeypatch.setattr(pd, "read_parquet", mutate)
+    with pytest.raises(DataReadinessError, match="source changed"):
+        _run(publication)
+    assert not (publication["output"] / "_manifest.json").exists()
+
+
+def test_canonical_ids_survive_target_dictionary_parquet_roundtrip_and_resume(publication: dict[str, Any]) -> None:
+    expected = publication["partitions"][0][1]
+    targets = pd.read_parquet(publication["dirs"]["outcomes"] / "2024-01/targets.parquet")
+    for name in ("decision_id", "parent_decision_id"):
+        assert expected[name].dtype == pd.StringDtype()
+        assert targets[name].dtype != expected[name].dtype
+        assert targets[name].tolist() == expected[name].tolist()
+    owner._verify_decision_metadata(targets, expected)
+    result = _run(publication)
+    assert _run(publication, resume=True)["manifest_sha256"] == result["manifest_sha256"]
+
+
+@pytest.mark.parametrize("side", ["expected", "actual"])
+@pytest.mark.parametrize("field", [name for name in owner.DECISION_METADATA_COLUMNS
+    if name not in {"session_date_et", "decision_time_utc", "bar_start_utc"}])
+@pytest.mark.parametrize("value", [None, pd.NA, 123, ""])
+def test_metadata_rejects_nontext_or_missing_values_before_string_normalization(
+    side: str, field: str, value: Any,
+) -> None:
+    expected = _inputs()[0].iloc[:3].copy()
+    expected["timeframe"] = "1d"
+    expected["bar_start_utc"] = pd.to_datetime(expected.session_date_et, utc=True) + pd.Timedelta(hours=14, minutes=30)
+    expected["prediction_cutoff_policy_id"] = SWING_NIGHTLY_CUTOFF.policy_id
+    expected = corrected_decisions(expected.drop(columns="decision_id"), ())
+    actual = pd.DataFrame(expected.to_dict("records"))
+    frame = expected if side == "expected" else actual
+    frame[field] = frame[field].astype(object)
+    frame.loc[0, field] = value
+    with pytest.raises(DataReadinessError, match="nonempty textual"):
+        owner._verify_decision_metadata(actual, expected)

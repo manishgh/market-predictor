@@ -66,6 +66,8 @@ def register_research_feature_commands(app: typer.Typer) -> None:
     def dataset(
         decision_config: Path = typer.Option(...),
         decision_config_sha256: str = typer.Option(...),
+        target_config: Path = typer.Option(...),
+        target_config_sha256: str = typer.Option(...),
         strategy_config: Path = typer.Option(...),
         strategy_config_sha256: str = typer.Option(...),
         predictor_manifest: Path = typer.Option(...),
@@ -87,6 +89,7 @@ def register_research_feature_commands(app: typer.Typer) -> None:
         try:
             result = materialize_research_dataset(root=root,
                 decision_config=SourcePin(path=decision_config.as_posix(), sha256=decision_config_sha256),
+                target_config=SourcePin(path=target_config.as_posix(), sha256=target_config_sha256),
                 strategy_config=SourcePin(path=strategy_config.as_posix(), sha256=strategy_config_sha256),
                 predictors=SourcePin(path=predictor_manifest.as_posix(), sha256=predictor_manifest_sha256),
                 outcomes=SourcePin(path=outcome_manifest.as_posix(), sha256=outcome_manifest_sha256),

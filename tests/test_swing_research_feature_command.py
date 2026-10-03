@@ -52,7 +52,7 @@ def test_research_join_command_preserves_independent_input_pins(
     app = typer.Typer()
     commands.register_research_feature_commands(app)
     arguments = ["materialize-swing-research-dataset"]
-    for name, suffix in (("decision-config", "toml"), ("strategy-config", "toml"),
+    for name, suffix in (("decision-config", "toml"), ("target-config", "toml"), ("strategy-config", "toml"),
         ("predictor-manifest", "json"), ("outcome-manifest", "json"), ("catalyst-manifest", "json")):
         arguments += [f"--{name}", f"{name}.{suffix}", f"--{name}-sha256", "a" * 64]
     if with_replay:
@@ -62,6 +62,7 @@ def test_research_join_command_preserves_independent_input_pins(
     assert result.exit_code == 0, result.exception
     assert json.loads(result.output)["training_eligible"] is False
     assert str(calls[0]["output"]).endswith("swing_corrected_initial_fit_research")
+    assert calls[0]["target_config"] == commands.SourcePin(path="target-config.toml", sha256="a" * 64)
     assert calls[0]["predictor_replay"] == (
         commands.SourcePin(path="predictor-replay.json", sha256="b" * 64) if with_replay else None)
     assert calls[0]["outcome_replay"] == (
@@ -74,12 +75,30 @@ def test_join_cli_requires_complete_replay_pair(flag: str) -> None:
     app = typer.Typer()
     commands.register_research_feature_commands(app)
     arguments = ["materialize-swing-research-dataset"]
-    for name in ("decision-config", "strategy-config", "predictor-manifest", "outcome-manifest", "catalyst-manifest"):
+    for name in ("decision-config", "target-config", "strategy-config", "predictor-manifest", "outcome-manifest", "catalyst-manifest"):
         arguments += [f"--{name}", f"{name}.json", f"--{name}-sha256", "a" * 64]
     arguments += [flag, "b" * 64 if flag.endswith("sha256") else "replay.json"]
     result = CliRunner().invoke(app, arguments)
     assert result.exit_code == 2
     assert "supplied together" in result.output
+
+
+@pytest.mark.parametrize("omit", ["--target-config", "--target-config-sha256"])
+def test_join_cli_requires_independent_target_config(omit: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    def unexpected(**kwargs: object) -> dict[str, object]:
+        pytest.fail("join must not start without the complete target-config pin")
+
+    monkeypatch.setattr(commands, "materialize_research_dataset", unexpected)
+    app = typer.Typer()
+    commands.register_research_feature_commands(app)
+    arguments = ["materialize-swing-research-dataset"]
+    for name in ("decision-config", "target-config", "strategy-config", "predictor-manifest", "outcome-manifest", "catalyst-manifest"):
+        for flag, value in ((f"--{name}", f"{name}.toml"), (f"--{name}-sha256", "a" * 64)):
+            if flag != omit:
+                arguments += [flag, value]
+    result = CliRunner().invoke(app, arguments)
+    assert result.exit_code == 2
+    assert omit in result.output
 
 
 @pytest.mark.parametrize("complete", [True, False])

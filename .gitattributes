@@ -28,3 +28,4 @@ docs/evidence/edge_rebuild_intraday_candidate_20260802_v1_rejection/*.json white
 
 # Preserve the reconstructed source scope bytes pinned by its publication.
 configs/swing_corporate_action_sources.toml whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+configs/swing_canonical_targets.toml whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

@@ -69,6 +69,18 @@ def test_partial_replay_does_not_authorize_completion(migration: dict[str, Any])
     assert not (migration["root"] / "data/reports/replay/_manifest.json").exists()
 
 
+def test_semantically_identical_config_cannot_replace_exact_target_lineage(migration: dict[str, Any]) -> None:
+    config = migration["config"]
+    old_policy = migration["policy"]
+    config.write_bytes(config.read_bytes() + b"\n# Distinct config file identity.\n")
+    migration["pin"] = file_sha256(config)
+    assert corrected_outcomes.load_corrected_outcome_policy(
+        migration["root"], config, migration["pin"]) == old_policy
+    with pytest.raises(DataReadinessError, match="policy or action identity changed"):
+        replay(migration)
+    assert not (migration["root"] / "data/reports/replay/_manifest.json").exists()
+
+
 def test_recomputed_mismatch_rejects(migration: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
     original = corrected_outcomes._month
 

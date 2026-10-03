@@ -18,6 +18,8 @@ from market_predictor.modeling.strategy_contract import StrategyContract, load_s
 from market_predictor.resources import assert_memory_budget, release_process_memory
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.corrected_decisions import verified_corrected_decision_partitions
+from market_predictor.swing.datasets.corrected_outcomes import DECISION_COLUMNS
+from market_predictor.swing.datasets.decision_price_equivalence import verify_decision_price_equivalence
 from market_predictor.swing.datasets.outcome_replay import verify_outcome_replay
 from market_predictor.swing.datasets.predictor_abstention_derivation import validate_predictor_derivation
 from market_predictor.swing.datasets.predictor_replay import verify_predictor_replay
@@ -26,6 +28,7 @@ from market_predictor.swing.features.catalyst_decision_authority import load_cat
 from market_predictor.swing.features.panel import CATALYST_RANKING_FEATURES, TECHNICAL_RANKING_FEATURES, swing_model_feature_columns
 from market_predictor.swing.features.research_ablation import assemble_research_ablations
 
+DECISION_METADATA_COLUMNS = (*DECISION_COLUMNS, "parent_ticker", "parent_decision_id")
 
 def _guard() -> None:
     assert_memory_budget(stage="monthly research join", hard_budget_gib=5.0, headroom_gib=0.75)
@@ -126,6 +129,27 @@ def _replace_json(path: Path, value: Mapping[str, Any]) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _verify_decision_metadata(actual: pd.DataFrame, expected: pd.DataFrame) -> None:
+    columns = list(DECISION_METADATA_COLUMNS)
+    if (not actual.columns.is_unique or not expected.columns.is_unique
+            or not set(columns).issubset(actual) or not set(columns).issubset(expected)
+            or actual.decision_id.duplicated().any() or expected.decision_id.duplicated().any()):
+        raise DataReadinessError("research decision metadata differs from frozen decisions")
+    left, right = expected.loc[:, columns].copy(), actual.loc[:, columns].copy()
+    text_columns = set(columns) - {"session_date_et", "decision_time_utc", "bar_start_utc"}
+    for frame in (left, right):
+        for name in text_columns:
+            if not frame[name].map(lambda value: isinstance(value, str) and bool(value)).all():
+                raise DataReadinessError("research decision metadata requires nonempty textual values")
+            frame[name] = frame[name].astype(pd.StringDtype())
+    try:
+        pd.testing.assert_frame_equal(
+            left.sort_values("decision_id").reset_index(drop=True),
+            right.sort_values("decision_id").reset_index(drop=True), check_exact=True)
+    except AssertionError as error:
+        raise DataReadinessError("research decision metadata differs from frozen decisions") from error
+
+
 def _verify_month(output: Path, record: Mapping[str, Any], expected: pd.DataFrame, request_pin: str,
     contract: StrategyContract, clocks: Mapping[str, str], month: str,
 ) -> None:
@@ -151,9 +175,12 @@ def _verify_month(output: Path, record: Mapping[str, Any], expected: pd.DataFram
         if (manifest["rows"] != len(expected) or manifest["inputs"] != {"request_sha256": request_pin}
                 or manifest["production_ready"] is not False):
             raise DataReadinessError("research join child lineage differs")
+        metadata = pd.read_parquet(path, columns=list(DECISION_METADATA_COLUMNS))
+        _check(output, {profile["path"]: profile["sha256"]})
+        _verify_decision_metadata(metadata, expected)
 
 
-def materialize_research_dataset(*, root: Path, decision_config: SourcePin, strategy_config: SourcePin,
+def materialize_research_dataset(*, root: Path, decision_config: SourcePin, target_config: SourcePin, strategy_config: SourcePin,
     predictors: SourcePin, outcomes: SourcePin, catalysts: SourcePin, output: Path,
     expected_checkpoint_sha256: str | None = None,
     predictor_replay: SourcePin | None = None, outcome_replay: SourcePin | None = None,
@@ -169,7 +196,7 @@ def materialize_research_dataset(*, root: Path, decision_config: SourcePin, stra
     if output == root / "data/features" or not output.is_relative_to(root / "data/features"):
         raise DataReadinessError("research dataset must publish below data/features")
     pins = _merge_pins(root, *({pin.path: pin.sha256} for pin in
-        (decision_config, strategy_config, predictors, outcomes, catalysts)))
+        (decision_config, target_config, strategy_config, predictors, outcomes, catalysts)))
     _check(root, pins)
     directories = {name: inside(root, pin.path).parent for name, pin in (
         ("predictors", predictors), ("outcomes", outcomes), ("catalysts", catalysts))}
@@ -178,6 +205,7 @@ def materialize_research_dataset(*, root: Path, decision_config: SourcePin, stra
     if output.exists() != (expected_checkpoint_sha256 is not None):
         raise DataReadinessError("existing research join requires its independent checkpoint hash")
     _guard()
+    equivalence = verify_decision_price_equivalence(root, decision_config, target_config)
     technical_manifest = pinned_object(inside(root, predictors.path), predictors.sha256)
     target_manifest = pinned_object(inside(root, outcomes.path), outcomes.sha256)
     news_manifest = pinned_object(inside(root, catalysts.path), catalysts.sha256)
@@ -210,8 +238,13 @@ def materialize_research_dataset(*, root: Path, decision_config: SourcePin, stra
             or target_request.get("schema") != "market_predictor.corrected_outcome_request"
             or technical_request.get("decision_start") != "2019-07-09"
             or technical_request.get("numeric_end") != "2024-05-28"
-            or target_request["lineage"].get("config_sha256") != decision_config.sha256):
-        raise DataReadinessError("research source request schema, dates or decision configuration differs")
+            or target_request["lineage"].get("config_sha256") != target_config.sha256
+            or target_request["lineage"].get("source_selection_sha256") != equivalence.target_policy.source_selection.sha256
+            or target_request["lineage"].get("action_audit_sha256") != equivalence.target_policy.action_audit_sha256):
+        raise DataReadinessError("research source request schema, dates or target configuration lineage differs")
+    target_sources = _merge_pins(root, target_request["lineage"]["source_files"])
+    if target_sources.get(inside(root, target_config.path).relative_to(root).as_posix()) != target_config.sha256:
+        raise DataReadinessError("research targets do not bind their independent target configuration")
     declared = _merge_pins(root, technical_request["declared_source_files"])
     if any(declared.get(inside(root, pin.path).relative_to(root).as_posix()) != pin.sha256
             for pin in (decision_config, strategy_config)):
@@ -234,7 +267,7 @@ def materialize_research_dataset(*, root: Path, decision_config: SourcePin, stra
     dependencies = _merge_pins(root, dependencies, *monthly_files.values())
     package = Path(__file__).resolve().parents[2]
     for name in ("swing/datasets/research_dataset.py", "swing/datasets/predictor_abstention_derivation.py",
-        "swing/features/research_ablation.py",
+        "swing/datasets/decision_price_equivalence.py", "swing/features/research_ablation.py",
         "swing/features/research_partition.py", "swing/features/research_join.py", "swing/features/catalyst_aggregates.py",
         "swing/features/catalyst_decision_authority.py", "swing/features/catalyst_decision_identity.py",
         "swing/features/cross_sectional.py", "swing/features/pipeline.py"):
@@ -252,6 +285,7 @@ def materialize_research_dataset(*, root: Path, decision_config: SourcePin, stra
             raise DataReadinessError("research inputs differ from the frozen cohort or total population")
         dependencies = _merge_pins(root, dependencies, projection.source_files)
         request = {"schema": "market_predictor.research_join_request", "source_files": dependencies,
+            "decision_price_equivalence": equivalence.as_record(),
             "decision_source_files": dict(projection.source_files), "cohort_sha256": projection.cohort_sha256,
             "rows": projection.expected_rows, "historical_first_seen_proven": False,
             "managed_outcomes_available": False, "profiles": ["technical_market", "catalyst_full"]}
@@ -286,6 +320,11 @@ def materialize_research_dataset(*, root: Path, decision_config: SourcePin, stra
                         or record["decision_ids_sha256"] != json_sha256(sorted(expected.decision_id))):
                     raise DataReadinessError("research source month population differs")
             _check(root, monthly_files[month])
+            target_path = directories["outcomes"] / month / "targets.parquet"
+            target_metadata = pd.read_parquet(target_path, columns=list(DECISION_METADATA_COLUMNS))
+            _check(root, monthly_files[month])
+            _verify_decision_metadata(target_metadata, expected)
+            del target_metadata
             if month in checkpoint["months"]:
                 _verify_month(output, checkpoint["months"][month], expected, checkpoint["request_sha256"], contract, clocks, month)
                 continue
