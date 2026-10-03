@@ -6,7 +6,7 @@ Last updated: 2026-10-03
 
 Repository: `C:\project\market-predictor`
 
-Branch: `main`
+Branch: `codex/v1-canonical-cleanup`
 
 This is the only active execution plan. Exact artifact state is recorded in
 `docs/reviews/active_edge_rebuild_handoff.md`; statistical rules are defined in
@@ -14,12 +14,30 @@ This is the only active execution plan. Exact artifact state is recorded in
 
 ## Objective And Boundary
 
-Naming rule (user, September 27): Only the public API is versioned (current contract `market_predictor.prediction.v4`, routes
-under `/v1/`). Models are not final, so model, record, class, file and other internal
+User-confirmed V1 workflow (October 3): collect candles/news/company events; clean
+duplicates and align security identities, corporate actions and trading sessions;
+build features using only information available at each decision; build future-return
+targets separately; train and evaluate; iterate using validation; assess the selected
+model on untouched test data before connecting an accepted model to the API. Return
+regressors use prediction error, ranking and baseline/portfolio comparisons; AUC is
+for classification, not a substitute for those return-model measurements. Repeatedly
+inspected test periods become development evidence and cannot remain labelled unseen.
+
+V1 is the initial end-to-end system across APIs, data models and features. Work on
+new branches; no version increments for implementation iterations. Merge accepted
+improvements after measured evidence, and consider V2 only as a deliberate later
+system release. A claim to beat SPY requires a reproducible comparison of net portfolio
+performance against funded SPY over matching dates/capital/dividend treatment, with
+costs and drawdown reported; an AUC increase, mean trade return or software test pass
+does not establish that outcome. Freeze evaluation choices before the final test.
+
+Naming rule (updated by user, October 3): the initial complete system remains V1.
+The current branch producer declares `market_predictor.prediction.v1` on `/v1/` routes;
+TradingFlow adoption remains pending. No iteration-driven V2/V3 or compatibility code. Models are not final, so model, record, class, file and other internal
 names carry no version number (`V3`, `.v3`, `_v1`) in either repository.
-Old-format records are refused by strict validation (unknown fields forbidden, required
-fields), not by version literals. Names bound in closed, hash-pinned evidence stay as
-recorded.
+Old-format records are refused by strict schema/shape validation; there are no
+compatibility aliases. Original raw evidence and historical receipts retain their
+bytes; those records do not make old derived artifacts valid for the current code.
 
 Current product scope: **long-only swing (roughly one to three weeks) and a
 separate open-ended investment cohort**, with verifiable net performance
@@ -47,6 +65,98 @@ Offline portfolio accounting is necessary to evaluate predictions. It is not liv
 portfolio management: alerts, orders, final position sizing, and execution remain
 outside this repository.
 
+## Shared Candle Flow And V1 API Recommendation (October 3)
+
+Status: candle design review recorded; no collector settings, strategy, retention
+policy or TradingFlow runtime changed. The branch API reset is tracked separately below. This recommendation does not replace the investment
+dataset checkpoint. The user requests common candle collection while applications
+remain separate, smaller histories after day-trading retirement, and V1 public APIs.
+
+Recommended flow: one configured collection owner for each provider/data product,
+raw receipt capture, deterministic normalization, immutable publication, then separate
+TradingFlow and Market Predictor consumers. Reuse Market Predictor's existing daily
+REST collection as the initial historical publisher; this is a proposed ownership
+choice, not an already completed migration. TradingFlow keeps its existing live
+quotes, order updates and protection responsibilities. Do not introduce another live
+stream owner or let a prediction-service outage interrupt position protection.
+Deduplicate requests by security, provider/feed, adjustment, interval, session scope
+and covered window. Include universe members and required benchmarks; TradingFlow
+requests additional watchlist coverage through the same collection owner.
+
+Recommended intervals and initial cache targets (engineering defaults, not measured
+optimal trading parameters):
+
+| Consumer/purpose | Candle interval | History and refresh |
+| --- | --- | --- |
+| TradingFlow swing setup/indicator warm-up | Daily | At least 300 completed exchange sessions, or the larger dependency-derived indicator history including lags and recursive initialization; then append completed sessions. |
+| TradingFlow new swing entry-confirmation baseline | 15 minutes | At least 20 completed sessions, or the larger indicator requirement; shortlisted candidates and active orders/holdings only. Use fresh quotes separately for spread/price checks. |
+| Existing TradingFlow entry/protection strategies | Explicit configured interval | Keep required 5-minute/hourly streams until each strategy's dependency and replay tests justify removal. The 15-minute baseline is not a substitution for existing strategies. |
+| Market Predictor swing and 63/252-session investment | Daily | Retain the admitted multi-year training history plus feature warm-up; nightly completed-session updates for prediction. A 300-session desk cache is not a training-history limit. |
+| Optional hourly confirmation | Session-aligned hourly | Derive from compatible completed 15-minute bars where parity is proven; include the shortened final bucket and early-close sessions. |
+
+No default four-hour product: a regular US equity session is 6.5 hours, so a
+session-anchored four-hour scheme leaves a 2.5-hour remainder and needs its own
+tested feature semantics. Daily aligns with the current models; four-hour inputs
+would require a separate feature/training comparison, not a collection-only switch.
+
+Stop broad minute-history expansion only after identifying consumers of each job.
+For a normal regular session, 390 one-minute buckets become 26 fifteen-minute
+buckets (about 93.3% fewer rows for equal symbols/windows), or one daily bucket.
+These are bucket-count estimates, not measured disk savings or proof that the
+current nightly job stores minute data: Market Predictor's incremental collector
+already requests `1Day`. Preserve raw/hash-pinned historical evidence and required
+fine-grained execution replay; coarse bars cannot resolve stop/target ordering inside
+a bar. Removing day-trading models does not remove live protection requirements.
+
+Keep raw/as-traded and adjusted daily data as explicit separate products. Execute
+and check absolute prices on raw values; consume the adjustment policy frozen for
+each model/indicator. Never silently replace existing daily data with an aggregation
+of regular-hours intraday bars: provider daily-session coverage and corporate-action
+semantics must match first. Record security/symbol mapping, OHLCV, precision, interval,
+feed, adjustment, currency, exchange session, bar start/end, availability and receipt
+times, revision identity and source hashes. Preserve immutable revisions; exclude
+unfinished/future bars at the decision cutoff and do not invent zero-volume bars for
+unexplained gaps. Use the exchange calendar, including daylight saving and early closes.
+
+Observed migration work in the independently changing TradingFlow checkout:
+`WarmupModels.cs` defaults to 60 calendar days across 5m/15m/1h/1d; entry preparation
+uses one calendar window for all intervals. Its backtest profile asks for 260 indicator
+bars, while paper asks for 150 despite SMA200/EMA200 calculations. Split daily and
+intraday windows and verify actual sufficient completed bars, rather than changing
+one global number. Existing strategy configs explicitly use 5m and 1h execution.
+
+V1 public boundary target: keep `/v1/` routes and freeze prediction JSON with
+`contract_version = market_predictor.prediction.v1`; the proposed candle read/publication
+API uses `contract_version = market_data.candles.v1`. A candle API may deliver small
+windows directly and immutable manifest/partition references for bulk history; the
+transport, exact fields, decimal representation, paging and error schema must be
+frozen in the shared OpenAPI/JSON contract before implementation. These are public
+wire versions, not new versions of Python/C# internal feature or model classes.
+Current TradingFlow branch `unified-swing-product` accepts unversioned
+`contract = market_predictor.prediction`, while the producer previously served v4; an older
+merged integration receipt does not establish compatibility with that working tree.
+The user explicitly ordered the producer cleanup now without compatibility. Producer
+and consumer adoption are separate recorded steps until the TF owner updates its
+working branch and fixtures. Reject unknown versions explicitly. Historical V1 shapes
+are not supported by the current strict schema; preserve historical receipt hashes.
+The future investment forecast API also belongs under V1, with explicit 63/252
+session horizons; it is not currently implemented and must not return swing forecasts.
+
+Implementation exit gates: agreed collector ownership and published V1 schema;
+Python/C# fixture parity including decimals, timezone/session boundaries, revisions,
+partial bars and missing coverage; sufficient indicator history per interval;
+duplicate-request/restart tests; training/live daily feature parity; representative
+entry/protection replay on each retained strategy timeframe; matched version/error
+handling and a measured before/after collection-volume report. Until these pass,
+existing collectors and version checks remain unchanged; insufficient or incompatible
+data returns a specific unavailable reason, with no silent provider/timeframe fallback.
+TradingFlow changes must be coordinated with its current developer; this review does
+not authorize interfering with that checkout's ongoing work.
+
+Sources checked October 3: [Alpaca bars](https://docs.alpaca.markets/us/reference/stockbars)
+for native intervals/feed/adjustments; [NYSE calendar](https://www.nyse.com/trade/hours-calendars)
+for regular sessions and early closes. Interval recommendations are design judgments.
+
 ## Unified Product Implementation
 
 Investment target projection completed in `147e5bd` and pushed on main (October 3).
@@ -67,7 +177,59 @@ all three investment modules. Consolidated code/ML review passed. No real data r
 training, source publication, promotion, deployment or TradingFlow operation occurred.
 README now states these limits and the completed monitoring/replay behavior.
 
-Current checkpoint: **Investment dataset policy and source admission** (`in progress`).
+Completed checkpoint: **Canonical pre-production code cleanup**.
+Implementation `af9e9b4` is pushed on `codex/v1-canonical-cleanup`; main and TradingFlow
+remain unchanged. Internal schema/policy generation suffixes and ml_v3 names are gone
+from active source; public communicating identities remain V1. The naming guard permits
+only the existing public V1 protocols, not internal version suffixes. Vendor URLs and
+original archived paths remain provider/evidence identities, not compatibility paths.
+Removed the weaker Alpaca reader and duplicate training-schema declarations. Temporal
+consumption now uses the actual current producer's session/date columns and final layout.
+Preserved original raw data and historical collection fixture bytes. Current future-build
+config bindings and synthetic served fixture were regenerated; saved research provenance
+was not relabelled as current. API consumer adoption and candle-flow implementation remain
+separate pending work, with exact TF changes in docs/contracts/tradingflow_handoff.md.
+
+Verification: full suite finished with 4,869 passed, 11 skipped and eight old identity/hash
+assertion failures; all eight were explained by the naming reset and corrected without
+changing feature vectors, attribution/classification rules or historical raw hashes.
+The final rerun of affected files plus new config/naming/continuity checks passed all
+152 tests. Strict mypy passed all 97 changed source files; Ruff and diff checks passed.
+Independent design review handled the two schema collisions; consolidated code/ML
+review found no supported code issues. No real model fit, SPY outperformance, promotion,
+deployment, data reconstruction or C# build is claimed. Full test logs are local task
+artifacts, not model evidence. No full-suite rerun was needed after test-assertion fixes.
+
+Current checkpoint: **Canonical data reconstruction and source admission** (`in progress`).
+This checkpoint is at inventory/freeze only: no canonical real dataset has been rebuilt.
+Reconstruct affected derived source/feature metadata from preserved provider bytes under
+the current schemas, starting with the exact dependent config chains recorded in the
+handoff. Verify content, timestamps and source links; do not simply change old receipt
+hashes. Keep original raw records and historical results identifiable. No new provider
+collection, sealed test access, model training or serving promotion is implied by this
+freeze. Exit gates are a concrete input/consumer inventory, independent source admission,
+current-contract producer/reader round trips, and reproducible feature-only publications
+without future outcomes entering decision inputs. Then resume investment dataset policy.
+
+Cleanup requirement and scope retained for review:
+User clarified that V1 is the initial complete collect/clean/features/targets/train/
+validate/test/API system, not the count of implementation iterations. All changes
+are on a new branch; merging or a future V2 requires deliberately accepted measured
+improvement, not passing software checks alone. No compatibility is required.
+Scope: remove internal generation suffixes and ml_v3 naming from canonical writers,
+readers, configs and owned fixtures; communicating contracts stay V1. Delete the
+weaker Alpaca transport reader rather than rename it into a parallel format; use one
+current panel materialization contract in temporal consumers. Preserve provider URLs,
+raw bytes and historical records; old derived artifacts are not automatically admitted
+after source/schema changes. No rehash may claim an unperformed dataset/model replay.
+Exit gates: no versioned internal identities in active source except explicit V1
+communications; no compatibility aliases; current producer/consumer round trips,
+retired-format rejection, mandatory raw-page replay, affected tests/lint/types, and
+one consolidated code/ML review. Record any real-data reconstruction separately.
+TradingFlow changes remain its owner's task while its checkout is concurrently edited.
+Do not merge this cleanup into main as if SPY outperformance had been established.
+
+Queued checkpoint: **Investment dataset policy and source admission**.
 October 3 clarification: the prior timestamp question was premature and is withdrawn.
 No row-level 63/252 dataset audit established a missing-timestamp count. The new
 projection's ability to reject unknown clocks is a software rule, not evidence that

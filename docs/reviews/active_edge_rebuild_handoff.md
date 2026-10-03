@@ -3,7 +3,7 @@
 Status: active
 Last updated: 2026-10-03
 Repository: `C:\project\market-predictor`
-Branch: `main`
+Branch: `codex/v1-canonical-cleanup`
 Last verified publisher implementation: `cb70f81`, following `ebe5dfb`.
 Monitoring implementations: `b3c8761`, `8fdb29f`, `116d711`. All are pushed on main
 through `bb88f75`; the user explicitly authorized GitHub publication and main merges.
@@ -16,6 +16,67 @@ Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
+
+Canonical code cleanup completed in `af9e9b4`, pushed on
+`codex/v1-canonical-cleanup`. Main remains at the pre-cleanup state; TradingFlow is
+untouched. No internal generation suffixes remain in active schema/policy identities;
+only explicit communicating protocols retain V1. External provider URLs and preserved
+raw/historical locations are not compatibility implementations. Removed the weaker
+Alpaca transport reader and duplicate training constants; temporal consumption uses
+the canonical current panel producer and session-aligned clocks.
+
+Verification receipt: full pytest run completed in 2,205 seconds with 4,869 passed,
+11 skipped and eight old identity/hash assertions failing. The eight assertions were
+corrected for the deliberate canonical identity reset; the historical August SIP
+request fixture was restored byte-for-byte and now proves old/current identities
+differ. Final rerun: all 152 tests passed across collection contracts, GDELT, issuer
+attribution/classification, strategy/swing contracts, monthly preparation, continuity
+and the new naming guard. Ruff/diff checks passed; strict mypy passed all 97 changed
+source files. Independent design and consolidated code/ML review passed. No real-data
+training, performance improvement, promotion, deployment or TF build was performed.
+Logs: task workspace pytest-canonical-full.log and pytest-canonical-final.log.
+
+October 3 candle/API review: the active plan's "Shared Candle Flow And V1 API
+Recommendation" records a common collection/publication flow with separate consumers.
+Recommend daily MP training/prediction and TradingFlow warm-up (300 completed sessions
+or larger indicator requirement), 15m new entry baseline (20 sessions or larger
+requirement, shortlist/orders/holdings only), and optional derived hourly data.
+Existing TradingFlow 5m/hourly execution dependencies remain until individually
+verified; no blanket minute-data deletion, four-hour switch, or live protection change.
+MP incremental collection already uses daily bars. Daily/intraday history windows
+must be separate; TF's 60-calendar-day default cannot initialize a 200-session average.
+The plan contains source links, concrete observed defaults and migration exit gates.
+
+The user's subsequent instruction requires cleanup first, without compatibility.
+The branch producer now declares market_predictor.prediction.v1 under /v1, and its
+served fixture was regenerated (SHA-256
+59288471c249b0422443f0a68ce7623f4b03956826877ad1158dc79ebf1fea51).
+TF's concurrently edited unified-swing-product checkout still expects unversioned
+contract=market_predictor.prediction; its developer must adopt contract_version and
+the V1 fixture. The candle API market_data.candles.v1 remains a proposed interface.
+No TF files/builds/processes, raw downloads or collection settings changed. The active
+plan now records the user's full collect-to-training-to-API pipeline and branch-based
+improvement policy. Software tests do not establish a model's SPY outperformance.
+
+Canonical reconstruction required after cleanup: saved derived training/model/feature
+artifacts and current-code replay receipts are not automatically admitted by renaming
+their schemas. Raw bytes and historical receipts remain intact. Concrete config chains
+affected by changed identities are `configs/swing_corrected_research_features.toml`,
+`configs/swing_return_relationship_publication.json`,
+`configs/swing_return_relationship_readiness.json`, `configs/swing_training_readiness.json`
+and `configs/swing_research_evidence.toml`: their saved parent provenance binds the
+old strategy/temporal/feature/failure-fact hashes. Rebuild or explicitly verify their
+canonical publications from preserved sources; do not simply rehash receipts or
+claim that historic models were retrained. This is outstanding data work, not a reason
+to retain compatibility readers in the current source tree.
+
+Future-build policy links were refreshed separately: `swing_initial_fit_monthly_news.json`
+binds current catalyst-lineage policy bytes; both `swing_issuer_content_cohort_inventory`
+JSON configs (including `_with_legacy_proofs`) and `swing_legacy_query_identity_proofs.json`
+bind the current monthly-news config. Their lightweight test checks the links and
+loads the policy without reading archives. Current strategy-governance config bindings,
+execution-policy pin and the current hypothesis-registry link were also refreshed;
+historical artifact pins were not rewritten.
 
 Investment target projection completed in `147e5bd` and pushed on main (October 3).
 The additive investment package binds four holding specifications and their source
@@ -35,7 +96,15 @@ all three investment modules. Consolidated code/ML review passed. No real data r
 training, source publication, promotion, deployment or TradingFlow operation occurred.
 README now states these limits and the completed monitoring/replay behavior.
 
-Current checkpoint: **Investment dataset policy and source admission** (`in progress`).
+Current checkpoint: **Canonical data reconstruction and source admission** (`in progress`).
+Inventory/freeze only; no real canonical dataset has been rebuilt. Use the affected
+config chain list above to reconstruct derived metadata/publications from preserved
+provider bytes, independently check source/clock links and round-trip current readers,
+then resume the permitted feature/label audit. Do not rewrite old receipts into claimed
+new runs, access sealed tests, train, promote, or touch TradingFlow as part of this freeze.
+Main must not be merged as a performance improvement on software checks alone.
+
+Queued checkpoint: **Investment dataset policy and source admission**.
 October 3 clarification: the prior timestamp question was premature and is withdrawn.
 No row-level 63/252 dataset audit established a missing-timestamp count. The new
 projection's ability to reject unknown clocks is a software rule, not evidence that
@@ -1626,8 +1695,11 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: audit the actual permitted investment source/feature/label
-metadata and applicable research rules, then freeze dataset admission/publication.
+Exact next checkpoint: reconstruct and verify affected canonical source/feature
+publications on codex/v1-canonical-cleanup using preserved provider bytes and the
+explicit config chains above, then resume the permitted source/feature/label audit.
+Code cleanup is closed in af9e9b4; do not repeat its general review. TF V1 consumer
+adoption and the shared candle-flow recommendation remain separate implementation work.
 The previous blanket timestamp question is withdrawn; no measured investment gap
 has been established and no user relaxation is assumed.
 The target projection `147e5bd`, monitoring statistics `4ba96f6`, and replay boundary
