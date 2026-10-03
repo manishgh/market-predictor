@@ -29,6 +29,7 @@ from market_predictor.core.system_memory import assert_system_memory_available
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside
 from market_predictor.resources import assert_memory_budget, memory_audit
+from market_predictor.sources.official_documents import load_official_document_inventory, verify_official_document_collection
 from market_predictor.swing.contracts.corrected_outcomes import CorrectedOutcomePolicy
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference
 from market_predictor.swing.contracts.holding_materialization import PositionSourceBinding
@@ -58,6 +59,7 @@ from market_predictor.swing.evaluation.trade_simulation import load_trade_simula
 from market_predictor.swing.labels.holding_identity import membership_session_coverage
 from market_predictor.swing.labels.holding_paths import holding_calendar
 from market_predictor.swing.labels.ordinary_holding import OrdinaryHoldingResult, build_ordinary_holding
+from market_predictor.universe.symbol_correction_policy import load_symbol_correction_policy
 
 DECISION_COLUMNS = (*IDENTITY_COLUMNS, "timeframe", "bar_start_utc", "prediction_cutoff_policy_id")
 TARGET_COLUMNS = ("fixed_horizon_gross_return", "fixed_horizon_net_return", "managed_horizon_gross_return",
@@ -116,9 +118,16 @@ def _projection(path: Path, columns: tuple[str, ...]) -> pd.DataFrame:
 
 
 @contextmanager
-def verified_corrected_research_sources(root: Path, config: Path, config_sha256: str, policy: CorrectedOutcomePolicy,
-    evidence: CorporateActionEvidence) -> Iterator[dict[str, Any]]:
-    """The canonical plan owns the one numerical/publication lease through yield."""
+def verified_corrected_price_sources(root: Path, config: Path, config_sha256: str,
+    policy: CorrectedOutcomePolicy) -> Iterator[dict[str, Any]]:
+    """Verify corrected raw prices and identities under the shared publication lease.
+
+    No action archive, holding specification or target is opened. The outcome
+    wrapper separately admits the economic evidence required for target creation.
+    """
+    root = root.resolve()
+    if load_corrected_outcome_policy(root, config, config_sha256) != policy:
+        raise DataReadinessError("corrected price policy differs from its pinned configuration")
     selected = pinned_object(inside(root, policy.source_selection.path), policy.source_selection.sha256)
     correction_plan = inside(root, selected["correction_plan"])
     authority = pinned_object(correction_plan / "_authority.json", selected["correction_plan_sha256"])
@@ -128,9 +137,8 @@ def verified_corrected_research_sources(root: Path, config: Path, config_sha256:
     with verified_initial_fit_raw_share_plan(root, inside(root, policy.parent_config.path), parent,
         expected_plan_sha256=parent_pin) as plan:
         _guard()
-        pins = {str(inside(root, config).relative_to(root)): config_sha256}
-        for pin in (policy.source_selection, policy.parent_config, policy.action_config, policy.symbol_corrections,
-                policy.research_contract, policy.simulation_policy, *(w.document for w in policy.official_windows)):
+        pins = {inside(root, config).relative_to(root).as_posix(): config_sha256}
+        for pin in (policy.source_selection, policy.parent_config, policy.symbol_corrections):
             pins[inside(root, pin.path).relative_to(root).as_posix()] = pin.sha256
         _check(root, pins)
         if selected["policy_sha256"] != policy.symbol_corrections.sha256:
@@ -154,6 +162,37 @@ def verified_corrected_research_sources(root: Path, config: Path, config_sha256:
             correction_archive_sha256=selected["correction_archive_sha256"], loader=load_complete_swing_history_collection)
         if rebuilt != selected:
             raise DataReadinessError("corrected source selection differs from independent reconstruction")
+        # Retain every raw unit and page validated by the canonical archive replay,
+        # including original units replaced by the reviewed symbol correction.
+        for directory in (inside(root, selected["correction_archive"]),
+                inside(root, correction["policy"]["parent_archive"])):
+            archive_manifest = pinned_object(directory / "_manifest.json",
+                pins[(directory / "_manifest.json").relative_to(root).as_posix()])
+            for record in archive_manifest["unit_artifacts"]:
+                for path_key, hash_key in (("bars_path", "bars_sha256"), ("unit_manifest_path", "unit_manifest_sha256")):
+                    path = inside(directory, record[path_key])
+                    pins[path.relative_to(root).as_posix()] = record[hash_key]
+                unit = pinned_object(inside(directory, record["unit_manifest_path"]), record["unit_manifest_sha256"])
+                for page in unit["pages"]:
+                    pins[inside(directory, page["raw_path"]).relative_to(root).as_posix()] = page["raw_sha256"]
+                    transport = page["transport"]
+                    pins[inside(directory, transport["body_path"]).relative_to(root).as_posix()] = transport["metadata"]["sha256"]
+        mapping = load_symbol_correction_policy(root, Path(policy.symbol_corrections.path), policy.symbol_corrections.sha256)
+        inventory_path = inside(root, mapping.document_inventory)
+        document_archive = inside(root, mapping.document_archive)
+        pins[inventory_path.relative_to(root).as_posix()] = file_sha256(inventory_path)
+        document_files = [path for path in document_archive.rglob("*") if path.is_file()]
+        if not document_files or len(document_files) > 1000:
+            raise DataReadinessError("corrected price document inventory exceeds bound")
+        for path in document_files:
+            pins[inside(root, path).relative_to(root).as_posix()] = file_sha256(path)
+        inventory = load_official_document_inventory(inventory_path)
+        documents = verify_official_document_collection(document_archive, inventory)
+        if documents["status"] != "collected_unreviewed" or json_sha256(documents) != mapping.document_report_sha256:
+            raise DataReadinessError("corrected price documents differ from the reviewed collection")
+        reviewed_ids = {doc for rule in mapping.corrections for doc in rule.document_ids}
+        if any(not set(rule.document_ids).issubset(reviewed_ids) for rule in policy.decision_corrections):
+            raise DataReadinessError("decision correction references an unreviewed source document")
         _check(root, pins)
         parent_authority = pinned_object(parent / "_authority.json", parent_pin)
         request = pinned_object(parent / "_request.json", parent_authority["request_sha256"])
@@ -173,9 +212,33 @@ def verified_corrected_research_sources(root: Path, config: Path, config_sha256:
         manifest = pinned_object(manifest_path, pins[manifest_path.relative_to(root).as_posix()])
         memberships = _projection(membership_path, MEMBERSHIP_COLUMNS)
         memberships = corrected_memberships(memberships, policy.decision_corrections)
+        for segment in selected["segments"]:
+            artifact = segment["artifact"]
+            path = inside(inside(root, segment["archive"]), artifact["bars_path"])
+            pins[path.relative_to(root).as_posix()] = artifact["bars_sha256"]
+        _check(root, pins)
+        yield {"selection": selected, "plan": plan, "request": request, "memberships": memberships,
+            "manifest": manifest, "manifest_path": manifest_path, "source_files": dict(pins),
+            "membership_path": membership_path}
+        _check(root, pins)
+
+
+@contextmanager
+def verified_corrected_research_sources(root: Path, config: Path, config_sha256: str, policy: CorrectedOutcomePolicy,
+    evidence: CorporateActionEvidence) -> Iterator[dict[str, Any]]:
+    """Add every target-admission authority while retaining the price-source lease."""
+    root = root.resolve()
+    with verified_corrected_price_sources(root, config, config_sha256, policy) as sources:
+        pins = dict(sources["source_files"])
+        for pin in (policy.action_config, policy.research_contract, policy.simulation_policy,
+                *(w.document for w in policy.official_windows)):
+            pins[inside(root, pin.path).relative_to(root).as_posix()] = pin.sha256
+        _check(root, pins)
         scope = prepare_corporate_action_scope(root, inside(root, policy.action_config.path),
             tomllib.loads(inside(root, policy.action_config.path).read_text(encoding="utf-8")))
-        expected = {s["artifact"]["provider_symbol"] for s in selected["segments"]} | SUCCESSORS
+        if scope["policy"].get("source_selection") != policy.source_selection.model_dump(mode="json"):
+            raise DataReadinessError("action evidence scope does not bind the corrected source selection")
+        expected = {s["artifact"]["provider_symbol"] for s in sources["selection"]["segments"]} | SUCCESSORS
         if len(expected) != 570 or set(scope["tickers"]) != expected:
             raise DataReadinessError("corrected outcomes need all 570 full-cohort action queries")
         action_request_path = inside(root, policy.action_archive) / "_request.json"
@@ -184,21 +247,11 @@ def verified_corrected_research_sources(root: Path, config: Path, config_sha256:
         if (action_request["request_sha256"] != evidence.request_sha256
                 or action_request["policy"] != scope["policy"] or set(action_request["tickers"]) != expected):
             raise DataReadinessError("action evidence request does not bind the corrected full selection")
-        correction_policy = tomllib.loads(inside(root, policy.symbol_corrections.path).read_text(encoding="utf-8"))
-        reviewed_ids = {doc for rule in correction_policy["corrections"] for doc in rule["document_ids"]}
-        if any(not set(rule.document_ids).issubset(reviewed_ids) for rule in policy.decision_corrections):
-            raise DataReadinessError("decision correction references an unreviewed source document")
         evidence.recheck(root)
         pins.update(evidence.source_files)
         pins.update(verify_action_scope_documents(root, policy.reviewed_cash_distribution_scopes))
-        for segment in selected["segments"]:
-            artifact = segment["artifact"]
-            path = inside(inside(root, segment["archive"]), artifact["bars_path"])
-            pins[path.relative_to(root).as_posix()] = artifact["bars_sha256"]
-        yield {"selection": selected, "plan": plan, "request": request, "memberships": memberships,
-            "manifest": manifest, "manifest_path": manifest_path, "source_files": pins,
-            "action_index": reconcile_actions(evidence, expected, policy.reviewed_cash_distribution_scopes),
-            "membership_path": membership_path}
+        yield {**sources, "source_files": dict(pins),
+            "action_index": reconcile_actions(evidence, expected, policy.reviewed_cash_distribution_scopes)}
         _check(root, pins)
         evidence.recheck(root)
 

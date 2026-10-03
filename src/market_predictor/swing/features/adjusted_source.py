@@ -1,24 +1,16 @@
 """Bounded adjusted predictor inputs; no source admission, labels or publication."""
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
-from pathlib import Path
-from typing import Any
 
 import exchange_calendars as xcals
 import numpy as np
 import pandas as pd
-import pyarrow.dataset as pds
 
 from market_predictor.canonical.joins import decisions_from_completed_bars, join_universe_membership
-from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.core.json_integrity import parse_strict_json_object
-from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import resolve_inside_authority
 from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.swing.datasets.feature_history_plan import DECISION_START, NUMERIC_END, WARMUP_START
 from market_predictor.swing.datasets.session_requirements import expected_ticker_sessions
@@ -29,7 +21,6 @@ from market_predictor.swing.features.research_join import DECISION_KEYS, _clocks
 
 BAR_COLUMNS = ("ticker", "timeframe", "bar_start_utc", "bar_end_utc", "available_at_utc",
     "open", "high", "low", "close", "volume", "price_feed", "adjustment", "schema_version")
-_CORRECTED_IDS = frozenset(("cik:0001415404", "cik:0000798354"))
 _CONTEXT = ("sector", "primary_benchmark", "membership_available_at_utc", "membership_effective_from_utc",
     "membership_effective_to_utc", "universe_snapshot_id")
 
@@ -44,10 +35,10 @@ def expected_adjusted_history_sessions(
     *, security_id: str, memberships: pd.DataFrame,
     sparse_missing_sessions_by_ticker: Mapping[str, Sequence[date]],
 ) -> tuple[date, ...]:
-    """Replay original combined-history requirements, retaining known sparse gaps.
+    """Derive required history from independently verified membership intervals.
 
-    Supply the verified original combined-history memberships and gap inventory,
-    not query units or a blanket calendar. Corrected memberships are supplied
+    Supply verified original memberships and any independently recorded gap inventory,
+    never infer membership from returned query rows. Corrected memberships are supplied
     separately to the feature builder; query warmup cannot extend membership.
     """
     if not {"security_id", "ticker", "effective_from_utc", "effective_to_utc"}.issubset(memberships):
@@ -67,62 +58,6 @@ def expected_adjusted_history_sessions(
     if not required:
         raise DataReadinessError("adjusted history requirements have no bounded sessions")
     return tuple(sorted(required))
-
-
-def _metadata(path: Path, expected: str) -> dict[str, Any]:
-    if not path.is_file() or path.stat().st_size > 8 * 1024**2:
-        raise DataReadinessError("adjusted source metadata missing or exceeds size bound")
-    payload = path.read_bytes()
-    if hashlib.sha256(payload).hexdigest() != expected:
-        raise DataReadinessError("adjusted source metadata hash mismatch")
-    return parse_strict_json_object(payload, label=str(path))
-
-
-def load_combined_adjusted_inventory(
-    panel_directory: Path, *, request_sha256: str, final_manifest_sha256: str,
-    final_authority_sha256: str, combined_manifest_sha256: str, contract: StrategyContract,
-) -> dict[str, dict[str, Any]]:
-    """Replay the metadata chain only; never load the historical final feature rows."""
-    request = _metadata(panel_directory / "_request.json", request_sha256)
-    panel = _metadata(panel_directory / "final/_manifest.json", final_manifest_sha256)
-    authority = _metadata(panel_directory / "final/_authority.json", final_authority_sha256)
-    combined = _metadata(panel_directory / "combined_daily/_manifest.json", combined_manifest_sha256)
-    owner = _metadata(panel_directory / "combined_daily/_authority.json", panel["source"]["combined_daily_authority_sha256"])
-    inputs = request["combined_daily_inputs"]
-    if (authority["state"] != "complete" or authority["artifact_sha256"] != final_manifest_sha256
-            or any(item["request_sha256"] != request["request_sha256"] for item in (panel, authority))
-            or any(item["strategy_contract_sha256"] != contract.sha256() for item in (request, panel, authority))
-            or owner["state"] != "complete" or owner["artifact_sha256"] != combined_manifest_sha256
-            or owner["request_sha256"] != combined["request_sha256"]
-            or json_sha256({**inputs, "parent_materialization_request_sha256": request["request_sha256"]})
-            != combined["request_sha256"] or inputs["price_feed"] != "sip" or inputs["adjustment"] != "all"):
-        raise DataReadinessError("adjusted source metadata chain differs")
-    inventory = {item["ticker"]: dict(item) for item in combined["artifacts"]}
-    if len(inventory) != len(combined["artifacts"]):
-        raise DataReadinessError("adjusted source inventory duplicates ticker")
-    return inventory
-
-
-def read_combined_adjusted_bars(
-    directory: Path, record: Mapping[str, Any], *, security_id: str,
-) -> pd.DataFrame:
-    """Read only bounded OHLCV from a record in the independently verified inventory."""
-    if security_id in _CORRECTED_IDS or record["ticker"] in {"ECHO", "SATS", "FISV", "FI"}:
-        raise DataReadinessError("corrected issuers require their newly replayed full adjusted streams")
-    path = resolve_inside_authority(directory, str(record["path"]))
-    if file_sha256(path) != record["sha256"]:
-        raise DataReadinessError("adjusted source bar hash mismatch")
-    arrow: Any = pds
-    dataset = arrow.dataset(path, format="parquet")
-    start = pd.Timestamp(WARMUP_START, tz="America/New_York").tz_convert("UTC")
-    end = (pd.Timestamp(NUMERIC_END, tz="America/New_York") + pd.Timedelta(days=1)).tz_convert("UTC")
-    predicate = (arrow.field("bar_start_utc") >= start) & (arrow.field("bar_start_utc") < end)
-    frame: pd.DataFrame = dataset.to_table(columns=list(BAR_COLUMNS), filter=predicate, use_threads=False).to_pandas()
-    if file_sha256(path) != record["sha256"]:
-        raise DataReadinessError("adjusted source bars changed during projected read")
-    if set(frame.ticker) - {record["ticker"]}:
-        raise DataReadinessError("adjusted source bar ticker differs from inventory")
-    return frame
 
 
 def _bars(frame: pd.DataFrame) -> pd.DataFrame:
@@ -159,7 +94,7 @@ def build_adjusted_technical_source(
 
     The caller binds provider/asof streams to security_id before this call and
     supplies corrected canonical membership and raw decision-bar identities.
-    Expected sessions replay the original combined-history requirements with
+    Expected sessions derive the original membership history with
     expected_adjusted_history_sessions; never supply a blanket IPO calendar.
     Missing sessions mask the configured clean warmup window using the existing
     sparse-gap policy. No missing prices are imputed or history windows spliced.

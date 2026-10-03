@@ -5,6 +5,7 @@ import copy
 import json
 import shutil
 from datetime import date
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -22,7 +23,6 @@ from market_predictor.swing.contracts.return_training import ReturnTrainingPolic
 from market_predictor.swing.datasets import return_relationship_verification as verifier
 from market_predictor.swing.labels.fixed_horizon_readiness import CONTEXT_COLUMNS, RETURN_COLUMNS
 from tests import test_swing_return_relationship_publication as publication_tests
-from tests.test_swing_feature_history_plan import evidence as evidence
 from tests.test_swing_return_relationship_publication import publication_fixture as publication_fixture
 from tests.test_swing_training_readiness import REPO, _json
 
@@ -97,8 +97,8 @@ def test_real_relationship_publication_to_124_column_loader(relationship_admissi
     assert any(name.endswith("/swing_return_inputs.py") for name in data.pins)
 
 
-def test_missing_source_clock_publication_replays_and_loads_124_columns(
-    evidence: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+def test_missing_source_clock_rejected_before_relationship_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest,
 ) -> None:
     original_bars = publication_tests._bars
 
@@ -108,27 +108,10 @@ def test_missing_source_clock_publication_replays_and_loads_124_columns(
             frame["ingested_at_utc"] = pd.Series(pd.NaT, index=frame.index, dtype="datetime64[ns, UTC]")
         return frame
 
-    # Generate missing-clock source bytes before the real fixture hashes its authorities.
     monkeypatch.setattr(publication_tests, "_bars", missing_stock_ingestion)
-    state = _admit_relationship(publication_fixture.__wrapped__(evidence, monkeypatch), monkeypatch)
-    data = loader.load_return_inputs(state["root"], state["training_policy"])
-    verified = verifier.verify_return_relationship_publication(state["root"], state["publication"])
-    assert data.features.shape == (354, 124)
-    assert tuple(data.features.columns) == verified.model_columns
-    assert data.features.dtypes.eq(np.dtype("float32")).all()
-    assert data.features[list(RETURN_RELATIONSHIP_COLUMNS)].isna().all(axis=None)
-    assert state["receipt"]["status"] == "passed"
-    assert state["receipt"]["additions_source_replayed"] is True
-    assert state["report"]["baseline_numerical_replayed"] is False
-    assert len(verified.months) == 59
-    directory = (state["root"] / state["publication"].path).parent
-    for record in verified.months.values():
-        frame = pd.read_parquet(directory / record["profiles"]["technical_relationships"]["path"])
-        for name in RETURN_RELATIONSHIP_COLUMNS:
-            clock = frame[f"available_at_{name}"]
-            assert clock.dtype == pd.DatetimeTZDtype(unit="ns", tz="UTC")
-            assert clock.isna().all()
-            assert frame[f"missing_reason_{name}"].eq("missing_required_bar_clock").all()
+    with pytest.raises(DataReadinessError, match="invalid observation clocks"):
+        publication_fixture.__wrapped__(tmp_path, monkeypatch, request)
+    assert not (tmp_path / "data/features/relationships/_manifest.json").exists()
 
 
 def test_relationship_loader_rejects_current_code_changed_after_readiness(relationship_admission: dict[str, Any]) -> None:

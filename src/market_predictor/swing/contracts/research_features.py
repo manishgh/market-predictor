@@ -11,9 +11,5 @@ class ResearchFeaturePolicy(HoldingContract):
     schema_version: Literal["market_predictor.corrected_research_features"]
     outcome_source_config: SourcePin
     strategy_contract: SourcePin
-    parent_request: SourcePin
-    parent_manifest: SourcePin
-    parent_authority: SourcePin
-    combined_manifest: SourcePin
     adjusted_plan_authority: SourcePin
     adjusted_archive_authority: SourcePin

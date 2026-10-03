@@ -18,10 +18,11 @@ from market_predictor.resources import assert_memory_budget, release_process_mem
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.return_feature_profiles import RETURN_RELATIONSHIP_COLUMNS, RETURN_RELATIONSHIP_PROFILE
 from market_predictor.swing.contracts.return_relationship_publication import VerifiedReturnRelationshipPublication
+from market_predictor.swing.datasets.adjusted_history_bindings import bind_adjusted_history_decisions
 from market_predictor.swing.datasets.return_relationship_integrity import load_policy
 from market_predictor.swing.datasets.return_relationship_parent import verify_parent
 from market_predictor.swing.datasets.return_relationship_publication import verify_return_relationship_publication
-from market_predictor.swing.datasets.return_relationship_rows import ADDITIONS, IDENTITY_COLUMNS, build_group, read_combined
+from market_predictor.swing.datasets.return_relationship_rows import ADDITIONS, IDENTITY_COLUMNS, build_group, read_spy
 from market_predictor.swing.datasets.return_relationship_sources import inventory_pins, relationship_sources, verify_source_context
 from market_predictor.swing.labels.fixed_horizon_readiness import utc_clocks
 
@@ -101,7 +102,7 @@ def _replay_additions(root: Path, publication_path: Path, verified: VerifiedRetu
     sources = relationship_sources(policy.parent_publication.sha256, context, inventory)
     if sources.model_dump(mode="json") != verified.request["sources"]:
         raise DataReadinessError("relationship replay source identity differs")
-    spy = read_combined(context.combined_directory, context.combined["SPY"])
+    spy = read_spy(context)
     paths = [str(inside(publication_path.parent, record["profiles"][RETURN_RELATIONSHIP_PROFILE]["path"]))
         for _, record in sorted(verified.months.items())]
     arrow: Any = pds
@@ -112,9 +113,9 @@ def _replay_additions(root: Path, publication_path: Path, verified: VerifiedRetu
         _guard()
         expected = build_group(root, parent, context, item, sources, spy)
         predicate = arrow.field("security_id") == item["security_id"]
-        if item["kind"] != "corrected":
-            predicate = predicate & (arrow.field("parent_ticker") == item["source_group"])
         actual: pd.DataFrame = dataset.to_table(columns=columns, filter=predicate, use_threads=False).to_pandas()
+        bound = bind_adjusted_history_decisions(actual, context.bindings)
+        actual = actual.loc[bound.source_group.eq(item["source_group"])].copy()
         identities = set(expected.decision_id)
         if (actual.decision_id.duplicated().any() or expected.decision_id.duplicated().any()
                 or len(actual) != len(expected) or set(actual.decision_id) != identities or seen.intersection(identities)):

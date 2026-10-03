@@ -17,35 +17,35 @@ from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.core.system_memory import assert_system_memory_available
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
+from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.modeling.strategy_contract import StrategyContract, load_strategy_contract
 from market_predictor.resources import assert_memory_budget, release_process_memory
 from market_predictor.swing.contracts.corrected_outcomes import CorrectedOutcomePolicy
-from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.research_features import ResearchFeaturePolicy
-from market_predictor.swing.datasets.action_evidence import load_corporate_action_evidence
+from market_predictor.swing.datasets.adjusted_history_bindings import (
+    AdjustedHistoryBindings,
+    bind_adjusted_history_decisions,
+    expected_bound_history_sessions,
+    load_adjusted_history_bindings,
+    read_bound_adjusted_history,
+    read_bound_benchmarks,
+)
 from market_predictor.swing.datasets.corrected_outcomes import (
     _projection,
     load_corrected_decision_partition,
     load_corrected_outcome_policy,
-    verified_corrected_research_sources,
+    verified_corrected_price_sources,
 )
 from market_predictor.swing.datasets.feature_history_plan import DECISION_START, NUMERIC_END
-from market_predictor.swing.datasets.history_archive import load_complete_swing_history_collection
 from market_predictor.swing.datasets.initial_fit_raw_share_plan import MEMBERSHIP_COLUMNS
-from market_predictor.swing.datasets.research_feature_sources import corrected_adjusted_bars, raw_dollar_volume_inputs
-from market_predictor.swing.datasets.session_requirements import session_abstentions_by_ticker
+from market_predictor.swing.datasets.research_feature_sources import raw_dollar_volume_inputs
 from market_predictor.swing.datasets.symbol_corrections import pinned_object
 from market_predictor.swing.features.adjusted_source import (
     AdjustedTechnicalSource,
     build_adjusted_technical_source,
-    expected_adjusted_history_sessions,
-    load_combined_adjusted_inventory,
-    read_combined_adjusted_bars,
 )
 from market_predictor.swing.features.panel import TECHNICAL_RANKING_FEATURES
 from market_predictor.swing.features.research_join import DECISION_KEYS
-
-CORRECTED_QUERY_SYMBOLS = {"cik:0000798354": "FI", "cik:0001415404": "SATS"}
 
 
 def _guard() -> None:
@@ -130,11 +130,7 @@ class PredictorSourceContext:
     source_policy: CorrectedOutcomePolicy
     sources: dict[str, Any]
     strategy: StrategyContract
-    parent: Path
-    archive: Path
-    inventory: dict[str, dict[str, Any]]
-    corrected_records: dict[str, Any]
-    sparse_gaps: dict[str, Any]
+    bindings: AdjustedHistoryBindings
     original_memberships: pd.DataFrame
     historical_memberships: pd.DataFrame
     decisions: pd.DataFrame
@@ -145,65 +141,37 @@ class PredictorSourceContext:
 
 def prepare_predictor_sources(*, root: Path, policy: ResearchFeaturePolicy,
     source_policy: CorrectedOutcomePolicy, sources: dict[str, Any],
-    feature_plan_snapshot: SourcePin | None = None,
 ) -> PredictorSourceContext:
     """Prepare bounded inputs inside the caller's verified corrected-source lease."""
     _guard()
-    parent = inside(root, policy.parent_request.path).parent
     strategy = load_strategy_contract(inside(root, policy.strategy_contract.path))
-    inventory = load_combined_adjusted_inventory(parent, request_sha256=policy.parent_request.sha256,
-        final_manifest_sha256=policy.parent_manifest.sha256, final_authority_sha256=policy.parent_authority.sha256,
-        combined_manifest_sha256=policy.combined_manifest.sha256, contract=strategy)
-    combined_manifest = pinned_object(parent / "combined_daily/_manifest.json", policy.combined_manifest.sha256)
-    gap_record = combined_manifest["session_gap_audit"]
-    gap_path = inside(parent / "combined_daily", gap_record["path"])
-    sparse_gaps = session_abstentions_by_ticker(pinned_object(gap_path, gap_record["sha256"]))
     original_memberships = _projection(sources["membership_path"], MEMBERSHIP_COLUMNS)
-    plan = inside(root, policy.adjusted_plan_authority.path).parent
-    archive = inside(root, policy.adjusted_archive_authority.path).parent
-    corrected = load_complete_swing_history_collection(archive, plan_directory=plan,
-        expected_adjustment="all", expected_plan_authority_sha256=policy.adjusted_plan_authority.sha256,
-        feature_plan_snapshot=feature_plan_snapshot)
-    corrected_records = {item["security_id"]: item for item in corrected["unit_artifacts"]}
-    if set(corrected_records) != set(CORRECTED_QUERY_SYMBOLS):
-        raise DataReadinessError("corrected adjusted issuer inventory differs")
+    bindings = load_adjusted_history_bindings(root=root, plan_authority=policy.adjusted_plan_authority,
+        archive_authority=policy.adjusted_archive_authority)
+    _pins(root, dict(bindings.source_files))
     records = [record for record in sources["manifest"]["files"]
         if record["first_session"] <= str(NUMERIC_END) and record["last_session"] >= str(DECISION_START)]
     decisions = pd.concat([load_corrected_decision_partition(root, sources, record, source_policy)
         for record in records], ignore_index=True)
     if decisions.decision_id.duplicated().any() or len(decisions) != sources["plan"]["requirements"]["in_window_decisions"]:
         raise DataReadinessError("research features lack the complete frozen decision population")
-    decisions["source_group"] = [CORRECTED_QUERY_SYMBOLS.get(identity, ticker)
-        for identity, ticker in zip(decisions.security_id, decisions.parent_ticker, strict=True)]
+    decisions = bind_adjusted_history_decisions(decisions, bindings)
     historical_memberships = sources["memberships"].loc[
         sources["memberships"].security_id.isin(decisions.security_id)
         & pd.to_datetime(sources["memberships"].effective_from_utc, utc=True).dt.tz_convert("America/New_York").dt.date.le(NUMERIC_END)]
     needed = {"SPY", "QQQ", *decisions.primary_benchmark, *historical_memberships.primary_benchmark.dropna()}
-    adjusted_source_files = {
-        inside(parent / "combined_daily", inventory[symbol]["path"]).relative_to(root).as_posix(): inventory[symbol]["sha256"]
-        for symbol in needed | set(decisions.source_group) if symbol in inventory
-    }
-    adjusted_source_files[gap_path.relative_to(root).as_posix()] = gap_record["sha256"]
-    benchmark = pd.concat([read_combined_adjusted_bars(parent / "combined_daily", inventory[symbol],
-        security_id=f"benchmark:{symbol}") for symbol in sorted(needed)], ignore_index=True)
-    return PredictorSourceContext(root, policy, source_policy, sources, strategy, parent, archive, inventory,
-        corrected_records, sparse_gaps, original_memberships, historical_memberships, decisions, records,
-        adjusted_source_files, benchmark)
+    benchmark = read_bound_benchmarks(bindings, needed)
+    return PredictorSourceContext(root, policy, source_policy, sources, strategy, bindings,
+        original_memberships, historical_memberships, decisions, records, dict(bindings.source_files), benchmark)
 
 
 def build_predictor_group(group: pd.DataFrame, context: PredictorSourceContext) -> AdjustedTechnicalSource:
     """One ordinary issuer construction for publication and numerical replay."""
     if group.empty or len(group[["security_id", "source_group"]].drop_duplicates()) != 1:
         raise DataReadinessError("predictor construction requires one nonempty source group")
-    identity, symbol = str(group.security_id.iloc[0]), str(group.source_group.iloc[0])
-    if identity in context.corrected_records:
-        bars = corrected_adjusted_bars(context.archive, context.corrected_records[identity])
-        original_group = context.original_memberships
-    else:
-        bars = read_combined_adjusted_bars(context.parent / "combined_daily", context.inventory[symbol], security_id=identity)
-        original_group = context.original_memberships.loc[context.original_memberships.ticker.eq(symbol)]
-    expected_history = expected_adjusted_history_sessions(security_id=identity, memberships=original_group,
-        sparse_missing_sessions_by_ticker={ticker: tuple(sorted(days)) for ticker, days in context.sparse_gaps.items()})
+    identity, unit_id = str(group.security_id.iloc[0]), str(group.source_group.iloc[0])
+    expected_history = expected_bound_history_sessions(context.bindings, unit_id, context.original_memberships)
+    bars = read_bound_adjusted_history(context.bindings, unit_id, expected_history).bars
     raw = raw_dollar_volume_inputs(root=context.root, selection=context.sources["selection"], decisions=group,
         policy=context.source_policy, policy_sha256=context.policy.outcome_source_config.sha256)
     sector_symbols = {"SPY", "QQQ", *group.primary_benchmark,
@@ -226,7 +194,8 @@ def predictor_implementation_files(root: Path) -> dict[str, str]:
         "swing/features/eligibility.py", "swing/datasets/corrected_outcomes.py", "swing/datasets/symbol_corrections.py",
         "swing/labels/holding_identity.py", "modeling/strategy_contract.py", "swing/datasets/session_requirements.py",
         "swing/datasets/history_archive.py", "evidence/io.py", "universe/symbol_correction_policy.py",
-        "swing/datasets/initial_fit_raw_share_plan.py")
+        "swing/datasets/initial_fit_raw_share_plan.py", "swing/datasets/adjusted_history_bindings.py",
+        "swing/datasets/adjusted_history_source.py")
     return {str((package / name).relative_to(root)): file_sha256(package / name) for name in names}
 
 
@@ -251,20 +220,18 @@ def materialize_research_predictors(*, root: Path, config: Path, expected_config
     if output.exists() != (expected_checkpoint_sha256 is not None):
         raise DataReadinessError("existing predictor output requires an independent checkpoint pin")
     declared = {pin.path: pin.sha256 for pin in (getattr(policy, name) for name in type(policy).model_fields if name != "schema_version")}
-    declared[str(config.relative_to(root))] = expected_config_sha256
+    declared[config.relative_to(root).as_posix()] = expected_config_sha256
     _pins(root, declared)
-    parent = inside(root, policy.parent_request.path).parent
-    if output.is_relative_to(parent) or parent.is_relative_to(output):
-        raise DataReadinessError("research predictor output overlaps its retained parent")
+    for pin in (policy.adjusted_plan_authority, policy.adjusted_archive_authority):
+        source_directory = inside(root, pin.path).parent
+        if output.is_relative_to(source_directory) or source_directory.is_relative_to(output):
+            raise DataReadinessError("research predictor output overlaps its adjusted source")
     source_config = inside(root, policy.outcome_source_config.path)
     source_policy = load_corrected_outcome_policy(root, source_config, policy.outcome_source_config.sha256)
-    evidence = load_corporate_action_evidence(root=root, config=inside(root, source_policy.action_config.path),
-        archive=inside(root, source_policy.action_archive), expected_audit_sha256=source_policy.action_audit_sha256)
-    with verified_corrected_research_sources(root, source_config, policy.outcome_source_config.sha256,
-        source_policy, evidence) as sources:
+    with verified_corrected_price_sources(root, source_config, policy.outcome_source_config.sha256,
+        source_policy) as sources:
         context = prepare_predictor_sources(root=root, policy=policy, source_policy=source_policy, sources=sources)
         decisions, records = context.decisions, context.records
-        inventory, corrected_records = context.inventory, context.corrected_records
         adjusted_source_files = context.adjusted_source_files
         implementation = predictor_implementation_files(root)
         request = {"schema": "market_predictor.research_predictor_request", "config_sha256": expected_config_sha256,
@@ -294,9 +261,6 @@ def materialize_research_predictors(*, root: Path, config: Path, expected_config
             _guard()
             group_key = json_sha256([identity, symbol])
             if group_key in checkpoint["groups"]:
-                if identity not in corrected_records:
-                    source_path = inside(parent / "combined_daily", inventory[symbol]["path"]).relative_to(root).as_posix()
-                    _pins(root, {source_path: adjusted_source_files[source_path]})
                 part = checkpoint["groups"][group_key]
                 _verify_part(output / "groups", part, request_pin)
                 if part["decision_ids_sha256"] != json_sha256(sorted(group.decision_id)):
@@ -310,7 +274,8 @@ def materialize_research_predictors(*, root: Path, config: Path, expected_config
             except MemoryBudgetError:
                 raise
             except (DataReadinessError, KeyError, FileNotFoundError, ValueError) as error:
-                checkpoint["failed_groups"][group_key] = {"security_id": str(identity), "symbol": str(symbol),
+                checkpoint["failed_groups"][group_key] = {"security_id": str(identity),
+                    "symbol": context.bindings.windows[str(symbol)]["query"]["ticker"], "source_group": str(symbol),
                     "error_type": type(error).__name__, "reason": str(error), "rows": len(group)}
                 _write(output / "_checkpoint.json", checkpoint)
                 built += 1
@@ -353,6 +318,19 @@ def materialize_research_predictors(*, root: Path, config: Path, expected_config
             raise DataReadinessError("technical monthly publication lost frozen decisions")
         result = {**checkpoint, "status": "technical_inputs_complete_research_only", "rows": len(decisions),
             "feature_eligible_rows": sum(part["feature_eligible_rows"] for part in checkpoint["months"].values())}
+        final_pins = {**declared, **implementation, **sources["source_files"], **adjusted_source_files}
+        checkpoint_pin = file_sha256(output / "_checkpoint.json")
+    # Source context exit replays its pins before any complete authority is visible.
+    # Reacquire the same workspace lease for the final, independently rechecked write.
+    with heavy_job_lease("research-predictor-publication", runtime_dir=inside(root, heavy_job_runtime_dir())):
+        if pinned_object(output / "_checkpoint.json", checkpoint_pin) != checkpoint:
+            raise DataReadinessError("predictor checkpoint changed before final publication")
+        if pinned_object(output / "_request.json", request_pin) != request:
+            raise DataReadinessError("predictor request changed before final publication")
+        for kind in ("groups", "months"):
+            for part in checkpoint[kind].values():
+                _verify_part(output / kind, part, request_pin)
+        _pins(root, final_pins)
         manifest_path = output / "_manifest.json"
         if manifest_path.exists():
             if pinned_object(manifest_path, file_sha256(manifest_path)) != result:
@@ -360,4 +338,4 @@ def materialize_research_predictors(*, root: Path, config: Path, expected_config
         else:
             _write(manifest_path, result)
         return {**result, "manifest_sha256": file_sha256(output / "_manifest.json"),
-            "checkpoint_sha256": file_sha256(output / "_checkpoint.json")}
+            "checkpoint_sha256": checkpoint_pin}

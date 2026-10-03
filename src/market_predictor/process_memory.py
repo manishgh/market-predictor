@@ -4,6 +4,7 @@ from __future__ import annotations
 import ctypes
 import gc
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -23,8 +24,21 @@ class _ProcessMemoryCounters(ctypes.Structure):
     ]
 
 
-def release_process_memory() -> None:
+def release_unused_process_memory() -> None:
+    """Release unused allocations without evicting live resident pages."""
     gc.collect()
+    # Return unused Arrow scan buffers, without importing it for lightweight callers.
+    arrow: Any = sys.modules.get("pyarrow")
+    if arrow is not None:
+        try:
+            arrow.default_memory_pool().release_unused()
+        except (AttributeError, MemoryError, OSError, RuntimeError):
+            # Cleanup is best effort; native trimming and all later guards still run.
+            pass
+
+
+def release_process_memory() -> None:
+    release_unused_process_memory()
     if os.name != "nt":
         return
     kernel32, psapi = _windows_dlls()

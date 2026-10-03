@@ -12,12 +12,15 @@ import pytest
 from pydantic import ValidationError
 
 import market_predictor.swing.datasets.predictor_abstention_derivation as owner
+from market_predictor.canonical.normalize import canonicalize_bars
 from market_predictor.canonical.store import file_sha256, load_canonical_artifact, manifest_path_for
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import write_json_object
 from market_predictor.heavy_jobs import HeavyJobBusyError, heavy_job_lease
 from market_predictor.swing.contracts.holding_materialization import SourcePin
+from market_predictor.swing.datasets.adjusted_history_bindings import AdjustedHistoryBindings
+from market_predictor.swing.datasets.adjusted_history_source import AdjustedHistorySource
 from market_predictor.swing.datasets.corrected_decisions import CorrectedDecisionProjection
 from market_predictor.swing.features.panel import TECHNICAL_RANKING_FEATURES
 from tests.test_swing_features import contract as contract
@@ -40,7 +43,7 @@ def example(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     source = root / "adjusted.parquet"
     source.write_bytes(b"not a parquet: source bytes must only be hashed, never decoded")
     write_json_object(evidence, dict(schema="market_predictor.predictor_source_failure_observations",
-        numeric_first="2018-05-29", numeric_last="2024-05-28", combined_manifest_sha256="c" * 64,
+        numeric_first="2018-05-29", numeric_last="2024-05-28",
         observations=[dict(security_id="issuer-WTW", ticker="WTW", source_path=source.name,
             source_sha256=file_sha256(source), bounded_rows=1, invalid_rows=[])]))
     implementation = root / "src/market_predictor/swing/datasets/predictor_abstention_derivation.py"
@@ -49,7 +52,27 @@ def example(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     producer = root / "producer.py"
     producer.write_text("# frozen producer", encoding="ascii")
     feature_config = root / "features.toml"
-    feature_config.write_text("# synthetic whole-stream-only policy; never opened for numeric replay", encoding="ascii")
+    locations = {name: root / f"{name}.json" for name in
+        ("strategy_contract", "adjusted_plan_authority", "adjusted_archive_authority")}
+    for path in locations.values():
+        path.write_text("{}", encoding="ascii")
+    locations["outcome_source_config"] = config
+    policy = {name: _pin(root, path).model_dump() for name, path in locations.items()}
+    lines = ['schema_version = "market_predictor.corrected_research_features"']
+    for name, pin in policy.items():
+        lines.extend([f"[{name}]", f'path = "{pin["path"]}"', f'sha256 = "{pin["sha256"]}"'])
+    feature_config.write_text("\n".join(lines), encoding="ascii")
+    report = json.loads(evidence.read_text())
+    report["adjusted_archive_authority"] = policy["adjusted_archive_authority"]
+    evidence.write_text(json.dumps(report), encoding="ascii")
+    windows = {f"unit-{symbol}": {name: dict(security_id=f"issuer-{symbol}", ticker=symbol, role="stock",
+        start_date="2018-05-29", end_date="2024-05-28") for name in ("parent", "query")}
+        for symbol in ("AAA", "WTW")}
+    bound_files = {source.name: file_sha256(source)}
+    records = {f"unit-{symbol}": {**windows[f"unit-{symbol}"]["query"], "bars_path": source.name,
+        "bars_sha256": file_sha256(source)} for symbol in ("AAA", "WTW")}
+    bindings = AdjustedHistoryBindings(AdjustedHistorySource(root, root, records, bound_files), windows, bound_files)
+    monkeypatch.setattr(owner, "load_adjusted_history_bindings", lambda **kwargs: bindings)
     monkeypatch.setattr(owner, "__file__", str(implementation))
     monkeypatch.setattr(owner, "_guard", lambda: None)
     monkeypatch.setattr(owner, "release_process_memory", lambda: None)
@@ -59,7 +82,8 @@ def example(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         decision_time_utc=pd.Timestamp(f"{day}T22:00:00Z"), sector="Technology", primary_benchmark="XLK")
         for symbol in ("AAA", "WTW") for day in ("2019-07-09", "2019-08-01")])
     request = dict(schema="market_predictor.research_predictor_request", config_sha256=file_sha256(feature_config),
-        declared_source_files={config.name: file_sha256(config), feature_config.name: file_sha256(feature_config)}, source_files={},
+        declared_source_files={**{pin["path"]: pin["sha256"] for pin in policy.values()},
+            feature_config.name: file_sha256(feature_config)}, source_files={},
         implementation_files={producer.name: file_sha256(producer)},
         adjusted_source_files={source.name: file_sha256(source)}, cohort_sha256="c" * 64,
         decision_start="2019-07-09", numeric_end="2024-05-28", expected_rows=len(decisions),
@@ -80,10 +104,10 @@ def example(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     good["universe_snapshot_id"] = "verified-membership"
     clocks = {n: "raw_dollar_volume_available_at_utc" if n == "dollar_volume_log" else "technical_available_at_utc"
         for n in TECHNICAL_RANKING_FEATURES}
-    key = json_sha256(["issuer-AAA", "AAA"])
-    fail_key = json_sha256(["issuer-WTW", "WTW"])
+    key = json_sha256(["issuer-AAA", "unit-AAA"])
+    fail_key = json_sha256(["issuer-WTW", "unit-WTW"])
     part = owner._publish(good, parent / "groups" / f"{key}.parquet", file_sha256(parent / "_request.json"))
-    failure = dict(security_id="issuer-WTW", symbol="WTW", error_type="DataReadinessError",
+    failure = dict(security_id="issuer-WTW", symbol="WTW", source_group="unit-WTW", error_type="DataReadinessError",
         reason="adjusted history has invalid or placeholder OHLCV/clocks", rows=2)
     checkpoint = dict(schema="market_predictor.research_predictors", status="partial_in_progress",
         request_sha256=file_sha256(parent / "_request.json"), groups={key: {**part, "availability_columns": clocks}},
@@ -104,7 +128,7 @@ def example(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     state: dict[str, Any] = dict(root=root, parent=parent, output=root / "data/features/derived", facts_path=facts_path,
         facts=facts, checkpoint=checkpoint, request=request, decisions=decisions, key=key, fail_key=fail_key,
         source=source, evidence=evidence, producer=producer, config=config, feature_config=feature_config, implementation=implementation,
-        exited=False, fail_exit=False, before_exit=None, partitions_read=0)
+        exited=False, fail_exit=False, before_exit=None, partitions_read=0, adjusted_bindings=bindings)
 
     @contextmanager
     def projection(**kwargs: Any) -> Any:
@@ -341,6 +365,8 @@ def test_pending_group_cannot_be_mistaken_for_finished_exhaustive_run(example: d
     example["request"]["expected_rows"] = len(decisions)
     example["request"]["decision_ids_sha256"] = json_sha256(sorted(decisions.decision_id))
     example["request"]["retained_security_ids"].append("issuer-CCC")
+    example["adjusted_bindings"].windows["unit-CCC"] = {name: dict(security_id="issuer-CCC", ticker="CCC",
+        role="stock", start_date="2018-05-29", end_date="2024-05-28") for name in ("parent", "query")}
     _refreeze(example)
     with pytest.raises(DataReadinessError, match="not exhaustive"):
         _run(example)
@@ -404,8 +430,9 @@ def _rebuild(args: dict[str, Any], fact: owner.ReviewedPredictorFailure, observa
     clocks = {name: "raw_dollar_volume_available_at_utc" if name == "dollar_volume_log" else "technical_available_at_utc"
         for name in TECHNICAL_RANKING_FEATURES}
     raw = args["raw_decision_bars"].loc[args["raw_decision_bars"].session_date_et.lt(fact.first_invalid_session)]
-    return owner._rebuild_prefix(args["decisions"], args["adjusted_bars"], args["benchmark_bars"], args["memberships"], raw,
-        fact=fact, observation=observation, expected_history_sessions=args["expected_history_sessions"], contract=contract,
+    return owner._rebuild_prefix(args["decisions"], owner._validated_prefix(args["adjusted_bars"], fact, observation),
+        args["benchmark_bars"], args["memberships"], raw, fact=fact,
+        expected_history_sessions=args["expected_history_sessions"], contract=contract,
         clocks=clocks).rows
 
 
@@ -507,46 +534,43 @@ def _install_prefix_replay(state: dict[str, Any], monkeypatch: pytest.MonkeyPatc
         path = root / "src/market_predictor" / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# test-only reader implementation", encoding="ascii")
-    combined = root / "combined/combined_daily"
-    combined.mkdir(parents=True)
-    stock = pd.DataFrame([dict(ticker="WTW", timeframe="1d", price_feed="sip", adjustment="all", schema_version="1",
-        bar_start_utc=pd.Timestamp(day + "T13:30Z"), bar_end_utc=pd.Timestamp(day + "T20:00Z"),
-        available_at_utc=pd.Timestamp(day + "T20:15Z"), open=10.0, high=11.0, low=9.0, close=10.0,
-        volume=100.0 if day == "2019-07-09" else 0.0) for day in ("2019-07-09", "2019-08-01")])
-    inventory = {}
+    directory = root / "adjusted"
+    directory.mkdir()
+    raw_stock = pd.DataFrame([dict(security_id="issuer-WTW", ticker="WTW", timeframe="1Day", source="alpaca",
+        price_feed="sip", adjustment="all", session_date=day,
+        bar_start_utc=pd.Timestamp(day + "T04:00Z"), ingested_at_utc=pd.Timestamp("2026-01-01T00:00Z"),
+        open=10.0, high=11.0, low=9.0, close=10.0, volume=100.0 if day == "2019-07-09" else 0.0)
+        for day in ("2019-07-09", "2019-08-01")])
+    stock = canonicalize_bars(raw_stock, timeframe="1d", availability_policy="market_interval_close")
+    records = {}
+    source_files = {}
     for symbol in ("WTW", "SPY", "QQQ", "XLK"):
-        path = combined / f"{symbol}.parquet"
-        path.write_bytes(f"test-only bound {symbol} source".encode())
-        inventory[symbol] = dict(ticker=symbol, path=path.name, sha256=file_sha256(path))
-        state["request"]["adjusted_source_files"][path.relative_to(root).as_posix()] = file_sha256(path)
-    state["source"] = combined / "WTW.parquet"
-    gaps = combined / "gaps.json"
-    write_json_object(gaps, {"gaps": []})
-    state["request"]["adjusted_source_files"][gaps.relative_to(root).as_posix()] = file_sha256(gaps)
-    manifest = combined / "_manifest.json"
-    write_json_object(manifest, dict(session_gap_audit=dict(path=gaps.name, sha256=file_sha256(gaps))))
-    locations = dict(outcome_source_config=state["config"], combined_manifest=manifest,
-        parent_request=combined.parent / "_request.json")
-    for name in ("strategy_contract", "parent_manifest", "parent_authority", "adjusted_plan_authority", "adjusted_archive_authority"):
-        locations[name] = root / f"{name}.json"
-    for path in locations.values():
-        if not path.exists():
-            path.write_text("{}", encoding="ascii")
-    policy = {name: _pin(root, path).model_dump() for name, path in locations.items()}
-    lines = ['schema_version = "market_predictor.corrected_research_features"']
-    for name, pin in policy.items():
-        lines.extend([f"[{name}]", f'path = "{pin["path"]}"', f'sha256 = "{pin["sha256"]}"'])
-        state["request"]["declared_source_files"][pin["path"]] = pin["sha256"]
-    state["feature_config"].write_text("\n".join(lines), encoding="ascii")
-    state["facts"]["feature_config"] = _pin(root, state["feature_config"]).model_dump()
-    state["request"]["config_sha256"] = file_sha256(state["feature_config"])
-    state["request"]["declared_source_files"][state["feature_config"].name] = file_sha256(state["feature_config"])
+        identity = "issuer-WTW" if symbol == "WTW" else f"benchmark:{symbol}"
+        bars = raw_stock.assign(ticker=symbol, security_id=identity)
+        if symbol != "WTW":
+            bars["volume"] = 100.0
+        path = directory / f"{symbol}.parquet"
+        bars.to_parquet(path, index=False)
+        manifest = directory / f"{symbol}.json"
+        write_json_object(manifest, {})
+        records[f"unit-{symbol}"] = dict(ticker=symbol, security_id=identity, role="stock" if symbol == "WTW" else "benchmark",
+            provider_symbol=symbol, start_date="2019-07-09", end_date="2019-08-01", rows=2,
+            bars_path=path.name, bars_sha256=file_sha256(path), unit_manifest_path=manifest.name,
+            unit_manifest_sha256=file_sha256(manifest))
+        source_files.update({p.relative_to(root).as_posix(): file_sha256(p) for p in (path, manifest)})
+    windows = {**state["adjusted_bindings"].windows}
+    state["adjusted_bindings"] = AdjustedHistoryBindings(
+        AdjustedHistorySource(root, directory, records, source_files), windows, source_files)
+    state["request"]["adjusted_source_files"] = dict(source_files)
+    state["source"] = directory / "WTW.parquet"
+    policy = owner.ResearchFeaturePolicy.model_validate(__import__("tomllib").loads(state["feature_config"].read_text()))
     row = stock.iloc[-1]
     invalid = dict(session_date_et="2019-08-01", invalid_fields=["volume"],
         ohlcv={name: float(row[name]) for name in ("open", "high", "low", "close", "volume")},
         clocks={name: str(row[name]) for name in ("bar_start_utc", "bar_end_utc", "available_at_utc")})
     report = dict(schema="market_predictor.predictor_source_failure_observations", review_approval=False,
-        numeric_first="2018-05-29", numeric_last="2024-05-28", combined_manifest_sha256=file_sha256(manifest),
+        numeric_first="2018-05-29", numeric_last="2024-05-28",
+        adjusted_archive_authority=policy.adjusted_archive_authority.model_dump(mode="json"),
         observations=[dict(ticker="WTW", security_id="issuer-WTW", bounded_rows=2, invalid_rows=[invalid],
             source_path=state["source"].relative_to(root).as_posix(), source_sha256=file_sha256(state["source"]))])
     state["evidence"].write_text(json.dumps(report), encoding="ascii")
@@ -579,14 +603,9 @@ def _install_prefix_replay(state: dict[str, Any], monkeypatch: pytest.MonkeyPatc
             finally:
                 state["replay_active"] = False
 
-    def read(directory: Path, record: dict[str, Any], **kwargs: Any) -> pd.DataFrame:
+    def benchmarks(bindings: Any, symbols: set[str]) -> pd.DataFrame:
         assert state["replay_active"] and state["exited"]
-        state["replay_calls"].append(("read", record["ticker"]))
-        bars = stock.copy()
-        bars["ticker"] = record["ticker"]
-        if record["ticker"] != "WTW":
-            bars["volume"] = 100.0
-        return bars
+        return pd.concat([stock.assign(ticker=symbol, volume=100.0) for symbol in sorted(symbols)], ignore_index=True)
 
     def raw(**kwargs: Any) -> pd.DataFrame:
         assert state["replay_active"] and kwargs["decisions"].session_date_et.lt(date(2019, 8, 1)).all()
@@ -608,15 +627,13 @@ def _install_prefix_replay(state: dict[str, Any], monkeypatch: pytest.MonkeyPatc
         rows["technical_missing_reasons"] = [()] * len(rows)
         return owner.AdjustedTechnicalSource(rows, old_part["availability_columns"])
 
-    monkeypatch.setattr(owner, "load_corrected_outcome_policy", lambda *a: SimpleNamespace(
-        action_config=SourcePin(path="actions.json", sha256="a" * 64), action_archive="actions", action_audit_sha256="a" * 64))
-    monkeypatch.setattr(owner, "load_corporate_action_evidence", lambda **k: None)
-    monkeypatch.setattr(owner, "verified_corrected_research_sources", source_context)
+    monkeypatch.setattr(owner, "load_corrected_outcome_policy", lambda *a: SimpleNamespace())
+    monkeypatch.setattr(owner, "verified_corrected_price_sources", source_context)
     monkeypatch.setattr(owner, "load_strategy_contract", lambda *a: contract)
-    monkeypatch.setattr(owner, "load_combined_adjusted_inventory", lambda *a, **k: inventory)
+    monkeypatch.setattr(owner, "load_adjusted_history_bindings", lambda **kwargs: state["adjusted_bindings"])
     monkeypatch.setattr(owner, "_projection", lambda *a: memberships.copy())
-    monkeypatch.setattr(owner, "expected_adjusted_history_sessions", lambda **k: (date(2019, 7, 9), date(2019, 8, 1)))
-    monkeypatch.setattr(owner, "read_combined_adjusted_bars", read)
+    monkeypatch.setattr(owner, "expected_bound_history_sessions", lambda *a: (date(2019, 7, 9), date(2019, 8, 1)))
+    monkeypatch.setattr(owner, "read_bound_benchmarks", benchmarks)
     monkeypatch.setattr(owner, "raw_dollar_volume_inputs", raw)
     monkeypatch.setattr(owner, "build_adjusted_technical_source", build)
 
@@ -669,3 +686,88 @@ def test_reviewed_config_preserves_exact_four_failure_scopes() -> None:
         "WTW": None, "ATVI": date(2023, 10, 13), "INFO": date(2022, 2, 28), "SBNY": date(2023, 3, 13)}
     assert {fact.symbol for fact in facts.failures if fact.quarantine == "entire_failed_group"} == {"WTW"}
     assert facts.observations.sha256 == "70c6f85029e64ba3354ba04b5aa936c2147272f2f527ca9757517b3d31178060"
+
+
+@pytest.mark.parametrize("poison", ["archive", "old_archive_field", "source_hash", "source_path", "boundary_values",
+    "boundary_clock", "row_count", "earlier_invalid", "outside_query", "wrong_unit"])
+def test_current_adjusted_prefix_requires_exact_reviewed_source(example: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch, contract: Any, poison: str,
+) -> None:
+    _install_prefix_replay(example, monkeypatch, contract)
+    facts = owner.PredictorFailureFacts.model_validate_json(json.dumps(example["facts"]))
+    fact = facts.failures[0]
+    observation = owner._observation(example["root"], facts, fact)
+    bindings = example["adjusted_bindings"]
+    if poison in {"archive", "old_archive_field"}:
+        report = json.loads(example["evidence"].read_text())
+        if poison == "archive":
+            report["adjusted_archive_authority"]["sha256"] = "a" * 64
+        else:
+            report["combined_manifest_sha256"] = report.pop("adjusted_archive_authority")["sha256"]
+        example["evidence"].write_text(json.dumps(report), encoding="ascii")
+        facts = facts.model_copy(update={"observations": _pin(example["root"], example["evidence"])})
+        files = owner._merge(example["root"], *(example["request"][name] for name in owner.PIN_MAPS))
+        with pytest.raises(DataReadinessError, match="another adjusted archive authority"):
+            owner._reviewed_bindings(example["root"], facts, owner._feature_policy(example["root"], facts), files)
+        return
+    if poison == "wrong_unit":
+        fact = fact.model_copy(update={"group_key": json_sha256([fact.security_id, "another-unit"])})
+    elif poison == "source_hash":
+        observation["source_sha256"] = "a" * 64
+    elif poison == "source_path":
+        observation["source_path"] = "old/WTW.parquet"
+    elif poison == "row_count":
+        observation["bounded_rows"] += 1
+    elif poison in {"boundary_values", "boundary_clock"}:
+        reported = observation["invalid_rows"][0]
+        if poison == "boundary_values":
+            reported["ohlcv"]["close"] = 10.5
+        else:
+            reported["clocks"]["available_at_utc"] = "2019-08-01T20:16:00Z"
+        fact = fact.model_copy(update={"boundary_observation_sha256": json_sha256(reported)})
+    else:
+        raw = pd.read_parquet(example["source"])
+        if poison == "earlier_invalid":
+            raw.loc[0, "volume"] = 0.0
+        else:
+            raw.loc[0, "session_date"] = "2019-07-08"
+            raw.loc[0, "bar_start_utc"] = pd.Timestamp("2019-07-08T04:00Z")
+        raw.to_parquet(example["source"], index=False)
+        digest = file_sha256(example["source"])
+        bindings.source.records["unit-WTW"]["bars_sha256"] = digest
+        bindings.source_files[example["source"].relative_to(example["root"]).as_posix()] = digest
+        fact = fact.model_copy(update={"source_artifacts": (_pin(example["root"], example["source"]),)})
+        observation["source_sha256"] = digest
+    # Membership excludes the earlier candle: its invalidity must still reject.
+    with pytest.raises(DataReadinessError):
+        owner.validated_bound_prefix(bindings, "unit-WTW", fact, observation, (date(2019, 8, 1),))
+
+
+def test_bound_prefix_clips_only_after_validation_and_preserves_physical_columns(example: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch, contract: Any,
+) -> None:
+    _install_prefix_replay(example, monkeypatch, contract)
+    facts = owner.PredictorFailureFacts.model_validate_json(json.dumps(example["facts"]))
+    fact = facts.failures[0]
+    observation = owner._observation(example["root"], facts, fact)
+    bindings = example["adjusted_bindings"]
+    expected = canonicalize_bars(pd.read_parquet(example["source"]).iloc[:1], timeframe="1d",
+        availability_policy="market_interval_close")
+    actual = owner.validated_bound_prefix(bindings, "unit-WTW", fact, observation, (date(2019, 7, 9), date(2019, 8, 1)))
+    pd.testing.assert_frame_equal(actual, expected)
+    clipped = owner.validated_bound_prefix(bindings, "unit-WTW", fact, observation, (date(2019, 8, 1),))
+    assert clipped.empty and set(clipped) == set(expected)
+
+
+
+def test_reviewed_observations_distinguish_same_ticker_query_windows(example: dict[str, Any]) -> None:
+    facts = owner.PredictorFailureFacts.model_validate_json(json.dumps(example["facts"]))
+    report = json.loads(example["evidence"].read_text())
+    other = {**report["observations"][0], "source_path": "another-window.parquet", "source_sha256": "a" * 64}
+    report["observations"].append(other)
+    example["evidence"].write_text(json.dumps(report), encoding="ascii")
+    facts = facts.model_copy(update={"observations": _pin(example["root"], example["evidence"])})
+    assert owner._observation(example["root"], facts, facts.failures[0]) == report["observations"][0]
+    other_fact = facts.failures[0].model_copy(update={"source_artifacts":
+        (SourcePin(path=other["source_path"], sha256=other["source_sha256"]),)})
+    assert owner._observation(example["root"], facts, other_fact) == other

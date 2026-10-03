@@ -8,15 +8,22 @@ import exchange_calendars as xcals
 import pandas as pd
 import pyarrow.dataset as pds
 
-from market_predictor.canonical.store import file_sha256, manifest_path_for
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside
 from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.swing.contracts.return_feature_profiles import RETURN_RELATIONSHIP_COLUMNS, ReturnRelationshipSources
-from market_predictor.swing.datasets.predictor_abstention_derivation import _observation, _validated_prefix
-from market_predictor.swing.datasets.research_feature_sources import corrected_adjusted_bars
-from market_predictor.swing.datasets.return_relationship_integrity import read_object
+from market_predictor.swing.datasets.adjusted_history_bindings import (
+    bind_adjusted_history_decisions,
+    expected_bound_history_sessions,
+    read_bound_adjusted_history,
+)
+from market_predictor.swing.datasets.adjusted_history_source import read_adjusted_history_unit
+from market_predictor.swing.datasets.predictor_abstention_derivation import (
+    _observation,
+    validate_bound_observation,
+    validated_bound_prefix,
+)
 from market_predictor.swing.datasets.return_relationship_parent import VerifiedRelationshipParent
 from market_predictor.swing.datasets.return_relationship_sources import RelationshipSourceContext
 from market_predictor.swing.features.adjusted_source import BAR_COLUMNS, _bars
@@ -30,57 +37,47 @@ PHYSICAL_COLUMNS = (*BAR_COLUMNS, "source", "availability_policy", "ingested_at_
 IDENTITY_COLUMNS = [*DECISION_KEYS, "session_date_et", "parent_ticker"]
 
 
-def read_combined(directory: Path, record: dict[str, Any]) -> pd.DataFrame:
-    path = inside(directory, record["path"])
-    sidecar = read_object(manifest_path_for(path), record["canonical_manifest_sha256"])
-    if (sidecar.get("artifact_type") != "bars" or sidecar.get("artifact_sha256") != record["sha256"]
-            or sidecar.get("rows") != record["rows"]
-            or not set(PHYSICAL_COLUMNS).issubset(sidecar["columns"])):
-        raise DataReadinessError("relationship physical source metadata is missing or substituted")
-    if file_sha256(path) != record["sha256"]:
-        raise DataReadinessError("relationship adjusted bar hash mismatch")
-    arrow: Any = pds
-    dataset = arrow.dataset(path, format="parquet")
-    predicate = ((arrow.field("bar_start_utc") >= pd.Timestamp("2018-05-29", tz="UTC"))
-        & (arrow.field("bar_start_utc") < pd.Timestamp("2024-05-29", tz="UTC")))
-    frame: pd.DataFrame = dataset.to_table(columns=list(PHYSICAL_COLUMNS), filter=predicate, use_threads=False).to_pandas()
-    if file_sha256(path) != record["sha256"] or not frame.ticker.eq(record["ticker"]).all():
-        raise DataReadinessError("relationship adjusted source changed or ticker differs")
+def read_spy(context: RelationshipSourceContext) -> pd.DataFrame:
+    unit = read_adjusted_history_unit(context.bindings.source, context.spy_unit_id)
+    frame = unit.bars.copy()
     frame["session_date_et"] = frame.bar_start_utc.dt.tz_convert("America/New_York").dt.date
     return frame
 
 
 def read_stock(root: Path, context: RelationshipSourceContext, item: dict[str, Any]) -> pd.DataFrame:
     identity = item["security_id"]
-    if item["kind"] == "corrected":
-        frame = corrected_adjusted_bars(context.corrected_directory, item["artifact"])
-        frame["session_date_et"] = frame.bar_start_utc.dt.tz_convert("America/New_York").dt.date
-        for rule in context.outcome_policy.decision_corrections:
-            if rule.security_id == identity:
-                selection = frame.session_date_et.between(rule.first_session, rule.last_session)
-                frame.loc[selection, "ticker"] = rule.ticker
-    else:
-        if identity in context.corrected or item["source_group"] in {"FI", "FISV", "SATS", "ECHO"}:
-            raise DataReadinessError("relationship corrected issuer cannot consume old combined stream")
-        frame = read_combined(context.combined_directory, item["artifact"])
-    fact = next((fact for fact in context.facts.failures if fact.security_id == identity), None)
+    record = context.bindings.source.records.get(item["source_group"])
+    if record is None or dict(record) != item["artifact"] or record["security_id"] != identity or record["role"] != "stock":
+        raise DataReadinessError("relationship stock source differs from its verified query unit")
+    expected = expected_bound_history_sessions(context.bindings, item["source_group"], context.memberships)
+    unit = read_bound_adjusted_history(context.bindings, item["source_group"], expected)
+    frame = unit.bars.copy()
+    frame["session_date_et"] = pd.to_datetime(frame.bar_start_utc, utc=True).dt.tz_convert("America/New_York").dt.date
+    key = json_sha256([identity, item["source_group"]])
+    fact = next((fact for fact in context.facts.failures if fact.group_key == key), None) if context.facts else None
     if fact is not None:
+        assert context.facts is not None
         if item["quarantine"] != fact.model_dump(mode="json"):
             raise DataReadinessError("relationship source quarantine changed")
+        observation = _observation(root, context.facts, fact)
+        validate_bound_observation(context.bindings, item["source_group"], fact, observation)
         if fact.first_invalid_session is None:
             frame = frame.iloc[:0].copy()
         else:
-            # The original prefix validator proves the boundary using immutable observations;
-            # retain physical metadata from the same original rows, not its narrow projection.
-            prefix = _validated_prefix(frame, fact, _observation(root, context.facts, fact))
-            frame = frame.loc[frame.session_date_et.isin(prefix.session_date_et)].copy()
+            frame = validated_bound_prefix(context.bindings, item["source_group"], fact,
+                observation, expected)
     else:
         _bars(frame)
+    frame["session_date_et"] = pd.to_datetime(frame.bar_start_utc, utc=True).dt.tz_convert("America/New_York").dt.date
+    for rule in context.outcome_policy.decision_corrections:
+        if rule.security_id == identity:
+            selection = frame.session_date_et.between(rule.first_session, rule.last_session)
+            frame.loc[selection, "ticker"] = rule.ticker
     frame["security_id"] = identity
     return frame
 
 
-def read_baseline_group(parent: VerifiedRelationshipParent, item: dict[str, Any]) -> pd.DataFrame:
+def read_baseline_group(parent: VerifiedRelationshipParent, context: RelationshipSourceContext, item: dict[str, Any]) -> pd.DataFrame:
     paths = [str(inside(parent.path.parent, record["profiles"]["technical_market"]["path"]))
         for _, record in sorted(parent.manifest["months"].items())]
     arrow: Any = pds
@@ -89,8 +86,8 @@ def read_baseline_group(parent: VerifiedRelationshipParent, item: dict[str, Any]
         *parent.availability_columns.values(), "feature_profile")))
     frame: pd.DataFrame = dataset.to_table(columns=columns,
         filter=arrow.field("security_id") == item["security_id"], use_threads=False).to_pandas()
-    if item["kind"] != "corrected":
-        frame = frame.loc[frame.parent_ticker.eq(item["source_group"])].copy()
+    bound = bind_adjusted_history_decisions(frame, context.bindings)
+    frame = frame.loc[bound.source_group.eq(item["source_group"])].copy()
     if (len(frame) != item["rows"] or frame.decision_id.duplicated().any()
             or json_sha256(sorted(frame.decision_id)) != item["decision_ids_sha256"]):
         raise DataReadinessError("relationship projected baseline group differs")
@@ -102,7 +99,7 @@ def build_group(root: Path, parent: VerifiedRelationshipParent, context: Relatio
     baseline: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     if baseline is None:
-        baseline = read_baseline_group(parent, item)
+        baseline = read_baseline_group(parent, context, item)
     bars = read_stock(root, context, item)
     sessions = tuple(day.date() for day in xcals.get_calendar("XNYS").sessions_in_range("2018-05-29", "2024-05-28"))
     result = build_return_relationship_profile(expected_decisions=baseline.loc[:, IDENTITY_COLUMNS],

@@ -99,7 +99,7 @@ def test_staging_cannot_be_adopted_using_its_own_recomputed_hash(tmp_path: Path)
     (tmp_path / "_baseline_stage").mkdir()
     _json(tmp_path / "_baseline_stage/_manifest.json", dict(request_sha256="1" * 64, inventory_sha256="2" * 64, files={}))
     with pytest.raises(DataReadinessError, match="independently checkpointed"):
-        stage_baseline(tmp_path, None, {}, "1" * 64, lambda: None)  # type: ignore[arg-type]
+        stage_baseline(tmp_path, None, {}, "1" * 64, lambda: None, bindings=None)  # type: ignore[arg-type]
 
 
 def test_only_profile_identity_may_change_parent_columns() -> None:
@@ -119,7 +119,7 @@ def test_config_rejects_scope_widening_unknown_fields_and_snapshot_shortcuts() -
         parent_publication=pin, parent_saved_row_verification=pin, feature_config=pin, predictor_failure_facts=pin, strategy_contract=pin)
     assert ReturnRelationshipPublicationPolicy.model_validate(config).maximum_system_used_percent == 90.0
     for extra in ({"source_start": "2019-01-01"}, {"decision_end": "2025-01-01"},
-            {"maximum_system_used_percent": 95.0}, {"historical_implementation_snapshot": pin}):
+            {"maximum_system_used_percent": 95.0}, {"historical_implementation_snapshot": pin}, {"feature_plan_snapshot": pin}):
         with pytest.raises(ValidationError):
             ReturnRelationshipPublicationPolicy.model_validate({**config, **extra})
 

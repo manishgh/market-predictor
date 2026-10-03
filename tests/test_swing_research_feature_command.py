@@ -99,10 +99,9 @@ def test_predictor_replay_cli_preserves_pins_and_partial_status(
     result = CliRunner().invoke(app, ["replay-swing-research-predictors", "--publication", "data/features/publication.json",
         "--publication-sha256", "a" * 64, "--migration-bindings", "data/evidence/bindings.json",
         "--migration-bindings-sha256", "b" * 64, "--implementation-snapshot", "data/evidence/snapshot.json",
-        "--snapshot-sha256", "c" * 64, "--output", "data/reports/predictor-replay", "--maximum-groups", "1",
-        "--feature-plan-snapshot", "data/evidence/plan.json", "--feature-plan-snapshot-sha256", "d" * 64])
+        "--snapshot-sha256", "c" * 64, "--output", "data/reports/predictor-replay", "--maximum-groups", "1"])
     assert result.exit_code == (0 if complete else 2), result.output
     assert calls[0]["maximum_groups"] == 1
     assert calls[0]["publication"] == commands.SourcePin(path="data/features/publication.json", sha256="a" * 64)
     assert calls[0]["implementation_snapshot"] == commands.SourcePin(path="data/evidence/snapshot.json", sha256="c" * 64)
-    assert calls[0]["feature_plan_snapshot"] == commands.SourcePin(path="data/evidence/plan.json", sha256="d" * 64)
+    assert "feature_plan_snapshot" not in calls[0]

@@ -21,9 +21,8 @@ class ReturnRelationshipPublicationPolicy(HoldingContract):
     parent_publication: SourcePin
     parent_saved_row_verification: SourcePin
     feature_config: SourcePin
-    predictor_failure_facts: SourcePin
+    predictor_failure_facts: SourcePin | None = None
     strategy_contract: SourcePin
-    feature_plan_snapshot: SourcePin | None = None
     source_start: Literal["2018-05-29"] = "2018-05-29"
     source_end: Literal["2024-05-28"] = "2024-05-28"
     decision_start: Literal["2019-07-09"] = "2019-07-09"

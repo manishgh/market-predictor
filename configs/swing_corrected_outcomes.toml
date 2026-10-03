@@ -9,10 +9,10 @@ batch_rows = 64
 promotion_eligible = false
 action_archive = "data/raw/swing_full_cohort_corporate_actions"
 action_audit_sha256 = "04553f69998bd4a6034c04ffef95238aad9b516eaa0cf0ad6849dc034fedf40c"
-source_selection = { path = "data/reports/swing_symbol_corrected_sources.json", sha256 = "01153e33e8b6a161c04fde2dbea8021eeea369fef6988868c38b49f0e0c065ee" }
+source_selection = { path = "data/research/swing_symbol_corrected_sources.json", sha256 = "093f497847532f03e029b213b5f98efb6d2d1c8e927e80c5d78f4b30719119c4" }
 parent_config = { path = "configs/swing_initial_fit_raw_share_plan.toml", sha256 = "cfef6ddf203c8a4496b2527154f86d37fac1706e2e4bd489562bc3d38543eb54" }
 action_config = { path = "configs/swing_full_cohort_corporate_actions.toml", sha256 = "0d81b536625c08b6b8422d26f83e571ed4758e9aaef893d952017a467806808d" }
-symbol_corrections = { path = "configs/swing_symbol_corrections.toml", sha256 = "be63ad9460f80cf87a377b903971c5415bcfefdf5d457308a9a9028d2b5488e3" }
+symbol_corrections = { path = "configs/swing_symbol_corrections.toml", sha256 = "259e5328a150eb25f67ab51a55af908f5639744f4b9c0970741d7863bf009fa1" }
 research_contract = { path = "configs/swing_research.toml", sha256 = "411d1d5e745a038fb1e4f16433eb7df6411f4c74c95264d9878ec64b9d0e42d9" }
 simulation_policy = { path = "configs/swing_trade_simulation.toml", sha256 = "3754e89ece9e46beabe4e5a82504daa27085ffff8d7858fd158c9abbe520a5b2" }
 

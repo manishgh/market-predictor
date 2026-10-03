@@ -8,7 +8,7 @@ import pytest
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.swing.datasets.research_feature_sources import corrected_adjusted_bars, raw_dollar_volume_inputs
+from market_predictor.swing.datasets.research_feature_sources import raw_dollar_volume_inputs
 from tests.test_swing_corrected_outcomes import publication as publication
 
 
@@ -47,43 +47,3 @@ def test_duplicate_source_ownership_cannot_double_volume(publication: dict[str, 
     segments.append(segments[0])
     with pytest.raises(DataReadinessError, match="one exact selected segment"):
         _raw(publication)
-
-
-def _adjusted(fixture: dict[str, Any]) -> tuple[Path, dict[str, Any]]:
-    source = fixture["source"]["selection"]["segments"][0]
-    raw = Path(source["archive"]) / source["artifact"]["bars_path"]
-    frame = pd.read_parquet(raw)
-    frame["adjustment"] = "all"
-    path = raw.with_name("adjusted.parquet")
-    frame.to_parquet(path, index=False)
-    return path, {**source["artifact"], "bars_path": path.name, "bars_sha256": file_sha256(path), "rows": len(frame)}
-
-
-def test_adjusted_source_reuses_canonical_market_intervals(publication: dict[str, Any]) -> None:
-    path, record = _adjusted(publication)
-    result = corrected_adjusted_bars(path.parent, record)
-    assert result.timeframe.eq("1d").all()
-    assert result.availability_policy.eq("market_interval_close").all()
-    assert result.bar_start_utc.iloc[0] == pd.Timestamp("2024-01-02T14:30Z")
-    assert result.available_at_utc.iloc[0] == pd.Timestamp("2024-01-02T21:15Z")
-
-
-def test_adjusted_source_wrong_identity_rejected(publication: dict[str, Any]) -> None:
-    path, record = _adjusted(publication)
-    with pytest.raises(DataReadinessError, match="issuer/feed/basis mismatch"):
-        corrected_adjusted_bars(path.parent, {**record, "security_id": "wrong-issuer"})
-
-
-def test_adjusted_source_numeric_projection_stops_at_initial_fit(
-    publication: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    path, record = _adjusted(publication)
-    original = pd.read_parquet
-
-    def bounded(*args: Any, **kwargs: Any) -> pd.DataFrame:
-        assert kwargs["filters"] == [("session_date", ">=", "2018-05-29"), ("session_date", "<=", "2024-05-28")]
-        assert "columns" in kwargs
-        return original(*args, **kwargs)
-
-    monkeypatch.setattr(pd, "read_parquet", bounded)
-    corrected_adjusted_bars(path.parent, record)

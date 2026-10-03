@@ -20,50 +20,55 @@ import pyarrow.dataset as pds
 import pyarrow.parquet as pq
 from pydantic import Field, model_validator
 
+from market_predictor.canonical.normalize import canonicalize_bars
 from market_predictor.canonical.store import file_sha256, load_canonical_artifact, manifest_path_for
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import inside, write_json_object
+from market_predictor.evidence.io import inside, resolve_inside_authority, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.modeling.strategy_contract import StrategyContract, load_strategy_contract
 from market_predictor.resources import release_process_memory
 from market_predictor.swing.contracts.holding_accounting import HoldingContract, Identifier, Sha256
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.research_features import ResearchFeaturePolicy
-from market_predictor.swing.datasets.action_evidence import load_corporate_action_evidence
+from market_predictor.swing.datasets.adjusted_history_bindings import (
+    AdjustedHistoryBindings,
+    bind_adjusted_history_decisions,
+    expected_bound_history_sessions,
+    load_adjusted_history_bindings,
+    read_bound_benchmarks,
+)
+from market_predictor.swing.datasets.adjusted_history_source import read_adjusted_history_unit
 from market_predictor.swing.datasets.corrected_decisions import verified_corrected_decision_partitions
 from market_predictor.swing.datasets.corrected_outcomes import (
     _projection,
     load_corrected_outcome_policy,
-    verified_corrected_research_sources,
+    verified_corrected_price_sources,
 )
 from market_predictor.swing.datasets.feature_history_plan import NUMERIC_END, WARMUP_START
+from market_predictor.swing.datasets.holding_raw_sources import RAW_COLUMNS
 from market_predictor.swing.datasets.initial_fit_raw_share_plan import MEMBERSHIP_COLUMNS
 from market_predictor.swing.datasets.research_feature_sources import raw_dollar_volume_inputs
 from market_predictor.swing.datasets.research_features import (
-    CORRECTED_QUERY_SYMBOLS,
     _check_population,
     _guard,
     _pins,
     _publish,
     _verify_part,
 )
-from market_predictor.swing.datasets.session_requirements import session_abstentions_by_ticker
 from market_predictor.swing.datasets.symbol_corrections import pinned_object
 from market_predictor.swing.features.adjusted_source import (
     AdjustedTechnicalSource,
     _bars,
     build_adjusted_technical_source,
-    expected_adjusted_history_sessions,
-    load_combined_adjusted_inventory,
-    read_combined_adjusted_bars,
 )
 from market_predictor.swing.features.panel import TECHNICAL_RANKING_FEATURES
 from market_predictor.swing.features.research_join import DECISION_KEYS
 
 SCHEMA = "market_predictor.predictor_abstention_derivation"
 PIN_MAPS = ("declared_source_files", "source_files", "implementation_files", "adjusted_source_files")
-PREFIX_IMPLEMENTATION_FILES = ("swing/datasets/action_evidence.py", "swing/datasets/holding_raw_sources.py")
+PREFIX_IMPLEMENTATION_FILES = ("swing/datasets/adjusted_history_bindings.py", "swing/datasets/adjusted_history_source.py",
+    "swing/datasets/holding_raw_sources.py", "canonical/normalize.py")
 
 
 class ReviewedPredictorFailure(HoldingContract):
@@ -126,13 +131,16 @@ def _observation(root: Path, facts: PredictorFailureFacts, fact: ReviewedPredict
     if (report.get("schema") != "market_predictor.predictor_source_failure_observations"
             or report.get("numeric_first") != str(WARMUP_START) or report.get("numeric_last") != str(NUMERIC_END)):
         raise DataReadinessError("reviewed observations escape the frozen numeric window")
-    records = [item for item in report["observations"] if item["security_id"] == fact.security_id and item["ticker"] == fact.symbol]
+    if len(fact.source_artifacts) != 1:
+        raise DataReadinessError("reviewed observation requires exactly one source artifact")
+    source = fact.source_artifacts[0]
+    normalized = inside(root, source.path).relative_to(root).as_posix()
+    records = [row for row in report["observations"] if row["security_id"] == fact.security_id
+        and row["ticker"] == fact.symbol and row.get("source_path") == normalized
+        and row.get("source_sha256") == source.sha256]
     if len(records) != 1:
         raise DataReadinessError("reviewed failure requires one exact issuer observation record")
     record: dict[str, Any] = records[0]
-    if (len(fact.source_artifacts) != 1 or _merge(root, {record["source_path"]: record["source_sha256"]})
-            != _merge(root, {fact.source_artifacts[0].path: fact.source_artifacts[0].sha256})):
-        raise DataReadinessError("reviewed observation source bytes differ from failure facts")
     if fact.first_invalid_session is not None:
         invalid = record["invalid_rows"]
         if not invalid:
@@ -182,7 +190,8 @@ def _inputs(root: Path, checkpoint_pin: SourcePin, facts_pin: SourcePin,
     for key, fact in approved.items():
         failure = checkpoint["failed_groups"][key]
         if (json_sha256(failure) != fact.parent_failure_sha256
-                or key != json_sha256([fact.security_id, fact.symbol])
+                or not isinstance(failure.get("source_group"), str)
+                or key != json_sha256([fact.security_id, failure["source_group"]])
                 or failure.get("security_id") != fact.security_id or failure.get("symbol") != fact.symbol
                 or type(failure.get("rows")) is not int or failure["rows"] != fact.rows
                 or failure.get("error_type") != "DataReadinessError"):
@@ -352,12 +361,58 @@ def _validated_prefix(frame: pd.DataFrame, fact: ReviewedPredictorFailure, obser
     return prefix
 
 
+def validate_bound_observation(bindings: AdjustedHistoryBindings, unit_id: str,
+    fact: ReviewedPredictorFailure, observation: Mapping[str, Any],
+) -> None:
+    """Bind reviewed source bytes to this exact current adjusted query unit."""
+    if unit_id not in bindings.source.records:
+        raise DataReadinessError("reviewed adjusted query unit is absent")
+    record = bindings.source.records[unit_id]
+    path = resolve_inside_authority(bindings.source.directory, record["bars_path"])
+    expected = SourcePin(path=path.relative_to(bindings.source.root).as_posix(), sha256=record["bars_sha256"])
+    if (fact.group_key != json_sha256([fact.security_id, unit_id])
+            or record["security_id"] != fact.security_id or record["ticker"] != fact.symbol
+            or record["role"] != "stock" or len(fact.source_artifacts) != 1
+            or fact.source_artifacts[0] != expected
+            or observation.get("source_path") != expected.path or observation.get("source_sha256") != expected.sha256
+            or bindings.source_files.get(expected.path) != expected.sha256
+            or file_sha256(path) != expected.sha256):
+        raise DataReadinessError("reviewed observation differs from current adjusted query source bytes")
+
+
+def validated_bound_prefix(bindings: AdjustedHistoryBindings, unit_id: str,
+    fact: ReviewedPredictorFailure, observation: Mapping[str, Any], expected_sessions: tuple[date, ...],
+) -> pd.DataFrame:
+    """Prove the complete raw prefix before clipping to independent membership."""
+    validate_bound_observation(bindings, unit_id, fact, observation)
+    unit = read_adjusted_history_unit(bindings.source, unit_id)
+    record = unit.record
+    first, last = (date.fromisoformat(str(record[name])) for name in ("start_date", "end_date"))
+    if (fact.first_invalid_session is None or not expected_sessions
+            or tuple(sorted(set(expected_sessions))) != expected_sessions
+            or any(not first <= day <= last for day in expected_sessions)):
+        raise DataReadinessError("prefix replay requires independent ordered query sessions")
+    path = resolve_inside_authority(bindings.source.directory, record["bars_path"])
+    raw = pd.read_parquet(path, columns=RAW_COLUMNS)
+    validate_bound_observation(bindings, unit_id, fact, observation)
+    if len(raw) != observation.get("bounded_rows") or len(raw) != record["rows"]:
+        raise DataReadinessError("prefix replay requires the complete bounded observed stream")
+    dates = raw.session_date.map(date.fromisoformat)
+    if not dates.between(first, last).all():
+        raise DataReadinessError("prefix raw source escapes the current query window")
+    projected = raw.loc[dates.le(fact.first_invalid_session)].copy()
+    canonical = canonicalize_bars(projected, timeframe="1d", availability_policy="market_interval_close")
+    _validated_prefix(canonical, fact, {**observation, "bounded_rows": len(projected)})
+    days = pd.to_datetime(canonical.bar_start_utc, utc=True).dt.tz_convert("America/New_York").dt.date
+    return canonical.loc[days.lt(fact.first_invalid_session) & days.isin(expected_sessions)].reset_index(drop=True)
+
+
 def _rebuild_prefix(group: pd.DataFrame, stock: pd.DataFrame, benchmarks: pd.DataFrame,
     memberships: pd.DataFrame, raw: pd.DataFrame, *, fact: ReviewedPredictorFailure,
-    observation: Mapping[str, Any], expected_history_sessions: tuple[date, ...], contract: StrategyContract,
+    expected_history_sessions: tuple[date, ...], contract: StrategyContract,
     clocks: Mapping[str, str],
 ) -> AdjustedTechnicalSource:
-    prefix = _validated_prefix(stock, fact, observation)
+    prefix = _bars(stock)
     assert fact.first_invalid_session is not None
     earlier = group.loc[group.session_date_et.lt(fact.first_invalid_session)]
     suffix = group.loc[group.session_date_et.ge(fact.first_invalid_session)]
@@ -381,6 +436,35 @@ def _rebuild_prefix(group: pd.DataFrame, stock: pd.DataFrame, benchmarks: pd.Dat
     return AdjustedTechnicalSource(result, dict(clocks))
 
 
+def _feature_policy(root: Path, facts: PredictorFailureFacts) -> ResearchFeaturePolicy:
+    config = inside(root, facts.feature_config.path)
+    if config.stat().st_size > 65536 or file_sha256(config) != facts.feature_config.sha256:
+        raise DataReadinessError("prefix feature policy differs from pinned parent configuration")
+    policy = ResearchFeaturePolicy.model_validate(tomllib.loads(config.read_text(encoding="utf-8")))
+    if policy.outcome_source_config != facts.decision_config:
+        raise DataReadinessError("prefix source policy differs from frozen decision configuration")
+    return policy
+
+
+def _reviewed_bindings(root: Path, facts: PredictorFailureFacts, policy: ResearchFeaturePolicy,
+    files: Mapping[str, str],
+) -> AdjustedHistoryBindings:
+    for name in type(policy).model_fields:
+        if name != "schema_version":
+            pin = getattr(policy, name)
+            normalized = inside(root, pin.path).relative_to(root).as_posix()
+            if files.get(normalized) != pin.sha256:
+                raise DataReadinessError("prefix policy dependency is not bound by the parent request")
+    report = pinned_object(inside(root, facts.observations.path), facts.observations.sha256)
+    if report.get("adjusted_archive_authority") != policy.adjusted_archive_authority.model_dump(mode="json"):
+        raise DataReadinessError("boundary observations refer to another adjusted archive authority")
+    bindings = load_adjusted_history_bindings(root=root, plan_authority=policy.adjusted_plan_authority,
+        archive_authority=policy.adjusted_archive_authority)
+    if any(files.get(name) != digest for name, digest in bindings.source_files.items()):
+        raise DataReadinessError("reviewed adjusted history is not bound by the parent request")
+    return bindings
+
+
 def _recover_prefixes(*, root: Path, facts: PredictorFailureFacts, expected: Mapping[str, pd.DataFrame],
     files: dict[str, str], clocks: Mapping[str, str],
 ) -> tuple[dict[str, pd.DataFrame], dict[str, str]]:
@@ -388,74 +472,36 @@ def _recover_prefixes(*, root: Path, facts: PredictorFailureFacts, expected: Map
     recover = [fact for fact in facts.failures if fact.quarantine == "suffix_from_first_invalid"]
     if not recover:
         return {}, files
-    config = inside(root, facts.feature_config.path)
-    if config.stat().st_size > 65536 or file_sha256(config) != facts.feature_config.sha256:
-        raise DataReadinessError("prefix feature policy differs from pinned parent configuration")
-    policy = ResearchFeaturePolicy.model_validate(tomllib.loads(config.read_text(encoding="utf-8")))
-    if policy.outcome_source_config != facts.decision_config:
-        raise DataReadinessError("prefix source policy differs from frozen decision configuration")
+    policy = _feature_policy(root, facts)
     source_config = inside(root, facts.decision_config.path)
     source_policy = load_corrected_outcome_policy(root, source_config, facts.decision_config.sha256)
-    # This established evidence loader acquires/releases its own lease. Do not
-    # wrap it or the subsequent verified source context in another lease.
-    evidence = load_corporate_action_evidence(root=root, config=inside(root, source_policy.action_config.path),
-        archive=inside(root, source_policy.action_archive), expected_audit_sha256=source_policy.action_audit_sha256)
     recovered: dict[str, pd.DataFrame] = {}
-    with verified_corrected_research_sources(root, source_config, facts.decision_config.sha256, source_policy, evidence) as sources:
+    with verified_corrected_price_sources(root, source_config, facts.decision_config.sha256, source_policy) as sources:
         _guard()
         files = _merge(root, files, sources["source_files"])
+        bindings = _reviewed_bindings(root, facts, policy, files)
+        files = _merge(root, files, bindings.source_files)
         _pins(root, files)
-        for name in type(policy).model_fields:
-            if name != "schema_version":
-                pin = getattr(policy, name)
-                normalized = inside(root, pin.path).relative_to(root).as_posix()
-                if files.get(normalized) != pin.sha256:
-                    raise DataReadinessError("prefix policy dependency is not bound by the parent request")
         strategy = load_strategy_contract(inside(root, policy.strategy_contract.path))
-        parent = inside(root, policy.parent_request.path).parent
-        inventory = load_combined_adjusted_inventory(parent, request_sha256=policy.parent_request.sha256,
-            final_manifest_sha256=policy.parent_manifest.sha256, final_authority_sha256=policy.parent_authority.sha256,
-            combined_manifest_sha256=policy.combined_manifest.sha256, contract=strategy)
-        combined = pinned_object(parent / "combined_daily/_manifest.json", policy.combined_manifest.sha256)
-        report = pinned_object(inside(root, facts.observations.path), facts.observations.sha256)
-        if report["combined_manifest_sha256"] != policy.combined_manifest.sha256:
-            raise DataReadinessError("boundary observations refer to another combined source inventory")
-        gap_record = combined["session_gap_audit"]
-        gap_path = inside(parent / "combined_daily", gap_record["path"])
-        if files.get(gap_path.relative_to(root).as_posix()) != gap_record["sha256"]:
-            raise DataReadinessError("prefix session-gap authority is not bound by the parent request")
-        gaps = session_abstentions_by_ticker(pinned_object(gap_path, gap_record["sha256"]))
         original_memberships = _projection(sources["membership_path"], MEMBERSHIP_COLUMNS)
-
-        def read(symbol: str, identity: str) -> pd.DataFrame:
-            record = inventory[symbol]
-            path = inside(parent / "combined_daily", record["path"])
-            if files.get(path.relative_to(root).as_posix()) != record["sha256"]:
-                raise DataReadinessError("prefix stock or benchmark is not a pinned parent input")
-            return read_combined_adjusted_bars(parent / "combined_daily", record, security_id=identity)
 
         for fact in recover:
             _guard()
             group = expected[fact.group_key]
             observation = _observation(root, facts, fact)
-            record = inventory[fact.symbol]
-            if (_pin(root, inside(parent / "combined_daily", record["path"]), record["sha256"])
-                    != _merge(root, {observation["source_path"]: observation["source_sha256"]})):
-                raise DataReadinessError("prefix issuer inventory differs from reviewed source bytes")
-            stock = read(fact.symbol, fact.security_id)
+            unit_id = str(group.source_group.iloc[0])
+            history_sessions = expected_bound_history_sessions(bindings, unit_id, original_memberships)
+            stock = validated_bound_prefix(bindings, unit_id, fact, observation, history_sessions)
             memberships = sources["memberships"].loc[sources["memberships"].security_id.eq(fact.security_id)]
             membership_start = pd.to_datetime(memberships.effective_from_utc, utc=True).dt.tz_convert("America/New_York").dt.date
             memberships = memberships.loc[membership_start.lt(fact.first_invalid_session)]
             symbols = {"SPY", "QQQ", *group.primary_benchmark, *memberships.primary_benchmark.dropna()}
-            benchmarks = pd.concat([read(symbol, f"benchmark:{symbol}") for symbol in sorted(symbols)], ignore_index=True)
-            history_sessions = expected_adjusted_history_sessions(security_id=fact.security_id,
-                memberships=original_memberships.loc[original_memberships.ticker.eq(fact.symbol)],
-                sparse_missing_sessions_by_ticker={ticker: tuple(sorted(days)) for ticker, days in gaps.items()})
+            benchmarks = read_bound_benchmarks(bindings, symbols)
             earlier = group.loc[group.session_date_et.lt(fact.first_invalid_session)]
             raw = (raw_dollar_volume_inputs(root=root, selection=sources["selection"], decisions=earlier,
                 policy=source_policy, policy_sha256=facts.decision_config.sha256) if not earlier.empty else pd.DataFrame())
             recovered[fact.group_key] = _rebuild_prefix(group, stock, benchmarks, memberships, raw, fact=fact,
-                observation=observation, expected_history_sessions=history_sessions, contract=strategy, clocks=clocks).rows
+                expected_history_sessions=history_sessions, contract=strategy, clocks=clocks).rows
             del stock, benchmarks, raw
             release_process_memory()
         _pins(root, files)
@@ -501,8 +547,10 @@ def derive_predictors_with_abstentions(*, root: Path, parent_checkpoint: SourceP
                 or parent_request["retained_security_ids"] != list(projection.retained_security_ids)
                 or parent_request["decision_ids_sha256"] != json_sha256(sorted(decisions.decision_id))):
             raise DataReadinessError("derivation differs from the frozen decision population")
-        decisions["source_group"] = [CORRECTED_QUERY_SYMBOLS.get(identity, ticker)
-            for identity, ticker in zip(decisions.security_id, decisions.parent_ticker, strict=True)]
+        policy = _feature_policy(root, facts)
+        bindings = _reviewed_bindings(root, facts, policy, files)
+        files = _merge(root, files, bindings.source_files)
+        decisions = bind_adjusted_history_decisions(decisions, bindings)
         expected = {json_sha256([identity, symbol]): group for (identity, symbol), group in
             decisions.groupby(["security_id", "source_group"], sort=True)}
         if set(expected) != set(parent["groups"]) | set(parent["failed_groups"]):
@@ -522,7 +570,9 @@ def derive_predictors_with_abstentions(*, root: Path, parent_checkpoint: SourceP
                 raise DataReadinessError("inherited predictor parent decision identity differs")
             del frame
         for fact in facts.failures:
-            if len(expected[fact.group_key]) != fact.rows:
+            group = expected[fact.group_key]
+            validate_bound_observation(bindings, str(group.source_group.iloc[0]), fact, _observation(root, facts, fact))
+            if len(group) != fact.rows:
                 raise DataReadinessError("approved unavailable row count differs from frozen population")
         _pins(root, files)
     recovered, files = _recover_prefixes(root=root, facts=facts, expected=expected, files=files, clocks=clocks)

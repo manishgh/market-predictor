@@ -1,19 +1,15 @@
 from datetime import date
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.swing.features.adjusted_source import (
     BAR_COLUMNS,
     build_adjusted_technical_source,
     expected_adjusted_history_sessions,
-    load_combined_adjusted_inventory,
-    read_combined_adjusted_bars,
 )
 from market_predictor.swing.features.panel import TECHNICAL_RANKING_FEATURES
 from tests.test_swing_features import contract as contract
@@ -102,30 +98,6 @@ def test_future_price_poison_does_not_change_earlier_rows(contract: StrategyCont
     pd.testing.assert_frame_equal(before.iloc[:-1], after.iloc[:-1])
 
 
-def test_projected_read_excludes_heldout_numeric_and_labels(tmp_path: Path) -> None:
-    args = _source_inputs()
-    bars = args["adjusted_bars"].copy()
-    later = bars.iloc[:1].copy()
-    later["bar_start_utc"] = pd.Timestamp("2025-01-02T14:30:00Z")
-    bars = pd.concat([bars, later], ignore_index=True)
-    bars["future_net_return_10d"] = 1e99
-    path = tmp_path / "bars.parquet"
-    bars.to_parquet(path)
-    record = dict(path=path.name, ticker="AAA", sha256=file_sha256(path))
-    result = read_combined_adjusted_bars(tmp_path, record, security_id="issuer-a")
-    assert len(result) == 300 and set(result) == set(BAR_COLUMNS)
-    assert result.bar_start_utc.max().date() <= date(2024, 5, 28)
-    record["sha256"] = "0" * 64
-    with pytest.raises(DataReadinessError, match="hash mismatch"):
-        read_combined_adjusted_bars(tmp_path, record, security_id="issuer-a")
-
-
-@pytest.mark.parametrize("security_id", ["cik:0001415404", "cik:0000798354"])
-def test_wrong_old_corrected_stream_never_read(tmp_path: Path, security_id: str) -> None:
-    with pytest.raises(DataReadinessError, match="newly replayed"):
-        read_combined_adjusted_bars(tmp_path, {"ticker": "AAA"}, security_id=security_id)
-
-
 @pytest.mark.parametrize("ticker,security_id", [("SATS", "cik:0001415404"), ("FI", "cik:0000798354")])
 def test_corrected_stream_keeps_canonical_parent_symbol(ticker: str, security_id: str, contract: StrategyContract) -> None:
     args = _source_inputs()
@@ -145,38 +117,6 @@ def test_missing_entire_stock_stream_preserves_population(contract: StrategyCont
     rows = build_adjusted_technical_source(**args, contract=contract).rows
     assert len(rows) == 20 and rows.return_20d.isna().all()
     assert rows.technical_missing_reasons.map(lambda value: "adjusted_history_warmup_crosses_missing_session" in value).all()
-
-
-def test_inventory_metadata_only_and_tamper(tmp_path: Path, contract: StrategyContract, monkeypatch: pytest.MonkeyPatch) -> None:
-    from market_predictor.evidence.hashing import json_sha256
-    from market_predictor.evidence.io import write_json_object
-
-    inputs = dict(price_feed="sip", adjustment="all")
-    request = dict(combined_daily_inputs=inputs, request_sha256="request", strategy_contract_sha256=contract.sha256())
-    combined_request = json_sha256({**inputs, "parent_materialization_request_sha256": "request"})
-    (tmp_path / "combined_daily").mkdir()
-    (tmp_path / "final").mkdir()
-    write_json_object(tmp_path / "_request.json", request)
-    write_json_object(tmp_path / "combined_daily/_manifest.json", dict(request_sha256=combined_request,
-        artifacts=[dict(ticker="AAA", path="bars/missing.parquet", sha256="a" * 64)]))
-    combined_pin = file_sha256(tmp_path / "combined_daily/_manifest.json")
-    write_json_object(tmp_path / "combined_daily/_authority.json", dict(state="complete", artifact_sha256=combined_pin,
-        request_sha256=combined_request))
-    write_json_object(tmp_path / "final/_manifest.json", dict(request_sha256="request", strategy_contract_sha256=contract.sha256(),
-        source=dict(combined_daily_authority_sha256=file_sha256(tmp_path / "combined_daily/_authority.json"))))
-    final_pin = file_sha256(tmp_path / "final/_manifest.json")
-    write_json_object(tmp_path / "final/_authority.json", dict(state="complete", artifact_sha256=final_pin,
-        request_sha256="request", strategy_contract_sha256=contract.sha256()))
-    kwargs = dict(request_sha256=file_sha256(tmp_path / "_request.json"), final_manifest_sha256=final_pin,
-        final_authority_sha256=file_sha256(tmp_path / "final/_authority.json"), combined_manifest_sha256=combined_pin,
-        contract=contract)
-    monkeypatch.setattr(pd, "read_parquet", lambda *a, **k: pytest.fail("numeric read forbidden"))
-    assert set(load_combined_adjusted_inventory(tmp_path, **kwargs)) == {"AAA"}
-    request["combined_daily_inputs"]["adjustment"] = "raw"
-    (tmp_path / "_request.json").unlink()
-    write_json_object(tmp_path / "_request.json", request)
-    with pytest.raises(DataReadinessError, match="hash mismatch"):
-        load_combined_adjusted_inventory(tmp_path, **kwargs)
 
 
 def test_single_gap_recovers_at_configured_clean_warmup(contract: StrategyContract) -> None:

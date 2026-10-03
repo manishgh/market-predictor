@@ -21,19 +21,14 @@ def register_research_feature_commands(app: typer.Typer) -> None:
         implementation_snapshot: Path = typer.Option(...), snapshot_sha256: str = typer.Option(...),
         output: Path = typer.Option(...), root: Path = typer.Option(Path(".")),
         maximum_groups: int | None = typer.Option(None, min=1),
-        feature_plan_snapshot: Path | None = typer.Option(None), feature_plan_snapshot_sha256: str | None = typer.Option(None),
     ) -> None:
         """Reconstruct every technical group and month against its original publication."""
-        if (feature_plan_snapshot is None) != (feature_plan_snapshot_sha256 is None):
-            raise typer.BadParameter("feature-plan snapshot and SHA256 must be supplied together")
         try:
             result = replay_predictor_publication(root=root,
                 publication=SourcePin(path=publication.as_posix(), sha256=publication_sha256),
                 migration_bindings=SourcePin(path=migration_bindings.as_posix(), sha256=migration_bindings_sha256),
                 implementation_snapshot=SourcePin(path=implementation_snapshot.as_posix(), sha256=snapshot_sha256),
-                output=output, maximum_groups=maximum_groups,
-                feature_plan_snapshot=None if feature_plan_snapshot is None else SourcePin(
-                    path=feature_plan_snapshot.as_posix(), sha256=str(feature_plan_snapshot_sha256)))
+                output=output, maximum_groups=maximum_groups)
         except HeavyJobBusyError as error:
             typer.echo(str(error), err=True)
             raise typer.Exit(code=HEAVY_JOB_BUSY_EXIT_CODE) from error

@@ -13,6 +13,8 @@ import pytest
 import market_predictor.swing.datasets.research_features as owner
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
+from market_predictor.swing.datasets.adjusted_history_bindings import AdjustedHistoryBindings
+from market_predictor.swing.datasets.adjusted_history_source import AdjustedHistorySource, AdjustedHistoryUnit
 from market_predictor.swing.features.adjusted_source import AdjustedTechnicalSource
 from market_predictor.swing.features.panel import TECHNICAL_RANKING_FEATURES
 from tests.test_swing_features import contract as contract
@@ -30,24 +32,20 @@ def publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contract: Any) 
         "swing/datasets/symbol_corrections.py", "swing/labels/holding_identity.py", "modeling/strategy_contract.py",
         "swing/datasets/session_requirements.py", "swing/datasets/history_archive.py",
         "evidence/io.py", "universe/symbol_correction_policy.py",
-        "swing/datasets/initial_fit_raw_share_plan.py")
+        "swing/datasets/initial_fit_raw_share_plan.py", "swing/datasets/adjusted_history_bindings.py",
+        "swing/datasets/adjusted_history_source.py")
     for relative in paths:
         path = package / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# synthetic implementation pin\n", encoding="ascii")
     monkeypatch.setattr(owner, "__file__", str(package / paths[0]))
-    parent = root / "data/features/parent"
-    locations = {"parent_request": parent / "_request.json", "parent_manifest": parent / "final/_manifest.json",
-        "parent_authority": parent / "final/_authority.json", "combined_manifest": parent / "combined_daily/_manifest.json"}
-    for name in ("outcome_source_config", "strategy_contract", "adjusted_plan_authority", "adjusted_archive_authority"):
-        locations[name] = root / "data/research" / name / "source.json"
+    archive = root / "data/raw/adjusted"
+    archive.mkdir(parents=True)
+    locations = {name: root / "data/research" / name / "source.json" for name in
+        ("outcome_source_config", "strategy_contract", "adjusted_plan_authority", "adjusted_archive_authority")}
     for path in locations.values():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("{}", encoding="ascii")
-    gap_path = parent / "combined_daily/_session_gap_audit.json"
-    gap_path.write_text(json.dumps(dict(gaps=[dict(ticker="AAA", missing_sessions=["2019-07-10"])])), encoding="ascii")
-    locations["combined_manifest"].write_text(json.dumps(dict(session_gap_audit=dict(path=gap_path.name,
-        sha256=file_sha256(gap_path)))), encoding="ascii")
     config = root / "configs/features.toml"
     config.parent.mkdir()
     lines = ['schema_version = "market_predictor.corrected_research_features"']
@@ -75,12 +73,20 @@ def publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contract: Any) 
     state: dict[str, Any] = dict(root=root, config=config, output=root / "data/features/new",
         expected_config_sha256=file_sha256(config), calls=[], active=False, failures={}, decisions=decisions,
         sources=sources, captured_benchmarks={}, captured_sessions={})
-    inventory = {}
+    inventory, windows, adjusted_files = {}, {}, {}
     for symbol in ("AAA", "BBB", "SPY", "QQQ", "XLK", "XLF"):
-        path = parent / "combined_daily" / f"{symbol}.parquet"
+        path = archive / f"{symbol}.parquet"
         path.write_bytes(f"synthetic bound bar bytes {symbol}".encode())
-        inventory[symbol] = dict(ticker=symbol, path=path.name, sha256=file_sha256(path))
-    state.update(inventory=inventory, parent=parent)
+        stock = symbol in {"AAA", "BBB"}
+        unit_id = f"unit-{symbol}"
+        identity = dict(security_id=f"issuer-{symbol}" if stock else f"benchmark:{symbol}", ticker=symbol,
+            role="stock" if stock else "benchmark", start_date="2018-05-29", end_date="2024-05-28")
+        inventory[unit_id] = dict(**identity, unit_id=unit_id, bars_path=path.name, bars_sha256=file_sha256(path))
+        windows[unit_id] = dict(parent={**identity, "start_date": "2019-07-09"}, query=identity)
+        adjusted_files[path.relative_to(root).as_posix()] = file_sha256(path)
+    adjusted = AdjustedHistorySource(root, archive, inventory, adjusted_files)
+    bindings = AdjustedHistoryBindings(adjusted, windows, adjusted_files)
+    state.update(inventory=inventory, archive=archive, bindings=bindings)
 
     @contextmanager
     def verified(*args: Any, **kwargs: Any) -> Any:
@@ -88,15 +94,19 @@ def publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contract: Any) 
         state["active"] = True
         try:
             yield sources
+            if state.get("exit_failure"):
+                raise DataReadinessError("source context exit hash check failed")
         finally:
             state["active"] = False
 
-    def read_bars(directory: Path, record: dict[str, Any], **kwargs: Any) -> pd.DataFrame:
+    def read_bars(source: AdjustedHistorySource, unit_id: str) -> AdjustedHistoryUnit:
         assert state["active"], "numeric source read escaped the source lease"
-        if file_sha256(directory / record["path"]) != record["sha256"]:
+        record = source.records[unit_id]
+        if file_sha256(source.directory / record["bars_path"]) != record["bars_sha256"]:
             raise DataReadinessError("synthetic adjusted source changed")
         state["calls"].append(("read", record["ticker"]))
-        return pd.DataFrame(dict(ticker=[record["ticker"]], session_date_et=[date(2019, 7, 9)]))
+        bars = pd.DataFrame(dict(ticker=[record["ticker"]], bar_start_utc=[pd.Timestamp("2019-07-09T13:30Z")]))
+        return AdjustedHistoryUnit(bars, (date(2019, 7, 10),), (), record)
 
     def build(group: pd.DataFrame, bars: pd.DataFrame, benchmarks: pd.DataFrame, *args: Any, **kwargs: Any) -> Any:
         identity = kwargs["security_id"]
@@ -117,16 +127,12 @@ def publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contract: Any) 
     monkeypatch.setattr(owner, "_guard", lambda: None)
     monkeypatch.setattr(owner, "release_process_memory", lambda: None)
     monkeypatch.setattr(owner, "load_strategy_contract", lambda *a, **k: contract)
-    monkeypatch.setattr(owner, "load_corrected_outcome_policy", lambda *a, **k: SimpleNamespace(
-        action_config=SimpleNamespace(path="actions.toml"), action_archive="actions", action_audit_sha256="a" * 64))
-    monkeypatch.setattr(owner, "load_corporate_action_evidence", lambda **k: None)
-    monkeypatch.setattr(owner, "verified_corrected_research_sources", verified)
-    monkeypatch.setattr(owner, "load_combined_adjusted_inventory", lambda *a, **k: inventory)
-    monkeypatch.setattr(owner, "load_complete_swing_history_collection", lambda *a, **k: dict(unit_artifacts=[
-        dict(security_id=value) for value in owner.CORRECTED_QUERY_SYMBOLS]))
+    monkeypatch.setattr(owner, "load_corrected_outcome_policy", lambda *a, **k: SimpleNamespace())
+    monkeypatch.setattr(owner, "verified_corrected_price_sources", verified)
+    monkeypatch.setattr(owner, "load_adjusted_history_bindings", lambda **k: bindings)
     monkeypatch.setattr(owner, "load_corrected_decision_partition", lambda root, sources, record, policy:
         decisions.loc[decisions.session_date_et.map(lambda day: day.strftime("%Y-%m")).eq(record["partition_month"])].copy())
-    monkeypatch.setattr(owner, "read_combined_adjusted_bars", read_bars)
+    monkeypatch.setattr("market_predictor.swing.datasets.adjusted_history_bindings.read_adjusted_history_unit", read_bars)
     monkeypatch.setattr(owner, "raw_dollar_volume_inputs", lambda **k: pd.DataFrame())
     monkeypatch.setattr(owner, "build_adjusted_technical_source", build)
     return state
@@ -236,7 +242,7 @@ def test_reconstructed_orphan_different_values_rejected(publication: dict[str, A
 
 def test_completed_group_source_tamper_rejected_on_resume(publication: dict[str, Any]) -> None:
     _run(publication, maximum_groups_this_run=1)
-    (publication["parent"] / "combined_daily/AAA.parquet").write_bytes(b"source changed after checkpoint")
+    (publication["archive"] / "AAA.parquet").write_bytes(b"source changed after checkpoint")
     with pytest.raises(DataReadinessError, match="source changed"):
         _resume(publication)
 
@@ -260,8 +266,63 @@ def test_context_mismatch_refused() -> None:
         owner._check_population(frame, wrong)
 
 
-def test_original_ipo_requirements_and_sparse_gap_reach_builder(publication: dict[str, Any]) -> None:
+def test_original_ipo_requirements_retain_absent_session_for_warmup(publication: dict[str, Any]) -> None:
     _run(publication)
     sessions = publication["captured_sessions"]["issuer-AAA"]
     assert min(sessions) == date(2019, 7, 9)
     assert date(2019, 7, 10) in sessions
+
+
+def test_price_context_requires_no_action_or_target_source(publication: dict[str, Any]) -> None:
+    # The policy stub deliberately has no action_config/archive/audit fields.
+    assert _run(publication)["rows"] == 4
+
+
+def test_unavailable_rows_keep_frozen_months_and_ids(publication: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+    original = owner.build_adjusted_technical_source
+
+    def unavailable(*args: Any, **kwargs: Any) -> AdjustedTechnicalSource:
+        result = original(*args, **kwargs)
+        result.rows["feature_eligible"] = False
+        result.rows["technical_missing_reasons"] = [("stock_history_missing",)] * len(result.rows)
+        return result
+
+    monkeypatch.setattr(owner, "build_adjusted_technical_source", unavailable)
+    result = _run(publication)
+    assert result["rows"] == 4 and result["feature_eligible_rows"] == 0
+    assert set(result["months"]) == {"2019-07", "2019-08"}
+    ids = set()
+    for part in result["months"].values():
+        ids.update(pd.read_parquet(publication["output"] / "months" / part["path"]).decision_id)
+    assert ids == set(publication["decisions"].decision_id)
+
+
+@pytest.mark.parametrize("maximum_groups", [None, 1])
+def test_source_exit_failure_never_publishes_complete_manifest(publication: dict[str, Any], maximum_groups: int | None) -> None:
+    publication["exit_failure"] = True
+    with pytest.raises(DataReadinessError, match="source context exit"):
+        _run(publication, maximum_groups_this_run=maximum_groups)
+    assert (publication["output"] / "_checkpoint.json").is_file()
+    assert not (publication["output"] / "_manifest.json").exists()
+
+
+def test_mutation_between_source_exit_and_final_lease_refused(publication: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    @contextmanager
+    def mutate(*args: Any, **kwargs: Any) -> Any:
+        assert not publication["active"]
+        (publication["archive"] / "AAA.parquet").write_bytes(b"changed after source lease")
+        yield {}
+
+    monkeypatch.setattr(owner, "heavy_job_lease", mutate)
+    with pytest.raises(DataReadinessError, match="source changed"):
+        _run(publication)
+    assert not (publication["output"] / "_manifest.json").exists()
+
+
+def test_failed_group_records_query_ticker_and_unit_identity(publication: dict[str, Any]) -> None:
+    publication["failures"]["issuer-AAA"] = DataReadinessError("synthetic unavailable input")
+    result = _run(publication)
+    failure = next(iter(result["failed_groups"].values()))
+    assert failure["source_group"] == "unit-AAA" and failure["symbol"] == "AAA"

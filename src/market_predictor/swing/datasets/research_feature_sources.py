@@ -7,35 +7,13 @@ from typing import Any
 
 import pandas as pd
 
-from market_predictor.canonical.normalize import canonicalize_bars
-from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.evidence.io import resolve_inside_authority
 from market_predictor.swing.contracts.corrected_outcomes import CorrectedOutcomePolicy
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference
 from market_predictor.swing.contracts.holding_materialization import PositionSourceBinding
 from market_predictor.swing.datasets.corrected_outcome_admission import corrected_ticker
-from market_predictor.swing.datasets.holding_raw_sources import RAW_COLUMNS, read_bound_observations
+from market_predictor.swing.datasets.holding_raw_sources import read_bound_observations
 from market_predictor.swing.features.research_join import DECISION_KEYS
-
-
-def corrected_adjusted_bars(archive: Path, record: dict[str, Any]) -> pd.DataFrame:
-    """Consume one record from the independently replayed two-issuer collection."""
-    path = resolve_inside_authority(archive, record["bars_path"])
-    if file_sha256(path) != record["bars_sha256"]:
-        raise DataReadinessError("corrected adjusted feature source changed")
-    frame = pd.read_parquet(path, columns=RAW_COLUMNS,
-        filters=[("session_date", ">=", "2018-05-29"), ("session_date", "<=", "2024-05-28")])
-    if file_sha256(path) != record["bars_sha256"] or len(frame) != record["rows"]:
-        raise DataReadinessError("corrected adjusted feature inventory differs")
-    if (not frame.security_id.eq(record["security_id"]).all() or not frame.ticker.eq(record["ticker"]).all()
-            or not frame.source.eq("alpaca").all() or not frame.price_feed.eq("sip").all()
-            or not frame.adjustment.eq("all").all() or not frame.timeframe.eq("1Day").all()):
-        raise DataReadinessError("corrected adjusted feature issuer/feed/basis mismatch")
-    dates = pd.to_datetime(frame.session_date, errors="raise").dt.date
-    if not dates.between(date(2018, 5, 29), date(2024, 5, 28)).all():
-        raise DataReadinessError("corrected adjusted history escapes warm-up/initial-fit bounds")
-    return canonicalize_bars(frame, timeframe="1d", availability_policy="market_interval_close")
 
 
 def raw_dollar_volume_inputs(

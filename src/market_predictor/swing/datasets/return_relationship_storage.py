@@ -16,10 +16,10 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.swing.contracts.return_relationship_publication import ARTIFACT_TYPE
+from market_predictor.swing.datasets.adjusted_history_bindings import AdjustedHistoryBindings, bind_adjusted_history_decisions
 from market_predictor.swing.datasets.return_relationship_integrity import check_files, read_object
 from market_predictor.swing.datasets.return_relationship_parent import VerifiedRelationshipParent, load_parent_month
 from market_predictor.swing.datasets.return_relationship_rows import ADDITIONS, IDENTITY_COLUMNS
-from market_predictor.swing.datasets.return_relationship_sources import CORRECTED_SYMBOLS
 
 GROUP_TYPE = "swing_return_relationship_additions"
 
@@ -59,7 +59,7 @@ def verify_child(output: Path, record: dict[str, Any], request_sha256: str, *, g
 
 def stage_baseline(output: Path, parent: VerifiedRelationshipParent, inventory: dict[str, dict[str, Any]],
     request_sha256: str, guard: Callable[[], None],
-    expected: dict[str, Any] | None = None,
+    expected: dict[str, Any] | None = None, *, bindings: AdjustedHistoryBindings,
 ) -> dict[str, Any]:
     directory = output / "_baseline_stage"
     manifest_path = directory / "_manifest.json"
@@ -83,8 +83,9 @@ def stage_baseline(output: Path, parent: VerifiedRelationshipParent, inventory: 
         for month in sorted(parent.manifest["months"]):
             guard()
             frame = load_parent_month(parent, month, columns)
-            group_keys = [json_sha256([str(identity), CORRECTED_SYMBOLS.get(str(identity), str(ticker))])
-                for identity, ticker in zip(frame.security_id, frame.parent_ticker, strict=True)]
+            bound = bind_adjusted_history_decisions(frame, bindings)
+            group_keys = [json_sha256([str(identity), str(unit_id)])
+                for identity, unit_id in zip(bound.security_id, bound.source_group, strict=True)]
             if not set(group_keys).issubset(inventory):
                 raise DataReadinessError("relationship staging encountered an unbound source group")
             frame["_source_group_key"] = group_keys

@@ -9,6 +9,7 @@ from market_predictor.process_memory import (
 from market_predictor.process_memory import (
     release_process_memory as release_process_memory,
 )
+from market_predictor.process_memory import release_unused_process_memory
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +47,8 @@ def assert_memory_budget(
             f"memory guard stopped {stage}: RSS {_gib(snapshot[0]):.2f} GiB exceeds "
             f"the {_gib(threshold):.2f} GiB safety threshold for the {hard_budget_gib:.2f} GiB hard budget"
         )
+    # Reclaim unused buffers after measuring RSS, before subsequent system guards.
+    release_unused_process_memory()
 
 
 def assert_peak_memory_budget(

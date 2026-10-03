@@ -98,6 +98,8 @@ def verify_parent(root: Path, policy: ReturnRelationshipPublicationPolicy) -> Ve
         raise DataReadinessError("relationship parent or original saved-row receipt differs")
     declared = pins(root, request["source_files"], request["decision_source_files"])
     for pin in (policy.feature_config, policy.predictor_failure_facts, policy.strategy_contract):
+        if pin is None:
+            continue
         if declared.get(inside(root, pin.path).relative_to(root).as_posix()) != pin.sha256:
             raise DataReadinessError("relationship configuration substitutes a parent source authority")
     live, historical = _historical_sources(root, declared, policy)

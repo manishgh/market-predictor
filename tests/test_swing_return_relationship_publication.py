@@ -1,11 +1,8 @@
 """Synthetic bounded authorities; no provider calls or production evidence."""
 from __future__ import annotations
 
-import hashlib
-import json
 import shutil
-from dataclasses import replace
-from datetime import date, datetime, timedelta
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -28,31 +25,12 @@ from market_predictor.swing.datasets.return_relationship_parent import _historic
 from market_predictor.swing.features.panel import swing_model_feature_columns
 from market_predictor.swing.training.return_validation import security_transfer_mask
 from tests.test_fixed_horizon_readiness import inputs
-from tests.test_swing_feature_history_plan import _publish
-from tests.test_swing_feature_history_plan import evidence as evidence
-from tests.test_swing_history_collection import _FakeSource, _test_transport_response
 from tests.test_swing_return_feature_profiles import _bars
 from tests.test_swing_training_readiness import REPO, _json
 
 
 def _pin(root: Path, path: Path) -> dict[str, str]:
     return dict(path=path.relative_to(root).as_posix(), sha256=file_sha256(path))
-
-
-class _FullSource(_FakeSource):
-    def fetch_daily_page(self, symbol: str, start: datetime, end_exclusive: datetime, *,
-        page_token: str | None, asof: date, adjustment: str,
-    ) -> history_archive.SwingDailyPage:
-        page = super().fetch_daily_page(symbol, start, end_exclusive, page_token=page_token, asof=asof, adjustment=adjustment)
-        days = xcals.get_calendar("XNYS").sessions_in_range(start.date(), asof)
-        bars = tuple(dict(t=pd.Timestamp(day.date(), tz="America/New_York").tz_convert("UTC").isoformat(),
-            o=100.0 + index / 10, h=102.0 + index / 10, l=99.0 + index / 10,
-            c=101.0 + index / 10, v=1000 + index) for index, day in enumerate(days))
-        payload = {"bars": {symbol: list(bars)}, "next_page_token": None}
-        params = dict(symbols=symbol, timeframe="1Day", start=start.isoformat(),
-            end=(end_exclusive - timedelta(microseconds=1)).isoformat(), feed="sip", limit=10000,
-            adjustment=adjustment, sort="asc", asof=asof.isoformat())
-        return replace(page, bars=bars, raw_payload=payload, transport_response=_test_transport_response(payload, params))
 
 
 def _canonical(frame: pd.DataFrame, path: Path, kind: str, request: str) -> None:
@@ -71,83 +49,36 @@ def _feature_config(root: Path, values: dict[str, Any]) -> Path:
     return path
 
 
-def _collection_fixture(root: Path, family: str) -> dict[str, Any]:
-    """Protocol-faithful metadata only; never a replayable provider archive."""
-    path = root / "data/raw" / family
-    path.mkdir(parents=True)
-    if family == "pre_collection":
-        plan_hashes = dict(request_sha256="1" * 64, manifest_sha256="2" * 64,
-            authority_sha256="3" * 64, units_sha256="4" * 64)
-        payload = dict(schema="edge_rebuild.swing_history_collection", provider="alpaca", timeframe="1Day",
-            adjustment="all", price_feed="sip", plan_hashes=plan_hashes, universe_sha256="7" * 64,
-            plan_directory=str(root / "synthetic-pre-plan"), plan_schema="edge_rebuild.swing_history_plan.v1",
-            provider_unit_set_sha256=json_sha256([]), provider_symbols={}, transport_receipts_required=True,
-            workers=2, maximum_memory_gib=4.0)
-        identity = json_sha256(payload)
-        request_pin = _json(path / "_request.json", {**payload, "request_sha256": identity})
-        unit_set = json_sha256([])
-        manifest_pin = _json(path / "_manifest.json", dict(schema=payload["schema"], status="complete",
-            request_sha256=identity, plan_hashes=plan_hashes, universe_sha256=payload["universe_sha256"],
-            failed_units=[], unattempted_units=[], unavailable_units=[], unavailable_security_fraction=0.0,
-            requested_units=0, terminal_units=0, observed_units=0, unit_artifacts=[], total_rows=0, unit_set_sha256=unit_set))
-        authority_pin = _json(path / "_authority.json", dict(schema="edge_rebuild.swing_history_collection_authority",
-            state="complete", artifact="_manifest.json", artifact_sha256=manifest_pin, request_sha256=identity,
-            plan_authority_sha256=plan_hashes["authority_sha256"], plan_units_sha256=plan_hashes["units_sha256"],
-            universe_sha256=payload["universe_sha256"], unit_set_sha256=unit_set))
-        return dict(directory=str(path), request_sha256=request_pin, manifest_sha256=manifest_pin,
-            authority_sha256=authority_pin, unit_set_sha256=unit_set, universe_sha256=payload["universe_sha256"])
-    assert family == "post_collection"
-    payload = dict(schema="swing.daily_history_collection", source="alpaca", timeframe="1d",
-        adjustment="all", price_feed="sip", start_date="2019-07-09", end_date="2026-07-08")
-    identity = hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
-    request_pin = _json(path / "_request.json", {**payload, "request_sha256": identity})
-    ledger = path / "_source_collections.parquet"
-    pd.DataFrame([dict(collection_id="alpaca-synthetic-test", ticker="AAA", source_family="alpaca_daily_bars",
-        requested_start_utc=pd.Timestamp("2019-07-09", tz="UTC"), requested_end_utc=pd.Timestamp("2026-07-08", tz="UTC"),
-        status="observed_empty", row_count=0)]).to_parquet(ledger, index=False)
-    ledger_pin = file_sha256(ledger)
-    status = dict(schema="swing.daily_history_manifest", status="complete_with_gaps", request_sha256=identity,
-        requested_symbols=1, observed_symbols=0, unavailable_symbols=["AAA"], failed_symbols={}, skipped_symbols=[],
-        source_collections_sha256=ledger_pin)
-    status_pin = _json(path / "_status.json", status)
-    manifest_pin = _json(path / "_manifest.json", {**status, "artifacts": [], "artifact_count": 0, "total_rows": 0})
-    return dict(directory=str(path), request_file_sha256=request_pin, request_identity_sha256=identity,
-        manifest_sha256=manifest_pin, status_sha256=status_pin, source_collections_sha256=ledger_pin)
+def _adjusted(root: Path, identities: list[str], sessions: tuple[date, ...]) -> Any:
+    from types import MappingProxyType
 
-
-def _combined(root: Path, strategy: Any, sessions: tuple[date, ...]) -> dict[str, Any]:
-    directory = root / "data/features/source"
-    combined = directory / "combined_daily"
-    combined.mkdir(parents=True)
-    lineage: dict[str, Any] = {"membership_authority": {"universe_sha256": "7" * 64}}
-    for family in ("pre_collection", "post_collection"):
-        lineage[family] = _collection_fixture(root, family)
-    combined_inputs = {**lineage, "source": "alpaca", "timeframe": "1Day", "adjustment": "all", "price_feed": "sip",
-        "start_date": "2018-05-29", "pre_end_date": "2019-07-08", "post_start_date": "2019-07-09"}
-    request = dict(request_sha256="a" * 64, strategy_contract_sha256=strategy.sha256(), combined_daily_inputs=combined_inputs)
-    _json(directory / "_request.json", request)
-    combined_sha = json_sha256({**combined_inputs, "parent_materialization_request_sha256": request["request_sha256"]})
-    artifacts = []
-    for ticker in ("AAA", "BBB", "SPY", "WTW"):
-        frame = _bars(sessions, "AAA" if ticker != "SPY" else "SPY").drop(columns="security_id", errors="ignore")
-        frame["ticker"] = ticker
-        frame["high"] = frame.close * 1.01
-        frame["low"] = frame.open * 0.99
-        frame["schema_version"] = "market_data"
-        path = combined / f"{ticker}.parquet"
-        _canonical(frame, path, "bars", combined_sha)
-        artifacts.append(dict(ticker=ticker, path=path.name, sha256=file_sha256(path), rows=len(frame),
-            canonical_manifest_sha256=file_sha256(manifest_path_for(path))))
-    manifest = dict(request_sha256=combined_sha, source_lineage=lineage, artifacts=artifacts)
-    combined_pin = _json(combined / "_manifest.json", manifest)
-    owner_pin = _json(combined / "_authority.json", dict(state="complete", artifact_sha256=combined_pin, request_sha256=combined_sha))
-    final_pin = _json(directory / "final/_manifest.json", dict(request_sha256=request["request_sha256"],
-        strategy_contract_sha256=strategy.sha256(), source=dict(combined_daily_authority_sha256=owner_pin)))
-    _json(directory / "final/_authority.json", dict(state="complete", artifact_sha256=final_pin,
-        request_sha256=request["request_sha256"], strategy_contract_sha256=strategy.sha256()))
-    transitive = {path.relative_to(root).as_posix() for family in ("pre_collection", "post_collection")
-        for path in Path(lineage[family]["directory"]).iterdir()}
-    return dict(directory=directory, artifacts=artifacts, transitive_metadata_paths=transitive)
+    from market_predictor.swing.datasets.adjusted_history_bindings import AdjustedHistoryBindings
+    from market_predictor.swing.datasets.adjusted_history_source import AdjustedHistorySource
+    directory = root / "adjusted-archive"
+    records, windows, sources = {}, {}, {}
+    for identity, ticker in zip([*identities, "benchmark:SPY", "unavailable-wtw"], ("AAA", "BBB", "SPY", "WTW"), strict=True):
+        unit_id = "unit-" + ticker
+        frame = _bars(sessions, "SPY" if ticker == "SPY" else "AAA").assign(
+            security_id=identity, ticker=ticker, high=lambda x: x.close * 1.01, low=lambda x: x.open * 0.99,
+            session_date=[str(day) for day in sessions], timeframe="1Day",
+            bar_start_utc=pd.to_datetime(sessions).tz_localize("America/New_York").tz_convert("UTC"))
+        path = directory / unit_id / "bars.parquet"
+        path.parent.mkdir(parents=True)
+        frame.to_parquet(path,index=False)
+        unit = path.parent / "_manifest.json"
+        _json(unit, {})
+        query = dict(security_id=identity, ticker=ticker, role="benchmark" if ticker=="SPY" else "stock",
+            start_date=str(sessions[0]),end_date=str(sessions[-1]))
+        records[unit_id] = {**query, "unit_id":unit_id, "provider_symbol":ticker, "status":"observed",
+            "rows":len(frame), "bars_path":path.relative_to(directory).as_posix(),"bars_sha256":file_sha256(path),
+            "unit_manifest_path":unit.relative_to(directory).as_posix(),"unit_manifest_sha256":file_sha256(unit)}
+        windows[unit_id] = {"parent":dict(query),"query":dict(query)}
+        sources.update({x.relative_to(root).as_posix():file_sha256(x) for x in (path,unit)})
+    for path in (root/"adjusted-plan/_authority.json", directory/"_authority.json"):
+        _json(path,{})
+        sources[path.relative_to(root).as_posix()]=file_sha256(path)
+    source = AdjustedHistorySource(root,directory,MappingProxyType(records),MappingProxyType(sources))
+    return AdjustedHistoryBindings(source,MappingProxyType(windows),MappingProxyType(sources))
 
 
 def _frames(strategy: Any) -> tuple[dict[str, pd.DataFrame], tuple[date, ...], list[str]]:
@@ -190,8 +121,9 @@ def _frames(strategy: Any) -> tuple[dict[str, pd.DataFrame], tuple[date, ...], l
 
 
 @pytest.fixture
-def publication_fixture(evidence: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    root = evidence["root"]
+def publication_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> dict[str, Any]:
+    root = tmp_path
+    derived = bool(getattr(request, "param", False))
     monkeypatch.setenv("MARKET_PREDICTOR_RUNTIME_DIR", str(root / "isolated-runtime"))
     shutil.copytree(REPO / "src/market_predictor", root / "src/market_predictor", ignore=shutil.ignore_patterns("__pycache__"))
     monkeypatch.setattr(integrity, "__file__", str(root / "src/market_predictor/swing/datasets/return_relationship_integrity.py"))
@@ -210,21 +142,38 @@ def publication_fixture(evidence: dict[str, Any], monkeypatch: pytest.MonkeyPatc
     shutil.copyfile(REPO / "configs/swing_corrected_outcomes.toml", config_dir / "swing_corrected_outcomes.toml")
     strategy = load_strategy_contract(root / readiness_policy["strategy_contract"]["path"])
     all_sessions = tuple(day.date() for day in xcals.get_calendar("XNYS").sessions_in_range("2018-05-29", "2024-05-28"))
-    combined = _combined(root, strategy, all_sessions)
-    plan, plan_pin = _publish(evidence)
-    archive = root / "adjusted-archive"
-    history_archive.collect_swing_history_plan(plan_directory=plan, output_directory=archive,
-        source_factory=_FullSource, provider_symbol_for=lambda ticker: ticker, expected_plan_authority_sha256=plan_pin)
-    directory = combined["directory"]
+    frames, sessions, identities = _frames(strategy)
+    bindings = _adjusted(root, identities, all_sessions)
+    from market_predictor.swing.datasets.initial_fit_raw_share_plan import MEMBERSHIP_COLUMNS
+    members = pd.DataFrame([{**{name: "synthetic" for name in MEMBERSHIP_COLUMNS},
+        "security_id":identity,"ticker":ticker,
+        "effective_from_utc":pd.Timestamp("2018-05-29",tz="America/New_York"),
+        "effective_to_utc":pd.Timestamp("2024-05-29",tz="America/New_York"),
+        "available_at_utc":pd.Timestamp("2018-05-29",tz="America/New_York")}
+        for identity,ticker in zip(identities,("AAA","BBB"),strict=True)])
+    members.to_parquet(root/"memberships.parquet",index=False)
+    preflight = root/"preflight.json"
+    _json(preflight,{"request":{"membership_path":"memberships.parquet"}})
+    parent_config=config_dir/"parent.toml"
+    parent_config.write_text(f'preflight_path = "preflight.json"\npreflight_sha256 = "{file_sha256(preflight)}"\n')
+    outcome_path=config_dir/"swing_corrected_outcomes.toml"
+    lines=outcome_path.read_text().splitlines()
+    lines=[f'parent_config = {{ path = "configs/parent.toml", sha256 = "{file_sha256(parent_config)}" }}'
+        if line.startswith("parent_config =") else line for line in lines]
+    outcome_path.write_text("\n".join(lines))
+    # Strict source admission is covered by adjusted-history binding tests. This
+    # fixture exercises real physical reads, group assembly, publication and replay.
+    from market_predictor.swing.datasets import return_relationship_sources as source_owner
+    monkeypatch.setattr(source_owner, "load_adjusted_history_bindings", lambda **kwargs: bindings)
     feature = _feature_config(root, dict(outcome_source_config=_pin(root, config_dir / "swing_corrected_outcomes.toml"),
-        strategy_contract=readiness_policy["strategy_contract"], parent_request=_pin(root, directory / "_request.json"),
-        parent_manifest=_pin(root, directory / "final/_manifest.json"), parent_authority=_pin(root, directory / "final/_authority.json"),
-        combined_manifest=_pin(root, directory / "combined_daily/_manifest.json"),
-        adjusted_plan_authority=_pin(root, plan / "_authority.json"), adjusted_archive_authority=_pin(root, archive / "_authority.json")))
+        strategy_contract=readiness_policy["strategy_contract"],
+        adjusted_plan_authority=_pin(root, root / "adjusted-plan/_authority.json"),
+        adjusted_archive_authority=_pin(root, root / "adjusted-archive/_authority.json")))
     observation = root / "data/reports/failure_observation.json"
-    wtw = next(item for item in combined["artifacts"] if item["ticker"] == "WTW")
-    wtw_pin = _pin(root, directory / "combined_daily" / wtw["path"])
+    wtw = bindings.source.records["unit-WTW"]
+    wtw_pin = _pin(root, bindings.source.directory / wtw["bars_path"])
     _json(observation, dict(schema="market_predictor.predictor_source_failure_observations",
+        adjusted_archive_authority=_pin(root, root / "adjusted-archive/_authority.json"),
         numeric_first="2018-05-29", numeric_last="2024-05-28", observations=[dict(security_id="unavailable-wtw", ticker="WTW",
             source_path=wtw_pin["path"], source_sha256=wtw_pin["sha256"], invalid_rows=[])]))
     facts_path = config_dir / "failures.json"
@@ -232,21 +181,29 @@ def publication_fixture(evidence: dict[str, Any], monkeypatch: pytest.MonkeyPatc
         parent_request_sha256="2" * 64, decision_config=_pin(root, config_dir / "swing_corrected_outcomes.toml"),
         feature_config=_pin(root, feature), observations=_pin(root, observation), parent_run_finished=True,
         approval_scope="causal_prefix_replay_and_nullable_completion_only", reviewed_by="Synthetic unit test",
-        failures=[dict(group_key=json_sha256(["unavailable-wtw", "WTW"]), security_id="unavailable-wtw", symbol="WTW", rows=1,
+        failures=[dict(group_key=json_sha256(["unavailable-wtw", "unit-WTW"]), security_id="unavailable-wtw", symbol="WTW", rows=1,
             parent_failure_sha256="3" * 64, reason_code="unverified_issuer_history", quarantine="entire_failed_group",
             first_invalid_session=None, boundary_observation_sha256=None, source_artifacts=[wtw_pin],
             reviewed_evidence=[_pin(root, observation)], detail="Synthetic absent issuer, never actual market evidence")]))
-    frames, sessions, identities = _frames(strategy)
     population = pd.concat(frames.values(), ignore_index=True)
-    groups = {json_sha256([identity, ticker]): dict(rows=int(population.security_id.eq(identity).sum()),
+    groups = {json_sha256([identity, "unit-" + ticker]): dict(rows=int(population.security_id.eq(identity).sum()),
         decision_ids_sha256=json_sha256(sorted(population.loc[population.security_id.eq(identity), "decision_id"])))
         for identity, ticker in zip(identities, ("AAA", "BBB"), strict=True)}
-    _json(root / "data/features/predictors/_manifest.json", dict(schema="market_predictor.research_predictors", rows=len(population),
-        groups=groups, derivation=dict(approved_failure_facts=_pin(root, facts_path))))
+    predictor_request = root / "data/features/predictors/_request.json"
+    _json(predictor_request, dict(schema="market_predictor.research_predictor_request",config_sha256=file_sha256(feature),
+        declared_source_files={pin["path"]:pin["sha256"] for pin in (
+            _pin(root,feature),_pin(root,config_dir/"swing_corrected_outcomes.toml"),readiness_policy["strategy_contract"],
+            _pin(root,root/"adjusted-plan/_authority.json"),_pin(root,root/"adjusted-archive/_authority.json"))},
+        adjusted_source_files=dict(bindings.source_files),expected_rows=len(population),
+        decision_ids_sha256=json_sha256(sorted(population.decision_id)),implementation_files={}))
+    predictor_manifest = dict(schema="market_predictor.research_predictors", rows=len(population), groups=groups,
+        request_sha256=file_sha256(predictor_request),status="technical_inputs_complete_research_only",failed_groups={},
+        exclusions_added=[],training_eligible=False,promotion_eligible=False)
+    if derived:
+        predictor_manifest["derivation"] = dict(approved_failure_facts=_pin(root,facts_path))
+    _json(root / "data/features/predictors/_manifest.json",predictor_manifest)
     source_files = {path.relative_to(root).as_posix(): file_sha256(path) for path in root.rglob("*")
-        if path.is_file() and not path.is_relative_to(root / "src") and not path.name.endswith(".lock")
-        and path.relative_to(root).as_posix() not in combined["transitive_metadata_paths"]}
-    assert not set(source_files).intersection(combined["transitive_metadata_paths"])
+        if path.is_file() and not path.is_relative_to(root / "src") and not path.name.endswith(".lock")}
     joined = root / "data/features/join"
     request_pin = _json(joined / "_request.json", dict(schema="market_predictor.research_join_request", rows=len(population),
         historical_first_seen_proven=False, cohort_sha256="c" * 64, source_files=source_files, decision_source_files={}))
@@ -275,7 +232,7 @@ def publication_fixture(evidence: dict[str, Any], monkeypatch: pytest.MonkeyPatc
     config = config_dir / "relationships.json"
     _json(config, dict(schema_version="market_predictor.return_relationship_publication_config",
         parent_publication=_pin(root, joined / "_manifest.json"), parent_saved_row_verification=_pin(root, receipt_path),
-        feature_config=_pin(root, feature), predictor_failure_facts=_pin(root, facts_path),
+        feature_config=_pin(root, feature), predictor_failure_facts=_pin(root, facts_path) if derived else None,
         strategy_contract=readiness_policy["strategy_contract"]))
     output = root / "data/features/relationships"
     partial = owner.materialize_return_relationships(root, config, file_sha256(config), output, maximum_groups_this_run=1)
@@ -308,16 +265,28 @@ def publication_fixture(evidence: dict[str, Any], monkeypatch: pytest.MonkeyPatc
     publication = SourcePin(path=(output / "_manifest.json").relative_to(root).as_posix(), sha256=result["manifest_sha256"])
     readiness_policy.update(publication=_pin(root, joined / "_manifest.json"), saved_row_verification=_pin(root, receipt_path))
     return dict(root=root, publication=publication, output=output, config=SourcePin(**_pin(root, config)), sessions=sessions,
-        parent=dict(policy=readiness_policy), result=result, partial=partial)
+        parent=dict(policy=readiness_policy), result=result, partial=partial, derived=derived)
 
 
-def test_real_publisher_and_metadata_verifier(publication_fixture: dict[str, Any]) -> None:
+@pytest.mark.parametrize("publication_fixture", [False, True], indirect=True)
+def test_real_publisher_and_metadata_verifier(publication_fixture: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
     state = publication_fixture
     verified = owner.verify_return_relationship_publication(state["root"], state["publication"])
     assert verified.manifest["rows"] == 354
+    if state["derived"]:
+        from market_predictor.swing.datasets.return_relationship_parent import verify_parent
+        from market_predictor.swing.datasets.return_relationship_sources import verify_source_context
+        policy = integrity.load_policy(state["root"],state["root"]/state["config"].path,state["config"].sha256)
+        parent = verify_parent(state["root"],policy)
+        with pytest.raises(DataReadinessError,match="exact failure facts"):
+            verify_source_context(state["root"],policy.model_copy(update={"predictor_failure_facts":None}),parent)
     assert len(verified.months) == 59 and len(verified.model_columns) == 124
     assert verified.manifest["status"] == "complete_research_only"
     assert all(verified.manifest[name] is False for name in owner.CLOSED)
+    from market_predictor.swing.datasets import return_relationship_verification as verification
+    monkeypatch.setattr(verification, "_guard", lambda: None)
+    monkeypatch.setattr(verification, "release_process_memory", lambda: None)
+    verification._replay_additions(state["root"], state["output"] / "_manifest.json", verified)
     before = {path: (file_sha256(path), path.stat().st_mtime_ns) for path in state["output"].rglob("*") if path.is_file()}
     config = state["config"]
     assert owner.materialize_return_relationships(state["root"], Path(config.path), config.sha256, state["output"],

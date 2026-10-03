@@ -61,7 +61,7 @@ def migration(example: dict[str, Any], monkeypatch: pytest.MonkeyPatch, contract
     expected_good, _ = load_canonical_artifact(state["output"] / "groups" / part["path"],
         expected_type="swing_research_technical_inputs", allow_research=True)
     decisions = state["decisions"].copy()
-    decisions["source_group"] = decisions.parent_ticker
+    decisions = derivation.bind_adjusted_history_decisions(decisions, state["adjusted_bindings"])
     sources = dict(source_files={state["config"].name: file_sha256(state["config"])}, request=published_request)
     context = SimpleNamespace(decisions=decisions, sources=sources, corrected_records={},
         adjusted_source_files=published_request["adjusted_source_files"], records=[dict(partition_month=month)
@@ -102,8 +102,7 @@ def migration(example: dict[str, Any], monkeypatch: pytest.MonkeyPatch, contract
     monkeypatch.setattr(owner, "release_process_memory", lambda: None)
     monkeypatch.setattr(features, "_guard", lambda: None)
     monkeypatch.setattr(owner, "load_corrected_outcome_policy", derivation.load_corrected_outcome_policy)
-    monkeypatch.setattr(owner, "load_corporate_action_evidence", lambda **k: SimpleNamespace(recheck=lambda root: None))
-    monkeypatch.setattr(owner, "verified_corrected_research_sources", source_context)
+    monkeypatch.setattr(owner, "verified_corrected_price_sources", source_context)
     monkeypatch.setattr(features, "prepare_predictor_sources", lambda **k: context)
     monkeypatch.setattr(features, "build_predictor_group", build)
     return state
@@ -130,26 +129,9 @@ def test_snapshot_binding_accepts_equivalent_native_paths(migration: dict[str, A
     assert verify(migration).historical_implementation_files == migration["historical"]
 
 
-def test_feature_plan_evidence_is_bound_and_reverified(
-    migration: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    marker = migration["root"] / "data/evidence/plan-proof.json"
-    marker.write_bytes(b'{"test_fixture":true}')
-    pin = _pin(migration["root"], marker)
-    calls: list[SourcePin | None] = []
-
-    def evidence(root: Path, policy: Any, snapshot: SourcePin | None) -> dict[str, str]:
-        calls.append(snapshot)
-        assert snapshot == migration["snapshot"]
-        return {pin.path: pin.sha256}
-
-    monkeypatch.setattr(owner, "_feature_plan_evidence", evidence)
-    replay(migration, feature_plan_snapshot=migration["snapshot"])
-    assert verify(migration).live_evidence_files[pin.path] == pin.sha256
-    assert len(calls) == 2
-    marker.write_bytes(b"altered")
-    with pytest.raises(DataReadinessError):
-        verify(migration)
+def test_replay_rejects_obsolete_feature_plan_snapshot_option(migration: dict[str, Any]) -> None:
+    with pytest.raises(TypeError, match="feature_plan_snapshot"):
+        replay(migration, feature_plan_snapshot=migration["snapshot"])
 
 
 def test_all_groups_and_months_rebuilt_and_verified(migration: dict[str, Any]) -> None:
@@ -341,3 +323,70 @@ def test_corrected_children_are_bound_through_original_authority(tmp_path: Path)
     (archive / "_manifest.json").write_bytes(b"tampered")
     with pytest.raises(DataReadinessError):
         owner._corrected_child_pins(tmp_path, policy)
+
+
+def test_successful_publication_replays_without_invented_failure_facts(
+    migration: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = migration["root"]
+    destination = root / "data/features/clean"
+    destination.mkdir()
+    request = {name: value for name, value in migration["published_request"].items() if name != "derivation"}
+    write_json_object(destination / "_request.json", request)
+    request_pin = file_sha256(destination / "_request.json")
+    groups, months, frames = {}, {}, {}
+    for key, record in migration["published_manifest"]["groups"].items():
+        frame, _ = load_canonical_artifact(migration["output"] / "groups" / record["path"],
+            expected_type="swing_research_technical_inputs", allow_research=True)
+        frames[key] = frame
+        groups[key] = {**features._publish(frame, destination / "groups" / record["path"], request_pin),
+            "availability_columns": record["availability_columns"]}
+    for month, record in migration["published_manifest"]["months"].items():
+        frame, _ = load_canonical_artifact(migration["output"] / "months" / record["path"],
+            expected_type="swing_research_technical_inputs", allow_research=True)
+        months[month] = features._publish(frame, destination / "months" / record["path"], request_pin)
+    manifest = dict(schema="market_predictor.research_predictors", status="technical_inputs_complete_research_only",
+        request_sha256=request_pin, groups=groups, months=months, failed_groups={}, rows=4,
+        feature_eligible_rows=sum(part["feature_eligible_rows"] for part in groups.values()),
+        training_eligible=False, promotion_eligible=False, exclusions_added=[])
+    write_json_object(destination / "_manifest.json", manifest)
+    publication = _pin(root, destination / "_manifest.json")
+    binding_path = root / migration["bindings"].path
+    binding = json.loads(binding_path.read_text())
+    binding["publications"][publication.path] = dict(manifest_sha256=publication.sha256,
+        request=(destination / "_request.json").relative_to(root).as_posix(), request_sha256=request_pin,
+        implementation_files=migration["historical"])
+    binding_path.write_text(json.dumps(binding))
+    migration.update(publication=publication, bindings=_pin(root, binding_path))
+
+    def build(group: pd.DataFrame, context: Any) -> AdjustedTechnicalSource:
+        key = owner.json_sha256([group.security_id.iloc[0], group.source_group.iloc[0]])
+        return AdjustedTechnicalSource(frames[key].copy(), groups[key]["availability_columns"])
+
+    monkeypatch.setattr(features, "build_predictor_group", build)
+    monkeypatch.setattr(derivation, "_recover_prefixes", lambda **k: pytest.fail("clean run must not recover failures"))
+    result = replay(migration)
+    assert result["replay_complete"] and result["rebuilt_prefix_rows"] == result["unavailable_rows"] == 0
+    verify(migration)
+
+
+@pytest.mark.parametrize("different", [None, "path", "hash"])
+def test_feature_config_pin_matches_normalized_windows_paths(tmp_path: Path, different: str | None) -> None:
+    root = tmp_path
+    directory = root / "configs"
+    directory.mkdir()
+    path = directory / "features.toml"
+    path.write_text('schema_version = "market_predictor.corrected_research_features"\n'
+        'outcome_source_config = {path = "decision.toml", sha256 = "' + "a" * 64 + '"}\n'
+        'strategy_contract = {path = "strategy.toml", sha256 = "' + "b" * 64 + '"}\n'
+        'adjusted_plan_authority = {path = "plan/_authority.json", sha256 = "' + "c" * 64 + '"}\n'
+        'adjusted_archive_authority = {path = "archive/_authority.json", sha256 = "' + "d" * 64 + '"}\n')
+    digest = file_sha256(path)
+    request = {"config_sha256": digest, "declared_source_files": {"configs\\features.toml": digest}}
+    facts = SimpleNamespace(feature_config=SourcePin(path="configs/other.toml" if different == "path" else "configs/features.toml",
+        sha256="e" * 64 if different == "hash" else digest), decision_config=SourcePin(path="decision.toml", sha256="a" * 64))
+    if different:
+        with pytest.raises(DataReadinessError, match="exact feature configuration"):
+            owner._publication_policy(root, request, facts)
+    else:
+        assert owner._publication_policy(root, request, facts).outcome_source_config == facts.decision_config

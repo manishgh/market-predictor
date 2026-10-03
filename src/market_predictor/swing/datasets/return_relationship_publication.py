@@ -38,7 +38,7 @@ from market_predictor.swing.datasets.return_relationship_rows import (
     assemble_month,
     assert_parent_parity,
     build_group,
-    read_combined,
+    read_spy,
 )
 from market_predictor.swing.datasets.return_relationship_sources import (
     RelationshipSourceContext,
@@ -61,17 +61,17 @@ CLOSED = {"training_eligible": False, "promotion_eligible": False, "serving_elig
 def _validate_inventory(inventory: dict[str, dict[str, Any]], context: RelationshipSourceContext) -> None:
     if set(inventory) != set(context.predictor_manifest["groups"]):
         raise DataReadinessError("relationship inventory does not cover complete saved ownership")
-    failures = {fact.security_id: fact.model_dump(mode="json") for fact in context.facts.failures}
+    failures = {fact.group_key: fact.model_dump(mode="json") for fact in context.facts.failures} if context.facts else {}
     for key, item in inventory.items():
         identity, symbol = item["security_id"], item["source_group"]
-        corrected = context.corrected.get(identity)
+        record = context.bindings.source.records.get(symbol)
         expected = {"security_id": identity, "source_group": symbol,
             "rows": context.predictor_manifest["groups"][key]["rows"],
             "decision_ids_sha256": context.predictor_manifest["groups"][key]["decision_ids_sha256"],
-            "kind": "corrected" if corrected is not None else "combined",
-            "artifact": corrected if corrected is not None else context.combined.get(symbol),
-            "quarantine": failures.get(identity)}
-        if key != json_sha256([identity, symbol]) or item != expected or expected["artifact"] is None:
+            "artifact": dict(record) if record is not None else None,
+            "quarantine": failures.get(key)}
+        if (key != json_sha256([identity, symbol]) or item != expected or record is None
+                or record["security_id"] != identity or record["role"] != "stock"):
             raise DataReadinessError("relationship inventory source, ownership or quarantine differs")
 
 
@@ -261,9 +261,9 @@ def _materialize(root: Path, output: Path, policy: ReturnRelationshipPublication
             "groups": {}, "months": {}, "rows": 0, "exclusions_added": [], **CLOSED}
         replace_checkpoint(checkpoint_path, state)
     source_bindings = relationship_sources(policy.parent_publication.sha256, context, request["stock_inventory"])
-    spy = read_combined(context.combined_directory, context.combined["SPY"])
+    spy = read_spy(context)
     stages = stage_baseline(output, parent, request["stock_inventory"], request_pin,
-        lambda: guard(policy.maximum_system_used_percent), expected=state.get("baseline_stage"))
+        lambda: guard(policy.maximum_system_used_percent), expected=state.get("baseline_stage"), bindings=context.bindings)
     state["baseline_stage"] = stages
     replace_checkpoint(checkpoint_path, state)
     count = 0

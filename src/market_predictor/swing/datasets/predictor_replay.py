@@ -1,4 +1,4 @@
-"""Current-code numerical replay of immutable, explicitly derived predictors."""
+"""Current-code numerical replay of immutable source-bound predictors."""
 from __future__ import annotations
 
 import json
@@ -26,11 +26,9 @@ from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.research_features import ResearchFeaturePolicy
 from market_predictor.swing.datasets import predictor_abstention_derivation as derivation
 from market_predictor.swing.datasets import research_features as features
-from market_predictor.swing.datasets.action_evidence import load_corporate_action_evidence
 from market_predictor.swing.datasets.corrected_decisions import _metadata_implementation
 from market_predictor.swing.datasets.corrected_outcomes import _implementation as _outcome_implementation
-from market_predictor.swing.datasets.corrected_outcomes import load_corrected_outcome_policy, verified_corrected_research_sources
-from market_predictor.swing.datasets.feature_history_plan import verify_feature_plan_replay
+from market_predictor.swing.datasets.corrected_outcomes import load_corrected_outcome_policy, verified_corrected_price_sources
 from market_predictor.swing.datasets.symbol_corrections import pinned_object
 
 SCHEMA = "market_predictor.predictor_implementation_replay"
@@ -64,12 +62,6 @@ def _split_historical_pins(root: Path, files: Mapping[str, str], declarations: M
     return {name: digest for name, digest in bound.items() if name not in historical}, historical
 
 
-def _feature_plan_evidence(root: Path, policy: ResearchFeaturePolicy, snapshot: SourcePin | None) -> dict[str, str]:
-    if snapshot is None:
-        return {}
-    return verify_feature_plan_replay(root=root, authority=policy.adjusted_plan_authority, implementation_snapshot=snapshot)
-
-
 def _current_implementation(root: Path) -> dict[str, str]:
     package = Path(__file__).resolve().parents[2]
     extra = ("swing/datasets/predictor_replay.py", "swing/datasets/predictor_abstention_derivation.py",
@@ -97,7 +89,7 @@ def _published_files(root: Path, directory: Path, manifest: Mapping[str, Any]) -
 
 def _load_publication(*, root: Path, publication: SourcePin, migration_bindings: SourcePin,
     implementation_snapshot: SourcePin,
-) -> tuple[dict[str, Any], dict[str, Any], derivation.PredictorFailureFacts, dict[str, str], dict[str, str]]:
+) -> tuple[dict[str, Any], dict[str, Any], derivation.PredictorFailureFacts | None, dict[str, str], dict[str, str]]:
     path = inside(root, publication.path)
     if path.name != "_manifest.json" or not path.is_relative_to(root / "data/features"):
         raise DataReadinessError("predictor replay requires a completed feature publication")
@@ -105,15 +97,16 @@ def _load_publication(*, root: Path, publication: SourcePin, migration_bindings:
     if (manifest.get("schema") != "market_predictor.research_predictors"
             or manifest.get("status") != "technical_inputs_complete_research_only"
             or manifest.get("failed_groups") != {} or manifest.get("training_eligible") is not False
-            or manifest.get("promotion_eligible") is not False or manifest.get("exclusions_added") != []
-            or not isinstance(manifest.get("derivation"), dict)):
+            or manifest.get("promotion_eligible") is not False or manifest.get("exclusions_added") != []):
         raise DataReadinessError("predictor replay publication contract differs")
     request_path = path.parent / "_request.json"
     request = pinned_object(request_path, manifest["request_sha256"])
     inherited = derivation.validate_historical_predictor_derivation(root=root, manifest=manifest, request=request)
-    facts_pin = SourcePin.model_validate(manifest["derivation"]["approved_failure_facts"])
-    facts = derivation.PredictorFailureFacts.model_validate_json(
-        json.dumps(pinned_object(inside(root, facts_pin.path), facts_pin.sha256)))
+    facts = None
+    if manifest.get("derivation") is not None:
+        facts_pin = SourcePin.model_validate(manifest["derivation"]["approved_failure_facts"])
+        facts = derivation.PredictorFailureFacts.model_validate_json(
+            json.dumps(pinned_object(inside(root, facts_pin.path), facts_pin.sha256)))
     binding = pinned_object(inside(root, migration_bindings.path), migration_bindings.sha256)
     if (binding.get("schema") != "market_predictor.archive_owner_migration_bindings"
             or binding.get("purpose") != "historical_implementation_provenance_not_numerical_replay"
@@ -136,6 +129,25 @@ def _load_publication(*, root: Path, publication: SourcePin, migration_bindings:
         {publication.path: publication.sha256, migration_bindings.path: migration_bindings.sha256},
         {request_path.relative_to(root).as_posix(): manifest["request_sha256"]})
     return manifest, request, facts, live, historical
+
+
+def _publication_policy(root: Path, request: Mapping[str, Any],
+    facts: derivation.PredictorFailureFacts | None,
+) -> ResearchFeaturePolicy:
+    """An exact producer config pin also identifies successful, non-derived runs."""
+    candidates = [SourcePin(path=name, sha256=digest) for name, digest in request["declared_source_files"].items()
+        if digest == request["config_sha256"]]
+    if len(candidates) != 1 or (facts is not None and derivation._merge(root,
+            {candidates[0].path: candidates[0].sha256}) != derivation._merge(root,
+            {facts.feature_config.path: facts.feature_config.sha256})):
+        raise DataReadinessError("predictor replay lacks one exact feature configuration")
+    path = inside(root, candidates[0].path)
+    if path.stat().st_size > 65536 or file_sha256(path) != candidates[0].sha256:
+        raise DataReadinessError("predictor replay feature policy differs from its pinned bytes")
+    policy = ResearchFeaturePolicy.model_validate(tomllib.loads(path.read_text(encoding="utf-8")))
+    if facts is not None and policy.outcome_source_config != facts.decision_config:
+        raise DataReadinessError("predictor replay decision policy differs")
+    return policy
 
 
 def _check_fresh_sources(root: Path, fresh: Mapping[str, str], live: Mapping[str, str], current: Mapping[str, str]) -> None:
@@ -238,7 +250,6 @@ def _compare_months(root: Path, directory: Path, output: Path, decisions: pd.Dat
 
 def replay_predictor_publication(*, root: Path, publication: SourcePin, migration_bindings: SourcePin,
     implementation_snapshot: SourcePin, output: Path, maximum_groups: int | None = None,
-    feature_plan_snapshot: SourcePin | None = None,
 ) -> dict[str, Any]:
     """Rebuild every group and month under current code; partial runs never complete.
 
@@ -259,14 +270,7 @@ def replay_predictor_publication(*, root: Path, publication: SourcePin, migratio
             migration_bindings=migration_bindings, implementation_snapshot=implementation_snapshot)
         files = derivation._merge(root, live, current)
         features._pins(root, files)
-        config = inside(root, facts.feature_config.path)
-        if config.stat().st_size > 65536:
-            raise DataReadinessError("predictor replay feature policy exceeds byte bound")
-        policy = ResearchFeaturePolicy.model_validate(tomllib.loads(config.read_text(encoding="utf-8")))
-        files = derivation._merge(root, files, _feature_plan_evidence(root, policy, feature_plan_snapshot))
-        features._pins(root, files)
-        if policy.outcome_source_config != facts.decision_config:
-            raise DataReadinessError("predictor replay decision policy differs")
+        policy = _publication_policy(root, request, facts)
         declared = derivation._merge(root, request["declared_source_files"])
         for name in type(policy).model_fields:
             if name != "schema_version":
@@ -278,7 +282,6 @@ def replay_predictor_publication(*, root: Path, publication: SourcePin, migratio
             "original_request_sha256": manifest["request_sha256"],
             "migration_bindings": migration_bindings.model_dump(mode="json"),
             "implementation_snapshot": implementation_snapshot.model_dump(mode="json"),
-            "feature_plan_snapshot": None if feature_plan_snapshot is None else feature_plan_snapshot.model_dump(mode="json"),
             "historical_implementation_files": historical, "current_implementation_files": current,
             "source_files": live, "comparison": "exact_all_columns_dtypes_nulls_groups_and_months",
             "maximum_groups": maximum_groups, "resume_policy": "new_directory_full_reconstruction_only"}
@@ -289,18 +292,14 @@ def replay_predictor_publication(*, root: Path, publication: SourcePin, migratio
             "training_eligible": False, "promotion_eligible": False, "exclusions_added": []}
         features._write(output / "_progress.json", report)
     directory = inside(root, publication.path).parent
-    source_config = inside(root, facts.decision_config.path)
-    source_policy = load_corrected_outcome_policy(root, source_config, facts.decision_config.sha256)
-    evidence = load_corporate_action_evidence(root=root, config=inside(root, source_policy.action_config.path),
-        archive=inside(root, source_policy.action_archive), expected_audit_sha256=source_policy.action_audit_sha256)
+    source_config = inside(root, policy.outcome_source_config.path)
+    source_policy = load_corrected_outcome_policy(root, source_config, policy.outcome_source_config.sha256)
     scratch: dict[str, str] = {}
-    failures = {fact.group_key: fact for fact in facts.failures}
-    with verified_corrected_research_sources(root, source_config, facts.decision_config.sha256,
-        source_policy, evidence) as sources:
+    failures = {} if facts is None else {fact.group_key: fact for fact in facts.failures}
+    with verified_corrected_price_sources(root, source_config, policy.outcome_source_config.sha256, source_policy) as sources:
         features._pins(root, files)
         _check_fresh_sources(root, sources["source_files"], live, current)
-        context = features.prepare_predictor_sources(root=root, policy=policy, source_policy=source_policy, sources=sources,
-            feature_plan_snapshot=feature_plan_snapshot)
+        context = features.prepare_predictor_sources(root=root, policy=policy, source_policy=source_policy, sources=sources)
         if derivation._merge(root, context.adjusted_source_files) != derivation._merge(root, request["adjusted_source_files"]):
             raise DataReadinessError("predictor replay adjusted inventory differs")
         # These child bytes are transitively bound by the verified adjusted authority.
@@ -325,9 +324,9 @@ def replay_predictor_publication(*, root: Path, publication: SourcePin, migratio
         features._pins(root, files)
         del context
     remaining = len(failures) if maximum_groups is None else max(0, maximum_groups - len(report["compared_groups"]))
-    selected = tuple(fact for fact in facts.failures)[:remaining]
-    recovery_facts = facts.model_copy(update={"failures": selected})
-    recovered, recovery_files = derivation._recover_prefixes(root=root, facts=recovery_facts,
+    selected = () if facts is None else tuple(fact for fact in facts.failures)[:remaining]
+    recovery_facts = None if facts is None else facts.model_copy(update={"failures": selected})
+    recovered, recovery_files = ({}, files) if recovery_facts is None else derivation._recover_prefixes(root=root, facts=recovery_facts,
         expected=expected, files=files, clocks=clocks)
     _check_fresh_sources(root, recovery_files, files, current)
     # Publication follows both verified source contexts, never their unvalidated yield.
@@ -353,14 +352,13 @@ def replay_predictor_publication(*, root: Path, publication: SourcePin, migratio
                 raise DataReadinessError("predictor replay aggregate population differs")
         features._pins(root, files)
         features._pins(root, scratch)
-        evidence.recheck(root)
         if pinned_object(output / "_request.json", report["request_sha256"]) != comparison_request:
             raise DataReadinessError("predictor replay request changed before finalization")
         _check_progress(output, report)
         if set(report["compared_groups"]) == set(expected) and set(report["compared_months"]) == set(manifest["months"]):
             report.update(status="exact_replay_complete", replay_complete=True, rows=manifest["rows"],
-                feature_eligible_rows=manifest["feature_eligible_rows"], rebuilt_prefix_rows=manifest["rebuilt_prefix_rows"],
-                unavailable_rows=manifest["unavailable_rows"])
+                feature_eligible_rows=manifest["feature_eligible_rows"], rebuilt_prefix_rows=manifest.get("rebuilt_prefix_rows", 0),
+                unavailable_rows=manifest.get("unavailable_rows", 0))
         report["reconstructed_files"] = scratch
         report["verified_source_files"] = files
         write_json_object(output / "_checkpoint.json", report)
@@ -397,19 +395,11 @@ def verify_predictor_replay(*, root: Path, publication: SourcePin, replay: Sourc
             or comparison.get("historical_implementation_files") != historical or comparison.get("source_files") != live
             or comparison.get("current_implementation_files") != current
             or report.get("compared_groups") != manifest["groups"] or report.get("compared_months") != manifest["months"]
-            or any(report.get(name) != manifest[name] for name in
+            or any(report.get(name) != manifest.get(name, 0) for name in
                 ("rows", "feature_eligible_rows", "rebuilt_prefix_rows", "unavailable_rows"))):
         raise DataReadinessError("predictor replay coverage, source or implementation identity differs")
-    config = inside(root, facts.feature_config.path)
-    if config.stat().st_size > 65536:
-        raise DataReadinessError("predictor replay feature policy exceeds byte bound")
-    policy = ResearchFeaturePolicy.model_validate(tomllib.loads(config.read_text(encoding="utf-8")))
-    if "feature_plan_snapshot" not in comparison:
-        raise DataReadinessError("predictor replay lacks an explicit feature-plan evidence declaration")
-    plan_snapshot = (None if comparison["feature_plan_snapshot"] is None
-        else SourcePin.model_validate(comparison["feature_plan_snapshot"]))
-    files = derivation._merge(root, live, current, _corrected_child_pins(root, policy),
-        _feature_plan_evidence(root, policy, plan_snapshot))
+    policy = _publication_policy(root, request, facts)
+    files = derivation._merge(root, live, current, _corrected_child_pins(root, policy))
     if report.get("verified_source_files") != files:
         raise DataReadinessError("predictor replay verified evidence inventory differs")
     scratch = derivation._merge(root, report["reconstructed_files"])
