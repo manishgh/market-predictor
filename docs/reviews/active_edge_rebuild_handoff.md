@@ -17,6 +17,55 @@ The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
 
+Part (4a) completed in `4ba96f6` and pushed on main (October 3).
+Reports now count matured complete decision sessions / horizon, retain verified
+zero-selection exposure, and include unselected scored outcomes in equal-sector
+fixed-horizon ranking. HH N-1 / NW 2N uncertainty preserves exchange-session gaps;
+benchmark excess is divided by actual holding duration. Internal old shapes fail.
+The invalid overlapping compounding is removed; portfolio return/drawdown are null
+with explicit missing accounting status. Drift cannot authorize predictions from
+these reports; measured severe losses or reversed ranks remain visible.
+Verification: 390 component tests passed (statistics, performance, population, drift,
+calendar, commands, registration, prediction/API, CLI, architecture and continuity).
+Ruff clean on all nine changed/new Python files; strict mypy clean on three source
+modules. Consolidated code/ML review passed. No full release suite, model fit, sealed
+test or TradingFlow operation. Drift policy pin is
+`09069c085acf87622987434a271e2f4905447696283105e5a969b01fb18527e1`.
+Part (4b) remains pending raw per-lot corporate-event/cost evidence and a governed
+curve adapter; adjusted monitoring prices cannot satisfy that contract.
+
+Current checkpoint: **Investment 63/252 target contract and shared-kernel projection** (`in progress`).
+The approved open-ended investment cohort needs separate 63- and 252-XNYS-session
+forecasts. Freeze marked holding value at the horizon, not an enforced liquidation:
+stock gross return, stock net return after the explicit 20-bps prepaid research-cost
+assumption, and net excess against gross SPY/QQQ/point-in-time sector holding values.
+This is a new investment research choice, not inherited swing target approval. No
+allocation/risk policy, production admission, profitable model or sell deadline.
+
+Scope: add investment contracts and projection only. Reuse the unchanged accounting
+kernel's existing arbitrary-length SessionSnapshots for raw-share holding specifications.
+Require exact next-open entry and all 63/252 consecutive closes, unique matching
+benchmark identities/intervals, consistent policy/source binding, and no ordinary
+ExecutionEvent. Select snapshot[N-1]; never use the kernel's day-ten aggregate label
+clock or swing target/settlement/ordinary-sale adapters. Derive latest required source
+availability from horizon snapshots, keeping unknown clocks/valuations unavailable.
+Corporate entitlements, payment timing, residual claims and valuation remain exclusively
+owned by the shared kernel; do not duplicate their arithmetic.
+
+Preserve every current swing implementation hash. Archived implementation snapshots
+are provenance, not an executable compatibility path: changing pinned accounting files
+would invalidate saved replay acceptance. The additive projection avoids that migration.
+Unknown values, missing required clocks or interval/source mismatch cannot yield an
+eligible training label. Research-only results cannot authorize production serving.
+Exit gates: 63/252 endpoints with early closes/holidays; final clock later than day ten;
+matched benchmarks; retained corporate distribution; unknown residual claim; no future
+payment effect; ordinary-sale refusal; source/hash binding; unchanged pinned swing files;
+targeted tests, dependency checks, Ruff/strict mypy and one code/ML review.
+Failure behavior: explicit unavailable target with reasons for missing valuation/clocks;
+invalid identities/intervals raise. No data collection, real fit, sealed source read,
+artifact rewriting or TradingFlow changes. Dataset publication/training/admission/API
+remain separate subsequent steps; this checkpoint alone is not training readiness.
+
 Part (6) completed in `b36778f` and pushed on main (October 3).
 Candidate, evaluation, model card and manifest now agree on final-fit decision end
 and the maximum label availability across selection and final-access populations.
@@ -32,7 +81,7 @@ Ruff and strict mypy passed on all eight changed source modules; one consolidate
 code/ML review found no actionable issue. No real fit, source read, promotion or
 deployment. The opt-in realistic memory benchmark and full release suite were not run.
 
-Current checkpoint: **Part (4a): overlap-aware monitoring and unavailable portfolio evidence** (`in progress`).
+Completed checkpoint: **Part (4a): overlap-aware monitoring and unavailable portfolio evidence**.
 Problem: reports treat overlapping trades as sequential full-capital investments,
 count daily decisions as independent holding periods, and omit unselected scored
 stocks from rank evaluation. Their current drawdown must not authorize predictions.
@@ -1528,12 +1577,13 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: implement part (4a), overlap-aware statistics and the
-explicit unavailable-portfolio gate, under the current freeze. Part (6) is complete.
-Part (4b) needs admitted raw holding/event/cost evidence; live activation needs current
-production authorities and a promoted model. Do not touch TradingFlow.
-Files: governance/outcomes/performance.py, governance/drift/policy.py, monitoring
-statistics helper, configs/drift_policy.toml/default.toml and their focused tests.
+Exact next checkpoint: implement the investment target contract and additive shared-
+kernel 63/252 projection under the current freeze. Replay part (6) and monitoring
+part (4a) are pushed. Part (4b) and live activation retain the exact missing evidence
+listed above. Dataset/training/admission/API follow the target contract; do not call
+the projection training-ready. Preserve pinned swing code and leave TradingFlow alone.
+Files: investment contracts/projection; swing/contracts/holding_accounting.py and
+swing/evaluation/holding_accounting.py (read/call only); focused tests and this freeze.
 
 Publisher verification uses `.venv/Scripts/python.exe`, `PYTHONDONTWRITEBYTECODE=1`,
 writable TEMP/TMP, `-p no:cacheprovider` and a unique writable `--basetemp`:
