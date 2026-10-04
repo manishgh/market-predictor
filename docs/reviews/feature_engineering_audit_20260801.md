@@ -2,6 +2,44 @@
 
 Last updated: 2026-10-04
 
+## User-Confirmed Astra Plan (October 4)
+
+The user confirmed that the saved plan's Bounded Experiment and Ordered Checkpoints
+are the intended Astra plan. Resume that approved sequence; do not replace it with
+the recent generic aggregate-news comparison or a regularization search.
+
+The frozen experiment crosses regularized linear and shallow boosted return models
+with three profiles: existing technical inputs; distinct price/volume/regime
+relationships; and those relationships plus qualified issuer-news/SEC reaction
+features. Four specifications are already fitted (`07963cc`, `a8be7cb`); the two
+issuer-reaction specifications remain. The measured weaker relationship results
+remain evidence, not an accepted improvement. At most six learned specifications
+and two frozen exit policies are permitted; any additional trial requires an explicit
+scope amendment before inspecting its results. Public APIs remain V1.
+
+Current work is original ordered checkpoint 3: complete qualified issuer reaction
+features using existing archives and the implemented `issuer_reaction` measurement
+component. Resume existing source/content qualification and define the exact final
+feature columns in the acceptance matrix; do not re-run completed aggregate joins
+or their source replay merely because names changed. Generic news counts/sentiment
+in `catalyst_full` do not satisfy the issuer-reaction feature contract. The component
+already measures stock-minus-SPY post-announcement returns and volume relative to
+the preceding 20 sessions; its source/event qualification and full batch/inference/
+training integration remain unfinished. An observed row/clock error gets a narrow
+repair with a regression test; otherwise reuse completed data and evidence.
+
+After the feature profile passes its specified checks, fit its remaining linear
+and boosted models on unchanged decisions, targets, folds, weights and costs. Then
+complete original checkpoint 5: evaluate the frozen long-only policies using funded
+portfolio NAV, costs, cash, turnover and drawdown against SPY. Prospective assessment
+and accepted V1 serving follow the original plan; the exposed old test period cannot
+be called untouched. TradingFlow remains independently owned and untouched here.
+
+This confirmation supersedes the recent next-step instructions to replay July/all
+news aggregates and add a fixed linear generic-news comparison. The completed paired
+prediction report, full peer replay and configuration-difference evidence below are
+retained; original artifact hashes and numerical values are unchanged.
+
 ## Matched-Input Reuse Evidence (October 4)
 
 The existing matched publication was preserved. Current numerical peer transforms
@@ -43,20 +81,9 @@ No project Python/configuration, stored inputs, data format, API version or TF f
 changed during this evidence checkpoint. The earlier 301-test implementation checks
 remain the code receipt; no new full suite or model fit was performed.
 
-Next precise source check: July news authority binds two source tables with 11,086
-and 32 assignment rows, at the original early/corrected lineage directories. Recompute
-the ten selected Alpaca aggregate bases from those pinned events/assignments with
-current issuer/window/availability/deduplication and coverage semantics; retain
-original sentiment scores and distinguish unknown coverage from zero events.
-Do not regenerate sentiment or collect news. Preserve publication-proxy availability
-as declared historical evidence; do not convert it into a historical capture receipt.
-The saved authority-code hash has not been recovered at either relocated Git path,
-so names/import similarity alone is not code equivalence. If a numerical/clock
-mismatch is found, name the exact row/field and repair only the affected aggregate.
-After a successful pilot, extend that bounded source replay monthly and bind inherited
-base-price/target evidence separately. Only then admit the frozen linear comparison.
-Current strict reader/receipt conflicts must be resolved through verified input
-identity, with preserved historical provenance, not overwritten metadata or compatibility.
+The prior proposal to replay the ten aggregate-news inputs is superseded by the
+user-confirmed Astra sequence above. No aggregate row error was demonstrated by
+these checks. Retain the completed evidence; resume issuer-reaction feature work.
 
 ## Completed Paired Outcome Check (October 4)
 
@@ -97,31 +124,16 @@ suite, training, provider downloads and C# checks were deliberately not run beca
 this checkpoint changes only historical comparison/reporting. Real report passed
 under the shared lease and unchanged memory limits; no worker remains running.
 
-## Next Bounded Input Verification
+## Existing Matched Inputs Retained
 
-Keep the matched publication `data/features/swing_corrected_initial_fit_research`
-with all 586,305 decisions/59 months and both original profiles. Technical has 120
-inputs; catalyst has 150 (the same 120 plus 30 transforms of ten news measures).
-The selected additional names contain no SEC-specific inputs. Saved monthly source
-bindings require Alpaca; SEC coverage-known is zero. A historical SEC timestamp
-warning alone cannot establish contamination of this particular news projection.
-Trace the saved aggregation/source bindings and verify selected values/clocks
-before fitting; do not infer missing capture timestamps or certify causal parity
-from matching names. Preserve original bytes and provenance.
-
-Next scope: immutable verification evidence for existing matched inputs; enumerate
-historical/current settings differences, proving naming-only equivalence separately
-from file hashes. Compare row identities, labels/maturity, common technical values
-and news source/availability semantics using bounded projections. Reuse unaffected
-partitions; any demonstrated substantive difference gets a specifically scoped
-repair. No compatibility aliases, new dataset-format requirement, source downloads
-or blanket target restart. Failure records the exact row/field and leaves inputs
-unchanged. After this evidence passes, freeze one fixed linear news-versus-technical
-experiment: unchanged folds, target, holdouts, eligibility and train-only preprocessing;
-require paired equal-date error improvement against both technical and zero, and no
-held-out-stock ranking deterioration. Training profile/column selection and a
-linear-only path must be explicit before fitting. No main merge or model admission
-follows merely from software tests.
+Keep `data/features/swing_corrected_initial_fit_research`, all 586,305 decisions/
+59 months, original target values, availability clocks and both original profiles.
+Its 120 technical inputs and 150-input aggregate-news profile remain distinct from
+the planned qualified issuer-reaction profile. The full peer replay and exact
+configuration comparison are complete. No further routine reconstruction/replay,
+generic news-only trial, data-format change or additional learner search is scheduled.
+A reproducible affected field or actual consuming contract conflict may justify a
+narrow repair with explicit evidence; preserve original provenance throughout.
 
 ## Canonical Source Reconstruction
 

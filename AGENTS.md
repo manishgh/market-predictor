@@ -65,6 +65,14 @@ data, demonstrate an affected numerical value, availability rule or consumer con
 verify and reuse unaffected partitions. Naming-only changes require explicit evidence
 of equivalent settings, not a blanket rebuild or rewritten historical provenance.
 
+User confirmation (October 4): follow the saved Astra plan's Bounded Experiment and
+Ordered Checkpoints. Four of six learned specifications are complete; next finish
+qualified issuer-news/SEC reaction features, then its two model fits and the frozen
+funded SPY policy evaluation. Do not substitute a generic aggregate-news trial or
+add a regularization search without explicitly amending the frozen experiment scope.
+Reuse completed matching/aggregate evidence; repeated reconstruction requires a
+specific demonstrated affected value/clock or consuming contract conflict.
+
 Never describe a situation using vague terminology or unexplained technical labels.
 Words such as "correctness", "readiness", "integrity", "validation" or "blocked"
 must not substitute for an explanation. Use plain, specific language and explain any
