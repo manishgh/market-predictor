@@ -1,7 +1,7 @@
 # Active Edge Rebuild Handoff
 
 Status: active
-Last updated: 2026-10-03
+Last updated: 2026-10-04
 Repository: `C:\project\market-predictor`
 Branch: `codex/v1-canonical-cleanup`
 Last verified publisher implementation: `cb70f81`, following `ebe5dfb`.
@@ -355,13 +355,13 @@ its single P2. No real target/news/model/test values, training, promotion or TF 
 Task-workspace logs: target-join-integration.log and target-join-final.log.
 
 Real target pilot and independent audit completed; full publication remains in progress.
-Private output `data/labels/.swing_initial_fit_targets.materializing` contains July
-2019 only: 7,884 rows, 6,409 complete stock/benchmark comparisons, 1,475 retained
+The July 2019 pilot in private `data/labels/.swing_initial_fit_targets.materializing`
+had 7,884 rows, 6,409 complete stock/benchmark comparisons, 1,475 retained
 unavailable rows, 6,630 holding specifications and zero terminal-immature rows.
 Independent audit consumed the full 586,305-decision metadata projection and checked
 all 5,884 source/implementation pins plus exact published metadata, null/reason flags,
 component references and ten-session maturity. Numerical/specification replay then
-passed for the pilot; checkpoint remains
+passed for the pilot; its checkpoint was
 `b9b130c7924e4ab38d3a9e6004dd789caf21d23ad8911aba36557497cc2cbaeb`.
 Request file pin:
 `01357a4515158ed7ef9a74a803c923b74243b70b1d4be22eea97c213dc20c2ad`.
@@ -377,6 +377,24 @@ Unavailable source reasons include unresolved distribution entitlement/payment,
 undated action effects, five official-scope reason hits and eight ownership-gap hits.
 Reason hits overlap, so they cannot be added to count distinct unusable rows.
 No source capture clocks were invented or declared missing by this audit.
+
+October 4 continuation: the full build saved 325,758 decisions across 33 months,
+July 2019-March 2022, before the system-memory guard stopped April's unfinished
+calculation: 86.3% used against the unchanged 85% maximum, with 2.14 GiB free.
+The target process peak was 0.495 GiB. Saved checkpoint SHA:
+`580a9652d04937325bfb20fbbcb02d35c04c61f8e2f0fe880ce6fa3cf81110a3`.
+Only the unbound April staging directory was removed; its file hash and removal
+receipt are in task workspace `target-canonical-memory-restart.json`. Raw inputs,
+saved months and source/config bytes are unchanged. With about 3.1 GiB free,
+the remaining 26 months are resumed under the same guards into the same private
+directory; log `target-canonical-complete-resume-absolute.log`, with stderr separate.
+Use explicit `--root C:/project/market-predictor`: the current runtime resolves
+relative `.` to an extra nested directory. The first restart therefore exited at
+config lookup before target reads or writes; its log is
+`target-canonical-complete-resume.log`. The failed memory run's log is
+retained as `target-canonical-complete.log`. Full replay/audit/publication have not
+run, and the final directory still does not exist. Workspace audit/finalizer review
+found no supported faults; successful full native replay remains an external gate.
 
 Next sub-slice frozen: materialize and independently replay initial-fit targets using
 that exact new policy. All 28 checked dependency/document pins match; research and
@@ -404,6 +422,16 @@ this publication private; resource stops resume only with the exact saved checkp
 Source admission, numerical replay and measured availability counts close this stage;
 no model fit, SPY outperformance, main merge, promotion or TradingFlow operation.
 Actual news/join/training and untouched-test assessment remain subsequent checkpoints.
+
+Read-only next-step design (not implemented): one explicitly declared research
+profile per publication, plus independent saved-row reconstruction and a canonical
+receipt consumed by readiness, return inputs and relationship parents. Technical
+uses predictors/targets only; catalyst-full also requires its catalyst authority.
+The old combined technical profile gates eligibility on news; the standalone
+profile must use predictor eligibility, so peer values need not match that old
+profile. Reuse numerical kernels, retain all decisions/targets/nulls/clocks, and
+reject missing/surplus sources, forged receipts, stale resumes and changed bytes.
+Freeze this code-only scope only after target publication/replay/audit closes.
 
 Queued checkpoint: **Investment dataset policy and source admission**.
 October 3 clarification: the prior timestamp question was premature and is withdrawn.
@@ -1996,9 +2024,9 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: resume the remaining 58 initial-fit target months privately
+Exact next checkpoint: complete the resumed remaining 26 initial-fit target months privately
 using collection_cli, the frozen target config and checkpoint
-b9b130c7924e4ab38d3a9e6004dd789caf21d23ad8911aba36557497cc2cbaeb. The pilot and
+580a9652d04937325bfb20fbbcb02d35c04c61f8e2f0fe880ce6fa3cf81110a3. The pilot and
 its independent metadata/source audit plus numerical/specification replay have passed.
 Then fully replay all 59 months, run the independent complete-population audit,
 perform leased final rechecks/atomic rename and normal final-path resume verification.
