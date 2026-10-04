@@ -14,11 +14,112 @@ Last completed model-training checkpoint: relationship run on `a8be7cb` (artifac
 Baseline model-training checkpoint: `07963cc` (pushed; unchanged).
 Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery retains its original receipts;
-current-schema reconstruction is still required before reuse.
+specific reuse conflicts require verification; blanket reconstruction is superseded.
+
+## Completed Paired Outcome Check (October 4)
+
+Implementation `da67c5c` is pushed. `compare-saved-swing-returns` reuses recorded
+predictions without fitting/loading models or changing matched data. All 16 pairs
+have identical training/scoring identities, weights, cutoffs/maturity, targets and
+settings. Every scored artifact hash and all scoring metadata match; declared
+holdout identities and eligibility counts are also checked. Baseline/candidate
+roles are explicit. Missing targets remain counted rather than silently dropped.
+
+Report: `data/reports/swing_technical_relationship_paired_comparison.json`, SHA256
+`dabf625a79890849c3939d8001f37f4fdaf27c5a166be97bcad5615e5c866393`.
+Pooled metrics give each evaluable session equal weight; they are not unweighted
+means of stored fold summaries. Each scope has 592 evaluable sessions. Temporal:
+289,802 scored / 187,432 known outcomes; held-out securities: 54,964 scored /
+35,548 known outcomes. These scopes overlap and are not independent trials.
+
+| Learner / scope | Technical error above zero-excess baseline | Relationship error above zero-excess baseline | Relationship error increase vs technical | Technical / relationship daily rank |
+| --- | ---: | ---: | ---: | ---: |
+| Linear / later dates | 1.7667% | 2.4877% | 0.7084% | 0.004494 / 0.001255 |
+| Linear / held-out stocks | 1.2760% | 1.9799% | 0.6950% | 0.006959 / 0.006091 |
+| Boosted / later dates | 1.9946% | 2.2954% | 0.2949% | 0.014672 / 0.007065 |
+| Boosted / held-out stocks | 2.1444% | 2.4805% | 0.3291% | 0.000293 / -0.012918 |
+
+Error means mean squared numerical-return prediction error. Zero excess means
+predicting no return above SPY; this is not a funded SPY portfolio comparison.
+The four added relationship inputs worsen errors and rankings in every pair. No
+new accepted model, portfolio performance or untouched-test evidence is asserted.
+Historical folds are development evidence for improving features/settings.
+
+Verification tier: component. Final affected tests: 301 passed in 40.94 seconds
+(comparison, return validation/artifacts, CLI inventory, continuity and dependency/
+architecture boundaries). Changed-file Ruff and strict mypy over both affected
+sources pass. Two consolidated P2 findings closed with explicit arm mappings and
+both-arm contradictory-holdout tests. Atomic publication exposes no partial
+report and refuses replacement; final consumed-file hashes are rechecked. Full
+suite, training, provider downloads and C# checks were deliberately not run because
+this checkpoint changes only historical comparison/reporting. Real report passed
+under the shared lease and unchanged memory limits; no worker remains running.
+
+## Next Bounded Input Verification
+
+Keep the matched publication `data/features/swing_corrected_initial_fit_research`
+with all 586,305 decisions/59 months and both original profiles. Technical has 120
+inputs; catalyst has 150 (the same 120 plus 30 transforms of ten news measures).
+The selected additional names contain no SEC-specific inputs. Saved monthly source
+bindings require Alpaca; SEC coverage-known is zero. A historical SEC timestamp
+warning alone cannot establish contamination of this particular news projection.
+Trace the saved aggregation/source bindings and verify selected values/clocks
+before fitting; do not infer missing capture timestamps or certify causal parity
+from matching names. Preserve original bytes and provenance.
+
+Next scope: immutable verification evidence for existing matched inputs; enumerate
+historical/current settings differences, proving naming-only equivalence separately
+from file hashes. Compare row identities, labels/maturity, common technical values
+and news source/availability semantics using bounded projections. Reuse unaffected
+partitions; any demonstrated substantive difference gets a specifically scoped
+repair. No compatibility aliases, new dataset-format requirement, source downloads
+or blanket target restart. Failure records the exact row/field and leaves inputs
+unchanged. After this evidence passes, freeze one fixed linear news-versus-technical
+experiment: unchanged folds, target, holdouts, eligibility and train-only preprocessing;
+require paired equal-date error improvement against both technical and zero, and no
+held-out-stock ranking deterioration. Training profile/column selection and a
+linear-only path must be explicit before fitting. No main merge or model admission
+follows merely from software tests.
+
+## October 4 User Priority And Frozen Checkpoint
+
+Reuse the existing matched candles/news publication; ordinary code or naming edits
+must not change dataset format or trigger blanket reconstruction. Preserve all
+586,305 decisions, 59 months, original values/clocks, saved model predictions and
+historical provenance. API protocols stay V1; internal names stay unversioned.
+A naming difference alone does not prove numerical values changed. Verify any
+claimed substantive difference and reconstruct only affected derived values.
+
+The owned target reconstruction was intentionally stopped at the user's priority
+change: 44 saved months / 434,992 rows; checkpoint
+`cf2d1ed86acfa82cb796a8ca9800d0df5f803b1f6db6d052b42bcaa0017dbaaa`.
+Private output is preserved, full replay never started, no final target publication
+exists, and the shared lease has been acquired/released after stopping the worker.
+Earlier instructions below to complete/replay all targets or replace the combined
+profile format are superseded pending evidence that the existing values must change.
+
+Completed scope (`da67c5c`): compare immutable saved technical and relationship predictions by
+exact decision identity on unchanged folds, labels, training weights and holdouts.
+Add one canonical comparator and CLI without changing training, feature/target
+kernels, stored data formats or current model-admission rules. Verify independently
+pinned requests/unit/artifact bytes, full scoring population and exact metadata.
+Calculate pooled equal-date squared/absolute error against the paired model and
+zero excess, and daily ranking quality on common evaluable dates. Separate temporal
+and security-transfer scopes. This is descriptive development evidence, not SPY
+portfolio performance, a new fitted model or an untouched final test.
+
+Exit gates: unequal-fold/session numerical fixtures; exact pairing and population/
+null/eligibility/settings rejection; constant/tied rank handling; artifact tamper
+and final-pin recheck tests; focused direct-consumer/CLI/architecture tests, Ruff,
+strict mypy, one consolidated review, real saved-prediction report, pushed code and
+documentation closure. Any mismatch stops reporting without altering source data.
+Next experiment is selected from measured results; a news fit requires the existing
+news values/clocks to satisfy the actual training contract, not merely a new name.
+TradingFlow remains untouched while its owner is changing it.
 
 ## Current State
 
-Latest implementation: `12baec5` (pushed), following `635ebdb`/`b97ad60`. Canonical source reconstructions and
+Latest implementation: `da67c5c` (pushed), following `12baec5`; following `635ebdb`/`b97ad60`. Canonical source reconstructions and
 standalone adjusted collection are complete; technical predictors now also have a
 complete independently audited feature-only publication.
 Exact pins and the next feature dependency are below. TradingFlow remains untouched.
@@ -102,7 +203,7 @@ all three investment modules. Consolidated code/ML review passed. No real data r
 training, source publication, promotion, deployment or TradingFlow operation occurred.
 README now states these limits and the completed monitoring/replay behavior.
 
-Current checkpoint: **Canonical data reconstruction and source admission** (`in progress`).
+Current checkpoint: **Matched-input reuse verification** (`in progress`).
 
 Completed source sub-slice in `86f7d429487934494da9c587ad9536cbf993e2dd`, pushed on
 `codex/v1-canonical-cleanup`: explicit offline reconstruction into
@@ -2036,14 +2137,13 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: complete the remaining 25 initial-fit target months privately
-using collection_cli, the frozen target config and checkpoint
-c470ae76508ae959a69aeed197028456acf43f1b795ac017735645e884c6d23f. The pilot and
-its independent metadata/source audit plus numerical/specification replay have passed.
-Then fully replay all 59 months, run the independent complete-population audit,
-perform leased final rechecks/atomic rename and normal final-path resume verification.
-No complete target authority exists yet. Keep feature/source/config bytes unchanged.
-No news/test/model reads, training, TF writes, main merge or promotion in this slice.
+Exact next checkpoint: verify reuse of the existing matched technical/news inputs
+under the bounded scope above. The paired saved-prediction analysis is complete in
+da67c5c with its immutable report pin. Preserve original profiles, values, clocks,
+labels and folds; enumerate actual config/source conflicts and verify selected news
+source scoping before admitting a fixed linear-only paired experiment. Do not resume
+blanket target reconstruction or change the data format for a naming edit. The private
+44-month target checkpoint remains preserved, not final or numerically replayed in full.
 
 Publisher verification uses `.venv/Scripts/python.exe`, `PYTHONDONTWRITEBYTECODE=1`,
 writable TEMP/TMP, `-p no:cacheprovider` and a unique writable `--basetemp`:

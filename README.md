@@ -106,6 +106,15 @@ reported explicitly. This check does not certify replay, profitability or servin
 Fresh verification under the active swing-only strategy contract remains required
 before historical models can be reused; original manifests must not be repinned.
 
+`compare-saved-swing-returns` compares two independently pinned historical training
+runs on identical decisions, labels, folds, weights and held-out stocks. It computes
+equal-date numerical prediction errors and daily stock-ranking differences from saved
+predictions, preserving unknown outcomes. The October 4 comparison found that four
+added relationship features worsened both measures in every paired learner/scope.
+Use the active feature audit for measured results and the next fixed experiment.
+This command does not change candles/news, train or load estimators, authorize
+model reuse, or measure portfolio performance against SPY.
+
 The first shared-data building block is a bounded Alpaca news HTTP receipt exchange
 with matching Python/C# validation fixtures. It preserves exact provider response
 bytes, query identity and original receipt time. File imports require a separately
