@@ -58,6 +58,13 @@ Validation supports iteration; repeatedly inspected test periods are development
 evidence, never an untouched final test. Software checks alone do not prove that a
 model beats SPY or authorize merging an experimental model as an improvement.
 
+User priority (October 4): reuse the existing matched candles, news and company
+inputs while improving model outcomes, names, design and code quality. Ordinary edits
+do not change data format or API version. Before reconstructing existing derived
+data, demonstrate an affected numerical value, availability rule or consumer contract;
+verify and reuse unaffected partitions. Naming-only changes require explicit evidence
+of equivalent settings, not a blanket rebuild or rewritten historical provenance.
+
 Never describe a situation using vague terminology or unexplained technical labels.
 Words such as "correctness", "readiness", "integrity", "validation" or "blocked"
 must not substitute for an explanation. Use plain, specific language and explain any

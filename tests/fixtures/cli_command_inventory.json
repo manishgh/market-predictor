@@ -76,6 +76,7 @@
     "canonicalize-source-collections",
     "collect-sec-clock-pages",
     "collect-sec-filing-documents",
+    "compare-saved-swing-returns",
     "extract-sp500-official-events",
     "finalize-edge-issuer-event-precision-audit",
     "freeze-edge-rebuild-temporal-manifest",

@@ -6,9 +6,19 @@ import typer
 
 from market_predictor.research.swing_return_training import train_swing_returns
 from market_predictor.swing.training.retained_runs import verify_completed_run_integrity
+from market_predictor.swing.training.return_comparison import compare_saved_returns
 
 
 def register_swing_return_training_command(app: typer.Typer) -> None:
+    @app.command("compare-saved-swing-returns")
+    def compare(root: Path = typer.Option(...), baseline: Path = typer.Option(...),
+        baseline_sha256: str = typer.Option(...), candidate: Path = typer.Option(...),
+        candidate_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
+        """Compare matching historical scores; never authorize a new fit or serving."""
+        result = compare_saved_returns(root=root, baseline=baseline, baseline_sha256=baseline_sha256,
+            candidate=candidate, candidate_sha256=candidate_sha256, output=output)
+        typer.echo(f"{result['status']}: {result['report_sha256']}")
+
     @app.command("train-swing-returns")
     def train(root: Path = typer.Option(...), config: Path = typer.Option(...),
         config_sha256: str = typer.Option(...), output: Path = typer.Option(...),
