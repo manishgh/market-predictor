@@ -396,6 +396,18 @@ retained as `target-canonical-complete.log`. Full replay/audit/publication have 
 run, and the final directory still does not exist. Workspace audit/finalizer review
 found no supported faults; successful full native replay remains an external gate.
 
+Latest saved state: April 2022 completed, 34 months / 335,338 decisions; checkpoint
+`c470ae76508ae959a69aeed197028456acf43f1b795ac017735645e884c6d23f`.
+May stopped at 85.3% system use / 2.31 GiB free; own peak remained 0.494 GiB.
+The unbound May specification file was removed with the hash/receipt retained in
+`target-canonical-memory-restart-may.json`. No full replay or final publication ran.
+Next attempt uses workspace `run_target_build_and_replay.ps1`: one control shell,
+one producer at a time, progress reads in that same shell, no separate status
+processes during the build. This reduces monitoring overhead without changing any
+memory limit; it is not yet evidence of a completed run. Logs are
+`target-canonical-single-shell-build.log` and, only after successful full build,
+`target-canonical-single-shell-full-replay.log`, each with separate stderr/runtime.
+
 Next sub-slice frozen: materialize and independently replay initial-fit targets using
 that exact new policy. All 28 checked dependency/document pins match; research and
 simulation contracts parse; the QQQ receipt-based report matches its reviewed hash.
@@ -2024,9 +2036,9 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: complete the resumed remaining 26 initial-fit target months privately
+Exact next checkpoint: complete the remaining 25 initial-fit target months privately
 using collection_cli, the frozen target config and checkpoint
-580a9652d04937325bfb20fbbcb02d35c04c61f8e2f0fe880ce6fa3cf81110a3. The pilot and
+c470ae76508ae959a69aeed197028456acf43f1b795ac017735645e884c6d23f. The pilot and
 its independent metadata/source audit plus numerical/specification replay have passed.
 Then fully replay all 59 months, run the independent complete-population audit,
 perform leased final rechecks/atomic rename and normal final-path resume verification.
