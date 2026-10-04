@@ -12,6 +12,62 @@ This is the only active execution plan. Exact artifact state is recorded in
 `docs/reviews/active_edge_rebuild_handoff.md`; statistical rules are defined in
 `docs/model_training_validation_protocol.md`.
 
+## Matched-Input Reuse Evidence (October 4)
+
+The existing matched publication was preserved. Current numerical peer transforms
+reproduced every saved 120-column technical and 150-column news profile exactly,
+including all derived availability clocks and identical common technical values/
+eligibility, over all 586,305 decisions / 59 months. This replays saved base values;
+it does not recompute candle indicators, raw-news aggregates or future targets.
+
+Peer report: `data/reports/swing_matched_peer_reuse_verification.json`, SHA256
+`f51418cae90bb8fce520d4b8b2aff97eb344c0702ad9e9deadaba943b2c323f2`.
+It binds 20 calculation/verifier source files captured before replay and rechecked
+before reporting, input Parquet/sidecar bytes, strategy bytes and runtime versions.
+Its training/promotion flags remain false. The review's missing implementation-pin
+finding was fixed before the complete run; a deliberate code-mutation regression
+refuses a passed report. The first unbound audit stopped after 17 matching months
+without publishing a report. Full guarded rerun completed and released its lease.
+Normal canonical readers still reject old sidecar names; this is inspection of
+immutable historical evidence, not an old-format production acceptance path.
+
+Configuration report: `data/reports/swing_matched_configuration_differences.json`,
+SHA256 `97fe1198f6dc7ed0ebd7e9401fa7ee9215c5d84268fa8990a801761954620b10`.
+Twelve of 19 original configurations are byte-identical. The seven changed originals
+were recovered at their exact saved hashes from Git `7b5d834`, including original
+CRLF bytes. Three change only schema names; monthly-news changes its schema and
+corresponding lineage-policy pin. Outcomes and symbol corrections change source
+bindings without changing economic settings or correction rules. The technical
+feature policy substitutes standalone adjusted authorities for the old combined/
+parent panel. These differences do not demonstrate changed numerical values.
+Original pins were not rewritten; source-equivalence and fitting remain unasserted.
+Exact nested-key/type/date-change regressions passed for this configuration audit.
+
+Locally retained immutable helper bytes (not production entry points):
+`C:/Users/manis/Documents/Codex/2026-09-28/c/work/verify_matched_peer_reuse.py`, SHA
+`694eb5efbd6799abd9358eab7bc010215382e47c33bbcb7774d53009743061fc`;
+`C:/Users/manis/Documents/Codex/2026-09-28/c/work/compare_saved_configuration_semantics.py`,
+SHA `1ff45cba71a735d566830b98b2db4ce96f183279dc092807fdb1f2e793df98fd`.
+Preserve these as-replayed bytes; a cosmetic edit would change retained evidence.
+No project Python/configuration, stored inputs, data format, API version or TF file
+changed during this evidence checkpoint. The earlier 301-test implementation checks
+remain the code receipt; no new full suite or model fit was performed.
+
+Next precise source check: July news authority binds two source tables with 11,086
+and 32 assignment rows, at the original early/corrected lineage directories. Recompute
+the ten selected Alpaca aggregate bases from those pinned events/assignments with
+current issuer/window/availability/deduplication and coverage semantics; retain
+original sentiment scores and distinguish unknown coverage from zero events.
+Do not regenerate sentiment or collect news. Preserve publication-proxy availability
+as declared historical evidence; do not convert it into a historical capture receipt.
+The saved authority-code hash has not been recovered at either relocated Git path,
+so names/import similarity alone is not code equivalence. If a numerical/clock
+mismatch is found, name the exact row/field and repair only the affected aggregate.
+After a successful pilot, extend that bounded source replay monthly and bind inherited
+base-price/target evidence separately. Only then admit the frozen linear comparison.
+Current strict reader/receipt conflicts must be resolved through verified input
+identity, with preserved historical provenance, not overwritten metadata or compatibility.
+
 ## Completed Paired Outcome Check (October 4)
 
 Implementation `da67c5c` is pushed. `compare-saved-swing-returns` reuses recorded
