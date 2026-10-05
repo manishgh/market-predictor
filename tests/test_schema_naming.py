@@ -19,6 +19,10 @@ HISTORICAL_EVIDENCE_IDENTITIES = {
     "swing/datasets/relationship_historical_evidence.py": {
         "market_data.artifact_manifest.v1", "market_data.v1",
     },
+    "swing/datasets/saved_evaluation_configuration.py": {
+        "edge_rebuild.strategy_contract.v2", "edge_rebuild.temporal_manifest.v2",
+        "sha256_threshold_security_id_v1",
+    },
 }
 TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9_.]*")
 GENERATION = re.compile(r"(?:[._]v\d+)(?:[._]|$)|\bml_v\d+", re.IGNORECASE)

@@ -29,6 +29,8 @@ def register_saved_oof_policy_command(app: typer.Typer) -> None:
         strategy_contract: Path = typer.Option(...), strategy_contract_sha256: str = typer.Option(...),
         research_contract: Path = typer.Option(...), research_contract_sha256: str = typer.Option(...),
         learner: str = typer.Option(...), exit_policy: str = typer.Option(...),
+        historical_configuration_evidence: Path | None = typer.Option(None),
+        historical_configuration_evidence_sha256: str | None = typer.Option(None),
     ) -> None:
         """Load action evidence first, then evaluate through the single source lease."""
         try:
@@ -36,6 +38,12 @@ def register_saved_oof_policy_command(app: typer.Typer) -> None:
                 raise DataReadinessError("saved policy evaluation requires one frozen return learner")
             if exit_policy not in ("target_stop_ten_session_timeout", "stop_ten_session_timeout"):
                 raise DataReadinessError("saved policy evaluation requires one frozen exit policy")
+            if (historical_configuration_evidence is None) != (historical_configuration_evidence_sha256 is None):
+                raise DataReadinessError("historical configuration evidence requires both path and SHA256")
+            historical = (SourcePin(path=historical_configuration_evidence.as_posix(),
+                                    sha256=historical_configuration_evidence_sha256)
+                          if historical_configuration_evidence is not None
+                          and historical_configuration_evidence_sha256 is not None else None)
             target = SourcePin(path=target_config.as_posix(), sha256=target_config_sha256)
             run = SourcePin(path=run_manifest.as_posix(), sha256=run_manifest_sha256)
             features = SourcePin(path=feature_publication.as_posix(), sha256=feature_publication_sha256)
@@ -53,6 +61,7 @@ def register_saved_oof_policy_command(app: typer.Typer) -> None:
                 target_config=target,
                 strategy_contract=strategy, research_contract=research,
                 learner=cast(Learner, learner), exit_policy=cast(ExitPolicy, exit_policy), evidence=evidence, output=output,
+                historical_configuration_evidence=historical,
             )
         except HeavyJobBusyError as error:
             typer.echo(str(error), err=True)

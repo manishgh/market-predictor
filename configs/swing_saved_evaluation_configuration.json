@@ -1,0 +1,50 @@
+{
+  "schema_version": "market_predictor.saved_evaluation_configuration",
+  "scope": "saved_initial_fit_evaluation_only",
+  "runs": [
+    {
+      "path": "data/research/swing_technical_return_models_initial_fit/_manifest.json",
+      "sha256": "0a30ef2f8e3b95cee252f8c1d1bb5be3c6b98cddda4e47d68e835ad5c1892551"
+    },
+    {
+      "path": "data/research/swing_relationship_return_models_initial_fit/_manifest.json",
+      "sha256": "7a699020920024ed29b5d8547724f5355fdc2202ca176f11d38f23418bd4666e"
+    }
+  ],
+  "strategy": {
+    "original_logical": {
+      "path": "configs/edge_rebuild_strategy_contract.toml",
+      "sha256": "02a087be6b9eff4971770026ca75dce3978f8f9e2028c1f21d027daefec9c0e7"
+    },
+    "original_artifact": {
+      "path": "data/research/swing_saved_evaluation_configuration_bytes/historical_strategy.toml",
+      "sha256": "02a087be6b9eff4971770026ca75dce3978f8f9e2028c1f21d027daefec9c0e7"
+    },
+    "current": {
+      "path": "configs/edge_rebuild_strategy_contract.toml",
+      "sha256": "428fa7c5580c91e3b1736c929d33a19d6baba30d376a3fca90ab21f32f52f860"
+    },
+    "git_commit": "7b5d834a84a21953ec522802e0f9e4616e8ac8f8",
+    "git_blob": "023fde181f6709a6f48d5d1b68940d70e04eb2e7"
+  },
+  "temporal": {
+    "original_logical": {
+      "path": "configs/edge_rebuild_temporal_manifest.toml",
+      "sha256": "eb6365e78e75599e170c78dc08805eae45744c88f7def21ea4d6a9436e12b95b"
+    },
+    "original_artifact": {
+      "path": "data/research/swing_saved_evaluation_configuration_bytes/historical_temporal.toml",
+      "sha256": "eb6365e78e75599e170c78dc08805eae45744c88f7def21ea4d6a9436e12b95b"
+    },
+    "current": {
+      "path": "configs/edge_rebuild_temporal_manifest.toml",
+      "sha256": "0f25e37ad0c137ea1543d131c021b8bef72274b6c0940a7ac62997ad11be4017"
+    },
+    "git_commit": "7b5d834a84a21953ec522802e0f9e4616e8ac8f8",
+    "git_blob": "c560b38d4704c9fca0f849f480aa88c59a707f95"
+  },
+  "source_configuration_report": {
+    "path": "data/reports/swing_matched_configuration_differences.json",
+    "sha256": "97fe1198f6dc7ed0ebd7e9401fa7ee9215c5d84268fa8990a801761954620b10"
+  }
+}

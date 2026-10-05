@@ -80,6 +80,7 @@ def test_saved_policy_command_preserves_inputs_and_reports_unavailable(
         research_contract=SourcePin(path="research.toml", sha256="a" * 64),
         learner="regularized_linear_return", exit_policy="stop_ten_session_timeout", evidence=actions.return_value,
         output=Path("data/research/evaluation"),
+        historical_configuration_evidence=None,
     )
 
 
@@ -118,3 +119,27 @@ def test_action_replay_failure_does_not_open_evaluation(
     assert result.exit_code == code
     assert str(failure) in result.output
     evaluate.assert_not_called()
+
+
+@pytest.mark.parametrize("extra", [
+    ["--historical-configuration-evidence", "proof.json"],
+    ["--historical-configuration-evidence-sha256", "a" * 64],
+    ["--historical-configuration-evidence", "proof.json", "--historical-configuration-evidence-sha256", "invalid"],
+])
+def test_incomplete_historical_evidence_pair_stops_before_actions(
+    monkeypatch: pytest.MonkeyPatch, extra: list[str],
+) -> None:
+    load, actions, evaluate = _patch(monkeypatch)
+    result = CliRunner().invoke(_app(), [*_args(), *extra])
+    assert result.exit_code == 2
+    load.assert_not_called()
+    actions.assert_not_called()
+    evaluate.assert_not_called()
+
+
+def test_explicit_historical_evidence_pin_reaches_actual_evaluator_argument(monkeypatch: pytest.MonkeyPatch) -> None:
+    _, _, evaluate = _patch(monkeypatch)
+    result = CliRunner().invoke(_app(), [*_args(), "--historical-configuration-evidence", "proof.json",
+        "--historical-configuration-evidence-sha256", "e" * 64])
+    assert result.exit_code == 0, result.output
+    assert evaluate.call_args.kwargs["historical_configuration_evidence"] == SourcePin(path="proof.json", sha256="e" * 64)

@@ -1,6 +1,7 @@
 """Evaluate one frozen policy against saved temporal scores; never refit a model."""
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -28,6 +29,7 @@ from market_predictor.swing.contracts.issuer_reaction_profile import ISSUER_REAC
 from market_predictor.swing.contracts.research import load_swing_research_contract
 from market_predictor.swing.contracts.return_feature_profiles import RETURN_RELATIONSHIP_COLUMNS
 from market_predictor.swing.contracts.return_training import ReturnTrainingPolicy
+from market_predictor.swing.contracts.saved_evaluation_configuration import SavedEvaluationConfigurationEvidence
 from market_predictor.swing.contracts.training_readiness import TrainingReadinessPolicy
 from market_predictor.swing.datasets.action_evidence import CorporateActionEvidence
 from market_predictor.swing.datasets.funded_policy_inputs import (
@@ -35,6 +37,7 @@ from market_predictor.swing.datasets.funded_policy_inputs import (
     unsimulated_managed_specification,
     verified_funded_policy_inputs,
 )
+from market_predictor.swing.datasets.saved_evaluation_configuration import verify_saved_evaluation_configuration
 from market_predictor.swing.datasets.symbol_corrections import pinned_object
 from market_predictor.swing.evaluation.accounting import evaluate_event_aware_swing_accounting
 from market_predictor.swing.evaluation.ledger import swing_valuation_sessions
@@ -67,6 +70,7 @@ IMPLEMENTATION_PATHS = (
     "swing/evaluation/trade_simulation.py", "edge_rebuild/temporal_manifest.py", "modeling/validation.py",
     "modeling/strategy_contract.py", "modeling/resampling.py", "canonical/cutoffs.py", "canonical/store.py",
     "heavy_jobs.py", "resources.py", "evidence/hashing.py", "evidence/io.py",
+    "swing/contracts/saved_evaluation_configuration.py", "swing/datasets/saved_evaluation_configuration.py",
 )
 
 
@@ -84,6 +88,7 @@ class _SavedScores:
     entry_sessions: tuple[str, ...]
     historical_source_files: dict[str, str]
     request_sha256: str
+    configuration_provenance: dict[str, Any] | None = None
 
 
 def _require(condition: bool, message: str) -> None:
@@ -203,6 +208,7 @@ def _read_parent_metadata(
 def _saved_scores(
     *, root: Path, run_manifest: SourcePin, feature_publication: SourcePin, strategy_pin: SourcePin,
     research_pin: SourcePin, strategy: StrategyContract, learner: Learner, pins: dict[str, str],
+    historical_configuration_evidence: SourcePin | None = None,
 ) -> _SavedScores:
     parquet: Any = pq
     run_path = _pin(root, run_manifest, pins)
@@ -211,15 +217,34 @@ def _saved_scores(
     _require(learner in ("regularized_linear_return", "shallow_boosted_return"), "unsupported saved learner")
     readiness = _object(root, policy.readiness, pins)
     readiness_policy = TrainingReadinessPolicy.model_validate(_object(root, policy.readiness_config, pins))
-    _require(readiness_policy.publication == feature_publication and readiness_policy.strategy_contract == strategy_pin
+    _require(readiness_policy.publication == feature_publication
              and readiness_policy.research_contract == research_pin and readiness_policy.published_profile == policy.published_profile,
              "saved readiness/config/publication bindings differ")
-    for pin in (policy.readiness, policy.readiness_config, feature_publication, strategy_pin,
+    configuration_provenance: dict[str, Any] | None = None
+    if historical_configuration_evidence is None:
+        _require(readiness_policy.strategy_contract == strategy_pin, "saved readiness strategy binding differs")
+        temporal_path = _pin(root, readiness_policy.temporal_contract, pins)
+    else:
+        # Archived hashes remain historical provenance. The separate proof binds
+        # recovered original bytes to current executable configurations exactly.
+        proof = SavedEvaluationConfigurationEvidence.model_validate_json(
+            json.dumps(_object(root, historical_configuration_evidence, pins)))
+        current_temporal = proof.temporal.current
+        verified = verify_saved_evaluation_configuration(
+            root=root, evidence_pin=historical_configuration_evidence, run_manifest=run_manifest,
+            strategy_pin=strategy_pin, temporal_pin=current_temporal,
+            original_strategy_pin=readiness_policy.strategy_contract,
+            original_temporal_pin=readiness_policy.temporal_contract, pins=pins,
+        )
+        _require(verified.strategy_path == inside(root, strategy_pin.path), "verified strategy path differs")
+        temporal_path = verified.temporal_path
+        configuration_provenance = dict(verified.provenance)
+    for pin in (policy.readiness, policy.readiness_config, feature_publication, readiness_policy.strategy_contract,
                 research_pin, readiness_policy.temporal_contract):
         _require(request["source_files"].get(pin.path) == pin.sha256, "required metadata/config lacks original training pin")
     _require(readiness.get("publication_sha256") == feature_publication.sha256 and readiness.get("published_profile", "technical_market")
              == policy.published_profile, "saved readiness publication/profile differs")
-    temporal = load_temporal_manifest_config(_pin(root, readiness_policy.temporal_contract, pins))
+    temporal = load_temporal_manifest_config(temporal_path)
     sessions = build_temporal_schedule(temporal).folds[0].train_sessions
     folds = return_folds(sessions, count=policy.folds, minimum_train=policy.minimum_train_sessions, embargo=policy.embargo_sessions)
     expected_folds = [{"number": fold.number, "train": [day.isoformat() for day in fold.train],
@@ -233,6 +258,10 @@ def _saved_scores(
     parent = _read_parent_metadata(root, feature_publication, request, policy, strategy, sessions, pins)
     holdouts = set(parent.loc[security_transfer_mask(parent.security_id, policy.holdout_fraction), "security_id"])
     _require(sorted(holdouts) == request["holdout_security_ids"], "saved holdout identities differ")
+    if configuration_provenance is not None:
+        configuration_provenance.update(fold_calendar_sha256=json_sha256(expected_folds),
+            holdout_security_ids_sha256=json_sha256(sorted(holdouts)),
+            saved_fold_calendar_reproduced=True, complete_parent_holdout_assignment_reproduced=True)
     parameters = policy.linear.model_dump() if learner == "regularized_linear_return" else policy.boosted.model_dump()
     pieces = []
     for fold in folds:
@@ -290,7 +319,7 @@ def _saved_scores(
         joined["fold"] = fold.number
         pieces.append(joined)
     return _SavedScores(pd.concat(pieces, ignore_index=True), score_days, score_days[:-10],
-                        request["source_files"], manifest["request_sha256"])
+                        request["source_files"], manifest["request_sha256"], configuration_provenance)
 
 
 def _select(rows: pd.DataFrame, score_sessions: tuple[str, ...], entry_sessions: tuple[str, ...], strategy: StrategyContract
@@ -343,6 +372,7 @@ def publish_saved_oof_policy_evaluation(
     *, root: Path, run_manifest: SourcePin, feature_publication: SourcePin, target_config: SourcePin,
     strategy_contract: SourcePin, research_contract: SourcePin, learner: Learner, exit_policy: ExitPolicy,
     evidence: CorporateActionEvidence, output: Path,
+    historical_configuration_evidence: SourcePin | None = None,
 ) -> dict[str, Any]:
     """One immutable learner/policy result inside the provider's sole source lease.
 
@@ -358,6 +388,8 @@ def publish_saved_oof_policy_evaluation(
                "feature_publication": feature_publication.model_dump(mode="json"), "target_config": target_config.model_dump(mode="json"),
                "strategy_contract": strategy_contract.model_dump(mode="json"),
                "research_contract": research_contract.model_dump(mode="json"),
+               "historical_configuration_evidence": (historical_configuration_evidence.model_dump(mode="json")
+                    if historical_configuration_evidence is not None else None),
                "learner": learner, "exit_policy": exit_policy, "action_projection_sha256": evidence.projection_sha256,
                "action_audit_sha256": evidence.audit_sha256, "implementation_files": implementations,
                "selection": "feature_and_cross_section_and_temporal_scope_rank_without_target_or_score_threshold",
@@ -382,7 +414,8 @@ def publish_saved_oof_policy_evaluation(
             _pin(root, SourcePin(path=name, sha256=digest), pins)
         _recheck(root, pins)
         saved = _saved_scores(root=root, run_manifest=run_manifest, feature_publication=feature_publication,
-            strategy_pin=strategy_contract, research_pin=research_contract, strategy=strategy, learner=learner, pins=pins)
+            strategy_pin=strategy_contract, research_pin=research_contract, strategy=strategy, learner=learner, pins=pins,
+            historical_configuration_evidence=historical_configuration_evidence)
         decisions, selected, counts = _select(saved.rows, saved.score_sessions, saved.entry_sessions, strategy)
         state.update(saved=saved, decisions=decisions, selected=selected, counts=counts)
         return selected, saved.entry_sessions
@@ -441,6 +474,7 @@ def publish_saved_oof_policy_evaluation(
                   "selected_rows": len(selected), "terminal_excluded_rows": int(decisions.terminal_excluded.sum()),
                   "historical_training_request_sha256": saved.request_sha256,
                   "historical_training_source_provenance": saved.historical_source_files,
+                  "historical_configuration_verification": saved.configuration_provenance,
                   "source_files": dict(sorted(pins.items())), "serving_eligible": False, "promotion_eligible": False,
                   "training_eligible": False, "economic_eligible": False, "source_admitted": False}
         write_json_object(output / "report.json", report)

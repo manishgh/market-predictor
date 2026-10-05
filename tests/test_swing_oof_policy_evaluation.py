@@ -174,6 +174,56 @@ def _scores(saved: dict[str, Any]) -> owner._SavedScores:
     return owner._saved_scores(**{name: saved[name] for name in keys}, pins={})
 
 
+def test_without_proof_saved_strategy_requires_unchanged_pin(saved: dict[str, Any]) -> None:
+    saved["strategy_pin"] = SourcePin(path=saved["strategy_pin"].path, sha256="b" * 64)
+    with pytest.raises(DataReadinessError, match="saved readiness strategy binding differs"):
+        _scores(saved)
+
+
+@pytest.mark.parametrize("wrong_path", [False, True])
+def test_proof_delegation_reproduces_fold_and_holdout_metadata(
+    saved: dict[str, Any], monkeypatch: pytest.MonkeyPatch, wrong_path: bool,
+) -> None:
+    # Unit wiring only: the independent verifier's real byte/rename rejection
+    # cases live in test_saved_evaluation_configuration. No real-data claim.
+    from market_predictor.swing.datasets.saved_evaluation_configuration import VerifiedSavedEvaluationConfiguration
+
+    root = saved["root"]
+    training = json.loads((saved["run"] / "_request.json").read_text())
+    readiness = json.loads((root / training["policy"]["readiness_config"]["path"]).read_text())
+    temporal = SourcePin.model_validate(readiness["temporal_contract"])
+    evidence = {"schema_version": "market_predictor.saved_evaluation_configuration",
+        "scope": "saved_initial_fit_evaluation_only", "runs": [saved["run_manifest"].model_dump(mode="json"),
+            {"path": "data/research/unopened-unit-run/_manifest.json", "sha256": "b" * 64}],
+        "source_configuration_report": {"path": "unit-only-report.json", "sha256": "c" * 64}}
+    for role, pin in (("strategy", saved["strategy_pin"]), ("temporal", temporal)):
+        evidence[role] = {"original_logical": pin.model_dump(mode="json"), "original_artifact": pin.model_dump(mode="json"),
+            "current": pin.model_dump(mode="json"), "git_commit": "d" * 40, "git_blob": "e" * 40}
+    proof = _relative(root, _json(root / "unit-configuration-proof.json", evidence))
+    calls = []
+
+    def verify(**kwargs: Any) -> VerifiedSavedEvaluationConfiguration:
+        calls.append(kwargs)
+        return VerifiedSavedEvaluationConfiguration(root / ("wrong.toml" if wrong_path else saved["strategy_pin"].path),
+            root / temporal.path, {"unit_case_only": True})
+
+    monkeypatch.setattr(owner, "verify_saved_evaluation_configuration", verify)
+    keys = ("root", "run_manifest", "feature_publication", "strategy_pin", "research_pin", "strategy", "learner")
+    if wrong_path:
+        with pytest.raises(DataReadinessError, match="verified strategy path differs"):
+            owner._saved_scores(**{name: saved[name] for name in keys}, pins={}, historical_configuration_evidence=proof)
+    else:
+        result = owner._saved_scores(**{name: saved[name] for name in keys}, pins={}, historical_configuration_evidence=proof)
+        assert result.configuration_provenance is not None
+        assert result.configuration_provenance["fold_calendar_sha256"] == json_sha256(training["folds"])
+        assert result.configuration_provenance["holdout_security_ids_sha256"] == json_sha256(training["holdout_security_ids"])
+        assert result.configuration_provenance["complete_parent_holdout_assignment_reproduced"] is True
+    assert len(calls) == 1
+    assert calls[0]["original_strategy_pin"] == saved["strategy_pin"]
+    assert calls[0]["original_temporal_pin"] == temporal
+    assert calls[0]["evidence_pin"] == proof
+
+
 def _mutate_unit(saved: dict[str, Any], change: Any, *, scores: bool = False) -> None:
     manifest = json.loads((saved["run"] / "_manifest.json").read_text())
     record = manifest["units"]["regularized_linear_return/temporal/fold-1"]
