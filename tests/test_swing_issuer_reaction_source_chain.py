@@ -15,9 +15,9 @@ import pytest
 
 from market_predictor.canonical.store import file_sha256, load_canonical_artifact
 from market_predictor.evidence.hashing import json_sha256
+from market_predictor.research import issuer_reaction_verification as verifier
 from market_predictor.swing.contracts.issuer_reaction import REACTION_COLUMNS
 from market_predictor.swing.contracts.issuer_reaction_publication import PROFILE
-from market_predictor.swing.datasets import issuer_reaction_verification as verifier
 from tests.test_issuer_content_qualification_authority import _seal_fixture
 from tests.test_issuer_content_qualification_authority import fixture as _source_population
 from tests.test_swing_issuer_reaction_publication import reaction_publication as reaction_publication
@@ -147,7 +147,7 @@ def test_native_reviewed_source_populates_completed_reaction_and_preserves_paren
     # verifier totals use its real manifest/parent/unique-decision equality checks.
     receipt_path = root / "data/reports/issuer_reaction_native_source_chain.json"
     with monkeypatch.context() as scoped:
-        scoped.setattr(verifier, "__file__", str(root / "src/market_predictor/swing/datasets/issuer_reaction_verification.py"))
+        scoped.setattr(verifier, "__file__", str(root / "src/market_predictor/research/issuer_reaction_verification.py"))
         scoped.setattr(verifier, "_guard", lambda: None)
         scoped.setattr(verifier, "release_process_memory", lambda: None)
         receipt = verifier.verify_issuer_reaction_rows(root, value["publication"], receipt_path)

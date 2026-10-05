@@ -16,6 +16,7 @@ from market_predictor.canonical.store import file_sha256, manifest_path_for, wri
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.heavy_jobs import HeavyJobBusyError, heavy_job_lease
+from market_predictor.research import issuer_reaction_verification as owner
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.issuer_reaction import REACTION_COLUMNS
 from market_predictor.swing.contracts.issuer_reaction_publication import (
@@ -24,7 +25,6 @@ from market_predictor.swing.contracts.issuer_reaction_publication import (
     IssuerReactionPublicationPolicy,
     VerifiedIssuerReactionPublication,
 )
-from market_predictor.swing.datasets import issuer_reaction_verification as owner
 from market_predictor.swing.features.issuer_reaction_profile import build_issuer_reaction_profile
 from tests.test_swing_issuer_reaction_profile import bundle as bundle
 
@@ -55,7 +55,7 @@ def derivative(tmp_path: Path, bundle: dict[str, Any], monkeypatch: pytest.Monke
         target = root / "src/market_predictor" / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(REPO / "src/market_predictor" / name, target)
-    monkeypatch.setattr(owner, "__file__", str(root / "src/market_predictor/swing/datasets/issuer_reaction_verification.py"))
+    monkeypatch.setattr(owner, "__file__", str(root / "src/market_predictor/research/issuer_reaction_verification.py"))
     monkeypatch.setattr(owner, "current_implementation", lambda root: {})
     monkeypatch.setattr(owner, "_guard", lambda: None)
     monkeypatch.setattr(owner, "release_process_memory", lambda: None)

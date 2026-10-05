@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.research import issuer_reaction_verification as verifier
 from market_predictor.research import swing_return_inputs as loader
 from market_predictor.research import swing_training_readiness as readiness
 from market_predictor.swing.contracts.holding_materialization import SourcePin
@@ -22,7 +23,6 @@ from market_predictor.swing.contracts.issuer_reaction import REACTION_COLUMNS
 from market_predictor.swing.contracts.issuer_reaction_profile import ISSUER_REACTION_PROFILE
 from market_predictor.swing.contracts.return_training import ReturnTrainingPolicy
 from market_predictor.swing.contracts.training_readiness import TrainingReadinessPolicy
-from market_predictor.swing.datasets import issuer_reaction_verification as verifier
 from market_predictor.swing.labels.fixed_horizon_readiness import CONTEXT_COLUMNS, RETURN_COLUMNS
 from market_predictor.swing.training.return_validation import date_balanced_weights
 from tests.test_swing_issuer_reaction_publication import qualification_fixture as qualification_fixture
@@ -93,7 +93,7 @@ def test_real_reaction_publication_receipt_readiness_and_126_loader_chain(
         shutil.copyfile(REPO / "src/market_predictor" / name, path)
     for module, name in ((readiness, "research/swing_training_readiness.py"),
                          (loader, "research/swing_return_inputs.py"),
-                         (verifier, "swing/datasets/issuer_reaction_verification.py")):
+                         (verifier, "research/issuer_reaction_verification.py")):
         monkeypatch.setattr(module, "__file__", str(package / name))
         monkeypatch.setattr(module, "release_process_memory", lambda: None)
     monkeypatch.setattr(verifier, "_guard", lambda: None)

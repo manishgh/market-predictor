@@ -9,9 +9,9 @@ from pydantic import ValidationError
 
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError
+from market_predictor.research.issuer_reaction_publication import materialize_issuer_reactions
+from market_predictor.research.issuer_reaction_verification import verify_issuer_reaction_rows
 from market_predictor.swing.contracts.holding_materialization import SourcePin
-from market_predictor.swing.datasets.issuer_reaction_publication import materialize_issuer_reactions
-from market_predictor.swing.datasets.issuer_reaction_verification import verify_issuer_reaction_rows
 
 
 def register_issuer_reaction_commands(app: typer.Typer) -> None:

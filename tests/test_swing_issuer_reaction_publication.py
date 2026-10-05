@@ -12,10 +12,10 @@ import pytest
 from market_predictor.canonical.store import file_sha256, load_canonical_artifact
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.io import write_json_object
+from market_predictor.research import issuer_reaction_publication as owner
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.issuer_reaction import REACTION_COLUMNS
 from market_predictor.swing.contracts.issuer_reaction_publication import ARTIFACT_TYPE, PROFILE, IssuerReactionPublicationPolicy
-from market_predictor.swing.datasets import issuer_reaction_publication as owner
 from market_predictor.swing.datasets import return_relationship_verification as relationship_verifier
 from market_predictor.swing.features.issuer_reaction_profile import build_issuer_reaction_profile
 from tests.test_issuer_content_qualification_authority import _publish as publish_qualification
@@ -40,7 +40,7 @@ def reaction_publication(publication_fixture: dict[str, Any], qualification_fixt
     parent = publication_fixture
     root = parent["root"]
     assert root == qualification_fixture["root"]
-    monkeypatch.setattr(owner, "__file__", str(root / "src/market_predictor/swing/datasets/issuer_reaction_publication.py"))
+    monkeypatch.setattr(owner, "__file__", str(root / "src/market_predictor/research/issuer_reaction_publication.py"))
     monkeypatch.setattr(owner, "guard", lambda limit: None)
     monkeypatch.setattr(owner, "release_process_memory", lambda: None)
     monkeypatch.setattr(owner, "EXPECTED_ROWS", parent["result"]["rows"])

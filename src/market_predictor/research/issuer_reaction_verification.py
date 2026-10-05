@@ -12,6 +12,14 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
+from market_predictor.research.issuer_reaction_publication import (
+    assemble_reaction_month,
+    current_implementation,
+    iter_reaction_inputs,
+    load_parent_month,
+    load_reaction_inputs,
+    verify_issuer_reaction_publication,
+)
 from market_predictor.resources import release_process_memory
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.issuer_reaction import REACTION_COLUMNS
@@ -22,14 +30,6 @@ from market_predictor.swing.contracts.issuer_reaction_publication import (
     VerifiedIssuerReactionPublication,
 )
 from market_predictor.swing.contracts.return_feature_profiles import RETURN_RELATIONSHIP_PROFILE
-from market_predictor.swing.datasets.issuer_reaction_publication import (
-    assemble_reaction_month,
-    current_implementation,
-    iter_reaction_inputs,
-    load_parent_month,
-    load_reaction_inputs,
-    verify_issuer_reaction_publication,
-)
 from market_predictor.swing.datasets.return_relationship_integrity import check_files
 from market_predictor.swing.datasets.return_relationship_integrity import pins as merge_pins
 from market_predictor.swing.datasets.return_relationship_verification import _guard
@@ -40,7 +40,7 @@ from market_predictor.swing.labels.fixed_horizon_readiness import utc_clocks
 SCHEMA = "market_predictor.issuer_reaction_row_verification"
 SCOPE = "published_issuer_reaction_population_clocks_original_targets"
 IMPLEMENTATION_PATHS = (
-    "swing/datasets/issuer_reaction_verification.py",
+    "research/issuer_reaction_verification.py",
     "swing/datasets/return_relationship_verification.py",
     "swing/datasets/return_relationship_integrity.py",
     "swing/labels/fixed_horizon_readiness.py",
@@ -71,7 +71,7 @@ def _assert_replayed_rows_equal(saved: pd.DataFrame, expected: pd.DataFrame) -> 
 
 
 def _pins(root: Path, verified: VerifiedIssuerReactionPublication) -> tuple[dict[str, str], dict[str, str]]:
-    package = Path(__file__).resolve().parents[2]
+    package = Path(__file__).resolve().parents[1]
     current = merge_pins(root, current_implementation(root), {
         (package / name).relative_to(root).as_posix(): file_sha256(package / name)
         for name in IMPLEMENTATION_PATHS

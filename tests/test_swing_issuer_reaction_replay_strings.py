@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from market_predictor.swing.datasets import issuer_reaction_verification as owner
+from market_predictor.research import issuer_reaction_verification as owner
 
 
 def _rows() -> tuple[pd.DataFrame, pd.DataFrame]:

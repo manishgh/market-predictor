@@ -15,6 +15,7 @@ from market_predictor.edge_rebuild.temporal_manifest import build_temporal_sched
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside
 from market_predictor.modeling.strategy_contract import load_strategy_contract
+from market_predictor.research.issuer_reaction_verification import validate_issuer_reaction_receipt
 from market_predictor.research.swing_training_readiness import (
     IMPLEMENTATION_PATHS,
     REACTION_IMPLEMENTATION_PATHS,
@@ -29,7 +30,6 @@ from market_predictor.swing.contracts.research import load_swing_research_contra
 from market_predictor.swing.contracts.return_feature_profiles import RETURN_RELATIONSHIP_PROFILE
 from market_predictor.swing.contracts.return_training import ReturnTrainingPolicy
 from market_predictor.swing.contracts.training_readiness import TrainingReadinessPolicy
-from market_predictor.swing.datasets.issuer_reaction_verification import validate_issuer_reaction_receipt
 from market_predictor.swing.datasets.return_relationship_verification import validate_return_relationship_receipt
 from market_predictor.swing.datasets.symbol_corrections import pinned_object
 from market_predictor.swing.features.panel import swing_model_feature_columns

@@ -82,9 +82,9 @@ def _require(condition: bool, message: str) -> None:
 
 
 def current_implementation(root: Path) -> dict[str, str]:
-    package = Path(__file__).resolve().parents[2]
+    package = Path(__file__).resolve().parents[1]
     names = (*qualification.IMPLEMENTATION_PATHS,
-        "swing/contracts/issuer_reaction_publication.py", "swing/datasets/issuer_reaction_publication.py",
+        "swing/contracts/issuer_reaction_publication.py", "research/issuer_reaction_publication.py",
         "swing/features/issuer_reaction_profile.py", "swing/features/issuer_reaction.py",
         "swing/contracts/issuer_reaction_profile.py", "swing/contracts/issuer_reaction.py")
     return pins(root, relationship_implementation(root),

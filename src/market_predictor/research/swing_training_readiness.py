@@ -16,13 +16,13 @@ from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.modeling.strategy_contract import load_strategy_contract
+from market_predictor.research.issuer_reaction_verification import validate_issuer_reaction_receipt
 from market_predictor.resources import assert_memory_budget, release_process_memory
 from market_predictor.swing.contracts.issuer_reaction_profile import ISSUER_REACTION_PROFILE
 from market_predictor.swing.contracts.issuer_reaction_publication import ARTIFACT_TYPE as REACTION_ARTIFACT_TYPE
 from market_predictor.swing.contracts.research import load_swing_research_contract
 from market_predictor.swing.contracts.return_feature_profiles import RETURN_RELATIONSHIP_PROFILE
 from market_predictor.swing.contracts.training_readiness import TrainingReadinessPolicy
-from market_predictor.swing.datasets.issuer_reaction_verification import validate_issuer_reaction_receipt
 from market_predictor.swing.datasets.return_relationship_verification import validate_return_relationship_receipt
 from market_predictor.swing.datasets.symbol_corrections import pinned_object
 from market_predictor.swing.features.panel import swing_model_feature_columns
@@ -41,8 +41,8 @@ RELATIONSHIP_IMPLEMENTATION_PATHS = (
 REACTION_IMPLEMENTATION_PATHS = (
     "research/swing_return_inputs.py", "swing/contracts/return_training.py",
     "swing/contracts/issuer_reaction_publication.py", "swing/contracts/issuer_reaction_profile.py",
-    "swing/contracts/issuer_reaction.py", "swing/datasets/issuer_reaction_publication.py",
-    "swing/datasets/issuer_reaction_verification.py", "swing/features/issuer_reaction_profile.py",
+    "swing/contracts/issuer_reaction.py", "research/issuer_reaction_publication.py",
+    "research/issuer_reaction_verification.py", "swing/features/issuer_reaction_profile.py",
     "swing/features/issuer_reaction.py",
 )
 
