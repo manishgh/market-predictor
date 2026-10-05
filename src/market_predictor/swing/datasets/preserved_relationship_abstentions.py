@@ -24,6 +24,20 @@ from market_predictor.swing.datasets.holding_raw_sources import RAW_COLUMNS
 from market_predictor.swing.datasets.predictor_abstention_derivation import ReviewedPredictorFailure, _validated_prefix
 from market_predictor.swing.datasets.return_relationship_integrity import check_files, pins, read_object
 
+HISTORICAL_OBSERVATION_SHA256 = "70c6f85029e64ba3354ba04b5aa936c2147272f2f527ca9757517b3d31178060"
+HISTORICAL_OBSERVATION_SCHEMA = "market_predictor.predictor_source_failure_observations.v1"
+
+
+def pinned_original_observation_report(root: Path, pin: SourcePin) -> dict[str, Any]:
+    """Inspect one frozen historical report; never admit an old current contract."""
+    if pin.sha256 != HISTORICAL_OBSERVATION_SHA256:
+        raise DataReadinessError("preserved abstention requires the exact original observation report hash")
+    report = read_object(inside(root, pin.path), pin.sha256)
+    if (report.get("schema") != HISTORICAL_OBSERVATION_SCHEMA
+            or report.get("numeric_first") != "2018-05-29" or report.get("numeric_last") != "2024-05-28"):
+        raise DataReadinessError("preserved abstention original observation schema or numerical bounds differ")
+    return report
+
 
 def preserved_abstention_evidence(root: Path, mapping: dict[str, Any],
 ) -> tuple[ReviewedPredictorFailure, dict[str, Any], dict[str, str]]:
@@ -58,14 +72,12 @@ def preserved_abstention_evidence(root: Path, mapping: dict[str, Any],
             raise DataReadinessError("preserved abstention observation/source lacks historical ownership")
     if observation_pin not in fact.reviewed_evidence or len(fact.source_artifacts) != 1:
         raise DataReadinessError("preserved abstention lacks one exact reviewed source observation")
-    report = read_object(inside(root, observation_pin.path), observation_pin.sha256)
+    report = pinned_original_observation_report(root, observation_pin)
     source = fact.source_artifacts[0]
     records = [row for row in report.get("observations", ()) if row.get("security_id") == fact.security_id
         and row.get("ticker") == fact.symbol and row.get("source_path") == inside(root, source.path).relative_to(root).as_posix()
         and row.get("source_sha256") == source.sha256]
-    if (report.get("schema") != "market_predictor.predictor_source_failure_observations"
-            or report.get("numeric_first") != "2018-05-29" or report.get("numeric_last") != "2024-05-28"
-            or len(records) != 1):
+    if len(records) != 1:
         raise DataReadinessError("preserved abstention requires one immutable historical observation")
     observation = records[0]
     if fact.first_invalid_session is None:

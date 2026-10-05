@@ -16,6 +16,9 @@ PUBLIC_IDENTITIES = {
 # Exact identifiers in independently pinned historical evidence. This isolated
 # inspector compares original bytes; these are not accepted current contracts.
 HISTORICAL_EVIDENCE_IDENTITIES = {
+    "swing/datasets/preserved_relationship_abstentions.py": {
+        "market_predictor.predictor_source_failure_observations.v1",
+    },
     "swing/datasets/relationship_historical_evidence.py": {
         "market_data.artifact_manifest.v1", "market_data.v1",
     },

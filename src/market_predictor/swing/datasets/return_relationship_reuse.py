@@ -29,6 +29,7 @@ from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.research_features import ResearchFeaturePolicy
 from market_predictor.swing.contracts.return_relationship_publication import ReturnRelationshipPublicationPolicy
 from market_predictor.swing.contracts.return_relationship_reuse import RelationshipReusePolicy
+from market_predictor.swing.datasets import preserved_relationship_abstentions
 from market_predictor.swing.datasets.adjusted_history_bindings import (
     bind_adjusted_history_decisions,
     expected_bound_history_sessions,
@@ -41,6 +42,7 @@ from market_predictor.swing.datasets.corrected_outcomes import (
 )
 from market_predictor.swing.datasets.initial_fit_raw_share_plan import MEMBERSHIP_COLUMNS, _projection
 from market_predictor.swing.datasets.preserved_relationship_abstentions import (
+    pinned_original_observation_report,
     preserved_abstention_evidence,
     preserved_physical_prefix,
 )
@@ -226,13 +228,11 @@ def _preserved_mapping(root: Path, evidence: ReuseEvidence, policy: Relationship
         return None
     if (len(decisions) != old_item["rows"] or json_sha256(sorted(decisions.decision_id)) != old_item["decision_ids_sha256"]):
         raise DataReadinessError("preserved historical abstention must retain its complete original decision group")
-    observations = []
-    for pin in fact["reviewed_evidence"]:
-        value = read_object(inside(root, pin["path"]), pin["sha256"])
-        if value.get("schema") == "market_predictor.predictor_source_failure_observations":
-            observations.append(pin)
+    observations = [pin for pin in fact["reviewed_evidence"]
+        if pin["sha256"] == preserved_relationship_abstentions.HISTORICAL_OBSERVATION_SHA256]
     if len(observations) != 1:
         raise DataReadinessError("preserved abstention lacks one exact original observation authority")
+    pinned_original_observation_report(root, SourcePin.model_validate(observations[0]))
     record = context.bindings.source.records[unit_id]
     source_path = inside(context.bindings.source.directory, record["bars_path"])
     expected = expected_bound_history_sessions(context.bindings, unit_id, context.memberships)

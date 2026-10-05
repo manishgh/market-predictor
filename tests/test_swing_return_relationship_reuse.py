@@ -1,9 +1,10 @@
 """Synthetic comparison/inspection boundaries; no claims about real saved sources."""
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
 from pathlib import Path
-from types import MappingProxyType
+from types import MappingProxyType, SimpleNamespace
 from typing import Any
 
 import pandas as pd
@@ -17,6 +18,7 @@ from market_predictor.evidence.io import write_json_object
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.return_relationship_publication import ReturnRelationshipPublicationPolicy
 from market_predictor.swing.contracts.return_relationship_reuse import RelationshipReusePolicy
+from market_predictor.swing.datasets import preserved_relationship_abstentions as abstentions
 from market_predictor.swing.datasets import relationship_historical_evidence as historical
 from market_predictor.swing.datasets import return_relationship_reuse as owner
 from market_predictor.swing.datasets.adjusted_history_bindings import AdjustedHistoryBindings
@@ -356,7 +358,9 @@ def test_whole_history_unknown_stays_empty_with_no_identity_resolution() -> None
     assert result.empty and list(result) == list(frame)
 
 
-def _scope_evidence_fixture(root: Path) -> tuple[dict[str, Any], AdjustedHistoryBindings, tuple[date, ...]]:
+def _scope_evidence_fixture(
+    root: Path, monkeypatch: pytest.MonkeyPatch,
+) -> tuple[dict[str, Any], AdjustedHistoryBindings, tuple[date, ...]]:
     frame, fact, observation = _preserved_prefix_inputs()
     old_directory = root / "old"
     old_directory.mkdir()
@@ -364,11 +368,12 @@ def _scope_evidence_fixture(root: Path) -> tuple[dict[str, Any], AdjustedHistory
     old_source.write_bytes(b"synthetic historical source, not an admitted current archive")
     old_source_pin = SourcePin(path="old/raw.bin", sha256=file_sha256(old_source))
     report_path = old_directory / "observations.json"
-    write_json_object(report_path, {"schema": "market_predictor.predictor_source_failure_observations",
+    write_json_object(report_path, {"schema": abstentions.HISTORICAL_OBSERVATION_SCHEMA,
         "numeric_first": "2018-05-29", "numeric_last": "2024-05-28", "observations": [
             {**observation, "security_id": fact.security_id, "ticker": fact.symbol,
                 "source_path": old_source_pin.path, "source_sha256": old_source_pin.sha256}]})
     report_pin = SourcePin(path="old/observations.json", sha256=file_sha256(report_path))
+    monkeypatch.setattr(abstentions, "HISTORICAL_OBSERVATION_SHA256", report_pin.sha256)
     fact = fact.model_copy(update={"source_artifacts": (old_source_pin,), "reviewed_evidence": (report_pin,)})
     identifiers = json_sha256(["decision-one", "decision-two"])
     old_request = {"stock_inventory": {fact.group_key: {"security_id": fact.security_id, "rows": 2,
@@ -406,8 +411,8 @@ def _scope_evidence_fixture(root: Path) -> tuple[dict[str, Any], AdjustedHistory
     return mapping, bindings, sessions
 
 
-def test_preserved_scope_references_keep_original_group_and_sources(tmp_path: Path) -> None:
-    mapping, _, _ = _scope_evidence_fixture(tmp_path)
+def test_preserved_scope_references_keep_original_group_and_sources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    mapping, _, _ = _scope_evidence_fixture(tmp_path, monkeypatch)
     fact, observation, files = preserved_abstention_evidence(tmp_path, mapping)
     assert fact.group_key == mapping["historical_group_key"]
     assert fact.source_artifacts[0].path == "old/raw.bin"
@@ -416,9 +421,82 @@ def test_preserved_scope_references_keep_original_group_and_sources(tmp_path: Pa
     assert mapping["source_issuer_verified"] is False
 
 
+@pytest.mark.parametrize("field,value", [
+    ("schema", "market_predictor.predictor_source_failure_observations"),
+    ("numeric_first", "2018-05-28"),
+    ("numeric_last", "2024-05-29"),
+])
+def test_original_observation_reader_rejects_rehashed_metadata_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, field: str, value: str,
+) -> None:
+    mapping, _, _ = _scope_evidence_fixture(tmp_path, monkeypatch)
+    path = tmp_path / mapping["observation"]["path"]
+    report = json.loads(path.read_bytes())
+    report[field] = value
+    path.write_text(json.dumps(report), encoding="utf-8")
+    digest = file_sha256(path)
+    # Only this unit substitutes the frozen file identity to isolate metadata checks.
+    monkeypatch.setattr(abstentions, "HISTORICAL_OBSERVATION_SHA256", digest)
+    with pytest.raises(DataReadinessError, match="schema or numerical bounds"):
+        abstentions.pinned_original_observation_report(tmp_path, SourcePin(path=mapping["observation"]["path"], sha256=digest))
+
+
+def test_original_observation_reader_rejects_other_file_digest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    mapping, _, _ = _scope_evidence_fixture(tmp_path, monkeypatch)
+    pin = SourcePin.model_validate(mapping["observation"]).model_copy(update={"sha256": "f" * 64})
+    with pytest.raises(DataReadinessError, match="exact original observation report hash"):
+        abstentions.pinned_original_observation_report(tmp_path, pin)
+
+
+@pytest.mark.parametrize("matching_pins", [0, 1, 2])
+def test_preserved_mapping_requires_exactly_one_original_observation_pin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, matching_pins: int,
+) -> None:
+    mapping, bindings, sessions = _scope_evidence_fixture(tmp_path, monkeypatch)
+    request = json.loads((tmp_path / "old/_request.json").read_bytes())
+    item = request["stock_inventory"][mapping["historical_group_key"]]
+    item.update(kind="combined", source_group="AAA")
+    item["quarantine"]["reviewed_evidence"] = [dict(mapping["observation"]) for _ in range(matching_pins)]
+    saved = historical.HistoricalFeatureEvidence(tmp_path / "old/_manifest.json",
+        {"request_sha256": mapping["historical_request"]["sha256"]}, request, {}, {}, "technical_relationships")
+    evidence = owner.ReuseEvidence(saved, saved, {}, {})
+    policy = _policy().model_copy(update={
+        "historical_relationship_publication": SourcePin.model_validate(mapping["historical_publication"]),
+        "historical_relationship_receipt": SourcePin.model_validate(mapping["historical_receipt"]),
+    })
+    # Fake collaborators are confined to this selector unit; no reader/replay pass is claimed.
+    context = SimpleNamespace(bindings=bindings, memberships=pd.DataFrame())
+    monkeypatch.setattr(owner, "expected_bound_history_sessions", lambda *args: sessions)
+    decisions = pd.DataFrame({"security_id": mapping["security_id"], "parent_ticker": "AAA",
+        "decision_id": ["decision-one", "decision-two"]})
+    if matching_pins == 1:
+        assert owner._preserved_mapping(tmp_path, evidence, policy, context, decisions, "current-query") == mapping
+    else:
+        with pytest.raises(DataReadinessError, match="one exact original observation authority"):
+            owner._preserved_mapping(tmp_path, evidence, policy, context, decisions, "current-query")
+
+
+def test_preserved_observation_requires_original_request_ownership(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    mapping, _, _ = _scope_evidence_fixture(tmp_path, monkeypatch)
+    request_path = tmp_path / "old/_request.json"
+    request = json.loads(request_path.read_bytes())
+    del request["source_files"][mapping["observation"]["path"]]
+    request_path.write_text(json.dumps(request), encoding="utf-8")
+    mapping["historical_request"]["sha256"] = file_sha256(request_path)
+    manifest_path = tmp_path / "old/_manifest.json"
+    manifest_path.write_text(json.dumps({"request_sha256": file_sha256(request_path)}), encoding="utf-8")
+    mapping["historical_publication"]["sha256"] = file_sha256(manifest_path)
+    receipt_path = tmp_path / "old/receipt.json"
+    receipt_path.write_text(json.dumps({"manifest_sha256": file_sha256(manifest_path), "status": "passed",
+        "additions_source_replayed": True}), encoding="utf-8")
+    mapping["historical_receipt"]["sha256"] = file_sha256(receipt_path)
+    with pytest.raises(DataReadinessError, match="lacks historical ownership"):
+        preserved_abstention_evidence(tmp_path, mapping)
+
+
 @pytest.mark.parametrize("path", ["old/raw.bin", "old/observations.json", "old/_request.json", "old/receipt.json"])
-def test_preserved_scope_rejects_historical_evidence_tamper(tmp_path: Path, path: str) -> None:
-    mapping, _, _ = _scope_evidence_fixture(tmp_path)
+def test_preserved_scope_rejects_historical_evidence_tamper(tmp_path: Path, path: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    mapping, _, _ = _scope_evidence_fixture(tmp_path, monkeypatch)
     source = tmp_path / path
     source.write_bytes(source.read_bytes() + b"changed")
     with pytest.raises(DataReadinessError):
@@ -426,8 +504,10 @@ def test_preserved_scope_rejects_historical_evidence_tamper(tmp_path: Path, path
 
 
 @pytest.mark.parametrize("poison", ["security", "query", "membership", "population", "boundary", "extra_field"])
-def test_preserved_scope_rejects_changed_current_ownership_or_historical_scope(tmp_path: Path, poison: str) -> None:
-    mapping, bindings, sessions = _scope_evidence_fixture(tmp_path)
+def test_preserved_scope_rejects_changed_current_ownership_or_historical_scope(
+    tmp_path: Path, poison: str, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mapping, bindings, sessions = _scope_evidence_fixture(tmp_path, monkeypatch)
     if poison == "security":
         mapping["security_id"] = "different-issuer"
     elif poison == "query":
