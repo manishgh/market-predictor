@@ -1,9 +1,9 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: actual jobs stopped for memory; saved-config proof next
+### Current continuation: real config proof passed; issuer orchestration ownership repair
 
 ML implementation 771d053 and corrective CI implementation 892100c are pushed on
-codex/v1-canonical-cleanup. Last documentation checkpoint is b2cb4c9. Astra step 3 remains in progress; four
+codex/v1-canonical-cleanup. Last documentation checkpoint is 913e351. Astra step 3 remains in progress; four
 existing fits are retained. Main and TradingFlow are untouched. APIs remain V1,
 internal identities unversioned. No compatibility fallback or accepted model claim.
 
@@ -134,14 +134,34 @@ available, failing the canonical raw-source reader's 85%/2 GiB rule. Sampled pea
 process resident memory was 0.285 GiB. No report exists; lease released. No threshold
 or guard changes, no repeated source export/matching/reviews, no actual reuse pass.
 
-Bounded lightweight next work: independently bind original strategy/temporal bytes
-from Git 7b5d834 to saved training pins, prove their only three naming changes against
-current configs, and reproduce saved folds/holdouts in the evaluator. All other
-parsed fields/types match in the read-only preflight. Active readers and historical
-model/request bytes remain unchanged. This admits only historical interpretation,
-not new training/source/economic/promotion evidence. Original action config is byte
-identical; no action-reader failure is claimed without execution. The eight frozen
-evaluations remain pending actual source access under existing memory limits.
+Saved-config proof implementation b589725 is pushed. Explicit evidence config
+configs/swing_saved_evaluation_configuration.json SHA256
+4ba8517a0f18fa1d360df7e061aff8cf917d92f2f3eff0bddd49d6ec5413b523
+binds exactly the two retained runs. Recovered original bytes under
+data/research/swing_saved_evaluation_configuration_bytes match their saved request
+hashes; recovery audit SHA106be521a5a9a9650d6dc53460bc5033a80d1ed6a766d2a9f014448714762466.
+Actual metadata proof passed exit 0 in 2.47s: report
+data/reports/swing_saved_evaluation_configuration_verification.json SHA256
+95175eaf55352d5e6fce316d107ebb46480bf60ea759631ae203d8efead13d0c.
+Both actual original/current config pairs and saved fold calendars match except
+three exact naming changes. Parent holdout assignment/prediction payloads/economics
+were not replayed by this small proof. Full evaluator retains those checks; all
+admissions stay false. Active readers and original model/request hashes unchanged.
+Initial proof helper invocation had a mistyped 63-character hash and exited before
+reading inputs; retained saved-configuration-actual.*. Corrected actual proof is
+saved-configuration-actual-verified.*. No production verifier change was needed.
+
+Focused unit run 66917: 294 passed, two existing package-boundary checks failed,
+434.63s. Durable saved-configuration-consumers JUnit/stdout/exit files retained.
+New proof/OOF/CLI/naming cases passed; two failures identify issuer_reaction_publication
+importing research/governance from swing. Four source modules pass strict typing;
+eight changed Python files pass Ruff and have LF/identical parsed syntax trees.
+One consolidated proof review found no further issues. Reopen only those demonstrated
+ownership violations: move research-only issuer publication and verification to
+research, update direct consumers/fingerprints, remove old paths without aliases.
+Preserve every qualification/replay/numerical/clock rule and closed producer byte.
+Original action config is byte-identical; no action-reader failure is claimed.
+The eight frozen evaluations remain pending actual source access under memory limits.
 
 Pushed software: qualification authority/CLI; explicit old/current 124 reuse proof
 with WTW/ATVI/INFO/SBNY abstentions preserved; 124-to-126 publication/replay and
@@ -2607,8 +2627,10 @@ the frozen numeric training boundary or authorize promotion.
 Exact next checkpoint: original Astra ordered checkpoint 3 remains in progress;
 its qualification/reuse reruns have exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
-Close these observed results, then implement the bounded lightweight saved-config
-proof designed above. Future actual 124 reuse still uses config SHA256
+Saved-config implementation b589725 and actual byte/fold proof are complete.
+Close this documentation checkpoint, then verify and close the exact publisher/
+verifier ownership repair for the two observed import violations. Future actual
+124 reuse still uses config SHA256
 95dd86ec733a70a72c0d0a2f05de78e0111b71e31fef1786d424136141cc209c.
 Only one heavy job at a time; freeze pinned source/configs during each run.
 Do not repeat completed export, matching, independent reviews or passed unit scopes.

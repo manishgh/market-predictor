@@ -1,6 +1,6 @@
 # Current Feature Engineering Audit
 
-Last updated: 2026-10-05
+Last updated: 2026-10-06
 
 ## Qualified Reaction Profile: Current Acceptance Matrix
 
@@ -32,6 +32,27 @@ builder and confines promotion fixtures to tests/support. Five focused unit chec
 passed; Ruff, source-configured strict typing and workflow parsing passed. CI checks
 actual unprovisioned startup and 503 refusal only. Docker is unavailable locally;
 container execution and successful real-data serving are not claimed.
+
+Latest actual-data attempts are retained failures, not replaced with fixtures:
+qualification 4422 exited at 90.0% system memory (1.57 GiB available), with only
+request/authority files and the same rejected family metrics. Reuse 37426 exited
+at 86.8% system memory (2.07 GiB), above its canonical 85% requirement; no report.
+Both processes and leases are gone. No new qualified/current feature authority exists.
+
+Implementation b589725 proves the saved-model strategy/date-config naming changes
+explicitly. Actual retained-byte and fold-calendar verification passed for both runs
+in data/reports/swing_saved_evaluation_configuration_verification.json. It does not
+replay prediction payloads/parent holdouts or prove funded returns. The focused unit
+run passed 294 checks but failed two existing package-boundary checks in issuer
+publication; their narrow ownership move is pending verification. No general gate
+exception, source/target rebuild, extra learner or API generation was introduced.
+
+Read-only source review identifies development improvements to assess next: exclude
+debt-tender results from earnings candidates; recognize a year directly attached to
+earnings guidance; mark equal/contradictory guidance ranges unresolved; bind review
+support to the actual exhibit rather than a cover page. Original judgments/metrics
+remain unchanged; previously inspected examples cannot be independent new acceptance
+evidence. No extraction change or new qualification pass is claimed here.
 
 These software results do not prove SPY outperformance or satisfy the future 252
 decision sessions plus ten maturity sessions required for prospective assessment.
