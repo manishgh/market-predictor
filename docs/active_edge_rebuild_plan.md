@@ -120,19 +120,30 @@ No model settings, splits, targets, weights or estimator-imputation policy chang
 Feature audit reflects this unverified state; actual source reviews/126 authority,
 new fits, funded results and live return-model inference remain unfinished.
 
-A concrete archived124 dependency conflict also needs completion: its request and
-receipt pin the old holding-accounting bytes, so the benchmark-cost repair would
-reject unchanged feature data. Code reviewer is implementing a narrow evidence
-role partition: retain original producer/verifier provenance and immutable receipt,
-keep all data/source/feature-kernel pins byte-strict, protect producer/resume and
-numerical functions, permit only named reader-definition migrations and the exact
-reviewed cost conditional/import through captured static AST fingerprints. No whole
-holding validator or transitive import closure exemption is allowed. Static stdlib
-AST fingerprint preparation is authorized; it is not a runtime check. Root's holding
-file remains untouched until source lease exit. Consumers use the validated current
-source map instead of treating the archived receipt's code hashes as current files.
-New fitting requires a fresh current readiness report; retained fits/OOF rows do not
-need to be retrained or rewritten. This work is unfinished and all tests are unrun.
+The attempted narrow archived124 evidence-role fix was stopped before repository
+edits: static original-byte recovery proved that its protected source semantics
+already differ after the previous canonical source migration. Exact evidence:
+C:/Users/manis/Documents/Codex/2026-09-28/c/work/relationship_fingerprints/drift_inventory.json
+records 50 mismatches (43 code files, 7 configuration files). Hash-matching producer
+snapshots came from local commit be474b5. The old policy requires failure facts and
+feature_plan_snapshot; the current policy changes those fields and uses exact
+standalone adjusted queries instead of combined/corrected readers. The first pinned
+124 sidecar has schema market_data.artifact_manifest.v1, which today's canonical
+reader rejects. This failure predates the pending benchmark-cost change. Merely
+exempting current code hashes would not prove unchanged features and is rejected.
+
+Only the original and utc_clocks124 publications exist, both historical; no modern
+124 source publication exists. Revised design review is freezing a narrow reuse
+proof/current derivative: inspect original manifest/receipt/sidecar bytes only at
+exact historical pins, retain all matched120 values/targets/clocks/eligibility,
+reuse the completed peer/configuration audits, and check only the four relationship
+additions against the current verified sources. Do not rerun matching/news/targets,
+rewrite old hashes, execute archived code or add an obsolete-format production
+fallback. Any actual numerical difference must be recorded before repair/retraining.
+Exact new scope/API and checks remain pending; do not run the abandoned AST-only fix.
+The existing qualification20-file producer-provenance repair remains independently
+valid. Keep holding_accounting.py untouched while the source scan pins it. Draft
+126 publishers/consumers are not admitted by synthetic fixtures or code alone.
 ### Latest continuation: pinned historical bridge inspection repaired
 
 Implementation `0471c66` is pushed after the first real source job demonstrated
