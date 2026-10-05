@@ -1,9 +1,9 @@
 # Active Edge Rebuild Plan
 
-### Current continuation: tested real-data repairs pushed; actual reruns next
+### Current continuation: actual jobs stopped for memory; saved-config proof next
 
 ML implementation 771d053 and corrective CI implementation 892100c are pushed on
-codex/v1-canonical-cleanup. Last documentation checkpoint is 88fd60a. Astra step 3 remains in progress; four
+codex/v1-canonical-cleanup. Last documentation checkpoint is b2cb4c9. Astra step 3 remains in progress; four
 existing fits are retained. Main and TradingFlow are untouched. APIs remain V1,
 internal identities unversioned. No compatibility fallback or accepted model claim.
 
@@ -113,8 +113,35 @@ not actual market-data integration. Ruff passed all affected Python; strict typi
 passed four source modules. Changed tracked Python line endings were normalized
 with identical parsed syntax trees; pinned config and source-data bytes untouched.
 Both bounded reviews are complete; no additional general review is needed.
-Actual repair reruns remain pending. Close this documentation checkpoint before
-starting either real job, then freeze code/config for its lifetime.
+Actual qualification rerun 4422/PID 87284 started at 21:35:33 UTC October 5,
+run 971522432cab4d81b87defdb61ed3b25. It uses the original population/reviewer pins
+and fresh output data/research/swing_initial_fit_issuer_content_qualified_disk_history.
+It ended exit 2 at 21:54:44 UTC when system memory reached 90.0% used, 1.57 GiB
+available. Its lease is released. Last sampled resident process memory was 0.427 GiB;
+final peak was not captured, so the disk repair has no completed actual-data proof.
+Only _request.json (58ab1946b0d8ed293a2b6fd0c4ae44a6db09070967171dc3b21b52c9cf0da71a)
+and _authority.json (0fce0852ded61c8d3eb2bf43f51c33ef346240296592e5929e72fb4a7fcf2eea)
+exist; no events/dispositions/manifest or feature admission. Both family metrics
+reproduce the earlier failures. Preserve this failed path. Durable stdout/exit:
+review-results/qualification-real-disk-history.* in the chat workspace.
+Actual 124 reuse session 37426/PID 87492 started at 21:55:37 UTC, run
+3f1a5b1f99ca4393a7879b5c04483072, under its sole canonical source lease.
+Original config SHA95dd86ec...209c and data/model bytes are unchanged. Output
+data/reports/swing_return_relationships_current_reuse_verification.json;
+durable review-results/relationship-reuse-real-repaired.*. Code/config remain frozen
+for the job. It ended exit 2 at 21:57:45 UTC: system memory 86.8% used, 2.07 GiB
+available, failing the canonical raw-source reader's 85%/2 GiB rule. Sampled peak
+process resident memory was 0.285 GiB. No report exists; lease released. No threshold
+or guard changes, no repeated source export/matching/reviews, no actual reuse pass.
+
+Bounded lightweight next work: independently bind original strategy/temporal bytes
+from Git 7b5d834 to saved training pins, prove their only three naming changes against
+current configs, and reproduce saved folds/holdouts in the evaluator. All other
+parsed fields/types match in the read-only preflight. Active readers and historical
+model/request bytes remain unchanged. This admits only historical interpretation,
+not new training/source/economic/promotion evidence. Original action config is byte
+identical; no action-reader failure is claimed without execution. The eight frozen
+evaluations remain pending actual source access under existing memory limits.
 
 Pushed software: qualification authority/CLI; explicit old/current 124 reuse proof
 with WTW/ATVI/INFO/SBNY abstentions preserved; 124-to-126 publication/replay and
