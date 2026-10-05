@@ -234,6 +234,18 @@ causal inputs and an explicit research-only training contract.
 | technical_relationships | Fresh UTC-clock publication and independent source replay pass all 586,305 decisions / 59 months; fix 82842e0 passes 94 focused tests and review | Exact original columns/outcomes preserved; additions independently recomputed, baseline numerical evidence explicitly inherited | Frozen 124-column experiment a8be7cb completed 16 validation fits and two final models; independent artifact audit passed; economic edge not established | Not authorized |
 | technical_relationships_issuer_reaction | Blocked: catalyst_full has aggregate news features, not qualified issuer/SEC event-reaction inputs; SEC/Finviz coverage is unknown here | Must reuse matched independently admitted labels | Not trained; counts and sentiment cannot substitute for the promised reaction feature contract | Not authorized |
 
+October 5 content-review input component `90a7f16` is pushed: exact source/version,
+chosen-field/extracted-text hashes, HTML element span locators, explicit issuer/action
+and fiscal-period evidence, independent unavailable/ambiguous reasons and causal
+clock replay share one historical/live implementation. Candidates remain unadmitted.
+All 548 affected checks, Ruff and strict mypy pass. Thirty-two pinned saved Alpaca
+records passed adapter/spans smoke (20 headlines, 12 bodies); this is not event
+precision/recall evidence. Corrected initial-fit SEC bodies `b3041a07…69318` exist;
+older metadata-only wording below is historical. Full-content review authority,
+source-linked candidate/rejected annotations, precision/recall, exact model columns,
+reaction profile publication and its two fits remain outstanding. Existing title
+reviews admit analyst revisions only and cannot admit this new extractor.
+
 September 21 source-qualification component: shared issuer reaction measurements
 are implemented in `8e24d45`, separately from final model-profile admission. The new source
 contract binds event/version, issuer identity and existing price authorities, with

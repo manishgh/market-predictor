@@ -1,7 +1,64 @@
 # Active Edge Rebuild Handoff
 
+### October 5 bounded checkpoint: issuer content review inputs (complete; profile remains pending)
+
+Problem: the completed Alpaca content inventory and corrected SEC document archive
+have no shared source-bound input for reviewing reported earnings and raised/lowered
+guidance. The existing reaction measurement cannot establish what an event says.
+
+Scope: one shared `catalysts/issuer_events/content_review.py` adapter/extractor for
+saved Alpaca JSON and SEC HTML. Bind original payload, chosen field, extracted text,
+HTML element locators, exact content-version and identity clocks; propose explicit
+issuer-action statements with supporting spans and explicit-or-missing fiscal periods.
+Every input receives candidates or an unclassified reason. Candidates never establish
+training/serving admission. Preserve provider bodies, matched inputs and schemas.
+PDFs remain explicitly unavailable to this HTML extractor; no guessed decoding.
+
+Exit: source/field/text tamper rejection, wrong-subject/preview/form-only controls,
+HTML/table/entity/hidden-text tests, revision and proxy/observed clock tests,
+deterministic duplicate handling and shared historical/live extraction tests; Ruff,
+strict mypy, one consolidated senior code/ML review and pushed checkpoint/closure.
+Failure: reject mismatched bytes/clocks or unsupported decoding; no fallback event,
+neutral value, feature publication, model fit or API activation. Qualification review
+must later sample both proposed events and rejected/unclassified records to measure
+missed real events as well as false event matches. No aggregate or target replay.
+
+Verified source checkpoint: content inventory `3e4f905eâ€¦e9bda` is complete; corrected
+SEC initial-fit documents `b3041a07â€¦69318` are complete (45,160 archived documents).
+The older metadata-only note below is historical. Existing precision authorities
+admit analyst revisions only and do not admit this new full-content extraction.
+
+
+Implementation `90a7f16` is pushed. The shared Alpaca/SEC adapters preserve exact
+payload/field/text hashes and source-element span locators, propose earnings/guidance
+annotations, and enforce content-version/identity/observed versus proxy clocks.
+They add no training columns or admissions. Consolidated senior ML/code findings
+were closed: backdated availability, another issuer's action clause and fiscal
+periods borrowed from a separate event. A bounded saved-source probe also exposed
+the original Alpaca producer's spaced-JSON hash encoding; the adapter now preserves
+that exact encoding, with a compact-hash rejection regression. No saved bytes or
+historical pins changed.
+
+Final component verification: 548 tests passed in 74.48 seconds over content-review,
+issuer-reaction, content-inventory, continuity, package and architecture checks;
+RuntimeWarnings were errors. Changed-file Ruff and strict mypy passed. JUnit:
+`C:/Users/manis/Documents/Codex/2026-09-28/c/work/content-review-source-contract.xml`.
+Read-only source smoke: 32 corrected initial-fit Alpaca records, 20 headline fields
+and 12 provider bodies, all hashes/spans reproduced. None proposed an event; this
+small source-adapter check is not a precision/recall sample. SEC HTML behavior is
+covered by synthetic tests; no archive-wide replay, sealed later-content access,
+provider request, new fit, TradingFlow operation or full suite ran.
+
+Remaining Astra step 3: publish source-linked development review populations and
+sample both proposed and rejected/unclassified records; freeze annotation rules,
+review agreement and precision/recall gates before examining review results. Then
+create a content-qualified event authority, freeze event-to-decision selection and
+final feature order, integrate the reaction profile through batch/inference and
+training readers, and run its two existing model specifications only after admission.
+No accepted model or funded SPY improvement was produced by this component.
+
 Status: active
-Last updated: 2026-10-04
+Last updated: 2026-10-05
 Repository: `C:\project\market-predictor`
 Branch: `codex/v1-canonical-cleanup`
 Last verified publisher implementation: `cb70f81`, following `ebe5dfb`.
@@ -10,6 +67,7 @@ through `bb88f75`; the user explicitly authorized GitHub publication and main me
 The code changes are committed; this documentation receipt is committed separately. The continuation baseline was `21ef677`.
 Part (3)'s design: `38c698e`, amended by the September 28 review in `18bdd8e`.
 Earlier retirement sub-slice (b) closure: `ea93712`, after `7dd6d44`.
+Last completed issuer-content implementation: `90a7f16` (pushed; candidate extraction only).
 Last completed model-training checkpoint: relationship run on `a8be7cb` (artifact pins below).
 Baseline model-training checkpoint: `07963cc` (pushed; unchanged).
 Source-collection checkpoint: `19698d6` (pushed).
@@ -2205,15 +2263,17 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: resume original Astra ordered checkpoint 3, qualified
-issuer-news/SEC reaction features. Read the existing issuer_reaction source contract/
-measurement code and completed source/content inventories; update the acceptance
-matrix with the first unfinished source-content qualification and batch/inference
-integration, then freeze its bounded implementation scope. Reuse completed matched
-news/candles/targets. Do not restart aggregate replay, generic news-versus-candles
-fitting, regularization searches or target reconstruction. Finish the distinct
-reaction profile before its remaining two model fits; funded SPY evaluation follows.
-No source/API format change, TradingFlow write or new trial is implied by this step.
+Exact next checkpoint: original Astra ordered checkpoint 3, source-linked issuer
+content qualification review. `content_review.py` and its independent tests are
+complete in `90a7f16`; do not rebuild matching or reopen the numerical reaction
+kernel. Freeze the initial-fit review population, candidate/rejected sampling,
+annotation rules and precision/recall gates; use completed Alpaca inventory
+`3e4f905e…e9bda` and corrected SEC body archive `b3041a07…69318`. Publish exact
+source/version/identity/clock/span evidence before independent annotations. Keep
+later SEC content sealed. After qualification, define one event-to-decision reducer
+and the exact appended model columns, then wire the remaining two frozen fits.
+No generic aggregate-news fit, regularization search, target reconstruction,
+TradingFlow write or API-version change belongs to this checkpoint.
 
 Publisher verification uses `.venv/Scripts/python.exe`, `PYTHONDONTWRITEBYTECODE=1`,
 writable TEMP/TMP, `-p no:cacheprovider` and a unique writable `--basetemp`:
