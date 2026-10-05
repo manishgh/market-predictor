@@ -35,6 +35,7 @@ from market_predictor.governance.issuer_content_qualification import (
 )
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.research import issuer_content_review_population as population
+from market_predictor.research.issuer_content_history import staged_history_exclusions
 from market_predictor.research.issuer_content_review_sources import END, recheck_source_pins
 from market_predictor.research.legacy_query_identity_proofs import pin_file
 from market_predictor.swing.contracts.holding_materialization import SourcePin
@@ -46,6 +47,7 @@ MAX_JSON_BYTES = 64 * 1024**2
 IMPLEMENTATION_PATHS = (
     *population.IMPLEMENTATION_PATHS,
     "research/issuer_content_qualification_authority.py",
+    "research/issuer_content_history.py",
     "swing/contracts/issuer_reaction_profile.py",
 )
 # The producer imports these only for SourcePin/HoldingContract. Holding-cost
@@ -280,160 +282,93 @@ def _identity_errors(row: dict[str, Any]) -> list[str]:
     return reasons
 
 
-def _history_exclusions(
-    connection: sqlite3.Connection,
-) -> tuple[dict[tuple[str, str, str], set[str]], dict[str, tuple[str, ...]], dict[str, str]]:
-    """Retained query copies can link a legacy query to its proven cohort issuer.
-
-    Links are local to one source event and become usable only when both their
-    source version and identity proof were available. A later proof never assigns
-    an earlier unknown version. Ambiguity suppresses possible histories, not identity.
-    """
-    links: dict[tuple[str, str, str, str], set[tuple[pd.Timestamp, str]]] = defaultdict(set)
-    for query in ("SELECT cluster_id,content_json FROM versions",
-                  "SELECT cluster_id,record_json FROM records WHERE version_id!=''"):
-        for position, (cluster, encoded) in enumerate(connection.execute(query)):
-            _guard_batch(position)
-            row = json.loads(encoded)
-            clock = _clock(row.get("version_available_at_utc"))
-            if clock is None or clock > END or _identity_errors(row):
-                continue
-            identity_clock = _clock(row["identity_available_at_utc"])
-            assert identity_clock is not None
-            available = max(clock, identity_clock)
-            if available > END:
-                continue
-            security, source, event = row["security_id"], row["source_family"], row["source_id"]
-            for kind, token in (("cluster", cluster), ("query", security), ("event", "*")):
-                links[(source, event, kind, token)].add((available, security))
-            metadata = row.get("source_metadata", {})
-            query_id, resolution = metadata.get("query_security_id"), metadata.get("query_identity_resolution")
-            proof = metadata.get("identity_bridge_row_sha256" if resolution == "bridged" else "identity_legacy_proof_row_sha256")
-            proven = (resolution == "identity_equal" and query_id == security) or (
-                resolution in ("bridged", "proven_legacy_identity") and metadata.get("cohort_security_id") == security
-                and isinstance(proof, str) and len(proof) == 64 and set(proof) <= set("0123456789abcdef"))
-            if proven and isinstance(query_id, str) and query_id:
-                links[(source, event, "query", query_id)].add((available, security))
-        population._guard()
-    excluded: dict[tuple[str, str, str], set[str]] = defaultdict(set)
-    targets: dict[str, tuple[str, ...]] = {}
-    ambiguity: dict[str, str] = {}
-    for position, (cluster, version, encoded) in enumerate(connection.execute("SELECT cluster_id,version_id,content_json FROM versions")):
-        _guard_batch(position)
-        row = json.loads(encoded)
-        clock = _clock(row.get("version_available_at_utc"))
-        if clock is not None and clock > END:
-            targets[version] = ()
-            continue
-        source, event, security = row["source_family"], row["source_id"], row.get("security_id")
-        if isinstance(security, str) and security:
-            owners = {security}
-        else:
-            query_id = row.get("source_metadata", {}).get("query_security_id")
-            candidates = links.get((source, event, "cluster", cluster), set()) | links.get((source, event, "query", query_id), set())
-            owners = {issuer for available, issuer in candidates if clock is not None and available <= clock}
-            if len(owners) != 1:
-                ambiguity[version] = "ambiguous_source_event_issuer_lineage"
-                if not owners:
-                    # Later in-cutoff evidence cannot assign identity backward,
-                    # but identifies histories that must remain suppressed.
-                    # Prefer exact cluster/query evidence over unrelated issuers.
-                    owners = {issuer for _, issuer in candidates}
-                    if not owners:
-                        owners = {issuer for _, issuer in links.get((source, event, "event", "*"), ())}
-        targets[version] = tuple(sorted(owners))
-        errors = _identity_errors(row)
-        if version in ambiguity:
-            errors.append(ambiguity[version])
-        for owner in owners:
-            if errors:
-                excluded[(source, event, owner)].update(errors)
-    population._guard()
-    return excluded, targets, ambiguity
-
-
 def _publish_events(
     connection: sqlite3.Connection, output: Path, authority_sha256: str, metrics: dict[str, Any],
     reviews: dict[tuple[str, str, str, str], list[ContentReview]],
 ) -> dict[str, Any]:
-    excluded, history_targets, ambiguous_versions = _history_exclusions(connection)
-    query = "SELECT cluster_id,version_id,content_json,candidates_json FROM versions ORDER BY version_id"
-    schema = pa.schema([
-        (name, pa.timestamp("ns", tz="UTC") if name.endswith("_at_utc") else pa.string())
-        for name in QUALIFIED_EVENT_COLUMNS
-    ])
-    counts: Counter[str] = Counter()
-    rows: list[dict[str, Any]] = []
-    with (output / "version_dispositions.jsonl").open("x", encoding="utf-8", newline="\n") as dispositions:
-        with cast(Any, pq.ParquetWriter)(output / "events.parquet", schema) as writer:
-            for position, (cluster, version, encoded, candidates_encoded) in enumerate(connection.execute(query)):
-                _guard_batch(position)
-                row, candidates = json.loads(encoded), json.loads(candidates_encoded)
-                clock = _clock(row.get("version_available_at_utc"))
-                future = clock is not None and clock > END
-                history_errors = sorted({reason for owner in history_targets[version]
-                                         for reason in excluded.get((row["source_family"], row["source_id"], owner), ())})
-                if not future:
-                    history_errors = sorted(set(history_errors + _identity_errors(row)
-                                                + ([ambiguous_versions[version]] if version in ambiguous_versions else [])))
-                reasons = list(row["unavailable_reasons"])
-                status, family = "unclassified", None
-                eligible = [candidate for candidate in candidates if candidate.get("fiscal_period")
-                            and not candidate.get("unresolved_reasons")]
-                families = {candidate["event_family"] for candidate in eligible}
-                if future:
-                    reasons.append("version_after_initial_fit_cutoff")
-                elif history_errors:
-                    reasons.extend(history_errors)
-                elif reasons:
-                    status = "rejected"
-                elif len(families) != 1:
-                    reasons.append("ambiguous_event_families" if len(families) > 1 else "no_resolved_explicit_period_candidate")
-                    status = "rejected" if candidates else "unclassified"
-                else:
-                    family = next(iter(families))
-                    pair = reviews.get((cluster, row["source_id"], row["source_version_sha256"], family))
-                    if pair is not None and (len(pair) != 2 or not all(review.joint for review in pair)):
-                        reasons.append("exact_version_review_not_joint_positive")
+    with staged_history_exclusions(
+        connection, directory=output.parent, end=END, clock=_clock, identity_errors=_identity_errors,
+        guard_batch=_guard_batch, guard=population._guard,
+    ) as history:
+        query = "SELECT cluster_id,version_id,content_json,candidates_json FROM versions ORDER BY version_id"
+        schema = pa.schema([
+            (name, pa.timestamp("ns", tz="UTC") if name.endswith("_at_utc") else pa.string())
+            for name in QUALIFIED_EVENT_COLUMNS
+        ])
+        counts: Counter[str] = Counter()
+        rows: list[dict[str, Any]] = []
+        with (output / "version_dispositions.jsonl").open("x", encoding="utf-8", newline="\n") as dispositions:
+            with cast(Any, pq.ParquetWriter)(output / "events.parquet", schema) as writer:
+                for position, (cluster, version, encoded, candidates_encoded) in enumerate(connection.execute(query)):
+                    _guard_batch(position)
+                    row, candidates = json.loads(encoded), json.loads(candidates_encoded)
+                    clock = _clock(row.get("version_available_at_utc"))
+                    future = clock is not None and clock > END
+                    owners = history.owners(version)
+                    history_errors = history.history_errors(row["source_family"], row["source_id"], version)
+                    ambiguity = history.ambiguous_reason(version)
+                    if not future:
+                        history_errors = sorted(set(history_errors + _identity_errors(row)
+                                                    + ([ambiguity] if ambiguity is not None else [])))
+                    reasons = list(row["unavailable_reasons"])
+                    status, family = "unclassified", None
+                    eligible = [candidate for candidate in candidates if candidate.get("fiscal_period")
+                                and not candidate.get("unresolved_reasons")]
+                    families = {candidate["event_family"] for candidate in eligible}
+                    if future:
+                        reasons.append("version_after_initial_fit_cutoff")
+                    elif history_errors:
+                        reasons.extend(history_errors)
+                    elif reasons:
                         status = "rejected"
-                    elif not metrics["families"][family]["qualified_for_historical_feature_use"]:
-                        reasons.append("family_review_gates_not_met")
-                        status = "rejected"
+                    elif len(families) != 1:
+                        reasons.append("ambiguous_event_families" if len(families) > 1 else "no_resolved_explicit_period_candidate")
+                        status = "rejected" if candidates else "unclassified"
                     else:
-                        status = "qualified"
-                include = not future and not history_errors
-                disposition = {"cluster_id": cluster, "version_id": version, "source": row,
-                               "qualification_status": status, "event_family": family, "reasons": sorted(set(reasons)),
-                               "possible_history_issuers": list(history_targets[version]),
-                               "projected": include, "qualification_authority_sha256": authority_sha256}
-                dispositions.write(json.dumps(disposition, sort_keys=True, allow_nan=False) + "\n")
-                counts["source_versions"] += 1
-                counts[f"{status}_versions"] += 1
-                if future:
-                    counts["future_metadata_only_versions"] += 1
-                if not include:
-                    counts["excluded_projection_versions"] += 1
-                    continue
-                counts["projected_versions"] += 1
-                event = {
-                    "security_id": row["security_id"], "ticker": row["ticker"], "source_family": row["source_family"],
-                    "event_id": row["source_id"], "event_version_sha256": row["source_version_sha256"],
-                    "event_available_at_utc": _clock(row["event_available_at_utc"]),
-                    "identity_available_at_utc": _clock(row["identity_available_at_utc"]), "event_family": family,
-                    "qualification_status": status, "qualification_authority_sha256": authority_sha256,
-                    "duplicate_group_id": cluster,
-                }
-                rows.append(event)
-                if len(rows) == 1000:
+                        family = next(iter(families))
+                        pair = reviews.get((cluster, row["source_id"], row["source_version_sha256"], family))
+                        if pair is not None and (len(pair) != 2 or not all(review.joint for review in pair)):
+                            reasons.append("exact_version_review_not_joint_positive")
+                            status = "rejected"
+                        elif not metrics["families"][family]["qualified_for_historical_feature_use"]:
+                            reasons.append("family_review_gates_not_met")
+                            status = "rejected"
+                        else:
+                            status = "qualified"
+                    include = not future and not history_errors
+                    disposition = {"cluster_id": cluster, "version_id": version, "source": row,
+                                   "qualification_status": status, "event_family": family, "reasons": sorted(set(reasons)),
+                                   "possible_history_issuers": list(owners),
+                                   "projected": include, "qualification_authority_sha256": authority_sha256}
+                    dispositions.write(json.dumps(disposition, sort_keys=True, allow_nan=False) + "\n")
+                    counts["source_versions"] += 1
+                    counts[f"{status}_versions"] += 1
+                    if future:
+                        counts["future_metadata_only_versions"] += 1
+                    if not include:
+                        counts["excluded_projection_versions"] += 1
+                        continue
+                    counts["projected_versions"] += 1
+                    event = {
+                        "security_id": row["security_id"], "ticker": row["ticker"], "source_family": row["source_family"],
+                        "event_id": row["source_id"], "event_version_sha256": row["source_version_sha256"],
+                        "event_available_at_utc": _clock(row["event_available_at_utc"]),
+                        "identity_available_at_utc": _clock(row["identity_available_at_utc"]), "event_family": family,
+                        "qualification_status": status, "qualification_authority_sha256": authority_sha256,
+                        "duplicate_group_id": cluster,
+                    }
+                    rows.append(event)
+                    if len(rows) == 1000:
+                        writer.write_table(pa.Table.from_pylist(rows, schema=schema))
+                        rows.clear()
+                if rows:
                     writer.write_table(pa.Table.from_pylist(rows, schema=schema))
-                    rows.clear()
-            if rows:
-                writer.write_table(pa.Table.from_pylist(rows, schema=schema))
-    population._guard()
-    return {"counts": dict(counts), "excluded_histories": [
-        {"source_family": source, "source_id": event, "security_id": security, "reasons": sorted(reasons)}
-        for (source, event, security), reasons in sorted(excluded.items())
-    ]}
+        exclusions: list[dict[str, Any]] = []
+        for position, exclusion in enumerate(history.excluded_histories()):
+            _guard_batch(position)
+            exclusions.append(exclusion)
+        population._guard()
+        return {"counts": dict(counts), "excluded_histories": exclusions}
 
 
 def publish_issuer_content_qualification(
@@ -466,6 +401,8 @@ def publish_issuer_content_qualification(
                 _verify_blind(connection, folder, item, manifest)
             reviews, by_version = _reviews(root, reviewer_files, population_authority, folder, samples, connection, pins)
             metrics = evaluate_content_reviews(clusters=clusters, samples=samples, reviews=reviews)
+            del clusters, samples, expected, reviews
+            population._guard()
             recheck_source_pins(root, pins)
             output.mkdir()
             request = {"schema": f"{SCHEMA}_request", "population_authority": population_authority.model_dump(mode="json"),

@@ -36,6 +36,22 @@ class HistoricalFeatureEvidence:
     profile: str
 
 
+def _monthly_child(record: dict[str, Any], month: str, profile: str) -> dict[str, Any]:
+    """Resolve the two frozen documents' distinct ownership without changing either."""
+    child = record["profiles"][profile]
+    if child.get("path") != f"{month}/{profile}.parquet":
+        raise DataReadinessError("historical monthly child ownership differs")
+    if profile == "technical_market":
+        if (child.get("audit", {}).get("rows") != record["rows"]
+                or "rows" in child or "decision_ids_sha256" in child):
+            raise DataReadinessError("historical baseline monthly ownership or audit rows differs")
+        return {**child, "rows": record["rows"], "decision_ids_sha256": record["decision_ids_sha256"]}
+    if (profile != "technical_relationships" or child.get("rows") != record["rows"]
+            or child.get("decision_ids_sha256") != record["decision_ids_sha256"]):
+        raise DataReadinessError("historical monthly child ownership differs")
+    return dict(child)
+
+
 def inspect_historical_publication(root: Path, publication: SourcePin, receipt_pin: SourcePin,
     *, profile: str,
 ) -> HistoricalFeatureEvidence:
@@ -73,10 +89,7 @@ def inspect_historical_publication(root: Path, publication: SourcePin, receipt_p
         request_path.relative_to(root).as_posix(): manifest["request_sha256"]})
     rows = 0
     for month, record in sorted(months.items()):
-        child = record["profiles"][profile]
-        if (child["path"] != f"{month}/{profile}.parquet" or child["rows"] != record["rows"]
-                or child["decision_ids_sha256"] != record["decision_ids_sha256"]):
-            raise DataReadinessError("historical monthly child ownership differs")
+        child = _monthly_child(record, month, profile)
         artifact = inside(path.parent, child["path"])
         sidecar = inspect_sidecar(artifact, child, artifact_type="swing_return_relationships" if relationship else "swing_research_join")
         if sidecar.get("inputs") != {"request_sha256": manifest["request_sha256"]}:
@@ -109,7 +122,7 @@ def inspect_sidecar(path: Path, record: dict[str, Any], *, artifact_type: str) -
 def historical_month(evidence: HistoricalFeatureEvidence, month: str,
     columns: list[str] | None = None,
 ) -> pd.DataFrame:
-    record = evidence.manifest["months"][month]["profiles"][evidence.profile]
+    record = _monthly_child(evidence.manifest["months"][month], month, evidence.profile)
     path = inside(evidence.path.parent, record["path"])
     check_files(evidence.path.parent, {record["path"]: record["sha256"],
         manifest_path_for(path).relative_to(evidence.path.parent).as_posix(): record["manifest_sha256"]})

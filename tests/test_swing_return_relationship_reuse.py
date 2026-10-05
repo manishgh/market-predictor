@@ -248,6 +248,7 @@ def test_missing_explicit_equivalence_pin_never_uses_historical_inspection(tmp_p
 
 
 def _historical_parent_fixture(root: Path, *, admitted_request: bool = False) -> tuple[SourcePin, SourcePin]:
+    """Synthetic unit fixture matching the frozen baseline metadata ownership."""
     directory = root / "historical-parent"
     directory.mkdir()
     # Exact frozen request convention: admission flags were absent, not false.
@@ -269,7 +270,8 @@ def _historical_parent_fixture(root: Path, *, admitted_request: bool = False) ->
         write_json_object(manifest_path_for(path), sidecar)
         identities = json_sha256(list(frame.decision_id))
         child = {"path": f"{month}/technical_market.parquet", "sha256": file_sha256(path),
-            "manifest_sha256": file_sha256(manifest_path_for(path)), "rows": 1, "decision_ids_sha256": identities}
+            "manifest_sha256": file_sha256(manifest_path_for(path)), "audit": {"rows": 1},
+            "model_columns": [], "availability_columns": []}
         months[month] = {"rows": 1, "decision_ids_sha256": identities, "profiles": {"technical_market": child}}
     manifest = {"schema": "market_predictor.research_join", "status": "complete_research_only", "exclusions_added": [],
         "request_sha256": request_pin, "months": months, "rows": 59, "training_eligible": False, "promotion_eligible": False}

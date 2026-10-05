@@ -149,6 +149,8 @@ def _qualification(root: Path, policy: IssuerReactionPublicationPolicy) -> tuple
             parent_folder, samples, connection, replay_pins)
         metrics = evaluate_content_reviews(clusters=clusters, samples=samples, reviews=reviews)
         _require(metrics == authority["metrics"], "qualification metric replay differs")
+        del clusters, samples, reviews
+        population._guard()
         # Use the one disposition/exclusion owner, never duplicate its arithmetic.
         with TemporaryDirectory(prefix="issuer-qualification-replay-") as temporary:
             replay = Path(temporary)
