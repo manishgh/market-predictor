@@ -3,7 +3,7 @@
 ### Current continuation: source scan running, qualification checks pending
 
 The requested 1%-remaining handoff was pushed in `a1e9cbe` and `5b95ade`.
-After the user's reset, the October 5 continuation meter reports 8% used.
+After the user's reset, the October 5 continuation meter reports 17% used at 13:24 UTC.
 Branch: `codex/v1-canonical-cleanup`; latest pushed implementation: `0471c66`.
 Astra step 3 remains `in_progress`; four existing fits are retained. Main and
 TradingFlow remain untouched.
@@ -14,8 +14,8 @@ PID `88592`; lease run ID `ca6bd0e1d47d467a8a89e1ea9574fe41`.
 Output: `data/research/swing_initial_fit_issuer_content_review_population_source_bound`.
 Owner: `data/runtime/heavy-job.owner.json`.
 
-Observation after 13:01 UTC: SEC index pass completed; Alpaca progress reached
-345,000 retained occurrences. No later source error or complete manifest observed.
+Observation 13:24 UTC: SEC index pass completed; Alpaca progress reached
+415,000 retained occurrences. No later source error or complete manifest observed.
 Captured checkpoint SHA256:
 `c40146593d7a24eb125bea41336a4c5f6d500b3bff85b2d2771debaeabf95ee6`.
 Snapshot `.resume/32f89fee5cfd4510a091905970cbc7fe.sqlite`, SHA256
@@ -75,7 +75,7 @@ Existing owners calculate exits, cash-funded NAV and 20/40-session uncertainty;
 remove only compiler-generated settlements before the evaluator simulates once.
 Preload corporate-action evidence under its own preceding lease, never nest it.
 NEW `swing/datasets/funded_policy_inputs.py` (15 intended cases) and
-`research/swing_oof_policy_evaluation.py` (24 intended cases) are stable drafts.
+`research/swing_oof_policy_evaluation.py` (25 intended cases) are stable drafts.
 OOF preserves canonical sale executions and rejects only generated settlement
 mechanics; it pins resampling code. All checks remain unrun while the worker runs.
 Current corrected source
@@ -104,12 +104,35 @@ resume checks or pretending old producer bytes were rewritten.
 Stable draft SHA256 pairs (source, tests):
 - Funded provider: 5e2c3a4a15736eef3b6602d963a4774312740e3510edf2f01310af05bcd7d0fc;
   96fe7c48df2c0840d63c722eb5de1bbf3855be4986ba9408ef2feefc845c0da4.
-- Saved OOF evaluator: 86ee83bcf0527f7dc58074e54e2c9091f65b4fb396fe9894374c99eea4f7f085;
-  aee3d3f9f43eacb91227c49b7e2d6b8b569f2ffbef01369f5c33655a1f01e474.
+- Saved OOF evaluator: dd461249e3e13c5624b481f3030214899b246a672686e5ff8b731fc626b5111d;
+  501a60b450d07db148f2e394b5ccbe73435523383c78f26c3e8283d8b472c12f.
 No draft code is verified or committed. Continue the scan; only then apply the
 benchmark repair and run affected authority, command, provider, accounting and OOF
 checks, Ruff and strict mypy. A read-only design task is freezing the remaining
 126-column vertical wiring; it does not authorize changing the frozen experiment.
+126-column vertical wiring is drafted, not verified: new issuer reaction publication
+contract/monthly owner (9 intended cases), independent saved-row/source verifier,
+8 command cases plus research registry/inventory, and explicit return-training
+policy/readiness/input consumption (9 intended cases). The genuine synthetic chain
+uses native qualification, 124 receipt, monthly publication and replay; no positive
+receipt-validator double is retained. OOF now has the exact126 profile-order branch.
+No model settings, splits, targets, weights or estimator-imputation policy changed.
+Feature audit reflects this unverified state; actual source reviews/126 authority,
+new fits, funded results and live return-model inference remain unfinished.
+
+A concrete archived124 dependency conflict also needs completion: its request and
+receipt pin the old holding-accounting bytes, so the benchmark-cost repair would
+reject unchanged feature data. Code reviewer is implementing a narrow evidence
+role partition: retain original producer/verifier provenance and immutable receipt,
+keep all data/source/feature-kernel pins byte-strict, protect producer/resume and
+numerical functions, permit only named reader-definition migrations and the exact
+reviewed cost conditional/import through captured static AST fingerprints. No whole
+holding validator or transitive import closure exemption is allowed. Static stdlib
+AST fingerprint preparation is authorized; it is not a runtime check. Root's holding
+file remains untouched until source lease exit. Consumers use the validated current
+source map instead of treating the archived receipt's code hashes as current files.
+New fitting requires a fresh current readiness report; retained fits/OOF rows do not
+need to be retrained or rewritten. This work is unfinished and all tests are unrun.
 ### Latest continuation: pinned historical bridge inspection repaired
 
 Implementation `0471c66` is pushed after the first real source job demonstrated
