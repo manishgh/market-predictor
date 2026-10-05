@@ -1,5 +1,28 @@
 # Active Edge Rebuild Handoff
 
+### Latest continuation: pinned historical bridge inspection repaired
+
+Implementation `0471c66` is pushed after the first real source job demonstrated
+that `load_identity_bridge` rejects the retained bridge's old canonical sidecar
+schema. The job exited before reading news/SEC bodies; the original output
+`data/research/swing_initial_fit_issuer_content_review_population` contains only
+a 4,687-byte `_request.json`, no checkpoint or SQLite, and no process remains.
+Preserve that failed-attempt request. Do not resume it with changed code.
+
+The narrow repair inspects only the parent-pinned historical bridge columns and
+sidecar, checks artifact/type/research-only flags, row counts, proof SHA256 values
+and typed nonnull UTC clocks, then rechecks all pins. Canonical production readers
+still reject the old schema; no compatibility fallback or historical file rewrite
+was added. Publisher tests: 19 passed in 5.86 seconds; Ruff and strict mypy passed.
+This is a supported reopening of the new publisher's identity-clock consumer.
+
+Next use the same config/hash and command below, replacing output with
+`data/research/swing_initial_fit_issuer_content_review_population_source_bound`.
+That is a fresh output for changed implementation pins, not a new API/data version.
+No real source population, source annotation, feature publication or new fit exists
+yet. Astra step 3 stays in progress; the software components below remain verified.
+
+
 ### October 5 current software checkpoint: source review, reaction projection and exits
 
 Implementation `e2abb9f` is committed and pushed on
