@@ -2,8 +2,8 @@
 
 ### Current continuation: software pushed; actual-data qualification running
 
-Implementation 771d053 is pushed on codex/v1-canonical-cleanup. Last documentation
-checkpoint before this closure is 6066327. Astra step 3 remains in progress; four
+ML implementation 771d053 and corrective CI implementation 892100c are pushed on
+codex/v1-canonical-cleanup. Last documentation checkpoint is 3fb9ca9. Astra step 3 remains in progress; four
 existing fits are retained. Main and TradingFlow are untouched. APIs remain V1,
 internal identities unversioned. No compatibility fallback or accepted model claim.
 
@@ -12,6 +12,21 @@ AGENTS.md records this. Fixture tests below are unit/regression evidence, not
 real-data integration, even where old test names say "real" or "native". Actual
 reuse, qualification, feature publication, training and evaluation use retained
 provider data and actual implementations without patched readers or calculations.
+
+The no-mocks requirement exposed a non-unit CI path: it trained a four-row invented
+model, fabricated promotion metrics/signatures, and mounted the resulting release.
+Corrective implementation 892100c is pushed. That operational builder and CI invocation
+are removed; promotion fixtures now live only under tests/support/promotion.py.
+CI uses the checked-in config with genuinely absent deployment artifacts, measuring
+container liveness and expected 503 refusal only. It does not claim real-data prediction.
+One bounded review found the moved helper's config path needed parents[2]; repaired.
+Five focused unit tests passed in 7.04s (no-synthetic-ci-2056 JUnit/stdout/exit files).
+Ruff passed; strict helper typing passed with MYPYPATH=src; workflow YAML parsed.
+An initial isolated mypy invocation could not resolve source annotations and failed;
+the correctly configured source invocation passed. Docker is unavailable locally;
+actual container execution remains unperformed here. No market/model output is mocked.
+Only a lightweight five-case unit run and static checks overlapped qualification;
+no other heavy data/model/test job ran. Qualification's pinned sources are unchanged.
 
 The original source export completed exit 0 at 15:11 UTC October 5; its source
 session 92732/PID 88592 is closed and lease removed. Do not rescan or resume it.
@@ -55,7 +70,7 @@ started 20:41 UTC October 5, using exactly the same population and reviewer hash
 Output data/research/swing_initial_fit_issuer_content_qualified_batched; durable
 review-results/qualification-real-batched-2041.*. It uses the canonical heavy lease.
 No measured family admission is claimed until this job completes. Do not overlap
-another data/model/test job, change pinned source code, or weaken its frozen gates.
+another heavy data/model/test job, change pinned source code, or weaken its frozen gates.
 
 Pushed software: qualification authority/CLI; explicit old/current 124 reuse proof
 with WTW/ATVI/INFO/SBNY abstentions preserved; 124-to-126 publication/replay and

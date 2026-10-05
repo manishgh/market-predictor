@@ -27,6 +27,12 @@ tests by the October 5 user instruction recorded in AGENTS.md. Actual qualificat
 reuse, feature publication, training and evaluation must use retained/provider data
 and actual readers/calculations without patched admission or model output.
 
+Corrective CI implementation 892100c removes the operational synthetic release
+builder and confines promotion fixtures to tests/support. Five focused unit checks
+passed; Ruff, source-configured strict typing and workflow parsing passed. CI checks
+actual unprovisioned startup and 503 refusal only. Docker is unavailable locally;
+container execution and successful real-data serving are not claimed.
+
 These software results do not prove SPY outperformance or satisfy the future 252
 decision sessions plus ten maturity sessions required for prospective assessment.
 TradingFlow and main remain untouched.
