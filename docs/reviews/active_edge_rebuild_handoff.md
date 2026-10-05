@@ -1,9 +1,9 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: real config proof passed; issuer orchestration ownership repair
+### Current continuation: ownership repair verified and pushed; real reuse retry next
 
 ML implementation 771d053 and corrective CI implementation 892100c are pushed on
-codex/v1-canonical-cleanup. Last documentation checkpoint is 913e351. Astra step 3 remains in progress; four
+codex/v1-canonical-cleanup. Last documentation checkpoint is 3383d3e. Astra step 3 remains in progress; four
 existing fits are retained. Main and TradingFlow are untouched. APIs remain V1,
 internal identities unversioned. No compatibility fallback or accepted model claim.
 
@@ -156,10 +156,21 @@ Focused unit run 66917: 294 passed, two existing package-boundary checks failed,
 New proof/OOF/CLI/naming cases passed; two failures identify issuer_reaction_publication
 importing research/governance from swing. Four source modules pass strict typing;
 eight changed Python files pass Ruff and have LF/identical parsed syntax trees.
-One consolidated proof review found no further issues. Reopen only those demonstrated
-ownership violations: move research-only issuer publication and verification to
-research, update direct consumers/fingerprints, remove old paths without aliases.
-Preserve every qualification/replay/numerical/clock rule and closed producer byte.
+One consolidated proof review found no further issues. The two demonstrated
+ownership violations are repaired in pushed c2063a8: research-only issuer publication
+and verification now live in research, with direct consumers/fingerprints updated
+and old paths removed without aliases. Qualification is text-identical; all ten
+changed-file syntax trees match after only prescribed import/path/root rewrites.
+All 23 protected producer/replay dependencies match the actual pre-move request
+hash inventory (issuer-producer-bytes-unchanged.json). Git-normalized bytes are not
+used as a false baseline for protected CRLF working files. The closed sources and
+original data/reviews/configs are unchanged. One bounded move review found no issues.
+Final unit scope 59764 passed all 314 cases in 2198.53s; issuer-ownership-final
+JUnit/stdout/exit files retained. These include full synthetic source-chain and
+training-admission regressions, not a real market-data run. Ruff passed ten files;
+strict typing passed five source modules. No owned worker or lease remains.
+System memory after the unit exited: 73.87% used, 4.101 GiB available. Close this
+documentation checkpoint before retrying actual 124 reuse with unchanged config.
 Original action config is byte-identical; no action-reader failure is claimed.
 The eight frozen evaluations remain pending actual source access under memory limits.
 
@@ -216,7 +227,7 @@ verified compatible return generation, else abstain. Implementation not started.
 Final acceptance requires 252 genuinely new decision sessions plus ten maturity sessions;
 historical reruns and software passes do not prove SPY improvement or authorize it.
 
-Latest inspected usage 47% used; update this handoff again at 99% used as requested.
+Latest inspected usage 57% used; update this handoff again at 99% used as requested.
 No reset redeemed. Do not claim the whole Astra plan is complete.
 
 ### Historical checkpoint record (superseded by the continuation above)
@@ -2628,9 +2639,9 @@ Exact next checkpoint: original Astra ordered checkpoint 3 remains in progress;
 its qualification/reuse reruns have exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
 Saved-config implementation b589725 and actual byte/fold proof are complete.
-Close this documentation checkpoint, then verify and close the exact publisher/
-verifier ownership repair for the two observed import violations. Future actual
-124 reuse still uses config SHA256
+Publisher/verifier ownership repair c2063a8 is pushed and its full 314-case selected
+unit scope passed. Close this documentation checkpoint, then retry actual 124 reuse
+while the improved 4.101 GiB system headroom is available, using config SHA256
 95dd86ec733a70a72c0d0a2f05de78e0111b71e31fef1786d424136141cc209c.
 Only one heavy job at a time; freeze pinned source/configs during each run.
 Do not repeat completed export, matching, independent reviews or passed unit scopes.

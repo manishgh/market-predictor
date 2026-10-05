@@ -44,7 +44,11 @@ explicitly. Actual retained-byte and fold-calendar verification passed for both 
 in data/reports/swing_saved_evaluation_configuration_verification.json. It does not
 replay prediction payloads/parent holdouts or prove funded returns. The focused unit
 run passed 294 checks but failed two existing package-boundary checks in issuer
-publication; their narrow ownership move is pending verification. No general gate
+publication. Their narrow ownership move is now verified and pushed as c2063a8:
+314 affected unit/package checks passed; exact qualification text and all 23
+protected producer dependencies are unchanged. No real feature pass follows from
+those fixtures. System headroom improved to 4.101 GiB after the unit exited; actual
+reuse will be retried after documentation closure. No general gate
 exception, source/target rebuild, extra learner or API generation was introduced.
 
 Read-only source review identifies development improvements to assess next: exclude
