@@ -12,6 +12,10 @@ import typer
 from market_predictor.catalysts.issuer_events.news_query_scope import SourcePin
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError
+from market_predictor.research.issuer_candidate_derivative import (
+    publish_issuer_candidate_derivative,
+    verify_issuer_candidate_derivative,
+)
 from market_predictor.research.issuer_content_cohort_inventory import publish_cohort_content_inventory
 from market_predictor.research.issuer_content_inventory import publish_saved_content_inventory
 from market_predictor.research.issuer_content_qualification_authority import publish_issuer_content_qualification
@@ -41,6 +45,33 @@ def _publish(call: Callable[[], dict[str, Any]], keys: tuple[str, ...], optional
 
 
 def register_issuer_content_commands(app: typer.Typer) -> None:
+    @app.command("derive-saved-issuer-candidates")
+    def derive_candidates(
+        parent_population: Path = typer.Option(...), parent_population_sha256: str = typer.Option(...),
+        output: Path = typer.Option(...), root: Path = typer.Option(Path(".")),
+    ) -> None:
+        """Replay revised event statements from the original text without recollecting news."""
+        _publish(lambda: publish_issuer_candidate_derivative(root=root,
+            parent_population=HoldingSourcePin(path=parent_population.as_posix(), sha256=parent_population_sha256),
+            output=output), ("status", "counts", "manifest_sha256", "qualification_established",
+                            "training_eligible", "serving_eligible", "promotion_eligible"))
+
+    @app.command("verify-saved-issuer-candidates")
+    def verify_candidates(
+        publication: Path = typer.Option(...), publication_sha256: str = typer.Option(...),
+        root: Path = typer.Option(Path(".")),
+    ) -> None:
+        """Independently replay every candidate derivative row; never qualify news for training."""
+        def verify() -> dict[str, Any]:
+            verified = verify_issuer_candidate_derivative(root=root,
+                publication=HoldingSourcePin(path=publication.as_posix(), sha256=publication_sha256))
+            return {"status": "passed_candidate_replay_only", "counts": verified.counts,
+                    "manifest_sha256": verified.publication.sha256, "qualification_established": False,
+                    "training_eligible": False, "serving_eligible": False, "promotion_eligible": False}
+
+        _publish(verify, ("status", "counts", "manifest_sha256", "qualification_established",
+                         "training_eligible", "serving_eligible", "promotion_eligible"))
+
     @app.command("qualify-issuer-content")
     def qualify_content(
         population_authority: Path = typer.Option(...), population_sha256: str = typer.Option(...),

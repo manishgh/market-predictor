@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import replace
+from dataclasses import asdict, replace
 from typing import Any
 
 import pandas as pd
@@ -11,6 +11,7 @@ import pytest
 
 from market_predictor.catalysts.issuer_events import content_review as owner
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.evidence.hashing import json_sha256
 
 
 def sha(value: bytes) -> str:
@@ -284,3 +285,157 @@ def test_tampered_normalized_text_and_out_of_bounds_spans_rejected() -> None:
 def test_pdf_and_invalid_declared_encoding_are_not_silently_decoded(body: bytes) -> None:
     with pytest.raises(DataReadinessError):
         sec(body)
+
+
+# Development examples below are synthetic unit sentences reproducing observed
+# failure classes, not new blind acceptance samples or real retained evidence.
+@pytest.mark.parametrize("text", [
+    "Acme announces results of its cash tender offer for notes due 2030.",
+    "Acme reports tender offer results and consent solicitation results.",
+    "Acme announces final results of its consent solicitation.",
+])
+def test_financing_results_are_not_reported_operating_earnings(text: str) -> None:
+    assert owner.extract_review_candidates(alpaca(record(headline=text))).candidates == ()
+
+
+def test_actual_financial_result_clause_is_not_removed_by_later_tender_reference() -> None:
+    text = "Acme reports Q2 2024 financial results, including expenses for its tender offer."
+    [candidate] = owner.extract_review_candidates(alpaca(record(headline=text))).candidates
+    assert candidate.event_family == "earnings"
+
+
+@pytest.mark.parametrize("issuer,year,metric", [("Ameren", "2021", "earnings"), ("CMS", "2022", "adjusted earnings")])
+def test_year_immediately_attached_to_financial_guidance_has_original_offsets(issuer: str, year: str, metric: str) -> None:
+    text = f"{issuer} raises {year} {metric} guidance."
+    evidence = alpaca(record(headline=text), context=context(issuer_aliases=(issuer,)))
+    [candidate] = owner.extract_review_candidates(evidence).candidates
+    assert candidate.fiscal_period == year and candidate.unresolved_reasons == ()
+    [span] = [item for item in candidate.spans if item.role == "fiscal_period"]
+    assert span.text == evidence.text[span.start:span.end] == year
+
+
+@pytest.mark.parametrize("text", [
+    "Acme raises earnings guidance, with notes maturing in 2030.",
+    "Acme raises revenue guidance in its 2024 announcement.",
+])
+def test_unattached_year_never_supplies_guidance_period(text: str) -> None:
+    [candidate] = owner.extract_review_candidates(alpaca(record(headline=text))).candidates
+    assert candidate.fiscal_period is None
+    assert "missing_explicit_fiscal_period" in candidate.unresolved_reasons
+
+
+@pytest.mark.parametrize("action,numbers,reason", [
+    ("raises", "to $5.75–$6.10 from $5.75–$6.10", "equal_explicit_guidance_ranges"),
+    ("raises", "from $5.75–$6.10 to $5.50–$6.00", "explicit_guidance_ranges_contradict_action"),
+    ("lowers", "from $5.75–$6.10 to $5.90–$6.30", "explicit_guidance_ranges_contradict_action"),
+    ("raises", "from $5.75–$6.10 to $5.50–$6.30", "explicit_guidance_ranges_contradict_action"),
+    ("raises", "from $5.75–$6.10 to $6.00–$6.30", None),
+])
+def test_comparable_guidance_ranges_never_override_contradiction(action: str, numbers: str, reason: str | None) -> None:
+    text = f"Tyson {action} FY2024 adjusted EPS guidance {numbers}."
+    evidence = alpaca(record(headline=text), context=context(issuer_aliases=("Tyson",)))
+    [candidate] = owner.extract_review_candidates(evidence).candidates
+    assert candidate.unresolved_reasons == (() if reason is None else (reason,))
+    assert all(evidence.text[span.start:span.end] == span.text for span in candidate.spans)
+    assert candidate.training_eligible is candidate.serving_eligible is False
+
+
+@pytest.mark.parametrize("numbers", ["from 5.75–6.10 to 5.75–6.10", "from 5.75–6.10% to 5.75–6.10%",
+    "from $5.75–$6.10 billion to $5.75–$6.10 million"])
+def test_range_comparison_never_invents_units_or_scale(numbers: str) -> None:
+    text = f"Acme raises FY2024 revenue guidance {numbers}."
+    [candidate] = owner.extract_review_candidates(alpaca(record(headline=text))).candidates
+    assert candidate.unresolved_reasons == ()
+
+
+def _saved_pair(text: str, *, html: bool = False) -> tuple[Any, dict[str, Any]]:
+    event_clock = pd.Timestamp("2024-07-19T16:01:00Z")
+    bound = context(availability_semantics="historical_proxy",
+        availability_policy_sha256=json_sha256(["retained_initial_fit_source_publication_proxy", event_clock.isoformat()]))
+    raw = sec(text.encode(), context=bound) if html else alpaca(record(headline=text), context=bound)
+    metadata = {"source_family": raw.source_family, "source_id": bound.event_id,
+        "security_id": bound.security_id, "ticker": bound.ticker,
+        "identity_authority_sha256": bound.identity_authority_sha256,
+        "identity_available_at_utc": bound.identity_available_at_utc.isoformat(),
+        "first_seen_at_utc": bound.first_seen_at_utc.isoformat(),
+        "availability_semantics": bound.availability_semantics,
+        "alias_proof": {"aliases": list(bound.issuer_aliases), "available_at_utc": bound.identity_available_at_utc.isoformat()},
+        "source_version_sha256": raw.source_version_sha256, "text_sha256": raw.text_sha256,
+        "source_metadata": {"available_at_utc": event_clock.isoformat(), "filing": {"available_at_utc": event_clock.isoformat()}},
+        "published_at_utc": raw.published_at_utc.isoformat(), "version_available_at_utc": raw.version_available_at_utc.isoformat(),
+        "event_available_at_utc": raw.available_at_utc.isoformat(), "unavailable_reasons": []}
+    return raw, {"text": raw.text, "expected_text_sha256": raw.text_sha256, "metadata": metadata,
+        "expected_metadata_sha256": json_sha256(metadata), "context": bound,
+        "expected_extraction_policy_sha256": owner.EXTRACTION_POLICY_SHA256}
+
+
+@pytest.mark.parametrize("html", [False, True])
+def test_saved_and_raw_share_candidate_core_ids_values_and_quote_offsets(html: bool) -> None:
+    text = "Acme raises 2024 adjusted earnings guidance to $5.75–$6.10 from $5.75–$6.10."
+    raw, kwargs = _saved_pair(f"<p>{text}</p>" if html else text, html=html)
+    saved = owner.saved_text_content_evidence(**kwargs)
+    raw_result, saved_result = owner.extract_review_candidates(raw), owner.extract_review_candidates(saved)
+    assert raw_result.disposition == saved_result.disposition and raw_result.reasons == saved_result.reasons
+    assert len(raw_result.candidates) == len(saved_result.candidates) == 1
+    raw_candidate, saved_candidate = raw_result.candidates[0], saved_result.candidates[0]
+    assert raw_candidate.candidate_id == saved_candidate.candidate_id
+    for raw_span, saved_span in zip(raw_candidate.spans, saved_candidate.spans, strict=True):
+        assert (raw_span.role, raw_span.start, raw_span.end, raw_span.text) == (
+            saved_span.role, saved_span.start, saved_span.end, saved_span.text)
+        assert all(locator.startswith("saved_text:") and saved.text_sha256 in locator for locator in saved_span.source_locators)
+        assert all("line=" not in locator for locator in saved_span.source_locators)
+    assert {key: value for key, value in asdict(raw_candidate).items() if key != "spans"} == {
+        key: value for key, value in asdict(saved_candidate).items() if key != "spans"}
+
+
+@pytest.mark.parametrize("fault", ["text", "metadata", "identity", "aliases", "policy", "future_version", "backdated",
+    "first_seen", "unavailable", "live", "segments"])
+def test_saved_adapter_rejects_tamper_context_clock_or_live_claim(fault: str) -> None:
+    _, kwargs = _saved_pair("Acme raises 2024 earnings guidance.")
+    metadata = kwargs["metadata"]
+    if fault == "text":
+        kwargs["text"] += " changed"
+    elif fault == "metadata":
+        metadata["ticker"] = "OTHER"
+    elif fault == "identity":
+        kwargs["context"] = replace(kwargs["context"], security_id="other-security")
+    elif fault == "aliases":
+        kwargs["context"] = replace(kwargs["context"], issuer_aliases=("Other",))
+    elif fault == "policy":
+        kwargs["expected_extraction_policy_sha256"] = "e" * 64
+    elif fault in ("future_version", "backdated", "first_seen", "unavailable"):
+        field, value = {"future_version": ("version_available_at_utc", "2024-07-20T16:00:00Z"),
+            "backdated": ("event_available_at_utc", "2024-07-01T00:00:00Z"),
+            "first_seen": ("first_seen_at_utc", "2024-07-19T16:02:00Z"),
+            "unavailable": ("unavailable_reasons", ["version_after_initial_fit_cutoff"])}[fault]
+        metadata[field] = value
+        kwargs["expected_metadata_sha256"] = json_sha256(metadata)
+    elif fault == "live":
+        kwargs["purpose"] = "live_construction"
+    else:
+        saved = owner.saved_text_content_evidence(**kwargs)
+        forged = replace(saved, text_segments=(owner.TextSegment(0, len(saved.text), "/invented/html:line=1:column=0"),))
+        with pytest.raises(DataReadinessError):
+            owner.extract_review_candidates(forged)
+        return
+    with pytest.raises(DataReadinessError):
+        owner.saved_text_content_evidence(**kwargs)
+
+
+def test_retained_tyson_equal_range_clause_is_unresolved_despite_analyst_estimate() -> None:
+    # Exact quoted development clause from Alpaca 14199104, text hash
+    # c6a1909e87a9871edc1ed573589eb75335e0c6de766be1d78768c102f1124d44.
+    # Surrounding fixture is synthetic; no retained artifact hash is asserted.
+    clause = ("Tyson Foods raised its fiscal year 2019 EPS guidance from $5.75-6.10 "
+              "to $5.75-6.10 versus a $5.89 analyst estimate.")
+    text = "x" * 434 + ". " + clause
+    evidence = alpaca(record(headline=text), context=context(issuer_aliases=("Tyson Foods",)))
+    [candidate] = owner.extract_review_candidates(evidence).candidates
+    assert candidate.fiscal_period == "fiscal year 2019"
+    assert candidate.unresolved_reasons == ("equal_explicit_guidance_ranges",)
+    [statement] = [span for span in candidate.spans if span.role == "statement"]
+    # Existing statement splitting retains the separating space, while every
+    # quote offset continues to refer to the exact original normalized text.
+    assert evidence.text[436:436 + len(clause)] == clause
+    assert evidence.text[statement.start:statement.end] == statement.text
+    assert candidate.training_eligible is candidate.serving_eligible is False

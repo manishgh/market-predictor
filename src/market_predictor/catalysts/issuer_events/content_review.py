@@ -13,6 +13,7 @@ import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from html.parser import HTMLParser
 from typing import Any, Literal
 
@@ -36,9 +37,12 @@ _POLICY = {
     "schema": "market_predictor.issuer_content_review_candidates",
     "families": ["earnings", "guidance"],
     "subject": "explicit_caller_bound_issuer_alias_immediately_precedes_action",
-    "earnings": "reported_results_not_preview_requires_result_or_metric_text",
+    "earnings": "reported_operating_financial_results_not_debt_tender_or_consent_results",
     "guidance": "explicit_raise_or_lower_requires_guidance_or_forecast_text",
-    "period": "explicit_span_or_missing_never_infer_from_publication",
+    "period": "explicit_span_or_immediately_attached_financial_guidance_year_never_publication_or_debt_year",
+    "guidance_ranges": "explicit_comparable_decimal_eps_or_dollar_ranges_equal_or_contradictory_unresolved",
+    "saved_text": "research_only_pinned_text_metadata_context_exact_offsets_no_html_provenance_claim",
+    "candidate_identity": "shared_core_policy_version_text_and_bound_issuer_context_not_locator_representation",
     "html": "visible_text_nodes_with_element_path_and_source_line_column",
     "availability": "max_exact_version_and_identity_clock_observed_also_requires_first_seen",
     "deduplication": "identical_normalized_sentence_family_action_once_per_content_version",
@@ -303,13 +307,143 @@ class ReviewCandidate:
 
 
 @dataclass(frozen=True)
+class SavedIssuerContentEvidence:
+    """Bound retained normalized text; never a claim to replay absent HTML nodes."""
+
+    context: IssuerContentContext
+    metadata: dict[str, Any]
+    saved_metadata_sha256: str
+    source_version_sha256: str
+    text: str
+    text_sha256: str
+    text_segments: tuple[TextSegment, ...]
+    published_at_utc: pd.Timestamp
+    version_available_at_utc: pd.Timestamp
+    available_at_utc: pd.Timestamp
+    extraction_policy_sha256: str
+
+
+def saved_text_content_evidence(*, text: str, expected_text_sha256: str, metadata: dict[str, Any],
+    expected_metadata_sha256: str, context: IssuerContentContext, expected_extraction_policy_sha256: str,
+    purpose: Literal["historical_research", "live_construction"] = "historical_research",
+) -> SavedIssuerContentEvidence:
+    """Inspect caller-pinned parent text/metadata for research candidate replay only.
+
+    The caller independently pins the retained population and supplies the exact
+    original metadata and text. This adapter supplies neither source admission nor
+    reconstructed raw/HTML provenance. No text normalization is performed here.
+    """
+    _require(purpose == "historical_research", "saved content is research-only; live construction is not authorized")
+    _require(context.availability_semantics == "historical_proxy", "saved content requires historical proxy context")
+    _require(expected_extraction_policy_sha256 == EXTRACTION_POLICY_SHA256, "saved content candidate policy differs")
+    _require(isinstance(metadata, dict) and json_sha256(metadata) == expected_metadata_sha256,
+             "saved content metadata hash differs")
+    _require(isinstance(text, str) and 0 < len(text.encode("utf-8")) <= MAX_CONTENT_BYTES,
+             "saved content text is missing or exceeds byte limit")
+    _require(_sha(text.encode("utf-8")) == expected_text_sha256 == metadata.get("text_sha256"),
+             "saved content text hash differs")
+    _require(metadata.get("unavailable_reasons") == [], "saved content retains unavailable source or identity reasons")
+    _require(metadata.get("source_family") in ("alpaca", "sec"), "saved content source family differs")
+    _require(metadata.get("source_id") == context.event_id and metadata.get("security_id") == context.security_id
+             and metadata.get("ticker") == context.ticker
+             and metadata.get("identity_authority_sha256") == context.identity_authority_sha256
+             and metadata.get("availability_semantics") == context.availability_semantics,
+             "saved content issuer context differs")
+    alias = metadata.get("alias_proof")
+    _require(isinstance(alias, dict) and isinstance(alias.get("aliases"), list)
+             and tuple(alias["aliases"]) == context.issuer_aliases, "saved content causal aliases differ")
+    assert isinstance(alias, dict)
+    _require(_clock(alias["available_at_utc"], "saved alias availability") <= context.identity_available_at_utc,
+             "saved content alias is unavailable at its identity clock")
+    _require(_clock(metadata.get("identity_available_at_utc"), "saved identity availability") == context.identity_available_at_utc
+             and _clock(metadata.get("first_seen_at_utc"), "saved first observation") == context.first_seen_at_utc,
+             "saved content context clocks differ")
+    version_hash = metadata.get("source_version_sha256")
+    _require(isinstance(version_hash, str) and _HASH.fullmatch(version_hash) is not None, "saved content version hash missing")
+    assert isinstance(version_hash, str)
+    source = metadata.get("source_metadata")
+    _require(isinstance(source, dict), "saved content source clock authority missing")
+    assert isinstance(source, dict)
+    event_clock = _clock(source["filing"]["available_at_utc"] if metadata["source_family"] == "sec"
+                         else source["available_at_utc"], "saved source event availability")
+    _require(context.availability_policy_sha256 == json_sha256(
+        ["retained_initial_fit_source_publication_proxy", event_clock.isoformat()]), "saved content availability policy differs")
+    published = _clock(metadata.get("published_at_utc"), "saved publication")
+    version = _clock(metadata.get("version_available_at_utc"), "saved version")
+    available = _clock(metadata.get("event_available_at_utc"), "saved event availability")
+    _require(published <= version <= context.first_seen_at_utc, "saved content version clocks do not replay")
+    _require(available == max(event_clock, version, context.identity_available_at_utc),
+             "saved content availability clock does not replay")
+    locator = f"saved_text:version={version_hash};sha256={expected_text_sha256};range=0:{len(text)}"
+    return SavedIssuerContentEvidence(context, metadata, expected_metadata_sha256, version_hash, text,
+        expected_text_sha256, (TextSegment(0, len(text), locator),), published, version, available, EXTRACTION_POLICY_SHA256)
+
+
+def _validate_saved_evidence(content: SavedIssuerContentEvidence) -> None:
+    expected = saved_text_content_evidence(text=content.text, expected_text_sha256=content.text_sha256,
+        metadata=content.metadata, expected_metadata_sha256=content.saved_metadata_sha256, context=content.context,
+        expected_extraction_policy_sha256=content.extraction_policy_sha256)
+    _require(expected == content, "saved content evidence fields or offsets do not replay")
+
+
+@dataclass(frozen=True)
 class CandidateExtraction:
-    evidence: IssuerContentEvidence
+    evidence: IssuerContentEvidence | SavedIssuerContentEvidence
     candidates: tuple[ReviewCandidate, ...]
     disposition: Literal["review_candidates", "unclassified"]
     reasons: tuple[str, ...]
     training_eligible: Literal[False] = False
     serving_eligible: Literal[False] = False
+
+
+_FINANCING_RESULT = re.compile(r"\b(?:tender\s+offers?|debt[ -]tender|consent\s+(?:solicitations?|results))\b", re.IGNORECASE)
+_GUIDANCE_YEAR = re.compile(
+    r"\b(?P<year>20\d{2})\s+(?:(?:adjusted|diluted|net|operating|GAAP|non[ -]GAAP)\s+){0,3}"
+    r"(?:earnings|EPS|revenue|sales|profit|income)(?:\s+per[ -]share)?\s+(?:guidance|forecast|outlook)\b", re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class _YearSpan:
+    text: str
+    left: int
+    right: int
+
+    def start(self) -> int:
+        return self.left
+
+    def end(self) -> int:
+        return self.right
+
+    def group(self) -> str:
+        return self.text[self.left:self.right]
+
+
+def _guidance_range_reasons(text: str, action: str) -> tuple[str, ...]:
+    # Restrict comparisons to explicit decimal ranges with one shared unit. No
+    # integers, percentages, scaled metrics or units are inferred from a headline.
+    number = r"\d+\.\d+"
+    interval = rf"(?P<{{p}}currency>\$?)(?P<{{p}}lo>{number})\s*[-–—]\s*\$?(?P<{{p}}hi>{number})(?![\w%]|\.\d)"
+    first = interval.format(p="a")
+    second = interval.format(p="b")
+    match = re.search(rf"\b(?P<direction>from|to)\s+{first}\s+(?P<other>to|from)\s+{second}", text, re.IGNORECASE)
+    if match is None or match.group("direction").casefold() == match.group("other").casefold():
+        return ()
+    currency = bool(match.group("acurrency")), bool(match.group("bcurrency"))
+    explicit_eps = re.search(r"\b(?:EPS|earnings\s+per[ -]share)\b", text, re.IGNORECASE) is not None
+    if currency != (True, True) and not (currency == (False, False) and explicit_eps):
+        return ()
+    a = Decimal(match.group("alo")), Decimal(match.group("ahi"))
+    b = Decimal(match.group("blo")), Decimal(match.group("bhi"))
+    old, new = (a, b) if match.group("direction").casefold() == "from" else (b, a)
+    if old[0] > old[1] or new[0] > new[1]:
+        return ("invalid_explicit_guidance_range",)
+    if old == new:
+        return ("equal_explicit_guidance_ranges",)
+    raised = action.startswith(("rais", "lift", "increas"))
+    aligned = all(new_value >= old_value if raised else new_value <= old_value
+                  for old_value, new_value in zip(old, new, strict=True))
+    return () if aligned else ("explicit_guidance_ranges_contradict_action",)
 
 
 def _statements(text: str, aliases: str) -> Iterator[tuple[int, int]]:
@@ -330,15 +464,18 @@ def _statements(text: str, aliases: str) -> Iterator[tuple[int, int]]:
         yield start, len(text)
 
 
-def _span(content: IssuerContentEvidence, role: Literal["statement", "issuer", "action", "fiscal_period", "result"],
-          start: int, end: int) -> EvidenceSpan:
+def _span(content: IssuerContentEvidence | SavedIssuerContentEvidence,
+          role: Literal["statement", "issuer", "action", "fiscal_period", "result"], start: int, end: int) -> EvidenceSpan:
     locators = tuple(segment.source_locator for segment in content.text_segments
                      if segment.start < end and segment.end > start)
     return EvidenceSpan(role, start, end, content.text[start:end], locators)
 
 
-def extract_review_candidates(content: IssuerContentEvidence) -> CandidateExtraction:
+def extract_review_candidates(content: IssuerContentEvidence | SavedIssuerContentEvidence) -> CandidateExtraction:
     """Propose content-grounded annotations without claiming their truth or recall."""
+    if isinstance(content, SavedIssuerContentEvidence):
+        _validate_saved_evidence(content)
+        return _candidate_core(content)
     _require(_sha(content.text.encode("utf-8")) == content.text_sha256, "extracted content text hash differs")
     _require(_sha(content.chosen_field.encode("utf-8")) == content.chosen_field_sha256, "chosen content field hash differs")
     _require(all(0 <= segment.start < segment.end <= len(content.text) for segment in content.text_segments),
@@ -354,6 +491,11 @@ def extract_review_candidates(content: IssuerContentEvidence) -> CandidateExtrac
     if content.context.availability_semantics == "observed":
         clocks.append(content.context.first_seen_at_utc)
     _require(available == max(clocks), "content availability clock does not replay")
+    return _candidate_core(content)
+
+
+def _candidate_core(content: IssuerContentEvidence | SavedIssuerContentEvidence) -> CandidateExtraction:
+    """The single semantic owner for raw-source and immutable saved-text adapters."""
     aliases = "|".join(re.escape(alias) for alias in sorted(content.context.issuer_aliases, key=len, reverse=True))
     subject = rf"(?<!\w)(?P<issuer>{aliases})(?!\w)(?:\s*\([^()\n]{{1,60}}\))?\s+"
     patterns: tuple[tuple[Literal["earnings", "guidance"], re.Pattern[str]], ...] = (
@@ -387,11 +529,21 @@ def extract_review_candidates(content: IssuerContentEvidence) -> CandidateExtrac
                     and match.group("result").casefold() not in ("results", "financial results")
                     and not re.search(r"\b(?:results|EPS|revenue|profit)\b", text, re.IGNORECASE)):
                 continue
+            if (family == "earnings" and _FINANCING_RESULT.search(text)
+                    and match.group("result").casefold() == "results"):
+                # A generic tender/consent result is not an operating result.
+                continue
             key = (family, action, re.sub(r"\s+", " ", text).strip().casefold())
             if key in seen:
                 continue
             seen.add(key)
-            periods = list(_PERIOD.finditer(text))
+            periods: list[re.Match[str] | _YearSpan] = list(_PERIOD.finditer(text))
+            if family == "guidance":
+                for attached in _GUIDANCE_YEAR.finditer(text, match.end("action"), match.end("result")):
+                    year_start, year_end = attached.span("year")
+                    if not any(period.start() <= year_start and period.end() >= year_end for period in periods):
+                        periods.append(_YearSpan(text, year_start, year_end))
+                periods.sort(key=lambda value: value.start())
             distinct_periods = {re.sub(r"\s+", " ", period.group()).casefold() for period in periods}
             period = periods[0] if len(distinct_periods) == 1 else None
 
@@ -406,9 +558,14 @@ def extract_review_candidates(content: IssuerContentEvidence) -> CandidateExtrac
             rule = f"{family}_explicit_issuer_action"
             candidate_id = json_sha256({"event": content.context.event_id, "security": content.context.security_id,
                                        "version": content.source_version_sha256, "text": content.text_sha256,
-                                       "policy": content.extraction_policy_sha256, "rule": rule, "statement": key})
-            candidates.append(ReviewCandidate(candidate_id, family, action, rule, fiscal,
-                                               (("ambiguous_explicit_fiscal_periods",) if periods else
-                                                ("missing_explicit_fiscal_period",)) if fiscal is None else (), tuple(spans)))
+                                       "policy": EXTRACTION_POLICY_SHA256,
+                                       "identity_authority": content.context.identity_authority_sha256,
+                                       "availability_policy": content.context.availability_policy_sha256,
+                                       "rule": rule, "statement": key})
+            unresolved: tuple[str, ...] = ((("ambiguous_explicit_fiscal_periods",) if periods else
+                           ("missing_explicit_fiscal_period",)) if fiscal is None else ())
+            if family == "guidance":
+                unresolved += _guidance_range_reasons(text[match.end("action"):], action)
+            candidates.append(ReviewCandidate(candidate_id, family, action, rule, fiscal, unresolved, tuple(spans)))
     return CandidateExtraction(content, tuple(candidates), "review_candidates" if candidates else "unclassified",
                                () if candidates else ("no_supported_explicit_issuer_event_statement",))
