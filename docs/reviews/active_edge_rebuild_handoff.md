@@ -2,7 +2,7 @@
 
 ### Current continuation: actual retained-data reuse running after observation repair
 
-Ownership repair c2063a8 and its documentation closure 59b54ed are pushed on
+Latest source-semantic implementation 77ff5f5 and prior documentation dc48a42 are pushed on
 codex/v1-canonical-cleanup. Astra step 3 remains in progress; four
 existing fits are retained. Main and TradingFlow are untouched. APIs remain V1,
 internal identities unversioned. No compatibility fallback or accepted model claim.
@@ -28,6 +28,32 @@ review-results/relationship-reuse-real-observation-fixed. Durable failed-attempt
 review-results/relationship-reuse-real-headroom.log/.exit.json.
 Unit receipts: historical-observation-units.*; actual metadata stdout:
 historical-observation-actual-metadata.log. No fixture result is market evidence.
+
+While 95557 runs, an independent scoped news-semantic repair is implemented/pushed
+as 77ff5f5:
+content_review.py and new research/issuer_candidate_derivative.py plus direct units.
+The running job's 131 dependencies exclude both files and were pinned to workspace
+review-results/relationship-reuse-frozen-implementation.json. Recheck that inventory
+after edits; all its files/config/data remain frozen. No second heavy job may run.
+Candidate repair and saved-text replay are not source qualification or training
+admission. Full SEC packets, fresh blind judgments and unchanged gates remain next.
+Commands: derive-saved-issuer-candidates --root C:/project/market-predictor
+--parent-population data/research/swing_initial_fit_issuer_content_review_population_source_bound/_manifest.json
+--parent-population-sha256 3c59845761740dc1a07a2f994cceaba53354c6f9486f4baa634ebd422a6a84ce
+--output data/research/swing_initial_fit_issuer_candidates_revised.
+Do not launch while session 95557 owns the lease. Verify the resulting actual
+manifest with verify-saved-issuer-candidates using its actual SHA; never invent one.
+The standalone derivative is implemented; full-packet sample/review/qualification
+integration is still pending. Original qualification readers stay strict and cannot
+accept the old population under the new policy; no blanket producer-pin waiver.
+121 initial unit cases passed (9.64s). Final selected direct-consumer scope:
+242 passed, one stale command-inventory assertion failed (179.72s). Inventory names
+were added; a 23-pass rerun still exposed alphabetical order, then its corrected
+single case passed (2.92s). Six-file Ruff and three-source strict typing passed.
+Initial 19 strict narrowing errors are repaired with all runtime checks preserved.
+One consolidated review found no further issues. All logs are unit-only evidence
+in review-results/issuer-semantic-* and issuer-cli-inventory-*; no actual derivative
+or new source qualification pass is claimed. The running job's 131 hashes are exact.
 
 The user clarified October 5: mocks/synthetic inputs are allowed only in unit tests.
 AGENTS.md records this. Fixture tests below are unit/regression evidence, not

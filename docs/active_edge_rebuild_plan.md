@@ -2,7 +2,7 @@
 
 ### Current continuation: actual retained-data reuse running after observation repair
 
-Ownership repair c2063a8 and its documentation closure 59b54ed are pushed on
+Latest source-semantic implementation 77ff5f5 and prior documentation dc48a42 are pushed on
 codex/v1-canonical-cleanup. Astra step 3 remains in progress; four
 existing fits are retained. Main and TradingFlow are untouched. APIs remain V1,
 internal identities unversioned. No compatibility fallback or accepted model claim.
@@ -28,6 +28,36 @@ review-results/relationship-reuse-real-observation-fixed. Durable failed-attempt
 review-results/relationship-reuse-real-headroom.log/.exit.json.
 Unit receipts: historical-observation-units.*; actual metadata stdout:
 historical-observation-actual-metadata.log. No fixture result is market evidence.
+
+Independent source-semantic repair 77ff5f5 is implemented within step 3: shared candidate
+classification rejects tender/consent results as earnings, recognizes explicitly
+attached financial-guidance years, and leaves equal/contradictory guidance ranges
+unresolved. A candidate-only derivative replays existing saved text with exact
+original parent/provenance/identity/clocks and a read-only joined view; no provider
+rescan or text/archive copy. Original reviews stay immutable. New blind packet
+review and qualification remain required before reaction features or fits.
+Named inspected examples are development regressions only. Exit gates: affected
+unit/tamper/parity tests, Ruff/strict typing, one bounded consolidated review, and
+actual derivative/requalification with unchanged statistical thresholds. All
+training/promotion/serving flags remain false until their required evidence passes.
+The running comparison's 131 source dependencies exclude content_review.py and
+this new helper. Its exact inventory is saved in workspace review-results/
+relationship-reuse-frozen-implementation.json and must remain byte-identical.
+The CLI exposes derive-saved-issuer-candidates and verify-saved-issuer-candidates.
+First 121 unit cases passed in 9.64s. Final direct-consumer scope passed 242 cases
+but failed its command inventory assertion; the inventory was updated for the two
+new names. A first inventory rerun passed 23 cases but still failed alphabetical
+order; that was fixed, and the exact inventory case passed in 2.92s. No calculation
+or source gate was changed to address the fixture failure. Ruff passed six changed
+Python files; strict typing passed all three source owners. Initial strict checks
+had 19 narrowing errors, repaired without removing runtime checks. One bounded
+consolidated review found no further issues. Logs: issuer-semantic-initial.*,
+issuer-semantic-final.*, issuer-cli-inventory-final.*, issuer-cli-inventory-corrected.*.
+Actual original-population derivative, independent replay, fresh full-packet reviews
+and qualification consumer integration remain unperformed; no training admission.
+All 131 running comparison source hashes were rechecked unchanged after application.
+Only these independent files/tests may change during the job; no concurrent heavy
+run or modification of its pinned source/config/data is permitted.
 
 The user clarified October 5: mocks/synthetic inputs are allowed only in unit tests.
 AGENTS.md records this. Fixture tests below are unit/regression evidence, not

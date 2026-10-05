@@ -56,7 +56,17 @@ debt-tender results from earnings candidates; recognize a year directly attached
 earnings guidance; mark equal/contradictory guidance ranges unresolved; bind review
 support to the actual exhibit rather than a cover page. Original judgments/metrics
 remain unchanged; previously inspected examples cannot be independent new acceptance
-evidence. No extraction change or new qualification pass is claimed here.
+evidence. The supported extraction repair is now implemented/pushed in 77ff5f5,
+with a shared raw/saved candidate core and exact hash/context/clock-bound saved-text
+adapter. Candidate-only sidecar publication/replay and a read-only parent join are
+implemented; no original text/SQLite copy, provider rescan or review-label rewrite.
+121 initial unit cases passed in 9.64s. Final consumer scope passed 242 cases but
+failed its stale CLI inventory; 23 inventory/boundary cases then passed, and the
+remaining alphabetical-order error was fixed and its one case passed separately.
+Ruff six-file and strict three-source checks passed; one bounded review found no
+further issues. Initial strict narrowing errors were repaired with checks retained.
+No actual derivative, new independent qualification or feature admission is claimed.
+The actual comparison's separate 131 dependencies remain byte-identical.
 
 These software results do not prove SPY outperformance or satisfy the future 252
 decision sessions plus ten maturity sessions required for prospective assessment.
