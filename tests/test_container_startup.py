@@ -1,7 +1,8 @@
-"""The CI container smoke release must start and fail closed, as the workflow asserts."""
+"""Unit check: the real application refuses readiness without deployment artifacts."""
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -9,17 +10,17 @@ from fastapi.testclient import TestClient
 
 from market_predictor.api import create_app
 from market_predictor.config import get_settings
-from scripts.build_container_smoke_release import build_smoke_release
 
 
-def test_smoke_release_config_starts_and_reports_not_ready(
+def test_unprovisioned_config_starts_and_reports_not_ready(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    output = tmp_path / "container-smoke"
-    build_smoke_release(output)
-    # The same environment the production-container job passes to the image.
+    repository = Path(__file__).resolve().parents[1]
+    shutil.copytree(repository / "configs", tmp_path / "configs")
+    # Use the same checked-in configuration as the container; create no model,
+    # market inputs, fabricated metrics, signing keys or promotion evidence.
     for name, value in {
-        "APP_CONFIG_PATH": str(output / "app_config.toml"),
+        "APP_CONFIG_PATH": str(tmp_path / "configs/default.toml"),
         "API_ENVIRONMENT": "development",
         "API_AUTH_MODE": "development",
         "API_DEVELOPMENT_BEARER_TOKEN": "s" * 80,
@@ -37,3 +38,4 @@ def test_smoke_release_config_starts_and_reports_not_ready(
 
     assert live.status_code == 200, live.text
     assert ready.status_code == 503, ready.text
+    assert not (tmp_path / "models").exists()

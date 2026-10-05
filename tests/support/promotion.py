@@ -1,4 +1,4 @@
-"""Deterministic synthetic promotion material for tests and CI smoke releases."""
+"""Synthetic promotion fixtures for unit tests only; never release evidence."""
 
 from __future__ import annotations
 
@@ -210,7 +210,7 @@ def _write_synthetic_shadow_outcomes(
 ) -> None:
     view, horizon = "swing", "10b"
     swing_contract = load_strategy_contract(
-        Path(__file__).resolve().parents[1]
+        Path(__file__).resolve().parents[2]
         / "configs"
         / "edge_rebuild_strategy_contract.toml"
     ).swing

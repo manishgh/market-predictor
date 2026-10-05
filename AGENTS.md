@@ -300,6 +300,10 @@ model outputs. Tests with synthetic fixtures or patched collaborators prove only
 the specific unit/regression behavior asserted; never describe them as real-data
 integration or end-to-end evidence. Clearly identify the data used when reporting
 a result. Passing fixture tests cannot replace the required actual-data run.
+Keep synthetic promotion/signing/data builders under `tests/support`; operational
+scripts and CI release jobs must not invoke them. A container process check may
+verify startup and refusal with genuinely absent deployment artifacts, but it must
+not fabricate an approved model or claim successful prediction integration.
 
 Select verification by affected behavior and consumers, not by the total test count.
 Record the selected tier, commands, results and deliberately unrun checks in the

@@ -14,7 +14,7 @@ from market_predictor.governance.outcomes.repository import OutcomeRepository
 from market_predictor.hypothesis_registry import load_hypothesis
 from market_predictor.promotion_attestation import file_sha256
 from market_predictor.shadow_ledger import shadow_gate_failures
-from scripts.promotion_fixture import (
+from tests.support.promotion import (
     synthetic_identity_metrics,
     trust_context_for_candidate,
 )

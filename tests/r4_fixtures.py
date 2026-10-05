@@ -8,22 +8,22 @@ import pandas as pd
 
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.modeling.ranking_economics import session_block_interval
-from scripts.promotion_fixture import (
+from tests.support.promotion import (
     authorize_candidate_for_test as authorize_candidate_for_test,
 )
-from scripts.promotion_fixture import (
+from tests.support.promotion import (
     synthetic_identity_metrics as synthetic_identity_metrics,
 )
-from scripts.promotion_fixture import (
+from tests.support.promotion import (
     test_authenticated_promotion_principals as test_authenticated_promotion_principals,
 )
-from scripts.promotion_fixture import (
+from tests.support.promotion import (
     test_promotion_identity_material as test_promotion_identity_material,
 )
-from scripts.promotion_fixture import (
+from tests.support.promotion import (
     test_signing_material as test_signing_material,
 )
-from scripts.promotion_fixture import (
+from tests.support.promotion import (
     trust_context_for_candidate as trust_context_for_candidate,
 )
 
