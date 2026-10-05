@@ -24,6 +24,7 @@ from market_predictor.swing.datasets.predictor_abstention_derivation import (
     validate_bound_observation,
     validated_bound_prefix,
 )
+from market_predictor.swing.datasets.preserved_relationship_abstentions import read_preserved_stock
 from market_predictor.swing.datasets.return_relationship_parent import VerifiedRelationshipParent
 from market_predictor.swing.datasets.return_relationship_sources import RelationshipSourceContext
 from market_predictor.swing.features.adjusted_source import BAR_COLUMNS, _bars
@@ -50,10 +51,22 @@ def read_stock(root: Path, context: RelationshipSourceContext, item: dict[str, A
     if record is None or dict(record) != item["artifact"] or record["security_id"] != identity or record["role"] != "stock":
         raise DataReadinessError("relationship stock source differs from its verified query unit")
     expected = expected_bound_history_sessions(context.bindings, item["source_group"], context.memberships)
+    key = json_sha256([identity, item["source_group"]])
+    preserved = (context.preserved_abstentions or {}).get(key)
+    if context.preserved_abstentions is not None:
+        expected_pin = json_sha256(preserved) if preserved is not None else None
+        if item.get("preserved_abstention_sha256") != expected_pin:
+            raise DataReadinessError("relationship preserved abstention binding changed")
+    if preserved is not None:
+        if item["quarantine"] is not None or context.facts is not None:
+            raise DataReadinessError("preserved abstention cannot impersonate a new predictor failure")
+        frame = read_preserved_stock(root, context.bindings, item["source_group"], preserved, expected)
+        frame["session_date_et"] = pd.to_datetime(frame.bar_start_utc, utc=True).dt.tz_convert("America/New_York").dt.date
+        frame["security_id"] = identity
+        return frame
     unit = read_bound_adjusted_history(context.bindings, item["source_group"], expected)
     frame = unit.bars.copy()
     frame["session_date_et"] = pd.to_datetime(frame.bar_start_utc, utc=True).dt.tz_convert("America/New_York").dt.date
-    key = json_sha256([identity, item["source_group"]])
     fact = next((fact for fact in context.facts.failures if fact.group_key == key), None) if context.facts else None
     if fact is not None:
         assert context.facts is not None

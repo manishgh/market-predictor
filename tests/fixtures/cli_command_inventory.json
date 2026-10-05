@@ -77,6 +77,7 @@
     "collect-sec-clock-pages",
     "collect-sec-filing-documents",
     "compare-saved-swing-returns",
+    "evaluate-saved-swing-policy",
     "extract-sp500-official-events",
     "finalize-edge-issuer-event-precision-audit",
     "freeze-edge-rebuild-temporal-manifest",
@@ -85,6 +86,7 @@
     "inspect-sec-form-inventory",
     "materialize-edge-rebuild-swing-panel",
     "materialize-swing-fixed-holdings",
+    "materialize-swing-issuer-reactions",
     "materialize-swing-research-dataset",
     "materialize-swing-research-predictors",
     "materialize-swing-return-relationships",
@@ -103,6 +105,7 @@
     "publish-sec-acceptance-clock",
     "publish-swing-issuer-family-cohort",
     "publish-verified-universe",
+    "qualify-issuer-content",
     "replay-swing-research-predictors",
     "replay-swing-transfer-history",
     "score-alpaca-news-history",
@@ -114,6 +117,8 @@
     "validate-strategy-research-contracts",
     "verify-events",
     "verify-retained-swing-run",
+    "verify-swing-issuer-reactions",
+    "verify-swing-relationship-reuse",
     "verify-swing-return-relationships"
   ]
 }

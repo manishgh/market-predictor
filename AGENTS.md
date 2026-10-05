@@ -292,6 +292,15 @@ abstention.
 
 ### 3.11 Risk-Based Verification
 
+User requirement (October 5): mocks and synthetic inputs are permitted only in
+unit test cases. Actual data jobs, integration evidence, feature publication,
+training, evaluation and serving checks must use real retained/provider data and
+the actual implementations, without mocked readers, admissions, accounting or
+model outputs. Tests with synthetic fixtures or patched collaborators prove only
+the specific unit/regression behavior asserted; never describe them as real-data
+integration or end-to-end evidence. Clearly identify the data used when reporting
+a result. Passing fixture tests cannot replace the required actual-data run.
+
 Select verification by affected behavior and consumers, not by the total test count.
 Record the selected tier, commands, results and deliberately unrun checks in the
 checkpoint/handoff. A normal commit or component checkpoint is not a release.

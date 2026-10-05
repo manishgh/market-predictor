@@ -39,6 +39,23 @@ class RelationshipSourceContext:
     predictor_request: dict[str, Any]
     source_files: dict[str, str]
     basis: dict[str, Any]
+    reuse_groups: dict[str, dict[str, Any]] | None = None
+    reuse_decision_ids_sha256: str | None = None
+    preserved_abstentions: dict[str, dict[str, Any]] | None = None
+
+    @property
+    def groups(self) -> dict[str, dict[str, Any]]:
+        if self.reuse_groups is not None:
+            return self.reuse_groups
+        result: dict[str, dict[str, Any]] = self.predictor_manifest["groups"]
+        return result
+
+    @property
+    def decision_ids_sha256(self) -> str:
+        if self.reuse_decision_ids_sha256 is not None:
+            return self.reuse_decision_ids_sha256
+        result: str = self.predictor_request["decision_ids_sha256"]
+        return result
 
 
 def _toml(root: Path, path: str, digest: str) -> dict[str, Any]:
@@ -49,6 +66,10 @@ def _toml(root: Path, path: str, digest: str) -> dict[str, Any]:
 def verify_source_context(root: Path, policy: ReturnRelationshipPublicationPolicy,
     parent: VerifiedRelationshipParent,
 ) -> RelationshipSourceContext:
+    if policy.reuse_equivalence_authority is not None:
+        from market_predictor.swing.datasets.return_relationship_reuse import verified_reuse_context
+
+        return verified_reuse_context(root, policy, parent)
     feature = ResearchFeaturePolicy.model_validate(_toml(root, policy.feature_config.path, policy.feature_config.sha256))
     if feature.strategy_contract != policy.strategy_contract:
         raise DataReadinessError("relationship source and strategy contracts differ")
@@ -137,12 +158,12 @@ def verify_source_context(root: Path, policy: ReturnRelationshipPublicationPolic
 def stock_inventory(population: pd.DataFrame, context: RelationshipSourceContext) -> dict[str, dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
     data = bind_adjusted_history_decisions(population, context.bindings)
-    if json_sha256(sorted(data.decision_id)) != context.predictor_request["decision_ids_sha256"]:
+    if json_sha256(sorted(data.decision_id)) != context.decision_ids_sha256:
         raise DataReadinessError("relationship decision population differs from saved predictor request")
     failures = {fact.group_key: fact for fact in context.facts.failures} if context.facts else {}
     for (identity, symbol), group in data.groupby(["security_id", "source_group"], sort=True):
         key = json_sha256([identity, symbol])
-        original = context.predictor_manifest["groups"].get(key)
+        original = context.groups.get(key)
         if original is None or original["rows"] != len(group) or original["decision_ids_sha256"] != json_sha256(sorted(group.decision_id)):
             raise DataReadinessError("relationship stock ownership differs from saved predictor group")
         fact = failures.get(key)
@@ -151,7 +172,10 @@ def stock_inventory(population: pd.DataFrame, context: RelationshipSourceContext
             "decision_ids_sha256": original["decision_ids_sha256"],
             "artifact": record,
             "quarantine": fact.model_dump(mode="json") if fact is not None else None}
-    if set(result) != set(context.predictor_manifest["groups"]):
+        if context.preserved_abstentions is not None:
+            preserved = context.preserved_abstentions.get(key)
+            result[key]["preserved_abstention_sha256"] = json_sha256(preserved) if preserved is not None else None
+    if set(result) != set(context.groups):
         raise DataReadinessError("relationship stock inventory omits a saved predictor group")
     return result
 

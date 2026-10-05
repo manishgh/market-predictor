@@ -227,6 +227,7 @@ def evaluate_event_aware_swing_accounting(
     missing: list[str] = []
     for ticker, spec in sorted(benchmark_holdings.items()):
         if (spec.security_id != ticker or spec.policy != "fixed_horizon"
+                or spec.sector != "benchmark" or spec.cost_prepaid_fraction != 0.0
                 or spec.research_contract_sha256 != research_contract.sha256()
                 or spec.initial_entry_timestamp != first_open or spec.session_end_timestamps != closes
                 or any(isinstance(event, ExecutionEvent) for event in spec.events)):

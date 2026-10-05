@@ -14,11 +14,13 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError
 from market_predictor.research.issuer_content_cohort_inventory import publish_cohort_content_inventory
 from market_predictor.research.issuer_content_inventory import publish_saved_content_inventory
+from market_predictor.research.issuer_content_qualification_authority import publish_issuer_content_qualification
 from market_predictor.research.issuer_content_review_population import publish_content_review_population
 from market_predictor.research.legacy_query_identity_proofs import publish_legacy_query_identity_proofs
 from market_predictor.research.sec_acceptance_clock import collect_sec_clock_pages, publish_sec_acceptance_clock
 from market_predictor.research.sec_filing_documents import collect_sec_filing_documents
 from market_predictor.research.sec_form_inventory import MODES, Mode, publish_sec_form_inventory
+from market_predictor.swing.contracts.holding_materialization import SourcePin as HoldingSourcePin
 from market_predictor.swing.datasets.initial_fit_issuer_news import LAST_INITIAL_FIT_CUTOFF
 from market_predictor.swing.datasets.issuer_news_preparation import FIRST
 
@@ -39,6 +41,23 @@ def _publish(call: Callable[[], dict[str, Any]], keys: tuple[str, ...], optional
 
 
 def register_issuer_content_commands(app: typer.Typer) -> None:
+    @app.command("qualify-issuer-content")
+    def qualify_content(
+        population_authority: Path = typer.Option(...), population_sha256: str = typer.Option(...),
+        reviewer_one: Path = typer.Option(...), reviewer_one_sha256: str = typer.Option(...),
+        reviewer_two: Path = typer.Option(...), reviewer_two_sha256: str = typer.Option(...),
+        output: Path = typer.Option(...), root: Path = typer.Option(Path(".")),
+    ) -> None:
+        """Measure two independent source reviews and publish historical feature evidence."""
+        _publish(lambda: publish_issuer_content_qualification(
+            root=root,
+            population_authority=HoldingSourcePin(path=population_authority.as_posix(), sha256=population_sha256),
+            reviewer_files=(
+                HoldingSourcePin(path=reviewer_one.as_posix(), sha256=reviewer_one_sha256),
+                HoldingSourcePin(path=reviewer_two.as_posix(), sha256=reviewer_two_sha256),
+            ), output=output,
+        ), ("status", "counts", "research_feature_eligible", "training_eligible", "serving_eligible", "manifest_sha256"))
+
     @app.command("prepare-issuer-content-review")
     def prepare_review(
         config: Path = typer.Option(...), config_sha256: str = typer.Option(...), output: Path = typer.Option(...),

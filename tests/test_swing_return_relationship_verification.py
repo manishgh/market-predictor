@@ -16,7 +16,10 @@ from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.heavy_jobs import HeavyJobBusyError, heavy_job_lease
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.return_feature_profiles import RETURN_RELATIONSHIP_COLUMNS
-from market_predictor.swing.contracts.return_relationship_publication import VerifiedReturnRelationshipPublication
+from market_predictor.swing.contracts.return_relationship_publication import (
+    ReturnRelationshipPublicationPolicy,
+    VerifiedReturnRelationshipPublication,
+)
 from market_predictor.swing.contracts.return_training import ReturnTrainingPolicy
 from market_predictor.swing.datasets import return_relationship_verification as owner
 from tests.test_swing_training_readiness import REPO, _json
@@ -59,7 +62,15 @@ def derivative(publication: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> 
     for name in RETURN_RELATIONSHIP_COLUMNS:
         frame[f"missing_reason_{name}"] = ["", "missing_required_session_or_value", ""]
     directory = root / "data/features/relationships"
-    request = dict(schema="market_predictor.return_relationship_request", profile_sha256="f" * 64)
+    # Metadata admission remains doubled; config parsing and exact pins are real.
+    parent_pin = SourcePin(path=parent_manifest_path.relative_to(root).as_posix(), sha256=file_sha256(parent_manifest_path))
+    policy = ReturnRelationshipPublicationPolicy(schema_version="market_predictor.return_relationship_publication_config",
+        parent_publication=parent_pin, parent_saved_row_verification=parent_pin,
+        feature_config=parent_pin, strategy_contract=parent_pin)
+    config_path = root / "configs/isolated_relationship_rows.json"
+    config_sha256 = _json(config_path, policy.model_dump(mode="json"))
+    request = dict(schema="market_predictor.return_relationship_request", profile_sha256="f" * 64,
+        config=dict(path=config_path.relative_to(root).as_posix(), sha256=config_sha256))
     request_hash = _json(directory / "_request.json", request)
     path = directory / "2019-07/technical_relationships.parquet"
     write_canonical_artifact(frame, path, artifact_type="swing_return_relationships", audit=audit,

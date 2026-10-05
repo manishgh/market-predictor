@@ -158,10 +158,10 @@ def _spec(*, case="ordinary", security="issuer", decision_index=0, length=10, po
         marks = [KnownMark(position_id="shares", mark_at=end, value_per_unit=100.0,
             currency="USD", evidence=evidence) for end in ends]
     return HoldingSpecification(research_contract_sha256=RESEARCH.sha256(),
-        decision_id=f"{decision_index}|{security}", security_id=security, sector="technology",
+        decision_id=f"{decision_index}|{security}", security_id=security, sector="benchmark" if case == "benchmark" else "technology",
         initial_position_id="shares", initial_entry_price=100.0, initial_entry_timestamp=entry,
         price_basis="raw_with_no_adjustment", currency="USD", entry_evidence=evidence,
-        session_end_timestamps=ends, cost_prepaid_fraction=0.002, policy=policy,
+        session_end_timestamps=ends, cost_prepaid_fraction=0.0 if case == "benchmark" else 0.002, policy=policy,
         events=tuple(events), marks=tuple(marks))
 
 
@@ -337,6 +337,25 @@ def test_event_accounting_does_not_score_unknown_right():
     assert report["status"] == "valuation_unavailable"
     assert report["comparisons"] is None
     assert report["summary"]["economic_conditions_passed"] is False
+
+
+@pytest.mark.parametrize("changes", [
+    {"cost_prepaid_fraction": 0.002},
+    {"sector": "technology", "cost_prepaid_fraction": 0.002},
+])
+def test_event_accounting_rejects_charged_or_unidentified_benchmark(changes):
+    spec = _spec()
+    benchmarks = {
+        ticker: _spec(case="benchmark", security=ticker, policy="fixed_horizon")
+        for ticker in ("SPY", "QQQ", "XLK")
+    }
+    benchmarks["SPY"] = HoldingSpecification.model_validate({**benchmarks["SPY"].model_dump(), **changes})
+    with pytest.raises(DataReadinessError, match="same-calendar, contract-bound buy-and-hold"):
+        evaluate_event_aware_swing_accounting(
+            _selected(spec), (spec,), benchmarks, config=SwingTrainingConfig(),
+            strategy_contract=load_strategy_contract(ROOT / "configs/edge_rebuild_strategy_contract.toml"),
+            research_contract=RESEARCH, session_calendar=(DAYS[0].date().isoformat(),),
+        )
 
 
 @pytest.mark.parametrize("unknown_right", [False, True])

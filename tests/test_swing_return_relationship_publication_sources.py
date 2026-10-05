@@ -69,7 +69,7 @@ def test_verified_query_stream_uses_explicit_decision_corrections_and_refuses_su
     decision_ticker = "FISV" if ticker == "FI" else ticker
     corrections = [SimpleNamespace(security_id=identity,ticker=decision_ticker,
         first_session=inputs.sessions[0],last_session=inputs.sessions[-1])]
-    context = SimpleNamespace(bindings=bindings,memberships=_members(bindings),
+    context = SimpleNamespace(preserved_abstentions=None, bindings=bindings,memberships=_members(bindings),
         outcome_policy=SimpleNamespace(decision_corrections=corrections),
         facts=SimpleNamespace(failures=[]))
     item = dict(security_id=identity,source_group="stock-unit",artifact=record,quarantine=None)
@@ -113,7 +113,7 @@ def _quarantine(root: Path, inputs: Inputs, ticker: str, boundary: int | None) -
         first_invalid_session=None if boundary is None else inputs.sessions[boundary],
         boundary_observation_sha256=None if boundary is None else json_sha256(invalid[0]),
         source_artifacts=(source,), reviewed_evidence=(observation,), detail="Synthetic source branch regression")
-    context = SimpleNamespace(bindings=bindings,memberships=_members(bindings),
+    context = SimpleNamespace(preserved_abstentions=None, bindings=bindings,memberships=_members(bindings),
         outcome_policy=SimpleNamespace(decision_corrections=[]),
         facts=SimpleNamespace(failures=[fact], observations=observation))
     item = dict(security_id=identity, source_group="stock-unit", artifact=record, quarantine=fact.model_dump(mode="json"))
@@ -153,7 +153,7 @@ def test_suffix_quarantine_preserves_exact_prefix_and_excludes_boundary_and_late
 def test_physical_missing_session_is_not_compressed_into_lag_positions(tmp_path: Path, inputs: Inputs) -> None:
     frame = _physical(inputs, "AAA").drop(index=248)
     bindings,record = _source(tmp_path,frame,"security-a")
-    context = SimpleNamespace(bindings=bindings,memberships=_members(bindings),
+    context = SimpleNamespace(preserved_abstentions=None, bindings=bindings,memberships=_members(bindings),
         outcome_policy=SimpleNamespace(decision_corrections=[]),facts=SimpleNamespace(failures=[]))
     item = dict(security_id="security-a",source_group="stock-unit",artifact=record,quarantine=None)
     inputs.stocks = read_stock(tmp_path, context, item)
@@ -172,7 +172,7 @@ def test_query_history_cannot_extend_original_membership(tmp_path: Path, inputs:
     members = _members(bindings)
     first = inputs.sessions[3]
     members.loc[0, "effective_from_utc"] = pd.Timestamp(first, tz="America/New_York")
-    context = SimpleNamespace(bindings=bindings, memberships=members,
+    context = SimpleNamespace(preserved_abstentions=None, bindings=bindings, memberships=members,
         outcome_policy=SimpleNamespace(decision_corrections=[]), facts=SimpleNamespace(failures=[]))
     item = dict(security_id="security-a", source_group="stock-unit", artifact=record, quarantine=None)
     actual = read_stock(tmp_path, context, item)
@@ -188,7 +188,7 @@ def test_invalid_unreviewed_candle_remains_a_calendar_gap(tmp_path: Path, inputs
     frame = _physical(inputs, "AAA")
     frame.loc[248, "volume"] = 0
     bindings, record = _source(tmp_path, frame, "security-a")
-    context = SimpleNamespace(bindings=bindings, memberships=_members(bindings),
+    context = SimpleNamespace(preserved_abstentions=None, bindings=bindings, memberships=_members(bindings),
         outcome_policy=SimpleNamespace(decision_corrections=[]), facts=SimpleNamespace(failures=[]))
     item = dict(security_id="security-a", source_group="stock-unit", artifact=record, quarantine=None)
     inputs.stocks = read_stock(tmp_path, context, item)
@@ -223,6 +223,8 @@ def test_reviewed_failure_applies_only_to_its_query_window(tmp_path: Path, input
     context.predictor_manifest = {"groups":{json_sha256([identity,unit]):dict(rows=1,decision_ids_sha256=json_sha256([decision]))
         for unit,decision in (("stock-unit","failed-decision"),("healthy-unit","healthy-decision"))}}
     context.predictor_request = {"decision_ids_sha256":json_sha256(sorted(population.decision_id))}
+    context.groups = context.predictor_manifest["groups"]
+    context.decision_ids_sha256 = context.predictor_request["decision_ids_sha256"]
     inventory = stock_inventory(population,context)
     _validate_inventory(inventory,context)
     assert inventory[json_sha256([identity,"stock-unit"])]["quarantine"] is not None

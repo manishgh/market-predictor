@@ -10,6 +10,7 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.io import inside
 from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.swing.contracts.return_relationship_publication import ReturnRelationshipPublicationPolicy
+from market_predictor.swing.datasets.relationship_historical_evidence import HistoricalFeatureEvidence, historical_month
 from market_predictor.swing.datasets.return_relationship_integrity import check_files, pins, read_object
 from market_predictor.swing.features.panel import swing_model_feature_columns
 
@@ -32,6 +33,7 @@ class VerifiedRelationshipParent:
     historical_implementation_files: dict[str, str]
     model_columns: tuple[str, ...]
     availability_columns: dict[str, str]
+    historical_evidence: HistoricalFeatureEvidence | None = None
 
 
 def _historical_sources(root: Path, declared: dict[str, str], policy: ReturnRelationshipPublicationPolicy,
@@ -72,6 +74,10 @@ def _historical_sources(root: Path, declared: dict[str, str], policy: ReturnRela
 
 
 def verify_parent(root: Path, policy: ReturnRelationshipPublicationPolicy) -> VerifiedRelationshipParent:
+    if policy.reuse_equivalence_authority is not None:
+        from market_predictor.swing.datasets.return_relationship_reuse import verified_reuse_parent
+
+        return verified_reuse_parent(root, policy)
     path = inside(root, policy.parent_publication.path)
     if path.name != "_manifest.json":
         raise DataReadinessError("relationship parent must be a completed manifest")
@@ -142,6 +148,8 @@ def verify_parent(root: Path, policy: ReturnRelationshipPublicationPolicy) -> Ve
 
 
 def load_parent_month(parent: VerifiedRelationshipParent, month: str, columns: list[str] | None = None) -> Any:
+    if parent.historical_evidence is not None:
+        return historical_month(parent.historical_evidence, month, columns)
     child = parent.manifest["months"][month]["profiles"]["technical_market"]
     path = inside(parent.path.parent, child["path"])
     if file_sha256(path) != child["sha256"] or file_sha256(manifest_path_for(path)) != child["manifest_sha256"]:

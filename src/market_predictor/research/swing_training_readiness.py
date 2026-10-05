@@ -17,9 +17,12 @@ from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.resources import assert_memory_budget, release_process_memory
+from market_predictor.swing.contracts.issuer_reaction_profile import ISSUER_REACTION_PROFILE
+from market_predictor.swing.contracts.issuer_reaction_publication import ARTIFACT_TYPE as REACTION_ARTIFACT_TYPE
 from market_predictor.swing.contracts.research import load_swing_research_contract
 from market_predictor.swing.contracts.return_feature_profiles import RETURN_RELATIONSHIP_PROFILE
 from market_predictor.swing.contracts.training_readiness import TrainingReadinessPolicy
+from market_predictor.swing.datasets.issuer_reaction_verification import validate_issuer_reaction_receipt
 from market_predictor.swing.datasets.return_relationship_verification import validate_return_relationship_receipt
 from market_predictor.swing.datasets.symbol_corrections import pinned_object
 from market_predictor.swing.features.panel import swing_model_feature_columns
@@ -34,6 +37,13 @@ IMPLEMENTATION_PATHS = (
 RELATIONSHIP_IMPLEMENTATION_PATHS = (
     "research/swing_return_inputs.py", "swing/contracts/return_training.py",
     "swing/datasets/return_relationship_verification.py", "swing/contracts/return_feature_profiles.py",
+)
+REACTION_IMPLEMENTATION_PATHS = (
+    "research/swing_return_inputs.py", "swing/contracts/return_training.py",
+    "swing/contracts/issuer_reaction_publication.py", "swing/contracts/issuer_reaction_profile.py",
+    "swing/contracts/issuer_reaction.py", "swing/datasets/issuer_reaction_publication.py",
+    "swing/datasets/issuer_reaction_verification.py", "swing/features/issuer_reaction_profile.py",
+    "swing/features/issuer_reaction.py",
 )
 
 
@@ -87,23 +97,27 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
         pins[source.relative_to(root).as_posix()] = file_sha256(source)
     _verify(root, pins)
     relationship = policy.published_profile == RETURN_RELATIONSHIP_PROFILE
+    reaction = policy.published_profile == ISSUER_REACTION_PROFILE
+    derivative = relationship or reaction
     publication_path = inside(root, policy.publication.path)
     manifest = pinned_object(publication_path, policy.publication.sha256)
     request_path = publication_path.parent / "_request.json"
     request = pinned_object(request_path, manifest["request_sha256"])
     pins[request_path.relative_to(root).as_posix()] = manifest["request_sha256"]
     receipt = pinned_object(inside(root, policy.saved_row_verification.path), policy.saved_row_verification.sha256)
-    verified = validate_return_relationship_receipt(root, policy.publication, receipt) if relationship else None
+    verified = (validate_issuer_reaction_receipt(root, policy.publication, receipt) if reaction else
+                validate_return_relationship_receipt(root, policy.publication, receipt) if relationship else None)
     if verified is not None:
-        for name, digest in receipt["source_files"].items():
+        current_sources = verified.source_files if relationship else receipt["source_files"]
+        for name, digest in current_sources.items():
             if name in pins and pins[name] != digest:
-                raise DataReadinessError("conflicting current relationship readiness pins")
+                raise DataReadinessError("conflicting current derivative readiness pins")
             pins[name] = digest
-        for name in RELATIONSHIP_IMPLEMENTATION_PATHS:
+        for name in REACTION_IMPLEMENTATION_PATHS if reaction else RELATIONSHIP_IMPLEMENTATION_PATHS:
             source = Path(__file__).parents[1] / name
             key, digest = source.relative_to(root).as_posix(), file_sha256(source)
             if key in pins and pins[key] != digest:
-                raise DataReadinessError("relationship readiness implementation changed")
+                raise DataReadinessError("derivative readiness implementation changed")
             pins[key] = digest
     provenance = request.get("source_files")
     if not isinstance(provenance, dict):
@@ -112,7 +126,7 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
         name = inside(root, source_pin.path).relative_to(root).as_posix()
         if provenance.get(name) != source_pin.sha256:
             raise DataReadinessError("readiness policy differs from publication provenance")
-    if not relationship and (manifest.get("schema") != "market_predictor.research_join"
+    if not derivative and (manifest.get("schema") != "market_predictor.research_join"
             or manifest.get("status") != "complete_research_only"
             or manifest.get("training_eligible") is not False or manifest.get("promotion_eligible") is not False
             or manifest.get("exclusions_added") != [] or request.get("schema") != "market_predictor.research_join_request"
@@ -120,7 +134,7 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
             or request.get("profiles") != ["technical_market", "catalyst_full"]
             or type(manifest.get("rows")) is not int or manifest["rows"] != request.get("rows")):
         raise DataReadinessError("unsupported or incomplete research publication")
-    if not relationship and (receipt.get("manifest_sha256") != policy.publication.sha256 or receipt.get("status") != "passed"
+    if not derivative and (receipt.get("manifest_sha256") != policy.publication.sha256 or receipt.get("status") != "passed"
             or receipt.get("scope") != "published_join_population_clocks_original_targets"
             or receipt.get("matched_profile_population") is not True or receipt.get("original_outcome_values_exact") is not True
             or receipt.get("outcome_filtered_rows") != 0 or receipt.get("unique_decisions") != manifest["rows"]
@@ -152,7 +166,7 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
     for month in months:
         _guard(policy)
         record = manifest["months"][month]
-        profiles = {RETURN_RELATIONSHIP_PROFILE} if relationship else {"technical_market", "catalyst_full"}
+        profiles = {policy.published_profile} if derivative else {"technical_market", "catalyst_full"}
         if set(record["profiles"]) != profiles:
             raise DataReadinessError("profile inventory differs")
         monthly[month] = {}
@@ -174,7 +188,8 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
             pins.update(child_pins)
             _verify(root, child_pins)
             projected = list(dict.fromkeys((*CONTEXT_COLUMNS, *RETURN_COLUMNS, *columns, *clocks.values())))
-            artifact_type = "swing_return_relationships" if relationship else "swing_research_join"
+            artifact_type = (REACTION_ARTIFACT_TYPE if reaction else
+                             "swing_return_relationships" if relationship else "swing_research_join")
             frame, sidecar = load_canonical_artifact(path, expected_type=artifact_type, allow_research=True, columns=projected)
             if (sidecar["inputs"] != {"request_sha256": manifest["request_sha256"]}
                     or sidecar["production_ready"] is not False or len(frame) != record["rows"]
@@ -208,7 +223,7 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
             _verify(root, child_pins)
             del frame, identity
             release_process_memory()
-        if not relationship:
+        if not derivative:
             monthly[month]["paired_complete_case_supervision"] = int(
                 (masks["technical_market"].complete_case_supervision & masks["catalyst_full"].complete_case_supervision).sum())
         del masks, reference
@@ -235,11 +250,16 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
         "year_sector_counts": {key: {group: dict(counts) for group, counts in value.items()} for key, value in groups.items()},
         "interpretation": "Supervised-label and complete-case counts are diagnostics, not an opportunity selection or training permission."}
     if verified is not None:
-        report.update(published_profile=RETURN_RELATIONSHIP_PROFILE, profile_sha256=request["profile_sha256"],
+        report.update(published_profile=policy.published_profile, profile_sha256=request["profile_sha256"],
             model_columns=list(verified.model_columns), availability_columns=verified.availability_columns,
             saved_row_verification_sha256=policy.saved_row_verification.sha256, serving_eligible=False,
             additions_source_replayed=True, baseline_numerical_replayed=False,
             baseline_evidence_scope="inherited_original_evidence_with_exact_saved_row_parity_not_new_numerical_replay")
+        if relationship:
+            report["saved_row_verification_source_provenance"] = receipt["source_files"]
+        if reaction:
+            report.update(event_authority_sha256=receipt["event_authority_sha256"],
+                qualification_publication=receipt["qualification_publication"], qualification_source_replayed=True)
     output.parent.mkdir(parents=True, exist_ok=True)
     write_json_object(output, report)
     return {**report, "report_sha256": file_sha256(output)}

@@ -1,0 +1,36 @@
+{
+  "schema_version": "market_predictor.relationship_reuse_config",
+  "historical_relationship_publication": {
+    "path": "data/features/swing_return_relationships_initial_fit_utc_clocks/_manifest.json",
+    "sha256": "e9ec4b628a59f7925fb66a0800194f1a712d617a819d13927860d0b9ab0ef04c"
+  },
+  "historical_relationship_receipt": {
+    "path": "data/reports/swing_return_relationships_initial_fit_utc_verification.json",
+    "sha256": "e1067950ace121d13e4b3227d7488540e03e558d205ee07668696801708d1086"
+  },
+  "historical_parent_publication": {
+    "path": "data/features/swing_corrected_initial_fit_research/_manifest.json",
+    "sha256": "63574b3b55cd30adaebf62b4040f92a2030e6dbb17772014afb3e3c168158256"
+  },
+  "historical_parent_receipt": {
+    "path": "data/reports/swing_initial_fit_join_verification.json",
+    "sha256": "3e4a3c9dd241b9776fc368e7856e45d4bff0ed3cd0ef1431750fa94b16ce53b0"
+  },
+  "peer_reuse_report": {
+    "path": "data/reports/swing_matched_peer_reuse_verification.json",
+    "sha256": "f51418cae90bb8fce520d4b8b2aff97eb344c0702ad9e9deadaba943b2c323f2"
+  },
+  "configuration_difference_report": {
+    "path": "data/reports/swing_matched_configuration_differences.json",
+    "sha256": "97fe1198f6dc7ed0ebd7e9401fa7ee9215c5d84268fa8990a801761954620b10"
+  },
+  "feature_config": {
+    "path": "configs/swing_corrected_research_features.toml",
+    "sha256": "1a4a3832bd20e8a8ab1aafa734e0de95fa77b7162f43be427c6f91e7aae3cbd7"
+  },
+  "strategy_contract": {
+    "path": "configs/edge_rebuild_strategy_contract.toml",
+    "sha256": "428fa7c5580c91e3b1736c929d33a19d6baba30d376a3fca90ab21f32f52f860"
+  },
+  "predictor_failure_facts": null
+}

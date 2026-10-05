@@ -19,8 +19,8 @@ from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.return_feature_profiles import RETURN_RELATIONSHIP_COLUMNS, RETURN_RELATIONSHIP_PROFILE
 from market_predictor.swing.contracts.return_relationship_publication import VerifiedReturnRelationshipPublication
 from market_predictor.swing.datasets.adjusted_history_bindings import bind_adjusted_history_decisions
-from market_predictor.swing.datasets.return_relationship_integrity import load_policy
-from market_predictor.swing.datasets.return_relationship_parent import verify_parent
+from market_predictor.swing.datasets.return_relationship_integrity import load_policy, read_object
+from market_predictor.swing.datasets.return_relationship_parent import load_parent_month, verify_parent
 from market_predictor.swing.datasets.return_relationship_publication import verify_return_relationship_publication
 from market_predictor.swing.datasets.return_relationship_rows import ADDITIONS, IDENTITY_COLUMNS, build_group, read_spy
 from market_predictor.swing.datasets.return_relationship_sources import inventory_pins, relationship_sources, verify_source_context
@@ -188,6 +188,8 @@ def verify_return_relationship_rows(root: Path, publication: SourcePin, output: 
     with heavy_job_lease("verify-return-relationship-rows", runtime_dir=runtime):
         _guard()
         verified = verify_return_relationship_publication(root, publication)
+        parent_policy = load_policy(root, Path(verified.request["config"]["path"]), verified.request["config"]["sha256"])
+        reuse_parent = verify_parent(root, parent_policy) if parent_policy.reuse_equivalence_authority is not None else None
         pins = _pins(root, verified)
         publication_path = inside(root, publication.path)
         pins[publication.path] = publication.sha256
@@ -213,7 +215,11 @@ def verify_return_relationship_rows(root: Path, publication: SourcePin, output: 
                 raise DataReadinessError("relationship child pin conflicts with source authority")
             pins.update(child_pins)
             _verify(root, child_pins)
-            parent, parent_sidecar = load_canonical_artifact(parent_path, expected_type="swing_research_join", allow_research=True)
+            if reuse_parent is None:
+                parent, parent_sidecar = load_canonical_artifact(parent_path, expected_type="swing_research_join", allow_research=True)
+            else:
+                parent = load_parent_month(reuse_parent, month)
+                parent_sidecar = read_object(manifest_path_for(parent_path), parent_child["manifest_sha256"])
             frame, sidecar = load_canonical_artifact(path, expected_type="swing_return_relationships", allow_research=True)
             if (record["rows"] != parent_record["rows"] or len(frame) != record["rows"]
                     or record["decision_ids_sha256"] != parent_record["decision_ids_sha256"]

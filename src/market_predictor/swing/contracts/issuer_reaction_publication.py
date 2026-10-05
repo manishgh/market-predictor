@@ -1,4 +1,4 @@
-"""Frozen initial-fit derivative publication, never model admission."""
+"""Frozen source-only issuer-reaction publication identities."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -10,20 +10,19 @@ from pydantic import Field
 from market_predictor.swing.contracts.holding_accounting import HoldingContract
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 
-PUBLICATION_SCHEMA = "market_predictor.return_relationship_publication"
-REQUEST_SCHEMA = "market_predictor.return_relationship_request"
-ARTIFACT_TYPE = "swing_return_relationships"
-PROFILE = "technical_relationships"
+PROFILE = "technical_relationships_issuer_reaction"
+ARTIFACT_TYPE = "swing_issuer_reaction_profile"
+PUBLICATION_SCHEMA = "market_predictor.issuer_reaction_publication"
+REQUEST_SCHEMA = "market_predictor.issuer_reaction_request"
 
 
-class ReturnRelationshipPublicationPolicy(HoldingContract):
-    schema_version: Literal["market_predictor.return_relationship_publication_config"]
+class IssuerReactionPublicationPolicy(HoldingContract):
+    schema_version: Literal["market_predictor.issuer_reaction_publication_config"]
     parent_publication: SourcePin
     parent_saved_row_verification: SourcePin
-    feature_config: SourcePin
-    predictor_failure_facts: SourcePin | None = None
-    reuse_equivalence_authority: SourcePin | None = None
-    strategy_contract: SourcePin
+    qualification_publication: SourcePin
+    qualification_authority: SourcePin
+    coverage: Literal["unknown"] = "unknown"
     source_start: Literal["2018-05-29"] = "2018-05-29"
     source_end: Literal["2024-05-28"] = "2024-05-28"
     decision_start: Literal["2019-07-09"] = "2019-07-09"
@@ -32,7 +31,7 @@ class ReturnRelationshipPublicationPolicy(HoldingContract):
 
 
 @dataclass(frozen=True)
-class VerifiedReturnRelationshipPublication:
+class VerifiedIssuerReactionPublication:
     request: dict[str, Any]
     manifest: dict[str, Any]
     source_files: dict[str, str]

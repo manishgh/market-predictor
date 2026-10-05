@@ -17,15 +17,19 @@ from market_predictor.evidence.io import inside
 from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.research.swing_training_readiness import (
     IMPLEMENTATION_PATHS,
+    REACTION_IMPLEMENTATION_PATHS,
     RELATIONSHIP_IMPLEMENTATION_PATHS,
     _guard,
     _verify,
 )
 from market_predictor.resources import release_process_memory
+from market_predictor.swing.contracts.issuer_reaction_profile import ISSUER_REACTION_PROFILE
+from market_predictor.swing.contracts.issuer_reaction_publication import ARTIFACT_TYPE as REACTION_ARTIFACT_TYPE
 from market_predictor.swing.contracts.research import load_swing_research_contract
 from market_predictor.swing.contracts.return_feature_profiles import RETURN_RELATIONSHIP_PROFILE
 from market_predictor.swing.contracts.return_training import ReturnTrainingPolicy
 from market_predictor.swing.contracts.training_readiness import TrainingReadinessPolicy
+from market_predictor.swing.datasets.issuer_reaction_verification import validate_issuer_reaction_receipt
 from market_predictor.swing.datasets.return_relationship_verification import validate_return_relationship_receipt
 from market_predictor.swing.datasets.symbol_corrections import pinned_object
 from market_predictor.swing.features.panel import swing_model_feature_columns
@@ -55,17 +59,21 @@ def load_return_inputs(root: Path, policy: ReturnTrainingPolicy) -> ReturnInputs
     if memory_policy.published_profile != policy.published_profile:
         raise DataReadinessError("return request and readiness profile differ")
     relationship = policy.published_profile == RETURN_RELATIONSHIP_PROFILE
+    reaction = policy.published_profile == ISSUER_REACTION_PROFILE
     verified = None
-    if relationship:
-        for name in (*IMPLEMENTATION_PATHS, *RELATIONSHIP_IMPLEMENTATION_PATHS):
+    if relationship or reaction:
+        dependencies = REACTION_IMPLEMENTATION_PATHS if reaction else RELATIONSHIP_IMPLEMENTATION_PATHS
+        for name in (*IMPLEMENTATION_PATHS, *dependencies):
             source = Path(__file__).parents[1] / name
             if pins.get(source.relative_to(root).as_posix()) != file_sha256(source):
-                raise DataReadinessError("return relationship readiness lacks current executed-code pin")
+                raise DataReadinessError("return derivative readiness lacks current executed-code pin")
         receipt_pin = memory_policy.saved_row_verification
         if pins.get(receipt_pin.path) != receipt_pin.sha256:
-            raise DataReadinessError("relationship readiness omits independent saved-row receipt")
+            raise DataReadinessError("derivative readiness omits independent saved-row receipt")
         receipt = pinned_object(inside(root, receipt_pin.path), receipt_pin.sha256)
-        verified = validate_return_relationship_receipt(root, memory_policy.publication, receipt)
+        verified = (validate_issuer_reaction_receipt(root, memory_policy.publication, receipt) if reaction else
+                    validate_return_relationship_receipt(root, memory_policy.publication, receipt))
+        current_sources = verified.source_files if relationship else receipt["source_files"]
         if (report.get("published_profile") != policy.published_profile
                 or report.get("profile_sha256") != verified.request["profile_sha256"]
                 or report.get("model_columns") != list(verified.model_columns)
@@ -73,8 +81,14 @@ def load_return_inputs(root: Path, policy: ReturnTrainingPolicy) -> ReturnInputs
                 or report.get("saved_row_verification_sha256") != receipt_pin.sha256
                 or report.get("serving_eligible") is not False or report.get("additions_source_replayed") is not True
                 or report.get("baseline_numerical_replayed") is not False
-                or any(pins.get(name) != digest for name, digest in receipt["source_files"].items())):
-            raise DataReadinessError("return relationship profile or current evidence differs")
+                or any(pins.get(name) != digest for name, digest in current_sources.items())):
+            raise DataReadinessError("return derivative profile or current evidence differs")
+        if relationship and report.get("saved_row_verification_source_provenance") != receipt["source_files"]:
+            raise DataReadinessError("return relationship saved receipt provenance differs")
+        if reaction and (report.get("event_authority_sha256") != verified.request["sources"]["event_authority_sha256"]
+                or report.get("qualification_publication") != verified.request["qualification_publication"]
+                or report.get("qualification_source_replayed") is not True):
+            raise DataReadinessError("return reaction qualification source identity differs")
     if (report.get("schema") != "market_predictor.swing_training_readiness" or report.get("status") != "diagnostic_complete"
             or report.get("scope") != "initial_fit_fixed_horizon_diagnostics" or report.get("rows_removed") != 0
             or report.get("training_eligible") is not False or report.get("promotion_eligible") is not False
@@ -129,7 +143,8 @@ def load_return_inputs(root: Path, policy: ReturnTrainingPolicy) -> ReturnInputs
         for source, digest in ((path, child["sha256"]), (manifest_path_for(path), child["manifest_sha256"])):
             if pins.get(source.relative_to(root).as_posix()) != digest or file_sha256(source) != digest:
                 raise DataReadinessError("return input child not bound by readiness receipt")
-        artifact_type = "swing_return_relationships" if relationship else "swing_research_join"
+        artifact_type = (REACTION_ARTIFACT_TYPE if reaction else
+                         "swing_return_relationships" if relationship else "swing_research_join")
         frame, sidecar = load_canonical_artifact(path, expected_type=artifact_type, allow_research=True,
             columns=list(dict.fromkeys((*CONTEXT_COLUMNS, *RETURN_COLUMNS, *names, *clocks.values()))))
         if (sidecar["production_ready"] is not False or sidecar["inputs"] != {"request_sha256": manifest["request_sha256"]}

@@ -6,6 +6,8 @@ from typing import Annotated, Literal, Self
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
+from market_predictor.swing.contracts import SECTOR_BENCHMARKS
+
 Identifier = Annotated[str, Field(min_length=1, pattern=r"^\S(?:.*\S)?$")]
 Positive = Annotated[float, Field(gt=0, allow_inf_nan=False)]
 Nonnegative = Annotated[float, Field(ge=0, allow_inf_nan=False)]
@@ -154,7 +156,13 @@ class HoldingSpecification(HoldingContract):
         ends = self.session_end_timestamps
         if tuple(sorted(set(ends))) != ends or self.initial_entry_timestamp >= ends[0]:
             raise ValueError("ten exact increasing session ends must follow entry")
-        if self.cost_prepaid_fraction != 0.002:
+        if self.cost_prepaid_fraction != 0.002 and not (
+            self.cost_prepaid_fraction == 0.0
+            and self.sector == "benchmark"
+            and self.security_id in ("SPY", "QQQ", *SECTOR_BENCHMARKS)
+            and self.policy == "fixed_horizon"
+            and not any(isinstance(event, ExecutionEvent) for event in self.events)
+        ):
             raise ValueError("the approved prepaid round-trip cost is fixed at 20 bps")
         ids = [event.event_id for event in self.events]
         if len(set(ids)) != len(ids):

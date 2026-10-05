@@ -59,17 +59,20 @@ CLOSED = {"training_eligible": False, "promotion_eligible": False, "serving_elig
 
 
 def _validate_inventory(inventory: dict[str, dict[str, Any]], context: RelationshipSourceContext) -> None:
-    if set(inventory) != set(context.predictor_manifest["groups"]):
+    if set(inventory) != set(context.groups):
         raise DataReadinessError("relationship inventory does not cover complete saved ownership")
     failures = {fact.group_key: fact.model_dump(mode="json") for fact in context.facts.failures} if context.facts else {}
     for key, item in inventory.items():
         identity, symbol = item["security_id"], item["source_group"]
         record = context.bindings.source.records.get(symbol)
         expected = {"security_id": identity, "source_group": symbol,
-            "rows": context.predictor_manifest["groups"][key]["rows"],
-            "decision_ids_sha256": context.predictor_manifest["groups"][key]["decision_ids_sha256"],
+            "rows": context.groups[key]["rows"],
+            "decision_ids_sha256": context.groups[key]["decision_ids_sha256"],
             "artifact": dict(record) if record is not None else None,
             "quarantine": failures.get(key)}
+        if context.preserved_abstentions is not None:
+            preserved = context.preserved_abstentions.get(key)
+            expected["preserved_abstention_sha256"] = json_sha256(preserved) if preserved is not None else None
         if (key != json_sha256([identity, symbol]) or item != expected or record is None
                 or record["security_id"] != identity or record["role"] != "stock"):
             raise DataReadinessError("relationship inventory source, ownership or quarantine differs")
@@ -96,6 +99,7 @@ def _request(root: Path, config: SourcePin, policy: ReturnRelationshipPublicatio
         "parent_saved_row_verification": policy.parent_saved_row_verification.model_dump(mode="json"),
         "rows": parent.manifest["rows"], "stock_inventory": inventory, "sources": sources.model_dump(mode="json"),
         "source_basis": context.basis, "profile": PROFILE, "model_columns": list(names), "availability_columns": clocks,
+        "preserved_research_abstentions": context.preserved_abstentions or {},
         "profile_sha256": return_relationship_profile_sha256(parent.model_columns, sources),
         "source_start": policy.source_start, "source_end": policy.source_end,
         "decision_start": policy.decision_start, "decision_end": policy.decision_end,

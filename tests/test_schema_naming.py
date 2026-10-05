@@ -13,6 +13,13 @@ PUBLIC_IDENTITIES = {
     "alpaca.news_collection_intent.v1",
     "alpaca.news_collection_result.v1",
 }
+# Exact identifiers in independently pinned historical evidence. This isolated
+# inspector compares original bytes; these are not accepted current contracts.
+HISTORICAL_EVIDENCE_IDENTITIES = {
+    "swing/datasets/relationship_historical_evidence.py": {
+        "market_data.artifact_manifest.v1", "market_data.v1",
+    },
+}
 TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9_.]*")
 GENERATION = re.compile(r"(?:[._]v\d+)(?:[._]|$)|\bml_v\d+", re.IGNORECASE)
 
@@ -25,7 +32,8 @@ def test_internal_identities_and_names_have_no_generation_suffix() -> None:
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 value = node.value
                 # Provider URLs and retained raw artifact paths are not internal IDs.
-                if TOKEN.fullmatch(value) and GENERATION.search(value) and value not in PUBLIC_IDENTITIES:
+                historical = HISTORICAL_EVIDENCE_IDENTITIES.get(path.relative_to(SOURCE).as_posix(), set())
+                if TOKEN.fullmatch(value) and GENERATION.search(value) and value not in PUBLIC_IDENTITIES | historical:
                     violations.append(f"{path.relative_to(SOURCE)}:{node.lineno}: {value}")
             elif isinstance(node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
                 if re.search(r"(?:V\d+|_v\d+)$", node.name):
