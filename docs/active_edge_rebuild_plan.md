@@ -3,7 +3,7 @@
 ### Current continuation: source scan running, qualification checks pending
 
 The requested 1%-remaining handoff was pushed in `a1e9cbe` and `5b95ade`.
-After the user's reset, the October 5 continuation meter reports 17% used at 13:24 UTC.
+After the user's reset, the October 5 continuation meter reports 28% used at 14:16 UTC.
 Branch: `codex/v1-canonical-cleanup`; latest pushed implementation: `0471c66`.
 Astra step 3 remains `in_progress`; four existing fits are retained. Main and
 TradingFlow remain untouched.
@@ -144,6 +144,27 @@ Exact new scope/API and checks remain pending; do not run the abandoned AST-only
 The existing qualification20-file producer-provenance repair remains independently
 valid. Keep holding_accounting.py untouched while the source scan pins it. Draft
 126 publishers/consumers are not admitted by synthetic fixtures or code alone.
+Current reuse remediation is drafted (52 intended tests, unrun). The historical120
+request is validated against its actual fields, rather than invented admission
+flags. New datasets/preserved_relationship_abstentions.py binds original facts,
+receipt, observations and source hashes to each complete current decision group.
+Shared read_stock uses the unchanged boundary validator on the full current unit
+before clipping valid-prefix sessions. WTW stays whole-history unavailable; ATVI,
+INFO and SBNY retain their original suffix boundaries. Changed boundary values,
+clocks or original observation counts cannot be waived. Both actual configurations
+keep predictor_failure_facts=null; no new failed checkpoint is manufactured.
+New features/return_candidate.py composes the existing120/124/126 kernels with
+explicit baseline availability and compatible bar authorities, retaining separate
+component/authority hashes. Its 22 intended cases and review are complete in source,
+but pytest/Ruff/mypy are unrun. Source review found no supported defect. All source,
+training, promotion and serving admission flags remain false. Actual return-serving
+replacement remains pending: the current V1 inference, persistence and maturation
+paths assume classification probabilities. Pure candidate features do not change
+that interface or admit a research regressor to serving.
+Root added two benchmark evaluator rejection cases to test_swing_event_funding.py;
+the accounting repair and its benchmark fixture remain queued until source exit.
+All changed draft Python files are LF; no running producer pin changed.
+
 ### Latest continuation: pinned historical bridge inspection repaired
 
 Implementation `0471c66` is pushed after the first real source job demonstrated
