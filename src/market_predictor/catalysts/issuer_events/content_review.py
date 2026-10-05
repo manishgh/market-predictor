@@ -196,6 +196,19 @@ def _extract(text: str, *, html: bool, locator: str) -> tuple[str, tuple[TextSeg
     return "".join(result).rstrip("\n"), tuple(segments)
 
 
+def extract_source_text(text: str, *, html: bool, locator: str) -> tuple[str, tuple[TextSegment, ...]]:
+    """Normalize source text for blind review even when issuer identity is unknown.
+
+    This creates no event, identity proof or feature availability timestamp.
+    The source-only review population must retain readable identity failures.
+    """
+    _require(isinstance(text, str) and len(text.encode("utf-8")) <= MAX_CONTENT_BYTES,
+             "source review text exceeds byte limit or is not text")
+    _require(type(html) is bool and isinstance(locator, str) and bool(locator.strip()),
+             "source review text requires its original format and locator")
+    return _extract(text, html=html, locator=locator)
+
+
 def _evidence(*, context: IssuerContentContext, source: Literal["alpaca", "sec"], payload_sha256: str,
               locator: str, chosen: str, html: bool, published: pd.Timestamp, version: pd.Timestamp,
               content_kind: str, purpose: Literal["historical_research", "live_construction"]) -> IssuerContentEvidence:
@@ -203,7 +216,7 @@ def _evidence(*, context: IssuerContentContext, source: Literal["alpaca", "sec"]
     if purpose == "live_construction":
         _require(context.availability_semantics == "observed", "live content cannot use historical proxy availability")
     _require(context.first_seen_at_utc >= version, "content observation precedes its retained version")
-    text, segments = _extract(chosen, html=html, locator=locator)
+    text, segments = extract_source_text(chosen, html=html, locator=locator)
     clocks = [version, context.identity_available_at_utc]
     if context.availability_semantics == "observed":
         clocks.append(context.first_seen_at_utc)

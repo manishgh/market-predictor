@@ -14,6 +14,7 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError
 from market_predictor.research.issuer_content_cohort_inventory import publish_cohort_content_inventory
 from market_predictor.research.issuer_content_inventory import publish_saved_content_inventory
+from market_predictor.research.issuer_content_review_population import publish_content_review_population
 from market_predictor.research.legacy_query_identity_proofs import publish_legacy_query_identity_proofs
 from market_predictor.research.sec_acceptance_clock import collect_sec_clock_pages, publish_sec_acceptance_clock
 from market_predictor.research.sec_filing_documents import collect_sec_filing_documents
@@ -38,6 +39,16 @@ def _publish(call: Callable[[], dict[str, Any]], keys: tuple[str, ...], optional
 
 
 def register_issuer_content_commands(app: typer.Typer) -> None:
+    @app.command("prepare-issuer-content-review")
+    def prepare_review(
+        config: Path = typer.Option(...), config_sha256: str = typer.Option(...), output: Path = typer.Option(...),
+        root: Path = typer.Option(Path(".")), resume_checkpoint_sha256: str | None = typer.Option(None),
+    ) -> None:
+        """Prepare initial-fit source-only candidate/negative review evidence; never feature admission."""
+        _publish(lambda: publish_content_review_population(root=root, config=config, config_sha256=config_sha256,
+            output=output, resume_checkpoint_sha256=resume_checkpoint_sha256),
+            ("status", "totals", "manifest_sha256", "training_eligible", "serving_eligible"))
+
     @app.command("inspect-saved-issuer-content")
     def inspect(
         event_artifact: Path = typer.Option(...), event_sha256: str = typer.Option(...),

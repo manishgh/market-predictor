@@ -1,0 +1,31 @@
+{
+  "schema": "market_predictor.issuer_content_review_population_config",
+  "alpaca_inventory": {
+    "path": "data/research/swing_initial_fit_issuer_content_inventory_with_legacy_proofs/_manifest.json",
+    "sha256": "3e4f905e8e6da4d3c0331fb358437633765211a59e94e2f6bba6d1b7962e9bda"
+  },
+  "sec_archive": {
+    "path": "data/raw/sec_filing_documents_initial_fit_corrected_clock/_manifest.json",
+    "sha256": "b3041a07f599e5c7f6a7b86a5991864c81586ba98e68391311fa3e9e84969318"
+  },
+  "sec_inventory": {
+    "path": "data/research/swing_initial_fit_sec_form_inventory_corrected_clock/_manifest.json",
+    "sha256": "3ca7750689e42249d35c2cb68751b459060ac8ff694b4c2168f19878f91b4b07"
+  },
+  "early_alias_artifact": {
+    "path": "data/research/swing_issuer_identity_cik_v1/security_identities.parquet",
+    "sha256": "f8945cd82bdf9755db65d908c889fed9893329e5f39dfe3fd465338f6bdb08a1"
+  },
+  "early_alias_sidecar": {
+    "path": "data/research/swing_issuer_identity_cik_v1/security_identities.parquet.manifest.json",
+    "sha256": "3a37ae25d6f1af054e67713bd6afc242014b9565f25a6389a530f75ce6a9a022"
+  },
+  "identity_manifest": {
+    "path": "data/research/swing_initial_fit_source_proven_news/_manifest.json",
+    "sha256": "e150475190fe0efbafecb115cd5f08bb7acb58576b2661b680fad832ffc00d98"
+  },
+  "legacy_identity_proofs": {
+    "path": "data/research/swing_legacy_query_identity_proofs/_manifest.json",
+    "sha256": "84ffb55398f3db016ce9e0af9dea8aa9de54c559f5d9a1959cca2396d92712d3"
+  }
+}
