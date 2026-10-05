@@ -1,6 +1,28 @@
 # Current Feature Engineering Audit
 
-Last updated: 2026-10-04
+Last updated: 2026-10-05
+
+## Qualified Reaction Profile: Current Acceptance Matrix
+
+Current proposed order is the unchanged 124-column relationship parent plus the
+two existing raw issuer reaction columns (126 total), not aggregate news counts.
+No extra model specification or API version is introduced.
+
+| Layer | Current evidence/status |
+| --- | --- |
+| Source collection | Existing initial-fit Alpaca inventory and corrected SEC archive retained; later SEC bodies stay sealed. |
+| Source clocks and aliases | New read-only source reader passes 15 tests. SEC identity resolves at filing availability and retains a distinct identity clock; causal names come from original index CIK/name blocks. |
+| Candidate precision and recall | Deterministic announcement sampling and governance metrics implemented; real source-only reviewer annotations and measured family admission still missing. This prevents feature admission. |
+| Historical/live calculation | Shared 124-to-126 projection passes 313 affected feature tests, including explicit diagnostic types under both pandas string inference settings. Latest known versions resolve before qualification; nulls retain missing-event/coverage/bar explanations. Actual qualified source publication and live source binding still missing. |
+| Ordered feature contract | New unversioned reaction profile contract fixes 126 columns and three-day selection. Actual feature authority/manifest not yet published. |
+| Training/serving consumers | Current training contract accepts only technical/relationship profiles. Extend it coherently after qualified source authority and feature publication; no remaining fits have started. |
+| API representation | Public V1 unchanged. Reaction values cannot be served until the source, profile and accepted model are bound through the inference reader. |
+| Poison/tamper/parity | Component tests cover revisions, identity clocks, unknown coverage, parent preservation and shared construction. Population future-revision and interrupted-checkpoint regressions added; full real-data replay remains unperformed. |
+| Frozen funded exits | New source-bound ordinary-lot compiler passes 29 focused tests, using existing accounting/fill costs. Full selected portfolio sources, funded SPY evaluation and model acceptance remain missing. |
+
+These are component software results. They do not admit a feature/model, show SPY
+outperformance, or satisfy the future 252 decision sessions plus ten maturity
+sessions required for prospective assessment.
 
 ## User-Confirmed Astra Plan (October 4)
 

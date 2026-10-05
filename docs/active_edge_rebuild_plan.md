@@ -1,5 +1,122 @@
 # Active Edge Rebuild Plan
 
+### October 5 current software checkpoint: source review, reaction projection and exits
+
+Implementation `e2abb9f` is committed and pushed on
+`codex/v1-canonical-cleanup`. Astra ordered step 3 remains `in_progress`;
+this closes software components, not event admission or the whole experiment.
+TradingFlow, main, raw archives, matched inputs and the four saved fits are untouched.
+
+Implemented: bounded read-only Alpaca/SEC source iterators; original filing-index
+CIK/name proofs; source-only announcement-cluster population and blind review
+exports; frozen precision/rule/reviewer and weighted recall metrics; shared
+124-to-126 reaction projection; and source-bound ordinary-lot frozen exit compiler.
+The new command is `prepare-issuer-content-review` on the research CLI only.
+Public APIs stay V1 and internal contracts are unversioned.
+
+Consolidated supported findings were fixed: SEC identity is resolved at the parent
+filing availability with its distinct identity clock; future revisions retain
+metadata but never enter initial-fit sampling/blind text; full text exports stream
+one version at a time; the latest independently pinned resume snapshot survives a
+database commit followed by failed checkpoint publication; disk shortage preserves
+that snapshot; and reaction diagnostic types are explicit under both pandas string
+inference settings. Missing noncandidate reviewer pairs prevent qualification.
+Uncertain completed reviews count as possible misses; no new recall cutoff exists.
+
+Narrow reopening of the closed extractor: blind review must retain readable sources
+without known issuer aliases, while the existing evidence adapter requires aliases.
+Added `extract_source_text`, reused by that adapter, without invented identities,
+event availability or admission. All original source bytes and pins were preserved.
+
+Verification: combined 842-test component run had 841 passes and one batch/single
+diagnostic dtype failure; the fix retained exact equality and passed all 313 affected
+feature tests. Final publisher/CLI checks passed 89 tests after disk/SQL summary
+changes; metrics passed 31, reader 15, exit compiler 29. These counts overlap and
+must not be summed. RuntimeWarnings were errors in the combined and final root runs.
+Ruff over all changed Python files and strict mypy over affected source modules passed.
+Combined JUnit: `C:/Users/manis/Documents/Codex/2026-09-28/c/reaction-checkpoint-final.xml`
+records the original failure, not an all-pass run. Full suite, real-source population
+scan, source reviewer annotation, feature publication, model fit and funded SPY
+evaluation have not yet run for this checkpoint. No verification workers remain.
+
+Exact next action, after this documentation closure is pushed: run one leased
+initial-fit source population job using
+`configs/swing_issuer_content_review_population.json`, SHA256
+`d2bb0e06d94acbb4ebd3fd9cf6493bcffe288aa7d69d3b142e42511f02e56659`.
+Output: `data/research/swing_initial_fit_issuer_content_review_population`.
+It reuses the completed inventories/archive; it does not reconstruct matched
+features, targets or old aggregate news. No later sealed SEC content is opened.
+
+```powershell
+& C:/project/market-predictor/.venv/Scripts/python.exe -B -m market_predictor.research_cli prepare-issuer-content-review --root C:/project/market-predictor --config configs/swing_issuer_content_review_population.json --config-sha256 d2bb0e06d94acbb4ebd3fd9cf6493bcffe288aa7d69d3b142e42511f02e56659 --output data/research/swing_initial_fit_issuer_content_review_population
+```
+
+The job owns the absolute shared workspace heavy lease and a 5 GiB process limit.
+Resume only with an independently recorded hash of the current `_checkpoint.json`
+and unchanged request/config/implementation; use `--resume-checkpoint-sha256`.
+The pointer binds an immutable `.resume/*.sqlite` snapshot; mutable working SQLite
+is restored from it. A running job may advance that pointer, so do not treat a
+previously observed checkpoint hash as the current one. Completed output is immutable.
+Partial blind export requires explicit inspection rather than silent overwrite.
+
+Then complete two independent source-only reviews of the frozen samples, bind each
+annotation text hash/span to the original source, and publish measured family
+qualification plus rejected/unclassified version history. No family is admitted by
+the new software or by a blind export. Qualified event authority, actual 126-column
+feature publication, training/inference reader wiring and the remaining two fits
+are still missing. The full funded SPY evaluator also remains unfinished; the exit
+compiler alone proves neither selected-trade source coverage nor outperformance.
+Prospective final assessment requires 252 new decision sessions plus ten maturity
+sessions. Do not label the exposed historical period untouched or promote a model
+from software test results. User requests a handoff refresh at 99% account usage;
+latest observed meter was 98% used. User said they reset usage; do not infer a reset
+from chat when the account meter still reports otherwise.
+
+
+### Active continuation: qualified events, reaction profile and frozen exits
+
+The user authorized completing the whole Astra plan on October 5. Current step 3
+remains in progress. Freeze this bounded scope before the next data publication:
+
+- Reuse the completed initial-fit Alpaca inventory and corrected SEC archive.
+  Publish source-linked versions, causal aliases, exact clocks, extracted spans and
+  candidate/rejected/unclassified/unreadable dispositions. Obtain new causal company
+  names from retained filing-index CIK/name blocks at corrected acceptance; a latest
+  SEC name propagated backward is not a historical alias. No collector or matched
+  aggregate/target reconstruction is required. Keep later SEC content sealed.
+- Freeze candidate sampling at existing 300 earnings/250 guidance clusters and
+  existing precision/issuer/joint/reviewer gates. Sample 600 noncandidate clusters
+  per family by source/year with recorded inclusion probabilities. Report weighted
+  recall, false negatives and uncertainty. No new 0.80 hard recall threshold is
+  introduced: the profile claims observed qualified events, not complete event
+  capture. Unknown coverage and underpowered recall remain explicit; never infer
+  zero missed events or complete source coverage from the sample.
+- Append only the two existing raw reaction measurements to the unchanged ordered
+  124-column parent (126 model columns). Resolve latest available source versions
+  before qualification filtering; rejected revisions cannot resurrect old text.
+  Use the existing three-day news convention: (decision-72h, decision]. Collapse
+  only evidenced duplicate groups by earliest qualified availability, then select
+  latest distinct announcement deterministically before checking bars. Preserve
+  every original row, label, weight and eligibility value; unavailable events,
+  unknown coverage and incomplete reactions remain distinct null diagnostics.
+- Accounting may proceed independently on synthetic/source-bound ordinary lots.
+  Compile the two frozen target/stop/timeout and stop/timeout policies: next-open
+  entry, ten XNYS sessions, +3/-1.5 raw-dollar ATR14 barriers, stop-first collision,
+  stop gap at min(open,stop), target at target price and tenth-close timeout.
+  Retain source facts; unsupported ownership changes before sale remain unavailable.
+  The existing ledger, cost-once and bootstrap owners are reused. This compiler
+  does not establish portfolio-source admission or funded SPY improvement.
+
+Exit checks: source/alias/version tamper, sealed-before-body rejection, bounded
+source streams, sampling/deduplication and annotation metrics, exact parent parity,
+revision/clock/coverage poison, shared batch/live selection, exit collision/gap/
+missingness/raw-ATR evidence, focused consumer checks, Ruff/strict mypy and one
+consolidated review. No training or serving until the relevant authority passes.
+On failure retain explicit reasons and original evidence; no permissive fallback.
+Final promotion requires the frozen 252 new sessions plus ten maturity sessions;
+historical implementation/selection cannot substitute for future observations.
+
+
 ### October 5 bounded checkpoint: issuer content review inputs (complete; profile remains pending)
 
 Problem: the completed Alpaca content inventory and corrected SEC document archive
@@ -23,8 +140,8 @@ neutral value, feature publication, model fit or API activation. Qualification r
 must later sample both proposed events and rejected/unclassified records to measure
 missed real events as well as false event matches. No aggregate or target replay.
 
-Verified source checkpoint: content inventory `3e4f905eâ€¦e9bda` is complete; corrected
-SEC initial-fit documents `b3041a07â€¦69318` are complete (45,160 archived documents).
+Verified source checkpoint: content inventory `3e4f905e...e9bda` is complete; corrected
+SEC initial-fit documents `b3041a07...69318` are complete (45,160 archived documents).
 The older metadata-only note below is historical. Existing precision authorities
 admit analyst revisions only and do not admit this new full-content extraction.
 
