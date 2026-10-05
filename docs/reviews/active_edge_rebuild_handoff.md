@@ -1,169 +1,134 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: source scan running, qualification checks pending
+### Current continuation: source export complete; component checks running
 
-The requested 1%-remaining handoff was pushed in `a1e9cbe` and `5b95ade`.
-After the user's reset, the October 5 continuation meter reports 28% used at 14:16 UTC.
-Branch: `codex/v1-canonical-cleanup`; latest pushed implementation: `0471c66`.
-Astra step 3 remains `in_progress`; four existing fits are retained. Main and
-TradingFlow remain untouched.
+Branch `codex/v1-canonical-cleanup`; last pushed executable implementation
+`0471c66`, last pushed documentation `b82641a`. Astra step 3 remains in progress;
+four existing fits are retained. Main and TradingFlow are untouched.
+The user reset usage; latest inspected meter was 31% used at 15:11 UTC October 5.
+Update this handoff again at 99% used. Do not claim the whole plan is complete.
 
-Owned source scan started 2026-10-05 11:32:32 UTC. Command:
-`prepare-issuer-content-review`; native exec session `92732`; host Python
-PID `88592`; lease run ID `ca6bd0e1d47d467a8a89e1ea9574fe41`.
-Output: `data/research/swing_initial_fit_issuer_content_review_population_source_bound`.
-Owner: `data/runtime/heavy-job.owner.json`.
+The owned prepare-issuer-content-review job completed with exit 0 at 15:11 UTC,
+October 5, after starting 11:32:32 UTC. Session 92732 is closed, PID 88592 exited,
+and the source job lease was removed. Do not continue that session or rescan.
+Completed output:
+`data/research/swing_initial_fit_issuer_content_review_population_source_bound`.
+Manifest SHA256 `3c59845761740dc1a07a2f994cceaba53354c6f9486f4baa634ebd422a6a84ce`;
+request SHA256 `3ea48fb4d746d6b77be0d65e96d23261cb578e527d0a3dbbd450a13957088e62`;
+sample SHA256 `f19f46917b1d629bfd55515556b5732b7b4f45cfb7669b1e0901f1a0b59d25c1`.
+Status complete_review_population_only: 469,668 Alpaca occurrences, 47,011 SEC
+body records, 22,720 SEC index records, 516,679 versions, 466,635 sampling clusters,
+1,750 blind samples. Candidate clusters: 12,995 earnings, 739 guidance.
+Readable issuer-unknown versions: 25,742. Record counts include duplicate issuer
+copies and do not equal physical archive file counts. Historical capture remains
+proxy evidence; export alone grants no event, training or serving admission.
 
-Observation 13:24 UTC: SEC index pass completed; Alpaca progress reached
-415,000 retained occurrences. No later source error or complete manifest observed.
-Captured checkpoint SHA256:
-`c40146593d7a24eb125bea41336a4c5f6d500b3bff85b2d2771debaeabf95ee6`.
-Snapshot `.resume/32f89fee5cfd4510a091905970cbc7fe.sqlite`, SHA256
-`54a6a7d7f4e4b6f99e5aca2d4f32120e96ac42d0db0223b2e6f226688fb9d28a`.
-Request SHA256: `3ea48fb4d746d6b77be0d65e96d23261cb578e527d0a3dbbd450a13957088e62`.
-These are partial observations, not event qualification. The running job advances
-its pointer every 5,000 records; this captured hash becomes stale. Resume requires
-the current independently inspected checkpoint, immutable snapshot, unchanged
-implementation and source pins. Mutable `population.sqlite` is not resume authority.
-Preserve the earlier failed attempt's request.
+Actual two independent source-only reviewer files are still required. Blind packets
+contain no candidate disposition, return or other reviewer judgment. Neutral source
+version selection is frozen before review: minimum SHA256 of compact sorted UTF-8
+JSON [sample_id,source_family,source_id,source_version_sha256,text_sha256].
+Both reviewers receive the identical selected version. Original packets remain
+accessible; ambiguous judgments remain null, never fabricated negatives. Mechanical
+helper at C:/Users/manis/Documents/Codex/2026-09-28/c/source_review_tools.py selects,
+binds actual text hashes/quoted spans and serializes model-assisted judgments; it
+never infers labels. Reviews are unfinished and cannot be published as complete.
 
-Continue session `92732`; otherwise verify the exact PID, command and lease owner.
-Do not launch competing heavy tests/builds/training, kill collectors or edit files
-listed in the running request's implementation/source pins. After exit, verify
-lease removal and inspect the complete manifest or exact error. No assumption that
-all 469,668 Alpaca occurrences or retained SEC documents are finished is permitted.
+Uncommitted software scope: source qualification authority/CLI; explicit unchanged
+historical candle reuse proof and four preserved abstention histories; current
+124-to-126 issuer publication/replay and training consumers; complete pure candidate
+feature adapter; funded raw-source policy provider; saved temporal OOF evaluation
+and CLI; benchmark-cost repair. All require final focused checks before staging.
+APIs remain V1; internal identities remain unversioned. No compatibility fallback,
+blanket hash waiver, raw data overwrite, news rematching or target rebuilding.
 
-Stable uncommitted authority draft, including root's producer-provenance repair:
-- `src/market_predictor/research/issuer_content_qualification_authority.py`, SHA256
-  `b933f96c6feed82e36ce5dbb4d50b0a5e9deb0994590dc3f28018d2336dfd412`.
-- `tests/test_issuer_content_qualification_authority.py`, SHA256
-  `0bbb7738307aaa68cda2d95cfd751836964bdce94d8f392c19c49b172feed447`.
-Authority has 28 intended cases. The command adapter and its four tests are also
-written. No pytest, Ruff or strict mypy ran. Do not stage these drafts
-with a documentation commit. Next verification after lease release: focused tests,
-direct reaction-consumer regression, Ruff on both files and strict mypy with a
-fresh writable cache. Fix supported failures before implementation commit/push.
+Source authority retains the original 20-file producer inventory as historical
+provenance. Only two unrelated HoldingContract/SourcePin files may differ from the
+completed producer; the other 18 producer dependencies and all original data pins
+remain exact. Qualification independently pins its current implementations. This
+allows the demonstrated benchmark repair without rescanning source text or altering
+original producer provenance. Do not resume that producer under changed code.
 
-One consolidated code/ML review found a supported P2: exclusions keyed only by
-provider story suppressed a proven issuer when another issuer on the same article
-had missing identity evidence. The fix follows retained issuer/query lineage.
-Root also demonstrated unknown T1 before proven T2 escaping exclusion; later
-in-cutoff exact cluster/query evidence now supports conservative history suppression
-without assigning an issuer backward. No source/proof after the initial-fit cutoff
-supplies links. Ambiguity remains explicit. The reviewer confirmed both remediations
-in source/regression fixtures, but runtime checks remain pending. No additional
-general review or reopening of closed components is required.
+Benchmark repair is applied: zero cost requires benchmark sector, SPY/QQQ/canonical
+sector ETF, fixed-horizon policy, and no sale execution. Evaluation requires that
+same zero-cost role. Stocks retain 20 bps exactly once. New tests corrected exact
+XNYS sessions and assert the existing gross-value versus net-return semantics.
+The first combined runtime run stopped at a fixture's immutable-file overwrite;
+fixing test-only mutation yielded five passes. The next authority/CLI run yielded
+32 passes before a benchmark fixture failure. After the calendar fix, 17 benchmark
+cases passed before the gross-value assertion failed; that assertion is now fixed.
+The subsequent combined run yielded 43 passes before funded provider fixture binding
+failed: empty archive path targeted repository root. A focused repair is underway;
+production source-path checks must remain strict. No combined suite pass claimed.
 
-Frozen API: `publish_issuer_content_qualification(root, population_authority,
-reviewer_files, output)` consumes a complete pinned population and two independent
-source-only reviewer files. Bind sample ID, source ID, raw version hash, normalized
-text hash and supporting spans; replay canonical sample and qualification metrics.
-Write immutable `_authority.json` before event rows; outer manifest binds both
-without circular hashes. Retain every version disposition and rejected revision;
-never resurrect older text after an unknown newer revision. Future revisions remain
-metadata only. No fabricated labels, generic-news substitute, new recall veto,
-coverage completeness, serving or promotion claim.
+Ruff and strict mypy passed the affected source modules in three scopes (12 reuse/
+funded/OOF, 8 issuer consumers/publication/candidate, 8 root command/authority/
+accounting modules). Root repaired the authority's implicit import and untyped
+PyArrow constructor boundary. All affected draft test Ruff issues have been fixed;
+final tests after relevant edits are pending. No full suite, real reuse proof,
+126-column data publication, new model fit or funded SPY result exists yet.
 
-Actual independent reviews remain required before qualified features are published.
-The 126-column publication, training/serving consumption, two remaining frozen
-fits and funded SPY evaluation are unfinished. The bounded parallel accounting
-design is frozen: temporal OOF only, exact parent-pinned selection metadata,
-existing sector/trade limits, no outcome-based candidate filtering or new score
-threshold. Retain the 718-session score calendar; new entries stop 2024-05-13,
-followed by ten maturation sessions ending 2024-05-28. Hold lots across folds.
-Existing owners calculate exits, cash-funded NAV and 20/40-session uncertainty;
-remove only compiler-generated settlements before the evaluator simulates once.
-Preload corporate-action evidence under its own preceding lease, never nest it.
-NEW `swing/datasets/funded_policy_inputs.py` (15 intended cases) and
-`research/swing_oof_policy_evaluation.py` (25 intended cases) are stable drafts.
-OOF preserves canonical sale executions and rejects only generated settlement
-mechanics; it pins resampling code. All checks remain unrun while the worker runs.
-Current corrected source
-authority admits no-reported-action windows; dividend/payment/residual gaps must
-return exact unavailable evidence, not a manufactured full-calendar SPY result.
-Prospective 252 new decision sessions plus 10 maturity sessions remain future
-observations. No accepted model, SPY improvement, complete plan or main merge claimed.
+Current real reuse config `configs/swing_return_relationship_reuse.json`, SHA256
+`95dd86ec733a70a72c0d0a2f05de78e0111b71e31fef1786d424136141cc209c`,
+binds original 120/124 receipts/publications, current source settings, peer report
+and reviewed configuration differences. It preserves WTW, ATVI, INFO and SBNY
+historical abstentions through original proof/observation ownership. It does not
+invent current failure facts or silently erase unresolved histories. Run the real
+comparison only after component tests and final code checks pass. On exact equality,
+a fresh current 124 derivative/receipt may reuse original values; original bytes
+remain unchanged. Any real differences must be reported and resolved explicitly.
 
-Pending concrete accounting repair after source lease release: HoldingSpecification
-currently rejects zero-cost buy-and-hold benchmarks, while the evaluator accepts a
-20-bps benchmark but reports zero benchmark cost. Permit zero cost only for the
-explicit benchmark sector, SPY/QQQ/canonical sector ETF, fixed-horizon policy and
-no sale execution; require zero cost in the evaluator. Keep stock trading costs
-unchanged. Root prepared 19 benchmark regression cases; update only the benchmark
-fixture in test_swing_event_funding.py. Do not edit holding_accounting.py while
-its bytes are pinned by the running source request.
+Saved OOF evaluation uses only retained temporal predictions and exact source-bound
+selection metadata: 718 score sessions, 708 entry sessions through May 13, 2024,
+ten maturation sessions through May 28; holdings cross fold boundaries. No refit,
+positive-score threshold, outcome-based filtering or new search. Existing accounting
+and frozen bootstrap owners compute once only when all valuations are supported.
+Missing dividend/payment/residual facts produce exact unavailable IDs and reasons,
+not an invented full-calendar SPY result. The evaluate-saved-swing-policy CLI preloads
+corporate-action evidence in its preceding lease, then uses the canonical evaluator.
 
-Qualification retains the complete original producer implementation inventory as
-historical provenance. Only the two HoldingContract/SourcePin imports are exempt
-from current producer-byte comparison; all replay-relevant source/text/sample
-code and all original data pins remain exact. Current qualification dependencies,
-including those two files, are pinned independently. This avoids forcing a raw
-source rescan after the demonstrated accounting repair, without weakening producer
-resume checks or pretending old producer bytes were rewritten.
+The pure 120-to-124-to-126 adapter remains research-only. The actual return-serving
+migration is still pending: current V1 inference/persistence/maturation assumes
+classification probabilities. The remaining two fits require qualified issuer
+features and their independent receipt first. Final model promotion requires 252
+new future decision sessions plus ten maturation sessions; these cannot be completed
+with historical reruns. Do not merge a model as a proven SPY improvement without
+its acceptance evidence. No additional general review of closed components.
 
-Stable draft SHA256 pairs (source, tests):
-- Funded provider: 5e2c3a4a15736eef3b6602d963a4774312740e3510edf2f01310af05bcd7d0fc;
-  96fe7c48df2c0840d63c722eb5de1bbf3855be4986ba9408ef2feefc845c0da4.
-- Saved OOF evaluator: dd461249e3e13c5624b481f3030214899b246a672686e5ff8b731fc626b5111d;
-  501a60b450d07db148f2e394b5ccbe73435523383c78f26c3e8283d8b472c12f.
-No draft code is verified or committed. Continue the scan; only then apply the
-benchmark repair and run affected authority, command, provider, accounting and OOF
-checks, Ruff and strict mypy. A read-only design task is freezing the remaining
-126-column vertical wiring; it does not authorize changing the frozen experiment.
-126-column vertical wiring is drafted, not verified: new issuer reaction publication
-contract/monthly owner (9 intended cases), independent saved-row/source verifier,
-8 command cases plus research registry/inventory, and explicit return-training
-policy/readiness/input consumption (9 intended cases). The genuine synthetic chain
-uses native qualification, 124 receipt, monthly publication and replay; no positive
-receipt-validator double is retained. OOF now has the exact126 profile-order branch.
-No model settings, splits, targets, weights or estimator-imputation policy changed.
-Feature audit reflects this unverified state; actual source reviews/126 authority,
-new fits, funded results and live return-model inference remain unfinished.
 
-The attempted narrow archived124 evidence-role fix was stopped before repository
-edits: static original-byte recovery proved that its protected source semantics
-already differ after the previous canonical source migration. Exact evidence:
-C:/Users/manis/Documents/Codex/2026-09-28/c/work/relationship_fingerprints/drift_inventory.json
-records 50 mismatches (43 code files, 7 configuration files). Hash-matching producer
-snapshots came from local commit be474b5. The old policy requires failure facts and
-feature_plan_snapshot; the current policy changes those fields and uses exact
-standalone adjusted queries instead of combined/corrected readers. The first pinned
-124 sidecar has schema market_data.artifact_manifest.v1, which today's canonical
-reader rejects. This failure predates the pending benchmark-cost change. Merely
-exempting current code hashes would not prove unchanged features and is rejected.
+Return-serving design is frozen for the subsequent software checkpoint, after current
+component closure: replace the existing V1 swing classifier path with the single
+selected canonical fitted return regressor; no parallel classifier compatibility
+route or pseudo-probabilities. Bundle/candidate export binds exact profile/order,
+SPY excess-return target, ten-session horizon, model/preprocessing/source authorities,
+and selection-wide information boundary. Existing signed promotion and atomic
+activation remain required. Inference uses predict_return fitted medians, missingness
+indicators and fitted scaler; contractual NaNs are permitted, infinity/text/bools and
+shape/order mismatches rejected. Rank finite signed predicted_excess_return with
+stable security-ID ties and existing sector limits; no positive-score filter or
+outcome/maturity selection. Update response, snapshot, intents and monitoring together
+under /v1/, removing probability/calibration assumptions. Observed live profile inputs
+require genuine source qualification; historical proxies cannot serve. Tests must
+prove canonical batch/live/single parity, negative/>1 score preservation, ties/limits,
+zero-selection sessions, poisoned inputs, persistence/maturation identities and
+unsigned/research-only candidate rejection. Rollback selects only a previously
+verified compatible return generation; otherwise abstain. No activation or economic
+acceptance is implied. Design agent completed this bounded design; code is not started.
 
-Only the original and utc_clocks124 publications exist, both historical; no modern
-124 source publication exists. Revised design review is freezing a narrow reuse
-proof/current derivative: inspect original manifest/receipt/sidecar bytes only at
-exact historical pins, retain all matched120 values/targets/clocks/eligibility,
-reuse the completed peer/configuration audits, and check only the four relationship
-additions against the current verified sources. Do not rerun matching/news/targets,
-rewrite old hashes, execute archived code or add an obsolete-format production
-fallback. Any actual numerical difference must be recorded before repair/retraining.
-Exact new scope/API and checks remain pending; do not run the abandoned AST-only fix.
-The existing qualification20-file producer-provenance repair remains independently
-valid. Keep holding_accounting.py untouched while the source scan pins it. Draft
-126 publishers/consumers are not admitted by synthetic fixtures or code alone.
-Current reuse remediation is drafted (52 intended tests, unrun). The historical120
-request is validated against its actual fields, rather than invented admission
-flags. New datasets/preserved_relationship_abstentions.py binds original facts,
-receipt, observations and source hashes to each complete current decision group.
-Shared read_stock uses the unchanged boundary validator on the full current unit
-before clipping valid-prefix sessions. WTW stays whole-history unavailable; ATVI,
-INFO and SBNY retain their original suffix boundaries. Changed boundary values,
-clocks or original observation counts cannot be waived. Both actual configurations
-keep predictor_failure_facts=null; no new failed checkpoint is manufactured.
-New features/return_candidate.py composes the existing120/124/126 kernels with
-explicit baseline availability and compatible bar authorities, retaining separate
-component/authority hashes. Its 22 intended cases and review are complete in source,
-but pytest/Ruff/mypy are unrun. Source review found no supported defect. All source,
-training, promotion and serving admission flags remain false. Actual return-serving
-replacement remains pending: the current V1 inference, persistence and maturation
-paths assume classification probabilities. Pure candidate features do not change
-that interface or admit a research regressor to serving.
-Root added two benchmark evaluator rejection cases to test_swing_event_funding.py;
-the accounting repair and its benchmark fixture remain queued until source exit.
-All changed draft Python files are LF; no running producer pin changed.
+October 5 resume at 19:09 UTC: the interrupted native test session8727 and old
+review agents are no longer available. No matching pytest process or project
+source lease remained. The interrupted run showed89 core cases plus the first
+native issuer-publication case passing; it produced no final suite report and
+must not be described as complete. Core verification is rerunning with durable
+JUnit/stdout/exit files under
+C:/Users/manis/Documents/Codex/2026-09-28/c/review-results/core-resume-1912.*,
+owned native session70355. Source reviewerA resumes140 persisted assessments;
+reviewerB resumes728. Both continue only their own independent source-only work.
+New agents source_reviewer_a_resume/source_reviewer_b_resume; logical reviewer IDs
+unchanged. Neither review is complete. Neutral selection manifest SHA256
+ccde69184e492356f76c1e26b52e09b4c5375c7292785f145ea7e57b956f1b25.
+Final all-draft Ruff and strict mypy over28 changed/new source modules passed before
+interruption. Usage meter35% used at19:09UTC; user1%-remaining handoff still applies.
+### Historical checkpoint record (superseded by the continuation above)
 
 ### Latest continuation: pinned historical bridge inspection repaired
 
