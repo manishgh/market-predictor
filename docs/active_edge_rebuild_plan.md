@@ -1,75 +1,86 @@
 # Active Edge Rebuild Plan
 
-### Running saved-source job and requested 1%-remaining handoff
+### Current continuation: source scan running, qualification checks pending
 
-Usage meter reported 99% used (1% remaining) on 2026-10-05. This refresh
-fulfills the user's handoff request; a reported reset did not change the meter
-observed by this turn. Branch: `codex/v1-canonical-cleanup`; last pushed commit
-before this documentation refresh: `703aaa5`; latest implementation: `0471c66`.
-Astra step 3 remains `in_progress`. Main and TradingFlow remain untouched.
+The requested 1%-remaining handoff was pushed in `a1e9cbe` and `5b95ade`.
+After the user's reset and latest continuation, the account meter reports 0% used.
+Branch: `codex/v1-canonical-cleanup`; latest pushed implementation: `0471c66`.
+Astra step 3 remains `in_progress`; four existing fits are retained. Main and
+TradingFlow remain untouched.
 
-The corrected source scan started at 2026-10-05 11:32:32 UTC. Command:
+Owned source scan started 2026-10-05 11:32:32 UTC. Command:
 `prepare-issuer-content-review`; native exec session `92732`; host Python
 PID `88592`; lease run ID `ca6bd0e1d47d467a8a89e1ea9574fe41`.
 Output: `data/research/swing_initial_fit_issuer_content_review_population_source_bound`.
 Owner: `data/runtime/heavy-job.owner.json`.
 
-Observation at approximately 12:03 UTC: SEC index pass had completed; Alpaca
-checkpoint contained 95,000 retained occurrences. Worker CPU: 1702.89 seconds;
-working set: 386,375,680 bytes. No later source error or complete output manifest
-had been observed. These are partial scan observations, not event qualification.
-
-Independently captured checkpoint SHA256 at 95,000 rows:
-`180b675b3c46dcc06c23da3e6ed13c3aca329fe624d123f58cf7a2dad75c4ad4`.
-Referenced snapshot: `.resume/bedd95d6e0c04dafab1126f93aa84065.sqlite`;
-SHA256: `61873970c00966a214021faf671f2230c23f9466959972ab47f3aa0af14b7cfc`.
+Observation 12:19 UTC: SEC index pass completed; Alpaca checkpoint reached
+170,000 retained occurrences. No later source error or complete manifest observed.
+Captured checkpoint SHA256:
+`c40146593d7a24eb125bea41336a4c5f6d500b3bff85b2d2771debaeabf95ee6`.
+Snapshot `.resume/32f89fee5cfd4510a091905970cbc7fe.sqlite`, SHA256
+`54a6a7d7f4e4b6f99e5aca2d4f32120e96ac42d0db0223b2e6f226688fb9d28a`.
 Request SHA256: `3ea48fb4d746d6b77be0d65e96d23261cb578e527d0a3dbbd450a13957088e62`.
-The running job advances this pointer every 5,000 records: this captured hash will
-become stale. Resume requires the current independently inspected checkpoint hash,
-its immutable snapshot, unchanged implementation and source pins. Mutable
-`population.sqlite` is not resume authority. Preserve the earlier failed request.
+These are partial observations, not event qualification. The running job advances
+its pointer every 5,000 records; this captured hash becomes stale. Resume requires
+the current independently inspected checkpoint, immutable snapshot, unchanged
+implementation and source pins. Mutable `population.sqlite` is not resume authority.
+Preserve the earlier failed attempt's request.
 
-Continue reading session `92732`; if unavailable, verify exact PID, command and
-lease owner. Do not launch competing heavy tests/builds/training, kill collectors,
-or edit implementation files whose hashes this running job captured. After exit,
-verify lease removal and inspect the actual complete manifest or error. Never
-assume all 469,668 Alpaca occurrences or SEC documents have completed from this
-partial checkpoint.
+Continue session `92732`; otherwise verify the exact PID, command and lease owner.
+Do not launch competing heavy tests/builds/training, kill collectors or edit files
+listed in the running request's implementation/source pins. After exit, verify
+lease removal and inspect the complete manifest or exact error. No assumption that
+all 469,668 Alpaca occurrences or retained SEC documents are finished is permitted.
 
-Uncommitted parallel work from `/root/consumer_review` is now a stable draft:
-NEW `src/market_predictor/research/issuer_content_qualification_authority.py`
-SHA256 `c9b0458861a06bf975f839235bf6951c7c94b88a1e6d5324dfe0f6f346689bb7`;
-NEW `tests/test_issuer_content_qualification_authority.py`
-SHA256 `118fe62372df943ac3ede63931caab8279aca34a8bfc6b885a54161c49c11c62`.
-Both files exist. Root manually read the source and tests; source AST parsing was
-reported successful. Eighteen intended parametrized cases have not been collected
-or run. No pytest, Ruff or strict mypy results exist for this component. Agent has
-finished; no existing pinned module changed. Do not stage this unfinished code
-with documentation. After the lease releases, run its focused tests plus direct
-reaction-consumer regression, Ruff on both new files and strict mypy with a fresh
-writable cache. Fix supported failures before implementation commit/push.
+Stable uncommitted authority draft from `/root/consumer_review`:
+- `src/market_predictor/research/issuer_content_qualification_authority.py`, SHA256
+  `b344f85057a03fb9eda5dff1d970bb401110caafa47d6e78a58754eeaf90b1bc`.
+- `tests/test_issuer_content_qualification_authority.py`, SHA256
+  `d2717aeafe586895f4059c0fa8d92119b3cebd5606aa90f3ba368e5514fcdafd`.
+Only these new code/test files were edited. No pytest, Ruff or strict mypy ran;
+23 intended parametrized cases remain uncollected/unrun. Do not stage this draft
+with a documentation commit. Next verification after lease release: focused tests,
+direct reaction-consumer regression, Ruff on both files and strict mypy with a
+fresh writable cache. Fix supported failures before implementation commit/push.
 
-Frozen next component: `publish_issuer_content_qualification(root,
-population_authority, reviewer_files, output)` consumes a complete pinned
-population and two independent source-only reviewer files. Every review binds
-sample ID, source ID, raw version hash, normalized text hash and supporting spans.
-Replay the frozen population/sample and existing qualification metrics; no invented
-labels, generic news replacement, new recall veto, serving or promotion claim.
-Write immutable `_authority.json` before event rows; the outer manifest binds
-both without circular hashes. Retain all version dispositions. The current reaction
-consumer requires proven identity and clocks for every event row; exclude an entire
-source-event/issuer history when any in-cutoff version lacks them, with explicit
-reasons and counts. Never drop an unknown newer revision and admit older text.
-Future revisions remain metadata only for initial-fit features.
+One consolidated code/ML review found a supported P2: exclusions keyed only by
+provider story suppressed a proven issuer when another issuer on the same article
+had missing identity evidence. The fix follows retained issuer/query lineage.
+Root also demonstrated unknown T1 before proven T2 escaping exclusion; later
+in-cutoff exact cluster/query evidence now supports conservative history suppression
+without assigning an issuer backward. No source/proof after the initial-fit cutoff
+supplies links. Ambiguity remains explicit. The reviewer confirmed both remediations
+in source/regression fixtures, but runtime checks remain pending. No additional
+general review or reopening of closed components is required.
 
-After the source job releases its lease, finish and review this authority component,
-run its focused poison/direct-consumer tests, Ruff and strict mypy, then commit/push
-and close both continuity documents. Actual independent reviews are still required
-before qualified features can be published. The 126-column profile publication,
-training/serving consumption, last two frozen fits and funded SPY evaluation remain
-unfinished. Four existing fits are retained. Prospective 252 new decision sessions
-plus 10 maturity sessions cannot be manufactured from today's historical outputs.
-No accepted model, SPY improvement, complete plan or main merge is claimed.
+Frozen API: `publish_issuer_content_qualification(root, population_authority,
+reviewer_files, output)` consumes a complete pinned population and two independent
+source-only reviewer files. Bind sample ID, source ID, raw version hash, normalized
+text hash and supporting spans; replay canonical sample and qualification metrics.
+Write immutable `_authority.json` before event rows; outer manifest binds both
+without circular hashes. Retain every version disposition and rejected revision;
+never resurrect older text after an unknown newer revision. Future revisions remain
+metadata only. No fabricated labels, generic-news substitute, new recall veto,
+coverage completeness, serving or promotion claim.
+
+Actual independent reviews remain required before qualified features are published.
+The 126-column publication, training/serving consumption, two remaining frozen
+fits and funded SPY evaluation are unfinished. The bounded parallel accounting
+design is frozen: temporal OOF only, exact parent-pinned selection metadata,
+existing sector/trade limits, no outcome-based candidate filtering or new score
+threshold. Retain the 718-session score calendar; new entries stop 2024-05-13,
+followed by ten maturation sessions ending 2024-05-28. Hold lots across folds.
+Existing owners calculate exits, cash-funded NAV and 20/40-session uncertainty;
+remove only compiler-generated settlements before the evaluator simulates once.
+Preload corporate-action evidence under its own preceding lease, never nest it.
+`/root/code_review` owns NEW `swing/datasets/funded_policy_inputs.py` and its tests;
+`/root/consumer_review` is freezing NEW `research/swing_oof_policy_evaluation.py`
+and tests. No heavy checks while the source worker runs. Current corrected source
+authority admits no-reported-action windows; dividend/payment/residual gaps must
+return exact unavailable evidence, not a manufactured full-calendar SPY result.
+Prospective 252 new decision sessions plus 10 maturity sessions remain future
+observations. No accepted model, SPY improvement, complete plan or main merge claimed.
 
 ### Latest continuation: pinned historical bridge inspection repaired
 
