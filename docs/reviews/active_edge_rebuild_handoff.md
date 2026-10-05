@@ -36,11 +36,18 @@ verify lease removal and inspect the actual complete manifest or error. Never
 assume all 469,668 Alpaca occurrences or SEC documents have completed from this
 partial checkpoint.
 
-Uncommitted parallel work belongs to `/root/consumer_review`: NEW
-`src/market_predictor/research/issuer_content_qualification_authority.py` and
-planned NEW `tests/test_issuer_content_qualification_authority.py`. The module
-existed at this observation; tests/review/lint/type checks have not run. Do not
-stage this unfinished implementation with the documentation refresh.
+Uncommitted parallel work from `/root/consumer_review` is now a stable draft:
+NEW `src/market_predictor/research/issuer_content_qualification_authority.py`
+SHA256 `c9b0458861a06bf975f839235bf6951c7c94b88a1e6d5324dfe0f6f346689bb7`;
+NEW `tests/test_issuer_content_qualification_authority.py`
+SHA256 `118fe62372df943ac3ede63931caab8279aca34a8bfc6b885a54161c49c11c62`.
+Both files exist. Root manually read the source and tests; source AST parsing was
+reported successful. Eighteen intended parametrized cases have not been collected
+or run. No pytest, Ruff or strict mypy results exist for this component. Agent has
+finished; no existing pinned module changed. Do not stage this unfinished code
+with documentation. After the lease releases, run its focused tests plus direct
+reaction-consumer regression, Ruff on both new files and strict mypy with a fresh
+writable cache. Fix supported failures before implementation commit/push.
 
 Frozen next component: `publish_issuer_content_qualification(root,
 population_authority, reviewer_files, output)` consumes a complete pinned
