@@ -1,9 +1,9 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: software pushed; actual-data qualification running
+### Current continuation: tested real-data repairs pushed; actual reruns next
 
 ML implementation 771d053 and corrective CI implementation 892100c are pushed on
-codex/v1-canonical-cleanup. Last documentation checkpoint is 3fb9ca9. Astra step 3 remains in progress; four
+codex/v1-canonical-cleanup. Last documentation checkpoint is 88fd60a. Astra step 3 remains in progress; four
 existing fits are retained. Main and TradingFlow are untouched. APIs remain V1,
 internal identities unversioned. No compatibility fallback or accepted model claim.
 
@@ -65,12 +65,56 @@ row/disposition, clock and reviewer check still runs; closed guard/producer code
 and all data remain unchanged. Bounded review accepted the repair; injected pressure
 at projection record 256 prevents a completed manifest. No old attempt is resumed.
 
-Fresh actual-data qualification is running in native session 64007 under 771d053,
-started 20:41 UTC October 5, using exactly the same population and reviewer hashes.
-Output data/research/swing_initial_fit_issuer_content_qualified_batched; durable
-review-results/qualification-real-batched-2041.*. It uses the canonical heavy lease.
-No measured family admission is claimed until this job completes. Do not overlap
-another heavy data/model/test job, change pinned source code, or weaken its frozen gates.
+Actual-data qualification session 64007 ended exit 2 at 21:01 UTC October 5:
+system memory use reached 90.4%, with 1.50 GiB available, above the frozen 90% limit.
+Its lease is removed. Output data/research/swing_initial_fit_issuer_content_qualified_batched
+contains only _request.json and _authority.json; there are no events, dispositions
+or completed manifest. Durable qualification-real-batched-2041 stdout/exit evidence
+is retained. Do not resume this failed path or claim a qualified publication.
+Intermediate real-review metrics: earnings joint positives 225/300, lower bound
+0.7067674358995081; guidance 216/250, lower bound 0.8244206756033808. Both families
+fail frozen gates. The wrong_issuer counters (13/4) count any reviewer False,
+including disagreements; they do not establish every article names a wrong company.
+For example, source 0001193125-21-011422/5 names Broadcom but announces debt tender
+results. Do not mutate reviews, lower gates or substitute invented news features.
+
+Actual reuse attempt 39985 ended exit 2 with no report; diagnostic 87347 ended exit 1.
+The preserved chained traceback (relationship-reuse-real-trace-2110.log) identifies
+relationship_historical_evidence.py:77, not an invalid raw-price plan: the new
+inspector accessed baseline child['rows'], but the original 120 publication owns
+rows/decision_ids_sha256 at month level and child audit.rows. Original 124 child
+has direct rows/hash declarations. Both saved publications contain their metadata.
+
+Repair 1d0d3be has one explicit historical monthly-record projection:
+baseline month count/hash plus checked audit.rows; relationship mandatory matching
+child count/hash. Sidecar and physical identity checks use that same projection.
+The original artifact bytes are unchanged; canonical readers gain no fallback.
+The old synthetic baseline unit helper was corrected to the actual document shape,
+and 18 unit cases assert both shapes, rehashed contradictions, physical rows/IDs and
+post-inspection tamper. This does not claim an actual reuse pass.
+
+Repair 1d0d3be replaces the history dictionaries with one
+separate temporary SQLite index (8 MiB cache, temp_store=FILE, mmap_size=0), keeping
+all causal clock/owner/proof/fallback/exclusion rules and source connections immutable.
+It releases completed review-cluster objects before projection in publisher/replay.
+A bounded review found SQLite could coerce integer query IDs into text matches;
+query matching now requires a nonempty string and a unit regression preserves the
+old ambiguity reasons. Final exclusion-list shape/order and every source disposition
+remain unchanged and guarded. No source/review/gate/config/data-format changes.
+Repairs are now committed and pushed as 1d0d3be. Focused run 60429 completed:
+91 cases outside the new ownership file passed (history 9, authority 29, prior reuse
+52, positive source-chain 1); that file initially had 6 failures/9 setup errors
+because its deliberate synthetic rewrites used the production immutable writer.
+Only that unit file was corrected with an explicit existing-fixture rewrite helper.
+Its complete rerun passed all 18 cases in 12.93s, with no production writer change.
+Durable receipts: real-failure-repairs-2118.* (725.28s, exit 1 retained) and
+historical-ownership-units-2122.* (18 passed, exit 0). These are unit-only results,
+not actual market-data integration. Ruff passed all affected Python; strict typing
+passed four source modules. Changed tracked Python line endings were normalized
+with identical parsed syntax trees; pinned config and source-data bytes untouched.
+Both bounded reviews are complete; no additional general review is needed.
+Actual repair reruns remain pending. Close this documentation checkpoint before
+starting either real job, then freeze code/config for its lifetime.
 
 Pushed software: qualification authority/CLI; explicit old/current 124 reuse proof
 with WTW/ATVI/INFO/SBNY abstentions preserved; 124-to-126 publication/replay and
@@ -125,7 +169,7 @@ verified compatible return generation, else abstain. Implementation not started.
 Final acceptance requires 252 genuinely new decision sessions plus ten maturity sessions;
 historical reruns and software passes do not prove SPY improvement or authorize it.
 
-Latest inspected usage 43% used; update this handoff again at 99% used as requested.
+Latest inspected usage 47% used; update this handoff again at 99% used as requested.
 No reset redeemed. Do not claim the whole Astra plan is complete.
 
 ### Historical checkpoint record (superseded by the continuation above)
@@ -2533,24 +2577,22 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: original Astra ordered checkpoint 3, source-linked issuer
-content qualification. Finish actual-data qualification session 64007 under pushed
-implementation 771d053. Both independent 1,750-sample source reviews are complete
-and copied unchanged into the project; do not repeat them or the source export.
-Core 215, direct-consumer 258 and final authority/positive-unit 43 cases passed;
-these are unit/fixture checks, not real-data integration. Close this documentation
-checkpoint on codex/v1-canonical-cleanup. After qualification releases the heavy
-lease, run the actual preserved 124 reuse comparison with
-configs/swing_return_relationship_reuse.json and SHA256
+Exact next checkpoint: original Astra ordered checkpoint 3. Repairs 1d0d3be are
+pushed and unit-verified; close this documentation checkpoint. Then rerun actual
+qualification into a fresh directory with unchanged source/review hashes and
+actual 124 reuse with config SHA256
 95dd86ec733a70a72c0d0a2f05de78e0111b71e31fef1786d424136141cc209c.
-Only a passed exact source/value/clock/population comparison authorizes the fresh
-current 124 derivative. Qualified source authority and its current 124 receipt
-precede actual 126 publication, independent receipt/readiness, and the remaining
-two frozen fits. Use retained provider data and actual implementations throughout;
-no patched readers, calculations or fabricated evidence. Report any failed source
-family gate exactly; do not relax thresholds. Keep later SEC content sealed.
-No generic aggregate-news fit, regularization search, target reconstruction,
-TradingFlow write or API-version change belongs to this checkpoint.
+Only one heavy job at a time; freeze pinned source/configs during each run.
+Do not repeat completed export, matching, independent reviews or passed unit scopes.
+Preserve failed qualification 64007, reuse 39985/diagnostic 87347, and the failed
+unit attempt 60429 alongside corrected 18-case unit receipt. Intermediate real
+review metrics reject both families; preserve exact judgments/gates and report
+final measured results without invented events or assumed training admission.
+Only a passed exact reuse comparison authorizes current 124 derivative/receipt;
+qualified source and 124 authorities precede actual 126 publication, receipt/readiness
+and the two remaining fits. No generic news trial, target rebuild, API-version change
+or TradingFlow write. The no-synthetic CI correction is closed in 892100c/88fd60a.
+Main and TradingFlow remain untouched.
 
 Publisher verification uses `.venv/Scripts/python.exe`, `PYTHONDONTWRITEBYTECODE=1`,
 writable TEMP/TMP, `-p no:cacheprovider` and a unique writable `--basetemp`:
