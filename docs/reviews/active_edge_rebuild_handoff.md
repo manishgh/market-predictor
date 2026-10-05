@@ -3,7 +3,7 @@
 ### Current continuation: source scan running, qualification checks pending
 
 The requested 1%-remaining handoff was pushed in `a1e9cbe` and `5b95ade`.
-After the user's reset and latest continuation, the account meter reports 0% used.
+After the user's reset, the October 5 continuation meter reports 8% used.
 Branch: `codex/v1-canonical-cleanup`; latest pushed implementation: `0471c66`.
 Astra step 3 remains `in_progress`; four existing fits are retained. Main and
 TradingFlow remain untouched.
@@ -14,8 +14,8 @@ PID `88592`; lease run ID `ca6bd0e1d47d467a8a89e1ea9574fe41`.
 Output: `data/research/swing_initial_fit_issuer_content_review_population_source_bound`.
 Owner: `data/runtime/heavy-job.owner.json`.
 
-Observation 12:19 UTC: SEC index pass completed; Alpaca checkpoint reached
-170,000 retained occurrences. No later source error or complete manifest observed.
+Observation after 13:01 UTC: SEC index pass completed; Alpaca progress reached
+345,000 retained occurrences. No later source error or complete manifest observed.
 Captured checkpoint SHA256:
 `c40146593d7a24eb125bea41336a4c5f6d500b3bff85b2d2771debaeabf95ee6`.
 Snapshot `.resume/32f89fee5cfd4510a091905970cbc7fe.sqlite`, SHA256
@@ -33,13 +33,13 @@ listed in the running request's implementation/source pins. After exit, verify
 lease removal and inspect the complete manifest or exact error. No assumption that
 all 469,668 Alpaca occurrences or retained SEC documents are finished is permitted.
 
-Stable uncommitted authority draft from `/root/consumer_review`:
+Stable uncommitted authority draft, including root's producer-provenance repair:
 - `src/market_predictor/research/issuer_content_qualification_authority.py`, SHA256
-  `b344f85057a03fb9eda5dff1d970bb401110caafa47d6e78a58754eeaf90b1bc`.
+  `b933f96c6feed82e36ce5dbb4d50b0a5e9deb0994590dc3f28018d2336dfd412`.
 - `tests/test_issuer_content_qualification_authority.py`, SHA256
-  `d2717aeafe586895f4059c0fa8d92119b3cebd5606aa90f3ba368e5514fcdafd`.
-Only these new code/test files were edited. No pytest, Ruff or strict mypy ran;
-23 intended parametrized cases remain uncollected/unrun. Do not stage this draft
+  `0bbb7738307aaa68cda2d95cfd751836964bdce94d8f392c19c49b172feed447`.
+Authority has 28 intended cases. The command adapter and its four tests are also
+written. No pytest, Ruff or strict mypy ran. Do not stage these drafts
 with a documentation commit. Next verification after lease release: focused tests,
 direct reaction-consumer regression, Ruff on both files and strict mypy with a
 fresh writable cache. Fix supported failures before implementation commit/push.
@@ -74,14 +74,42 @@ followed by ten maturation sessions ending 2024-05-28. Hold lots across folds.
 Existing owners calculate exits, cash-funded NAV and 20/40-session uncertainty;
 remove only compiler-generated settlements before the evaluator simulates once.
 Preload corporate-action evidence under its own preceding lease, never nest it.
-`/root/code_review` owns NEW `swing/datasets/funded_policy_inputs.py` and its tests;
-`/root/consumer_review` is freezing NEW `research/swing_oof_policy_evaluation.py`
-and tests. No heavy checks while the source worker runs. Current corrected source
+NEW `swing/datasets/funded_policy_inputs.py` (15 intended cases) and
+`research/swing_oof_policy_evaluation.py` (24 intended cases) are stable drafts.
+OOF preserves canonical sale executions and rejects only generated settlement
+mechanics; it pins resampling code. All checks remain unrun while the worker runs.
+Current corrected source
 authority admits no-reported-action windows; dividend/payment/residual gaps must
 return exact unavailable evidence, not a manufactured full-calendar SPY result.
 Prospective 252 new decision sessions plus 10 maturity sessions remain future
 observations. No accepted model, SPY improvement, complete plan or main merge claimed.
 
+Pending concrete accounting repair after source lease release: HoldingSpecification
+currently rejects zero-cost buy-and-hold benchmarks, while the evaluator accepts a
+20-bps benchmark but reports zero benchmark cost. Permit zero cost only for the
+explicit benchmark sector, SPY/QQQ/canonical sector ETF, fixed-horizon policy and
+no sale execution; require zero cost in the evaluator. Keep stock trading costs
+unchanged. Root prepared 19 benchmark regression cases; update only the benchmark
+fixture in test_swing_event_funding.py. Do not edit holding_accounting.py while
+its bytes are pinned by the running source request.
+
+Qualification retains the complete original producer implementation inventory as
+historical provenance. Only the two HoldingContract/SourcePin imports are exempt
+from current producer-byte comparison; all replay-relevant source/text/sample
+code and all original data pins remain exact. Current qualification dependencies,
+including those two files, are pinned independently. This avoids forcing a raw
+source rescan after the demonstrated accounting repair, without weakening producer
+resume checks or pretending old producer bytes were rewritten.
+
+Stable draft SHA256 pairs (source, tests):
+- Funded provider: 5e2c3a4a15736eef3b6602d963a4774312740e3510edf2f01310af05bcd7d0fc;
+  96fe7c48df2c0840d63c722eb5de1bbf3855be4986ba9408ef2feefc845c0da4.
+- Saved OOF evaluator: 86ee83bcf0527f7dc58074e54e2c9091f65b4fb396fe9894374c99eea4f7f085;
+  aee3d3f9f43eacb91227c49b7e2d6b8b569f2ffbef01369f5c33655a1f01e474.
+No draft code is verified or committed. Continue the scan; only then apply the
+benchmark repair and run affected authority, command, provider, accounting and OOF
+checks, Ruff and strict mypy. A read-only design task is freezing the remaining
+126-column vertical wiring; it does not authorize changing the frozen experiment.
 ### Latest continuation: pinned historical bridge inspection repaired
 
 Implementation `0471c66` is pushed after the first real source job demonstrated
