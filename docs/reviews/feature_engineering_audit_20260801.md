@@ -10,19 +10,26 @@ No extra model specification or API version is introduced.
 
 | Layer | Current evidence/status |
 | --- | --- |
-| Source collection | Existing initial-fit Alpaca inventory and corrected SEC archive retained; later SEC bodies stay sealed. Completed source export binds 516,679 versions and 1,750 blind samples in manifest 3c59845761740dc1a07a2f994cceaba53354c6f9486f4baa634ebd422a6a84ce. No event admission follows from exporting text. |
-| Source clocks and aliases | New read-only source reader passes 15 tests. SEC identity resolves at filing availability and retains a distinct identity clock; causal names come from original index CIK/name blocks. |
-| Candidate precision and recall | Deterministic announcement sampling and governance metrics implemented. Two independent model-assisted source-only reviews resumed from 140 and 728 saved assessments; neither complete reviewer file or measured family admission exists yet. Missing pairs prevent qualified feature publication. |
-| Historical/live calculation | Shared 124-to-126 projection passes 313 affected feature tests, including diagnostic types under both pandas string inference settings. The complete 120-to-126 candidate adapter is drafted with 22 unrun cases; its source review found no defect. It requires explicit baseline observation semantics and compatible component authorities, with separate source/profile hashes and no admission claim. Actual qualified publication and observed live source binding remain missing. |
-| Ordered feature contract | The unversioned reaction profile fixes 126 columns and three-day selection. Monthly publication and independent replay are drafted. The only existing124 parents are historical; a current source-input/value reuse proof is drafted with 52 unrun cases and four explicitly preserved exclusions. No passed real proof, current124 derivative or126 authority is published. |
-| Training/serving consumers | Explicit126 research dispatch and matching receipt checks are drafted with nine unrun integration cases. Existing120/124 values, targets, folds and weights remain retained; no remaining fits started. V1 live inference, prediction persistence and maturation still assume classifier probabilities. Pure candidate construction does not approve a return regressor or replace those serving contracts. |
-| API representation | Public V1 unchanged. Reaction values cannot be served until the source, profile and accepted model are bound through the inference reader. |
-| Poison/tamper/parity | Component tests cover revisions, identity clocks, unknown coverage, parent preservation and shared construction. Population future-revision and interrupted-checkpoint regressions added; full real-data replay remains unperformed. |
-| Frozen funded exits | New source-bound ordinary-lot compiler passes 29 focused tests, using existing accounting/fill costs. Full selected portfolio sources, funded SPY evaluation and model acceptance remain missing. |
+| Source collection | Retained initial-fit Alpaca inventory and corrected SEC archive. Completed export binds 516,679 versions and 1,750 blind samples in manifest 3c59845761740dc1a07a2f994cceaba53354c6f9486f4baa634ebd422a6a84ce. Later SEC bodies stay sealed. Exporting text does not admit an event. |
+| Source clocks and aliases | Filing availability and issuer identity clocks remain distinct. Original historical capture gaps remain declared proxies; no past observation timestamps are invented. |
+| Candidate precision and recall | Both independent source-only model-assisted reviewers completed all 1,750 samples. Their immutable project copies are hash-bound. Actual qualification session 64007 is running under pushed implementation 771d053 against these reviews and retained sources. Family precision, recall and admission have not yet been measured. Frozen gates remain unchanged. |
+| Historical/live calculation | Shared 124-to-126 projection and complete 120-to-126 candidate adapter are implemented and unit-tested. The adapter requires explicit baseline observation semantics and compatible component authorities. Actual qualified publication and observed live source binding remain pending. |
+| Ordered feature contract | Reaction profile fixes 126 columns and three-day selection. Monthly publication and independent replay are implemented and unit-tested. Preserved 124 source/value/clock reuse comparison is implemented, including WTW/ATVI/INFO/SBNY exclusions. Actual reuse proof, current 124 derivative and actual 126 authority have not run. Original artifacts and targets remain unchanged. |
+| Training/serving consumers | Explicit 126 research dispatch and matching receipt checks are implemented and unit-tested. Original folds, weights, estimators and targets remain frozen; two issuer-profile fits remain pending. V1 return-regressor serving design is frozen but not implemented. Current serving still assumes classifier probabilities. |
+| API representation | Public API remains V1. Pure candidate construction grants no training, promotion or serving admission. Live reaction values require observed sources, profile binding and an accepted return model. |
+| Poison/tamper/parity | Unit fixtures exercise future revisions, identity clocks, unknown coverage, parent preservation, interrupted checkpoints, source/value replay and resource pressure. The positive synthetic source-chain unit uses actual calculation/replay code and independent reaction-value checks. It is not market-data integration evidence. |
+| Frozen funded exits | Raw-source funded provider, saved temporal OOF evaluator and benchmark cost repair are implemented and unit-tested. Stock costs remain 20 bps per round trip; eligible fixed-horizon SPY/QQQ/sector benchmarks have zero costs. Actual funded comparisons and accepted SPY improvement remain pending. Missing payment/action facts must remain explicitly unavailable. |
 
-These are component software results. They do not admit a feature/model, show SPY
-outperformance, or satisfy the future 252 decision sessions plus ten maturity
-sessions required for prospective assessment.
+Implementation 771d053 is pushed. Selected unit/fixture checks passed: core 215,
+direct-consumer 258 and final authority/positive-chain 43. Ruff and strict typing
+passed affected source modules. Synthetic data and mocks are restricted to unit
+tests by the October 5 user instruction recorded in AGENTS.md. Actual qualification,
+reuse, feature publication, training and evaluation must use retained/provider data
+and actual readers/calculations without patched admission or model output.
+
+These software results do not prove SPY outperformance or satisfy the future 252
+decision sessions plus ten maturity sessions required for prospective assessment.
+TradingFlow and main remain untouched.
 
 ## User-Confirmed Astra Plan (October 4)
 
