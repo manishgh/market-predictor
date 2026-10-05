@@ -1,5 +1,35 @@
 # Active Edge Rebuild Handoff
 
+### Running saved-source job: do not launch a competing heavy process
+
+After `0471c66` implementation and `6b457b4` documentation were pushed,
+the corrected source scan started at 2026-10-05 11:32:32 UTC. Owned command:
+`prepare-issuer-content-review`; native exec session `92732`; host Python
+PID `88592`; lease run ID `ca6bd0e1d47d467a8a89e1ea9574fe41`.
+Output is
+`data/research/swing_initial_fit_issuer_content_review_population_source_bound`.
+The active owner file is `data/runtime/heavy-job.owner.json`.
+
+Last observation: job was alive, CPU time increased from 133.20 to 240.83 seconds,
+working set stayed below 0.32 GiB; no source error or completed manifest appeared.
+It was still preparing retained SEC filing metadata before the first 5,000-record
+checkpoint; SQLite was 32,768 bytes and no `_checkpoint.json` existed yet.
+These are observations, not a completion or source-qualification claim.
+
+Continue reading session `92732` if available; otherwise verify that exact PID,
+command and lease owner before interacting with the process. The sandbox process
+view cannot see the host PID; targeted host read of this owned process succeeded.
+Do not kill other jobs, TradingFlow or provider collectors. Do not start another
+heavy test/build/train process while this lease is active. After exit, verify owner
+removal and inspect the actual output/error. Only a complete manifest plus measured
+independent reviews can advance source admission; no model fits have started.
+
+Record the first checkpoint hash independently when it appears. The job may then
+advance its pointer; resume requires the current hash and unchanged implementation.
+The earlier failed output/request remains protected as described below. The account
+meter last reported 98% used; refresh this handoff again at 99% as the user requested.
+
+
 ### Latest continuation: pinned historical bridge inspection repaired
 
 Implementation `0471c66` is pushed after the first real source job demonstrated
