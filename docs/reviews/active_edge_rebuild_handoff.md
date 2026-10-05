@@ -1,34 +1,68 @@
 # Active Edge Rebuild Handoff
 
-### Running saved-source job: do not launch a competing heavy process
+### Running saved-source job and requested 1%-remaining handoff
 
-After `0471c66` implementation and `6b457b4` documentation were pushed,
-the corrected source scan started at 2026-10-05 11:32:32 UTC. Owned command:
+Usage meter reported 99% used (1% remaining) on 2026-10-05. This refresh
+fulfills the user's handoff request; a reported reset did not change the meter
+observed by this turn. Branch: `codex/v1-canonical-cleanup`; last pushed commit
+before this documentation refresh: `703aaa5`; latest implementation: `0471c66`.
+Astra step 3 remains `in_progress`. Main and TradingFlow remain untouched.
+
+The corrected source scan started at 2026-10-05 11:32:32 UTC. Command:
 `prepare-issuer-content-review`; native exec session `92732`; host Python
 PID `88592`; lease run ID `ca6bd0e1d47d467a8a89e1ea9574fe41`.
-Output is
-`data/research/swing_initial_fit_issuer_content_review_population_source_bound`.
-The active owner file is `data/runtime/heavy-job.owner.json`.
+Output: `data/research/swing_initial_fit_issuer_content_review_population_source_bound`.
+Owner: `data/runtime/heavy-job.owner.json`.
 
-Last observation: job was alive, CPU time increased from 133.20 to 240.83 seconds,
-working set stayed below 0.32 GiB; no source error or completed manifest appeared.
-It was still preparing retained SEC filing metadata before the first 5,000-record
-checkpoint; SQLite was 32,768 bytes and no `_checkpoint.json` existed yet.
-These are observations, not a completion or source-qualification claim.
+Observation at approximately 12:03 UTC: SEC index pass had completed; Alpaca
+checkpoint contained 95,000 retained occurrences. Worker CPU: 1702.89 seconds;
+working set: 386,375,680 bytes. No later source error or complete output manifest
+had been observed. These are partial scan observations, not event qualification.
 
-Continue reading session `92732` if available; otherwise verify that exact PID,
-command and lease owner before interacting with the process. The sandbox process
-view cannot see the host PID; targeted host read of this owned process succeeded.
-Do not kill other jobs, TradingFlow or provider collectors. Do not start another
-heavy test/build/train process while this lease is active. After exit, verify owner
-removal and inspect the actual output/error. Only a complete manifest plus measured
-independent reviews can advance source admission; no model fits have started.
+Independently captured checkpoint SHA256 at 95,000 rows:
+`180b675b3c46dcc06c23da3e6ed13c3aca329fe624d123f58cf7a2dad75c4ad4`.
+Referenced snapshot: `.resume/bedd95d6e0c04dafab1126f93aa84065.sqlite`;
+SHA256: `61873970c00966a214021faf671f2230c23f9466959972ab47f3aa0af14b7cfc`.
+Request SHA256: `3ea48fb4d746d6b77be0d65e96d23261cb578e527d0a3dbbd450a13957088e62`.
+The running job advances this pointer every 5,000 records: this captured hash will
+become stale. Resume requires the current independently inspected checkpoint hash,
+its immutable snapshot, unchanged implementation and source pins. Mutable
+`population.sqlite` is not resume authority. Preserve the earlier failed request.
 
-Record the first checkpoint hash independently when it appears. The job may then
-advance its pointer; resume requires the current hash and unchanged implementation.
-The earlier failed output/request remains protected as described below. The account
-meter last reported 98% used; refresh this handoff again at 99% as the user requested.
+Continue reading session `92732`; if unavailable, verify exact PID, command and
+lease owner. Do not launch competing heavy tests/builds/training, kill collectors,
+or edit implementation files whose hashes this running job captured. After exit,
+verify lease removal and inspect the actual complete manifest or error. Never
+assume all 469,668 Alpaca occurrences or SEC documents have completed from this
+partial checkpoint.
 
+Uncommitted parallel work belongs to `/root/consumer_review`: NEW
+`src/market_predictor/research/issuer_content_qualification_authority.py` and
+planned NEW `tests/test_issuer_content_qualification_authority.py`. The module
+existed at this observation; tests/review/lint/type checks have not run. Do not
+stage this unfinished implementation with the documentation refresh.
+
+Frozen next component: `publish_issuer_content_qualification(root,
+population_authority, reviewer_files, output)` consumes a complete pinned
+population and two independent source-only reviewer files. Every review binds
+sample ID, source ID, raw version hash, normalized text hash and supporting spans.
+Replay the frozen population/sample and existing qualification metrics; no invented
+labels, generic news replacement, new recall veto, serving or promotion claim.
+Write immutable `_authority.json` before event rows; the outer manifest binds
+both without circular hashes. Retain all version dispositions. The current reaction
+consumer requires proven identity and clocks for every event row; exclude an entire
+source-event/issuer history when any in-cutoff version lacks them, with explicit
+reasons and counts. Never drop an unknown newer revision and admit older text.
+Future revisions remain metadata only for initial-fit features.
+
+After the source job releases its lease, finish and review this authority component,
+run its focused poison/direct-consumer tests, Ruff and strict mypy, then commit/push
+and close both continuity documents. Actual independent reviews are still required
+before qualified features can be published. The 126-column profile publication,
+training/serving consumption, last two frozen fits and funded SPY evaluation remain
+unfinished. Four existing fits are retained. Prospective 252 new decision sessions
+plus 10 maturity sessions cannot be manufactured from today's historical outputs.
+No accepted model, SPY improvement, complete plan or main merge is claimed.
 
 ### Latest continuation: pinned historical bridge inspection repaired
 
