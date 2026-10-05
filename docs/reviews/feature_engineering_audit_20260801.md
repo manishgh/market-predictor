@@ -70,7 +70,9 @@ is shared by selector/replay; canonical contracts and original evidence remain
 unchanged. Selected 294 unit/package/naming/command checks passed in 25.46s,
 Ruff/strict two-source typing passed, and one bounded review found no issues.
 An actual leased read verified the four metadata references and original report
-bytes. It did not replay source values/features; the complete real reuse run is next.
+bytes. It did not replay source values/features. The complete actual retained-data
+reuse restarted at 23:17:18 UTC as session 95557/PID 37332, with unchanged config
+SHA95dd86ec...209c and no other heavy job. It has no result yet.
 
 ## User-Confirmed Astra Plan (October 4)
 

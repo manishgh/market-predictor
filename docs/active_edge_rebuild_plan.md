@@ -1,6 +1,6 @@
 # Active Edge Rebuild Plan
 
-### Current continuation: exact historical observation repair pushed; actual reuse next
+### Current continuation: actual retained-data reuse running after observation repair
 
 Ownership repair c2063a8 and its documentation closure 59b54ed are pushed on
 codex/v1-canonical-cleanup. Astra step 3 remains in progress; four
@@ -20,7 +20,11 @@ Canonical readers, report bytes, facts, boundaries and market values are unchang
 typing over both changed source modules passed. One bounded review found no further
 issues. A real read-only, leased metadata check verified all four original references
 and unchanged report bytes; it does not prove source/feature value equivalence.
-The full retained-data reuse run is next. Durable failed-attempt receipt: workspace
+The full retained-data reuse run restarted at 23:17:18 UTC October 5 as session
+95557/PID 37332, run b9c87e025e2145ba99847206c040afd6. Its original config hash
+is unchanged and the branch was clean at start. Source/config bytes remain frozen;
+no other heavy job runs. No result exists yet. Durable current stdout/exit prefix:
+review-results/relationship-reuse-real-observation-fixed. Durable failed-attempt receipt: workspace
 review-results/relationship-reuse-real-headroom.log/.exit.json.
 Unit receipts: historical-observation-units.*; actual metadata stdout:
 historical-observation-actual-metadata.log. No fixture result is market evidence.
