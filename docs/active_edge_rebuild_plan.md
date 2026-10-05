@@ -1,11 +1,29 @@
 # Active Edge Rebuild Plan
 
-### Current continuation: ownership repair verified and pushed; real reuse retry next
+### Current continuation: exact historical observation repair pushed; actual reuse next
 
-ML implementation 771d053 and corrective CI implementation 892100c are pushed on
-codex/v1-canonical-cleanup. Last documentation checkpoint is 3383d3e. Astra step 3 remains in progress; four
+Ownership repair c2063a8 and its documentation closure 59b54ed are pushed on
+codex/v1-canonical-cleanup. Astra step 3 remains in progress; four
 existing fits are retained. Main and TradingFlow are untouched. APIs remain V1,
 internal identities unversioned. No compatibility fallback or accepted model claim.
+
+Actual reuse retry 69678/PID 69440, run 2c42ca90bb5542ac8caa5832c136795b,
+started at 23:01:29 UTC October 5 and ended exit 2 at 23:08:31 UTC. It reached
+the preserved-abstention lookup and reported "preserved abstention lacks one exact
+original observation authority". No report exists and its lease is released.
+All four original facts pin report 70c6f850...78060, whose bytes are unchanged and
+whose original schema ends in .v1. The new historical reuse reader incorrectly
+expected the current unversioned schema. Repair 46a7669 is reviewed and pushed:
+one exact-hash/schema/bounds historical helper is shared by selector and replay.
+Canonical readers, report bytes, facts, boundaries and market values are unchanged.
+294 selected unit/package/naming/command checks passed in 25.46s; Ruff and strict
+typing over both changed source modules passed. One bounded review found no further
+issues. A real read-only, leased metadata check verified all four original references
+and unchanged report bytes; it does not prove source/feature value equivalence.
+The full retained-data reuse run is next. Durable failed-attempt receipt: workspace
+review-results/relationship-reuse-real-headroom.log/.exit.json.
+Unit receipts: historical-observation-units.*; actual metadata stdout:
+historical-observation-actual-metadata.log. No fixture result is market evidence.
 
 The user clarified October 5: mocks/synthetic inputs are allowed only in unit tests.
 AGENTS.md records this. Fixture tests below are unit/regression evidence, not

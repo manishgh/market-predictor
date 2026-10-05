@@ -62,6 +62,16 @@ These software results do not prove SPY outperformance or satisfy the future 252
 decision sessions plus ten maturity sessions required for prospective assessment.
 TradingFlow and main remain untouched.
 
+Actual reuse retry 69678 ended exit 2 at 23:08:31 UTC October 5 with no report:
+the historical lookup expected an unversioned observation schema, but all four
+original WTW/ATVI/INFO/SBNY facts pin the unchanged .v1 report SHA70c6f850...78060.
+Repair 46a7669 is pushed. Its sole exact-hash/schema/date-bounds historical reader
+is shared by selector/replay; canonical contracts and original evidence remain
+unchanged. Selected 294 unit/package/naming/command checks passed in 25.46s,
+Ruff/strict two-source typing passed, and one bounded review found no issues.
+An actual leased read verified the four metadata references and original report
+bytes. It did not replay source values/features; the complete real reuse run is next.
+
 ## User-Confirmed Astra Plan (October 4)
 
 The user confirmed that the saved plan's Bounded Experiment and Ordered Checkpoints

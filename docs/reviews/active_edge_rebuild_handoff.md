@@ -1,11 +1,29 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: ownership repair verified and pushed; real reuse retry next
+### Current continuation: exact historical observation repair pushed; actual reuse next
 
-ML implementation 771d053 and corrective CI implementation 892100c are pushed on
-codex/v1-canonical-cleanup. Last documentation checkpoint is 3383d3e. Astra step 3 remains in progress; four
+Ownership repair c2063a8 and its documentation closure 59b54ed are pushed on
+codex/v1-canonical-cleanup. Astra step 3 remains in progress; four
 existing fits are retained. Main and TradingFlow are untouched. APIs remain V1,
 internal identities unversioned. No compatibility fallback or accepted model claim.
+
+Actual reuse retry 69678/PID 69440, run 2c42ca90bb5542ac8caa5832c136795b,
+started at 23:01:29 UTC October 5 and ended exit 2 at 23:08:31 UTC. It reached
+the preserved-abstention lookup and reported "preserved abstention lacks one exact
+original observation authority". No report exists and its lease is released.
+All four original facts pin report 70c6f850...78060, whose bytes are unchanged and
+whose original schema ends in .v1. The new historical reuse reader incorrectly
+expected the current unversioned schema. Repair 46a7669 is reviewed and pushed:
+one exact-hash/schema/bounds historical helper is shared by selector and replay.
+Canonical readers, report bytes, facts, boundaries and market values are unchanged.
+294 selected unit/package/naming/command checks passed in 25.46s; Ruff and strict
+typing over both changed source modules passed. One bounded review found no further
+issues. A real read-only, leased metadata check verified all four original references
+and unchanged report bytes; it does not prove source/feature value equivalence.
+The full retained-data reuse run is next. Durable failed-attempt receipt: workspace
+review-results/relationship-reuse-real-headroom.log/.exit.json.
+Unit receipts: historical-observation-units.*; actual metadata stdout:
+historical-observation-actual-metadata.log. No fixture result is market evidence.
 
 The user clarified October 5: mocks/synthetic inputs are allowed only in unit tests.
 AGENTS.md records this. Fixture tests below are unit/regression evidence, not
@@ -2636,14 +2654,18 @@ the frozen numeric training boundary or authorize promotion.
 ## Next Actions
 
 Exact next checkpoint: original Astra ordered checkpoint 3 remains in progress;
-its qualification/reuse reruns have exited for system memory pressure. Preserve
+its latest actual reuse rerun exited on the historical observation schema mismatch
+described above. Repair 46a7669 is verified and pushed. Retry actual reuse with the
+unchanged inputs/config after this documentation closure; no more general review
+or repeat of passed units is required.
+The earlier qualification/reuse reruns exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
 Saved-config implementation b589725 and actual byte/fold proof are complete.
 Publisher/verifier ownership repair c2063a8 is pushed and its full 314-case selected
-unit scope passed. Close this documentation checkpoint, then retry actual 124 reuse
-while the improved 4.101 GiB system headroom is available, using config SHA256
+unit scope passed. Actual 124 reuse retains config SHA256
 95dd86ec733a70a72c0d0a2f05de78e0111b71e31fef1786d424136141cc209c.
-Only one heavy job at a time; freeze pinned source/configs during each run.
+Check current headroom first, then run only one heavy job at a time; freeze pinned
+source/configs during each run. Do not relax the canonical 85%/2 GiB source guard.
 Do not repeat completed export, matching, independent reviews or passed unit scopes.
 Preserve failed qualification 64007, reuse 39985/diagnostic 87347, and the failed
 unit attempt 60429 alongside corrected 18-case unit receipt. Intermediate real
