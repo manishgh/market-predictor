@@ -17,6 +17,71 @@ from market_predictor.research import issuer_content_review_population as popula
 from market_predictor.research.issuer_content_review_sources import AliasProof, ReviewSourceRecord
 
 
+def _identity_fixture(root: Path, *, fault: str | None = None) -> dict[str, Any]:
+    folder = root / "data/research/historical_alignment"
+    folder.mkdir(parents=True)
+    clock = pd.Timestamp("2019-07-09T04:00:00Z")
+    frame = pd.DataFrame({"bridge_row_sha256": ["a" * 64], "available_at_utc": [clock]})
+    if fault == "string_clock":
+        frame["available_at_utc"] = [clock.isoformat()]
+    elif fault == "naive_clock":
+        frame["available_at_utc"] = [clock.tz_localize(None)]
+    elif fault == "null_clock":
+        frame["available_at_utc"] = pd.Series([pd.NaT], dtype="datetime64[ns, UTC]")
+    elif fault == "row_proof":
+        frame["bridge_row_sha256"] = ["not-a-proof"]
+    artifact = folder / "identity_bridge.parquet"
+    frame.to_parquet(artifact, index=False)
+    sidecar = artifact.with_suffix(".parquet.manifest.json")
+    sidecar.write_text(json.dumps({"schema": "market_data.artifact_manifest.v1",
+        "canonical_schema_version": "market_data.v1", "artifact_type": "issuer_news_identity_bridge",
+        "artifact_sha256": "0" * 64 if fault == "artifact_sha" else file_sha256(artifact),
+        "rows": 2 if fault == "row_count" else 1, "columns": list(frame.columns), "production_ready": False}), encoding="utf-8")
+    sources = {path.relative_to(root).as_posix(): file_sha256(path) for path in (artifact, sidecar)}
+    alignment = folder / "_manifest.json"
+    alignment.write_text(json.dumps({"schema": "market_predictor.issuer_news_identity_alignment",
+                                    "source_files": sources}), encoding="utf-8")
+    if fault == "sidecar_tamper":
+        sidecar.write_text(sidecar.read_text() + " ", encoding="utf-8")
+    legacy = root / "data/research/legacy"
+    legacy.mkdir()
+    pd.DataFrame({"proof_row_sha256": ["b" * 64], "available_at_utc": [clock]}).to_parquet(legacy / "proofs.parquet")
+    manifest = legacy / "_manifest.json"
+    manifest.write_text(json.dumps({"schema": "market_predictor.legacy_query_identity_proofs", "status": "complete",
+                                   "proofs_sha256": file_sha256(legacy / "proofs.parquet")}), encoding="utf-8")
+    return {"identity_manifest": {"path": alignment.relative_to(root).as_posix(), "sha256": file_sha256(alignment)},
+            "legacy_identity_proofs": {"path": manifest.relative_to(root).as_posix(), "sha256": file_sha256(manifest)}}
+
+
+def test_identity_clocks_inspects_exact_historical_evidence_without_canonical_admission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from market_predictor.canonical import store
+    from market_predictor.research import legacy_query_identity_proofs
+    monkeypatch.setattr(store, "load_canonical_artifact", lambda *a, **k: pytest.fail("canonical admission called"))
+    monkeypatch.setattr(legacy_query_identity_proofs, "load_canonical_artifact",
+                        lambda *a, **k: pytest.fail("canonical admission called"))
+    settings = _identity_fixture(tmp_path)
+    pins: dict[str, str] = {}
+    assert population._identity_clocks(tmp_path, settings, pins) == {
+        "a" * 64: pd.Timestamp("2019-07-09T04:00:00Z"), "b" * 64: pd.Timestamp("2019-07-09T04:00:00Z")}
+    assert len(pins) == 5
+    assert "data/research/historical_alignment/identity_bridge.parquet.manifest.json" in pins
+
+
+@pytest.mark.parametrize("fault, message", [
+    ("sidecar_tamper", "input pin differs"), ("artifact_sha", "sidecar differs"),
+    ("row_count", "row count differs"), ("string_clock", "typed nonnull UTC"),
+    ("naive_clock", "typed nonnull UTC"), ("null_clock", "typed nonnull UTC"),
+    ("row_proof", "row proof must be a SHA256"),
+])
+def test_identity_clocks_rejects_changed_evidence_or_malformed_clock(
+    tmp_path: Path, fault: str, message: str,
+) -> None:
+    with pytest.raises(DataReadinessError, match=message):
+        population._identity_clocks(tmp_path, _identity_fixture(tmp_path, fault=fault), {})
+
+
 def _record(*, revision: str = "2020-06-01T20:00:00Z", source_id: str = "story") -> ReviewSourceRecord:
     payload = {"id": source_id, "created_at": "2020-06-01T20:00:00Z", "updated_at": revision,
                "headline": "Apex reports Q2 2020 earnings of $1 per share.", "content": None, "summary": None}

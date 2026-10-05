@@ -52,7 +52,7 @@ from market_predictor.research.issuer_content_review_sources import (
     read_early_alias_proofs,
     recheck_source_pins,
 )
-from market_predictor.research.legacy_query_identity_proofs import load_identity_bridge, load_legacy_query_proofs, pin_file
+from market_predictor.research.legacy_query_identity_proofs import load_legacy_query_proofs, pin_file
 from market_predictor.resources import assert_memory_budget
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 
@@ -145,12 +145,41 @@ class _Aliases:
 
 
 def _identity_clocks(root: Path, settings: dict[str, Any], pins: dict[str, str]) -> dict[str, pd.Timestamp]:
-    bridge, _ = load_identity_bridge(root, settings["identity_manifest"], pins)
+    # Historical evidence inspection only: this does not admit the bridge as a
+    # current canonical artifact or reinterpret its saved schema declaration.
+    alignment_path = pin_file(root, settings["identity_manifest"], pins)
+    alignment = read_json_object(alignment_path)
+    sources = alignment.get("source_files")
+    if alignment.get("schema") != "market_predictor.issuer_news_identity_alignment" or not isinstance(sources, dict):
+        raise DataReadinessError("identity alignment manifest differs")
+    bridge_path = alignment_path.parent / "identity_bridge.parquet"
+    sidecar_path = bridge_path.with_suffix(".parquet.manifest.json")
+    for path in (bridge_path, sidecar_path):
+        relative = path.relative_to(root).as_posix()
+        _require(relative in sources, "historical identity bridge parent pin missing")
+        pin_file(root, {"path": relative, "sha256": sources[relative]}, pins)
+    sidecar = read_json_object(sidecar_path)
+    _require(sidecar.get("artifact_sha256") == sources[bridge_path.relative_to(root).as_posix()]
+             and sidecar.get("artifact_type") == "issuer_news_identity_bridge"
+             and sidecar.get("production_ready") is False, "historical identity bridge sidecar differs")
+    columns = ["bridge_row_sha256", "available_at_utc"]
+    _require(isinstance(sidecar.get("columns"), list) and set(columns).issubset(sidecar["columns"]),
+             "historical identity bridge columns differ")
+    bridge = pd.read_parquet(bridge_path, columns=columns)
+    _require(type(sidecar.get("rows")) is int and sidecar["rows"] == len(bridge),
+             "historical identity bridge row count differs")
     legacy, _ = load_legacy_query_proofs(root, settings["legacy_identity_proofs"], pins)
-    result = {str(row["bridge_row_sha256"]): pd.Timestamp(row["available_at_utc"])
-              for row in bridge.to_dict("records")}
-    for row in legacy.to_dict("records"):
-        result[str(row["proof_row_sha256"])] = pd.Timestamp(row["available_at_utc"])
+    result: dict[str, pd.Timestamp] = {}
+    for frame, proof_column in ((bridge, "bridge_row_sha256"), (legacy, "proof_row_sha256")):
+        clocks = frame["available_at_utc"]
+        _require(isinstance(clocks.dtype, pd.DatetimeTZDtype) and str(clocks.dtype.tz) == "UTC"
+                 and not clocks.isna().any(), "historical identity clock must be typed nonnull UTC")
+        for proof, clock in zip(frame[proof_column], clocks, strict=True):
+            _require(isinstance(proof, str) and len(proof) == 64 and set(proof) <= set("0123456789abcdef"),
+                     "historical identity row proof must be a SHA256")
+            _require(proof not in result or result[proof] == clock, "historical identity proof has competing clocks")
+            result[proof] = clock
+    recheck_source_pins(root, pins)
     return result
 
 
