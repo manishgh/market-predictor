@@ -5,7 +5,7 @@ import hashlib
 import json
 import sqlite3
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, BinaryIO
@@ -319,8 +319,20 @@ def _packet_version(connection: sqlite3.Connection, row: tuple[Any, ...]) -> dic
     return PacketVersion.model_validate(payload).model_dump(mode="json")
 
 
+def _sample_occurrences(connection: sqlite3.Connection, samples: Sequence[SampleItem]) -> dict[str, list[dict[str, Any]]]:
+    """Read original occurrences once, retaining only sampled references and hashes."""
+    result: dict[str, list[dict[str, Any]]] = {item.cluster_id: [] for item in samples}
+    for position, (phase, ordinal, cluster, version, encoded) in enumerate(connection.execute(
+        "SELECT phase,ordinal,cluster_id,version_id,record_json FROM records ORDER BY phase,ordinal")):
+        _guard(position)
+        if cluster in result:
+            result[cluster].append({"phase": phase, "ordinal": ordinal, "version_id": version,
+                "record_json_sha256": hashlib.sha256(encoded.encode("utf-8")).hexdigest()})
+    return result
+
+
 def _packet(connection: sqlite3.Connection, sample: SampleItem, bindings: dict[str, str],
-            counts: Counter[str]) -> Iterator[bytes]:
+            counts: Counter[str], occurrences: list[dict[str, Any]]) -> Iterator[bytes]:
     header = {"schema": SCHEMA + "_blind_packet", "sample_id": sample.sample_id, "cluster_id": sample.cluster_id,
         "event_family_to_assess": sample.event_family, **bindings,
         "instructions": "Inspect every version independently using only original source text and identity evidence. "
@@ -341,11 +353,8 @@ def _packet(connection: sqlite3.Connection, sample: SampleItem, bindings: dict[s
         counts["metadata_only_entries"] += int(document["display_disposition"] == "metadata_only")
     _require(version_count > 0, "sample packet has no retained versions")
     yield b'],"occurrences":['
-    for position, (phase, ordinal, version, encoded) in enumerate(connection.execute(
-        "SELECT phase,ordinal,version_id,record_json FROM records WHERE cluster_id=? ORDER BY phase,ordinal", (sample.cluster_id,))):
+    for position, occurrence in enumerate(occurrences):
         _guard(position)
-        occurrence = {"phase": phase, "ordinal": ordinal, "version_id": version,
-                      "record_json_sha256": hashlib.sha256(encoded.encode("utf-8")).hexdigest()}
         occurrence_hash.update(_json(occurrence) + b"\n")
         yield (b"," if occurrence_count else b"") + _json(occurrence)
         occurrence_count += 1
@@ -389,10 +398,12 @@ def _render(connection: sqlite3.Connection, inputs: _Inputs, artifacts: _Artifac
     bindings = {"request_sha256": request_hash, "frame_sha256": frame_hash, "exclusions_sha256": exclusion_hash,
                 "sample_sha256": sample_hash, **policy_identities()}
     packet_counts: Counter[str] = Counter()
+    occurrences = _sample_occurrences(connection, samples)
     for sample in samples:
         _guard()
         _require(sample.cluster_id not in excluded, "development cluster leaked into the fresh sample")
-        artifacts.emit(f"blind/{sample.sample_id}.json", _packet(connection, sample, bindings, packet_counts))
+        artifacts.emit(f"blind/{sample.sample_id}.json",
+                       _packet(connection, sample, bindings, packet_counts, occurrences[sample.cluster_id]))
     sample_counts = Counter(f"{item.event_family}/{item.role}" for item in samples)
     requested = {f"{family}/{role}": POSITIVE_SAMPLES[family] if role == "candidate" else NEGATIVE_SAMPLES
                  for family in FAMILIES for role in ("candidate", "noncandidate")}

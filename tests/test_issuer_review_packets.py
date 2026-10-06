@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from collections import Counter
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -286,6 +287,37 @@ def test_original_occurrence_cannot_reassign_version_to_other_cluster(state: dic
                            (state["clusters"]["fresh-c"],))
         with pytest.raises(DataReadinessError, match="version/cluster owner"):
             owner._inventories(connection)
+
+
+def test_single_occurrence_pass_preserves_original_query_bytes_for_both_families(state: dict[str, Any]) -> None:
+    with sqlite3.connect(state["database"]) as connection:
+        cluster = state["clusters"]["fresh-a"]
+        version, = connection.execute("SELECT version_id FROM versions WHERE cluster_id=? LIMIT 1", (cluster,)).fetchone()
+        for phase, ordinal, key, identity in (("before", 2, cluster, version),
+            ("before", 1, state["clusters"]["old-a"], ""), ("zz", 1, cluster, "")):
+            connection.execute("INSERT INTO records VALUES(?,?,?,?,?)",
+                (phase, ordinal, key, identity, '{"source":"€ query copy 🧪"}'))
+        clusters = owner.population._clusters(connection)
+        samples = [item for item in owner.select_content_review_sample(clusters) if item.cluster_id == cluster]
+        assert {item.event_family for item in samples} == {"earnings", "guidance"}
+        expected = [{"phase": phase, "ordinal": ordinal, "version_id": identity,
+            "record_json_sha256": hashlib.sha256(encoded.encode("utf-8")).hexdigest()}
+            for phase, ordinal, identity, encoded in connection.execute(
+                "SELECT phase,ordinal,version_id,record_json FROM records WHERE cluster_id=? ORDER BY phase,ordinal", (cluster,))]
+        queries: list[str] = []
+        connection.set_trace_callback(queries.append)
+        retained = owner._sample_occurrences(connection, samples)
+        assert set(retained) == {cluster}
+        assert retained[cluster] == expected
+        expected_bytes = b"".join(owner._json(item) + b"\n" for item in expected)
+        for sample in samples:
+            packet = json.loads(b"".join(owner._packet(connection, sample, {}, Counter(), retained[cluster])))
+            assert packet["occurrences"] == expected
+            assert packet["occurrence_count"] == len(expected) == 7
+            assert packet["occurrence_inventory_sha256"] == hashlib.sha256(expected_bytes).hexdigest()
+        record_queries = [query for query in queries if "FROM records" in query]
+        assert record_queries == [
+            "SELECT phase,ordinal,cluster_id,version_id,record_json FROM records ORDER BY phase,ordinal"]
 
 
 def test_blind_reader_rejects_extraction_status_as_physical_reason(state: dict[str, Any]) -> None:
