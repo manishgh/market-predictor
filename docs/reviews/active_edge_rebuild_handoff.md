@@ -1,6 +1,52 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: actual source-review progress saved at 99% usage
+### Current continuation: finish source reviews and real ingestion only
+
+User scope (October 6): finish the two independent complete source-review artifact
+sets, then run actual installed annotation ingestion/publication and its independent
+verifier. Do not start metrics, event features, model fits, serving or main merge in
+this continuation. Four completed fits, matched candles/news and TradingFlow stay fixed.
+
+Usage was refreshed to 0% consumed at resumption; no reset credit was redeemed.
+The previously saved 99% checkpoint below is historical evidence, not current usage.
+Implementation 5cf8208 remains pushed on codex/v1-canonical-cleanup; no repository
+implementation was changed. Both source-review artifact sets remain incomplete.
+
+Source-only reviewer continuations are running, with no candidate/extractor/outcome
+or cross-reviewer judgment access. A is split into disjoint ranges to shorten wall
+time while preserving its existing declared model-assisted reviewer identity:
+
+- A main: sorted blind packet indices [0,1000), workspace work/source-review-fresh-a.
+- A tail: indices [1000,1750), workspace work/source-review-fresh-a-tail; fresh
+  source-only agent context, its own assessments and inspection receipts. It cannot
+  read main A judgments. This is one continuation of A, not a third independent set.
+- B: all indices [0,1750), workspace work/source-review-fresh-b. Resume its OWN
+  noncontiguous completed IDs and remaining read ranges.
+
+All workspace paths are rooted at
+C:/Users/manis/Documents/Codex/2026-09-28/c. Each combined reviewer set requires
+1,750 packets / 1,977 versions, including 15 metadata-only. Source year or explicit
+end date is required for a fully identified fiscal period; never infer year from
+publication. Read every readable version fully; keep uncertainty explicit. Never
+auto-fill unseen negatives or copy judgments across reviewers.
+
+Prepared workspace operational wrappers (no real ingestion launched yet):
+
+- work/prepare_actual_issuer_annotation_ingestion.py: installed schema/quote checks,
+  rejects missing/partial/duplicate/overlapping A ranges, preserves source judgments,
+  and --adopt creates immutable complete reviewer JSONL plus hash-bound inspection
+  receipts and strict physical config. Run only after all reviewer segments finish.
+- work/run_actual_issuer_annotation_ingestion.py --expected-config-sha256 ACTUAL_SHA:
+  frozen implementation inventory; installed publisher then independent verifier;
+  single exclusive run owner and no retained-evidence overwrite. No mocked owners.
+
+One bounded wrapper review found receipt pins and a competing-launch failure-state
+overwrite issue. Both fixes were confirmed by static review; wrapper syntax compile
+passed. Existing ingestion unit/lint/type/actual decoder evidence below stays closed.
+No new source qualification, features, model acceptance or SPY improvement is claimed.
+The current blocker for launching ingestion is incomplete genuine source coverage.
+
+### Historical continuation: actual source-review progress saved at 99% usage
 
 Last implementation 5cf8208 is pushed on codex/v1-canonical-cleanup; its software
 evidence was recorded in 193e1a7. Complete-version annotation component 75791f4 is
@@ -3303,18 +3349,15 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: Astra ordered checkpoint 3 remains in progress;
-resume the two genuine independent source reviews from their OWN workspace
-work/source-review-fresh-a and -b per-packet JSON/progress/read intervals. Preserve
-complete versus partial inspections and do not create uninspected remainder rows.
-Each needs1750packets / 1,977versions against actual publication 2b4b9335...50b3a9.
-New ingestion software 5cf8208 is pushed; actual complete ingestion/publication/replay
-is still OPEN. At full coverage freeze physical JSONL pins/config, invoke installed
-publisher to fresh output and independent verifier sequentially, one heavy job only.
-Then follow reviewed metrics design with unchanged numerical gates and exact-source
-truth; event projection/features/two remaining fits/funded SPY comparison follow.
-Do not rerun closed packet/input checks, reconstruct matched data, change targets,
-refit four completed fits, increment public V1, waive gates or write TradingFlow/main.
+Exact next checkpoint: finish source-only A main [0,1000), A tail
+[1000,1750) and independent B [0,1750) from their OWN workspace directories and read
+receipts. Root checks and assembles disjoint A segments without changing judgments.
+At full genuine coverage, freeze complete A/B physical JSONL pins and strict config,
+then run installed ingestion publication and independent verification sequentially
+using the prepared wrappers and one heavy worker. Save actual output manifest/hash,
+replay counts, frozen code/source checks and natural exit; close user steps 1 and 2.
+Stop this continuation after those steps; metrics/features/training/serving remain
+later Astra work. Preserve the four fits, matched data, V1, TradingFlow and main.
 The earlier qualification/reuse reruns exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
 Saved-config implementation b589725 and actual byte/fold proof are complete.
