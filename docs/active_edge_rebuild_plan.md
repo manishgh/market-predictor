@@ -1,6 +1,56 @@
 # Active Edge Rebuild Plan
 
-### Current continuation: original candles independently reproduced; reaction input binding next
+### Current continuation: original-data reader implemented; retained-data exercise next
+
+Implementation 852f43f is reviewed, unit-verified and pushed on
+codex/v1-canonical-cleanup. One original_relationship_inputs owner independently
+reproduces the original receipt, preserves company/group/month ownership and the
+four original quarantines, reads original stock/SPY inputs, and rechecks sources on
+exit. Reaction publication and row verification use that same scoped owner, with
+one full original replay per operation. The required original_snapshot_replay pin
+is explicit; there is no current-price fallback or public skip flag. Original replay
+and new reader code are bound in reaction and training implementation inventories.
+All 132 files bound by the passed original receipt remain byte-identical.
+Numeric kernels, feature order, targets, folds, four fits, main and TradingFlow are
+unchanged. Communicating APIs remain V1. Actual source qualification is still pending.
+
+One consolidated static review found two supported issues: outputs were written
+before context-exit source checks, and a foreign-source unit patched an unused import.
+Both are fixed and the same reviewer confirmed closure. Publisher closes its input
+context before completed manifest creation; verifier exits before writing its final
+receipt. Both retain the workspace lease and recheck sources before publication.
+The new mutation-at-exit UNIT cases verify that failed checks leave no final output.
+
+Verification is component-focused, not a release/full suite. Initial fast scope:
+322 passed and two new fixture writers failed on the immutable writer before their
+intended poison checks; both fixture writers were corrected. A missing schema-test
+filename caused an earlier zero-collection invocation; corrected scope uses
+test_schema_naming.py. Superseded native consumer run 41418/PID 92256 was stopped
+after final source fixes and redundant unit helper checks superseded its loaded
+snapshot; exit -1 at 06:13:39 UTC, no complete pass claimed. Final 72-case native
+scope 8736/PID 85264 ended with 70 passed and two UNIT setup failures in 7661.04s:
+assigning a frozen parent and holding the busy-test lease in a different runtime
+directory. Corrected self-contained boundary/busy cases both passed in 2.32s;
+receipt exit-mutation case passed separately in 4.47s. Last source-chain and 126
+readiness/loader case passed, preserving inherited rows/settings/fitting weights.
+Synthetic inputs/admissions remain tests-only; these are not retained-market proofs.
+Final Ruff passed all 11 changed Python files and strict typing all five source files.
+No full-suite repeat, actual 126 publication, news fit or funded performance claim.
+Unit log prefixes: original-input-fast-units*, original-input-consumer-units*,
+original-input-final-units*, original-input-boundaries-final*,
+original-input-exit-boundary-fixed*, original-input-receipt-exit-final*.
+
+Next actual operation: workspace work/verify_actual_original_input_interface.py.
+It uses three real original candle pins, the installed verified owner and one heavy
+lease, independently reproduces the original receipt, reads every original month and
+stock/SPY group, and writes evidence only after final context/source checks. No fake
+qualification pin, mocked reader, invented candle or model output is supplied.
+Fresh report: data/reports/swing_original_reaction_input_verification.json.
+Workspace state/log/exit/inventory prefix: review-results/actual-original-input-interface.
+An actual input-owner pass is not claimed yet. Qualified real news remains necessary
+for the later real reaction publication/pilot and its independent row replay.
+
+Previously completed original source replay:
 
 Actual original-candle chain 35051/PID 72924 completed exit 0 at 01:51:57 UTC
 October 6. First full replay passed at 01:32:40 UTC with zero differences, followed

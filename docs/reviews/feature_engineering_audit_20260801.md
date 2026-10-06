@@ -4,6 +4,14 @@ Last updated: 2026-10-06
 
 ## Qualified Reaction Profile: Current Acceptance Matrix
 
+Current input binding implementation 852f43f is pushed: shared original-data reader
+for reaction publication and verification, with required actual original receipt and
+final source checks before completed outputs. All 132 prior replay code pins stay
+unchanged; actual new reader exercise remains pending. Unit scope: 70 passes plus
+two setup failures, both corrected cases pass separately (2.32s); receipt exit check
+passes (4.47s). Ruff 11 files and strict types five sources pass. No actual qualified
+news authority, 126 publication, two remaining fits or SPY improvement follows.
+
 Current proposed order is the unchanged 124-column relationship parent plus the
 two existing raw issuer reaction columns (126 total), not aggregate news counts.
 No extra model specification or API version is introduced.
@@ -14,7 +22,7 @@ No extra model specification or API version is introduced.
 | Source clocks and aliases | Filing availability and issuer identity clocks remain distinct. Original historical capture gaps remain declared proxies; no past observation timestamps are invented. |
 | Candidate precision and recall | Both independent source-only model-assisted reviewers completed all 1,750 samples. Their immutable project copies are hash-bound. Actual qualification session 64007 stopped at system memory use 90.4%, leaving no completed manifest. Its intermediate review metrics reject both families: earnings joint positives 225/300; guidance 216/250. Reviewer False issuer counts include disagreements, not proof every article names another company. Disk-backed history repair 1d0d3be is pushed and unit-verified; exact causal behavior, sources, reviews and gates remain frozen. |
 | Historical/live calculation | Shared 124-to-126 projection and complete 120-to-126 candidate adapter are implemented and unit-tested. The adapter requires explicit baseline observation semantics and compatible component authorities. Actual qualified publication and observed live source binding remain pending. |
-| Ordered feature contract | Reaction profile fixes 126 columns and three-day selection. Monthly publication and independent replay are implemented and unit-tested. Preserved 124 source/value/clock reuse comparison is implemented, including WTW/ATVI/INFO/SBNY exclusions. Actual reuse report SHA5f480f56...83265 is failed_differences: all 586,305 rows/inherited columns unchanged, but 359 stock-input groups, all 549 SPY-input groups and 547 relationship-feature groups differ. INFO/SBNY fail complete physical-prefix verification. Current 124 publication is not authorized; actual source-choice design remains pending. Original artifacts and targets remain unchanged. |
+| Ordered feature contract | Reaction profile fixes 126 columns and three-day selection. Monthly publication and independent replay are implemented and unit-tested. Preserved 124 source/value/clock reuse comparison is implemented, including WTW/ATVI/INFO/SBNY exclusions. Actual reuse report SHA5f480f56...83265 is failed_differences: all 586,305 rows/inherited columns unchanged, but 359 stock-input groups, all 549 SPY-input groups and 547 relationship-feature groups differ. INFO/SBNY fail complete physical-prefix verification. Current-source 124 publication is not authorized. The distinct original-snapshot route passed full replay and independent reproduction (aa8000577dd9628d5edfc5557758238394ebf36aaa8a26f8fae0177fc7d9cec9), zero differences over all 586,305 rows/59 months. Original research-input binding 852f43f is reviewed/unit-verified; its actual reader exercise is next. Original artifacts and targets remain unchanged. |
 | Training/serving consumers | Explicit 126 research dispatch and matching receipt checks are implemented and unit-tested. Original folds, weights, estimators and targets remain frozen; two issuer-profile fits remain pending. V1 return-regressor serving design is frozen but not implemented. Current serving still assumes classifier probabilities. |
 | API representation | Public API remains V1. Pure candidate construction grants no training, promotion or serving admission. Live reaction values require observed sources, profile binding and an accepted return model. |
 | Poison/tamper/parity | Unit fixtures exercise future revisions, identity clocks, unknown coverage, parent preservation, interrupted checkpoints, source/value replay and resource pressure. The positive synthetic source-chain unit uses actual calculation/replay code and independent reaction-value checks. It is not market-data integration evidence. |
@@ -65,7 +73,7 @@ failed its stale CLI inventory; 23 inventory/boundary cases then passed, and the
 remaining alphabetical-order error was fixed and its one case passed separately.
 Ruff six-file and strict three-source checks passed; one bounded review found no
 further issues. Initial strict narrowing errors were repaired with checks retained.
-Actual derivative session 64326 completed exit 0 at 00:46:30 UTC October 6: manifest SHA9c5f5580...f82d0, 516,679 versions fully replayed before publication, 14,182 candidate versions, 470,541 unclassified and 31,956 unavailable. All training/qualification/serving flags remain false. Independent verification and original-candle replay now run sequentially as session 60410; no new qualification or feature admission is claimed.
+Actual derivative session 64326 completed exit 0 at 00:46:30 UTC October 6: manifest SHA9c5f5580...f82d0, 516,679 versions fully replayed before publication, 14,182 candidate versions, 470,541 unclassified and 31,956 unavailable. All training/qualification/serving flags remain false. Independent 516,679-version verification passed; original candle replay and independent receipt reproduction also passed as recorded in the active handoff; no new qualification or feature admission is claimed.
 The actual comparison's separate 131 dependencies remain byte-identical.
 
 These software results do not prove SPY outperformance or satisfy the future 252
