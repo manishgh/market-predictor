@@ -102,7 +102,7 @@ def _validate_physical_history(frame: pd.DataFrame, *, benchmark: bool) -> None:
         raise DataReadinessError("original SPY is absent or substituted")
     calendar = xcals.get_calendar("XNYS")
     for name in ("bar_start_utc", "bar_end_utc", "available_at_utc", "ingested_at_utc"):
-        if frame[name].isna().any() or not frame[name].map(lambda value: pd.Timestamp(value).tzinfo is not None).all():
+        if frame[name].isna().any() or not all(pd.Timestamp(value).tzinfo is not None for value in frame[name]):
             raise DataReadinessError("original physical clocks must be present and timezone aware")
     days = frame.session_date_et
     for name, clock in (("bar_start_utc", calendar.session_open), ("bar_end_utc", calendar.session_close)):

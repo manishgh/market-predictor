@@ -86,6 +86,21 @@ def test_full_ohlcv_and_source_clock_validation(inputs: Inputs, column: str, val
         owner._validate_physical_history(bars, benchmark=True)
 
 
+def test_empty_quarantined_stock_history_retains_typed_clocks(inputs: Inputs) -> None:
+    bars = inputs.spy.assign(high=inputs.spy.close + 1, low=inputs.spy.open - 1, schema_version="unit-physical").iloc[:0].copy()
+    assert isinstance(bars.bar_start_utc.dtype, pd.DatetimeTZDtype)
+    owner._validate_physical_history(bars, benchmark=False)
+    with pytest.raises(DataReadinessError, match="SPY is absent"):
+        owner._validate_physical_history(bars, benchmark=True)
+
+
+def test_physical_clock_validation_still_rejects_naive_timestamps(inputs: Inputs) -> None:
+    bars = inputs.spy.assign(high=inputs.spy.close + 1, low=inputs.spy.open - 1, schema_version="unit-physical")
+    bars["ingested_at_utc"] = bars.ingested_at_utc.dt.tz_localize(None)
+    with pytest.raises(DataReadinessError, match="timezone aware"):
+        owner._validate_physical_history(bars, benchmark=False)
+
+
 def test_actual_historical_bytes_are_pinned_and_later_rows_not_projected(tmp_path: Path) -> None:
     request, item, path = _historical_bar_fixture(tmp_path)
     files: dict[str, str] = {}
