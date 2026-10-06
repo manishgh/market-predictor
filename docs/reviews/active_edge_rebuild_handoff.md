@@ -1,6 +1,6 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: real news replay passed; measured empty-clock repair pushed
+### Current continuation: real news replay passed; repaired actual candle replay running
 
 Actual chain 60410 ended exit 1 at 01:06:53 UTC October 6 after its news
 verification passed. Original candle replay failed with TypeError: datetime64 type
@@ -19,11 +19,17 @@ passed. One read-only targeted code review found no further issue. An accidental
 .venvenv executable typo launched no test process; no full suite was run.
 Logs: review-results/original-empty-clock-units.log/.xml and original actual
 chain actual-saved-input-checks.log/.exit.json. Unit passes do not prove market replay.
-Next execute workspace work/run_actual_original_candle_checks.py: actual original
-candle replay followed by independent receipt reproduction only if it passes.
-Do not repeat the passed real news verification; the fix touches none of its twelve
-executed source files. Fresh frozen inventory/state/log prefix:
-review-results/actual-original-candle-checks. No actual rerun pass is claimed.
+Actual retry started at 01:12:52 UTC October 6: session 35051, PID 72924,
+original-relationship-replay run 30651db259954735986fa073e7ff1032. Workspace
+work/run_actual_original_candle_checks.py replays original candles and independently
+reproduces a receipt only if it passes. It does not repeat the completed real news
+verification; the fix touches none of that job's twelve executed source files.
+Freeze all 132 executed source files, configs and inputs throughout the actual retry.
+Frozen inventory: review-results/actual-original-candle-checks-frozen-implementation.json,
+SHA256 10cffb38bd603be4aae8591c6b179ffaefac3a769afd988476e029e86059de00.
+State/log/exit prefix: review-results/actual-original-candle-checks.
+No actual rerun pass is claimed; source/model bytes remain unchanged except the
+documented one-line repair. No other heavy process or TradingFlow change.
 
 Latest original-input replay implementation c81c70a and source-semantic implementation
 77ff5f5 are pushed on
@@ -2817,8 +2823,10 @@ the frozen numeric training boundary or authorize promotion.
 ## Next Actions
 
 Exact next checkpoint: original Astra ordered checkpoint 3 remains in progress;
-run and inspect workspace work/run_actual_original_candle_checks.py after
-repair cc64716. Chain 60410 ended after its real news verification passed and the
+await and inspect actual session 35051/PID 72924 using the durable
+actual-original-candle-checks state/log/exit after repair cc64716. Freeze its 132
+executed source files and all inputs/configs until it exits. Chain 60410 ended after
+its real news verification passed and the
 typed-empty candle-clock bug was observed. Preserve its log/exit and 134-file inventory.
 The next job replays actual original candles and independently reproduces only a
 passed receipt. Freeze its new source inventory and all inputs/configs throughout;
