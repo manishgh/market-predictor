@@ -9,7 +9,27 @@ SHA256 4b0a6a94a5fa4997854782df54c4d26ca0ce3aeb12bd4660954cc727ca8c4768.
 Both operations use actual retained sources and installed owners; no mocked data,
 admissions or model outputs. Freeze all executed code/config/source pins until the
 whole chain ends. Durable phase is publishing_actual_source_review_packets; no
-completed packet authority, independent verification or source quality is claimed.
+source quality or completed independent verification is claimed.
+
+Actual publication completed 12:24:53 UTC. Manifest
+data/research/swing_initial_fit_issuer_review_packets_retry/_manifest.json SHA256
+2b4b933565704a06fae86e815f3edab56412c2d2717254f4eb39e5ad5f50b3a9.
+Durable phase is now independently_verifying_actual_source_review_packets;
+session 59799/PID 75040 still owns the run and all 24 implementation pins stay frozen.
+Published inventory: 516,679 versions, 539,399 records (22,720 without a version),
+22,722 aliases. U=466,635 clusters; D=1,748 all inside U; F=464,887. New sample:
+1,750 entries/1,745 distinct clusters, 300 earnings and 250 guidance candidates,
+600 noncandidates each, zero shortages. Packets contain 1,977 version/occurrence
+entries, 15 metadata-only. All qualification/training/serving/promotion flags false.
+Frame SHAa05bccd0b82a4b4b5331695cec758201446017dc89eec7717864a6b9baaa4e2b;
+exclusions SHA91b104ab913d7466c52d48ec8da452761bf9ac5baa954ac138b83ca77b9aad09;
+sample SHA6da314ea6de8878fbdbf0aa6986cc92589faf4ce840fa39e58ea97471cf87fca.
+Packet slice remains open until actual independent verification exits successfully.
+
+Prepared reader real-data diagnostic also passed over all 884 complete preserved
+staged packets: 991 versions/occurrences, seven metadata-only, exact text/inventory
+hashes; no annotations created. Report issuer-annotation-actual-staged-packet-shape.json
+under workspace review-results. This is a draft shape check, not source admission.
 
 Independent preparation only while that run is frozen: reviewed annotation design
 work/revised-issuer-packet-design/DESIGN_ANNOTATION_SLICE.md; off-repository draft
