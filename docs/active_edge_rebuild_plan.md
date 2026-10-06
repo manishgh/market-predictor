@@ -1,5 +1,34 @@
 # Active Edge Rebuild Plan
 
+### Current continuation: complete-version annotation component closed
+
+Implementation 75791f4 is pushed. The installed pure annotation reader and exact
+event matcher enforce complete physical-version coverage, exact Unicode quotes,
+four-role matching and explicit unresolved/metadata-only judgments. They cannot
+authorize source qualification, model training, serving or promotion.
+
+Verification: 314 selected synthetic UNIT checks passed in 43.39s; Ruff over four
+files and strict mypy over two source modules passed. One consolidated review found
+no supported issue. The actual installed reader separately checked all 1,750
+published packets: 1,977 versions/occurrences, 15 metadata-only; no annotations were
+created. Publication SHA2b4b933565704a06fae86e815f3edab56412c2d2717254f4eb39e5ad5f50b3a9
+and all protected original-input 133 and packet 24 implementation hashes matched.
+Actual report: workspace review-results/issuer-annotation-actual-published-packet-shape.json;
+packet inventory SHA bb995b1cf782e4cf8b83da321146e9168f1587ea24fb92b1de15381c82b7659f.
+No full-suite release, new news-quality result, model fit or SPY improvement is claimed.
+
+Next bounded slice: operational pinned two-review ingestion/correspondence. Accept
+physical publication/reviewer SourcePins, call the canonical packet verifier, then
+read complete independent reviewer artifacts under a processing lease with source
+checks before and after. Preserve exact candidate/version evidence and all false
+admission flags. Metrics, event projection and training remain later checkpoints.
+Two NEW independent source-only review artifacts do not yet exist; software tests
+and packet publication cannot supply their judgments. Targets, four trained fits,
+TradingFlow, main and public API V1 stay unchanged.
+
+Historical details below are retained evidence; this current closure supersedes
+their annotation-adoption and packet-running narration.
+
 ### Current continuation: real packet publication and independent replay complete
 
 Packet component at d228191 is CLOSED. Actual chain 59799/PID 75040 completed

@@ -1,5 +1,34 @@
 # Active Edge Rebuild Handoff
 
+### Current continuation: complete-version annotation component closed
+
+Implementation 75791f4 is pushed. The installed pure annotation reader and exact
+event matcher enforce complete physical-version coverage, exact Unicode quotes,
+four-role matching and explicit unresolved/metadata-only judgments. They cannot
+authorize source qualification, model training, serving or promotion.
+
+Verification: 314 selected synthetic UNIT checks passed in 43.39s; Ruff over four
+files and strict mypy over two source modules passed. One consolidated review found
+no supported issue. The actual installed reader separately checked all 1,750
+published packets: 1,977 versions/occurrences, 15 metadata-only; no annotations were
+created. Publication SHA2b4b933565704a06fae86e815f3edab56412c2d2717254f4eb39e5ad5f50b3a9
+and all protected original-input 133 and packet 24 implementation hashes matched.
+Actual report: workspace review-results/issuer-annotation-actual-published-packet-shape.json;
+packet inventory SHA bb995b1cf782e4cf8b83da321146e9168f1587ea24fb92b1de15381c82b7659f.
+No full-suite release, new news-quality result, model fit or SPY improvement is claimed.
+
+Next bounded slice: operational pinned two-review ingestion/correspondence. Accept
+physical publication/reviewer SourcePins, call the canonical packet verifier, then
+read complete independent reviewer artifacts under a processing lease with source
+checks before and after. Preserve exact candidate/version evidence and all false
+admission flags. Metrics, event projection and training remain later checkpoints.
+Two NEW independent source-only review artifacts do not yet exist; software tests
+and packet publication cannot supply their judgments. Targets, four trained fits,
+TradingFlow, main and public API V1 stay unchanged.
+
+Historical details below are retained evidence; this current closure supersedes
+their annotation-adoption and packet-running narration.
+
 ### Current continuation: real packet publication and independent replay complete
 
 Packet component at d228191 is CLOSED. Actual chain 59799/PID 75040 completed
@@ -3138,17 +3167,17 @@ the frozen numeric training boundary or authorize promotion.
 ## Next Actions
 
 Exact next checkpoint: original Astra ordered checkpoint 3 remains in progress;
-adopt the reviewed pure annotation validator/matcher after passed chain 59799 at
-d228191 (exit 0, 13:44:20 UTC), with fresh real publication 2b4b9335...50b3a9.
-Use configs/swing_initial_fit_issuer_review_packets.json SHA7edd26c7...103fd and
-a fresh destination data/research/swing_initial_fit_issuer_review_packets_retry.
-Preserve the first incomplete private stage. Freeze executed code/input/config pins
-during the new sequential publication/verification chain; one heavy worker only.
-Use durable actual-issuer-review-packets state/log/exit; preserve any failed private
-stage and inspect its exact error before a retry. No blind labels before a passed packet.
-Actual candidate9c5f5580...f82d0 is the source, not a fixture. Keep all old judgments
-and numeric gates unchanged. No labels/qualification/model/serving acceptance
-follows from software tests or packet publication. Original component remains closed.
+implement the bounded operational pinned two-review ingestion/correspondence owner
+after closed pure component 75791f4. Use completed packet publication
+data/research/swing_initial_fit_issuer_review_packets_retry/_manifest.json
+SHA2b4b933565704a06fae86e815f3edab56412c2d2717254f4eb39e5ad5f50b3a9.
+Do not rerun packet publication or change its 24 owners. New independent complete
+source-only reviewer artifacts are still missing; preserve old judgments as historical.
+Follow sequential canonical verification/processing leases, strict physical pins,
+complete sample/version coverage, entry/exit mutation checks and exact source spans.
+All admissions false; metrics/event projection/model fits remain later checkpoints.
+Do not reconstruct matched candles/news, refit the four completed models, change
+targets or versions, waive numerical gates, or write to TradingFlow/main.
 The earlier qualification/reuse reruns exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
 Saved-config implementation b589725 and actual byte/fold proof are complete.

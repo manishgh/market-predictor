@@ -1,5 +1,13 @@
 # Current Feature Engineering Audit
 
+Latest component 75791f4: complete-version annotation validation and exact event
+correspondence are installed and pushed. Selected unit checks: 314 passed; Ruff
+and strict typing passed. Actual installed reader checked all 1,750 published
+packets/1,977 versions, including 15 metadata-only, with source hashes unchanged.
+No new review labels, source quality, features, fits or SPY performance follow from
+this reader check. Next implement pinned two-review ingestion; fresh independent
+source judgments and measured qualification remain required before issuer training.
+
 Last updated: 2026-10-06
 
 Actual complete-document review packet publication and independent byte replay at
