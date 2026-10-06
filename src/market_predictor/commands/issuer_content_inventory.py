@@ -20,6 +20,7 @@ from market_predictor.research.issuer_content_cohort_inventory import publish_co
 from market_predictor.research.issuer_content_inventory import publish_saved_content_inventory
 from market_predictor.research.issuer_content_qualification_authority import publish_issuer_content_qualification
 from market_predictor.research.issuer_content_review_population import publish_content_review_population
+from market_predictor.research.issuer_review_packets import publish_issuer_review_packets, verify_issuer_review_packets
 from market_predictor.research.legacy_query_identity_proofs import publish_legacy_query_identity_proofs
 from market_predictor.research.sec_acceptance_clock import collect_sec_clock_pages, publish_sec_acceptance_clock
 from market_predictor.research.sec_filing_documents import collect_sec_filing_documents
@@ -45,6 +46,34 @@ def _publish(call: Callable[[], dict[str, Any]], keys: tuple[str, ...], optional
 
 
 def register_issuer_content_commands(app: typer.Typer) -> None:
+    @app.command("publish-issuer-review-packets")
+    def publish_review_packets(
+        config: Path = typer.Option(...), expected_config_sha256: str = typer.Option(...),
+        output: Path = typer.Option(...), root: Path = typer.Option(Path(".")),
+    ) -> None:
+        """Publish complete blind source packets and a frozen fresh review frame."""
+        _publish(lambda: publish_issuer_review_packets(root=root, config=config,
+            expected_config_sha256=expected_config_sha256, output=output),
+            ("status", "counts", "manifest_sha256", "qualification_established",
+             "training_eligible", "serving_eligible", "promotion_eligible", "economic_eligible"))
+
+    @app.command("verify-issuer-review-packets")
+    def verify_review_packets(
+        publication: Path = typer.Option(...), publication_sha256: str = typer.Option(...),
+        root: Path = typer.Option(Path(".")),
+    ) -> None:
+        """Reproduce source packets and exclusions without approving events or models."""
+        def verify() -> dict[str, Any]:
+            verified = verify_issuer_review_packets(root=root,
+                publication=HoldingSourcePin(path=publication.as_posix(), sha256=publication_sha256))
+            return {"status": "passed_blind_review_packet_replay_only", "counts": verified.counts,
+                    "manifest_sha256": verified.publication.sha256, "qualification_established": False,
+                    "training_eligible": False, "serving_eligible": False, "promotion_eligible": False,
+                    "economic_eligible": False}
+
+        _publish(verify, ("status", "counts", "manifest_sha256", "qualification_established",
+                         "training_eligible", "serving_eligible", "promotion_eligible", "economic_eligible"))
+
     @app.command("derive-saved-issuer-candidates")
     def derive_candidates(
         parent_population: Path = typer.Option(...), parent_population_sha256: str = typer.Option(...),

@@ -1,0 +1,25 @@
+{
+  "schema": "market_predictor.issuer_review_packet_config",
+  "original_population": {
+    "path": "data/research/swing_initial_fit_issuer_content_review_population_source_bound/_manifest.json",
+    "sha256": "3c59845761740dc1a07a2f994cceaba53354c6f9486f4baa634ebd422a6a84ce"
+  },
+  "candidate_derivative": {
+    "path": "data/research/swing_initial_fit_issuer_candidates_revised/_manifest.json",
+    "sha256": "9c5f55807e9614c2e64d85902130e72c1dafdce73ba5f101f783daa9ac2f82d0"
+  },
+  "original_sample": {
+    "path": "data/research/swing_initial_fit_issuer_content_review_population_source_bound/sample.json",
+    "sha256": "f19f46917b1d629bfd55515556b5732b7b4f45cfb7669b1e0901f1a0b59d25c1"
+  },
+  "original_reviewers": [
+    {
+      "path": "data/research/swing_initial_fit_issuer_source_reviews/issuer-source-reviewer-a.json",
+      "sha256": "17132bdcc38ca19738fd00b9e8a0f576f55e972fa20b4fd74a792918d9fc8922"
+    },
+    {
+      "path": "data/research/swing_initial_fit_issuer_source_reviews/issuer-source-reviewer-b.json",
+      "sha256": "cfa9bea062ca443deed419593c1482a9b634bcb6f47797d770bc6219ade8342d"
+    }
+  ]
+}
