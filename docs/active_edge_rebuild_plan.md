@@ -1,8 +1,8 @@
 # Active Edge Rebuild Plan
 
-### Current continuation: actual retained-data reuse running after observation repair
+### Current continuation: measured candle differences; real saved-news derivative running
 
-Latest source-semantic implementation 77ff5f5 and prior documentation dc48a42 are pushed on
+Latest source-semantic implementation 77ff5f5 and documentation 1a7d974 are pushed on
 codex/v1-canonical-cleanup. Astra step 3 remains in progress; four
 existing fits are retained. Main and TradingFlow are untouched. APIs remain V1,
 internal identities unversioned. No compatibility fallback or accepted model claim.
@@ -20,12 +20,33 @@ Canonical readers, report bytes, facts, boundaries and market values are unchang
 typing over both changed source modules passed. One bounded review found no further
 issues. A real read-only, leased metadata check verified all four original references
 and unchanged report bytes; it does not prove source/feature value equivalence.
-The full retained-data reuse run restarted at 23:17:18 UTC October 5 as session
-95557/PID 37332, run b9c87e025e2145ba99847206c040afd6. Its original config hash
-is unchanged and the branch was clean at start. Source/config bytes remain frozen;
-no other heavy job runs. No result exists yet. Durable current stdout/exit prefix:
-review-results/relationship-reuse-real-observation-fixed. Durable failed-attempt receipt: workspace
-review-results/relationship-reuse-real-headroom.log/.exit.json.
+The complete retained-data comparison ended exit 2 at 23:56:34 UTC October 5.
+Actual report data/reports/swing_return_relationships_current_reuse_verification.json
+SHA256 5f480f56179e054ad4f621f780d72e49e50ac2482af74536c9a3b4aad5e83265
+has status failed_differences. All 586,305 rows and inherited columns are unchanged.
+Of 549 completed group comparisons, 359 differ in stock inputs, all 549 differ in
+SPY open/close values, and 547 differ in relationship additions. For example,
+old SPY open 259.51 is current retained-source 258.86; TRV 103.43 is 103.08.
+These are actual price/feature differences, not naming differences or fixture output.
+Two further groups (INFO and SBNY) fail complete physical-prefix verification.
+Original sources/features/models remain unchanged. This report cannot authorize
+current 124 publication or claim that existing fits used the current candle inputs.
+A bounded source-choice design review is pending; no equality tolerance, source
+waiver, retraining or original-data rewrite is authorized by this failed comparison.
+Its process and lease have ended. Durable stdout/exit prefix:
+review-results/relationship-reuse-real-observation-fixed.
+
+The next independent real-data job started at 00:06:59 UTC October 6:
+derive-saved-issuer-candidates, session 64326/PID 92408 (launcher 93416),
+run 86425b3802554752900eec1d78d24221. It reads the exact original 516,679-version
+news/SEC population and publishes only a candidate sidecar after full replay.
+Parent SHA256 3c59845761740dc1a07a2f994cceaba53354c6f9486f4baa634ebd422a6a84ce;
+output data/research/swing_initial_fit_issuer_candidates_revised.
+At start system memory was 77.00% used / 3.609 GiB available; output/stage absent.
+Durable log/exit prefix: review-results/issuer-candidate-real-derivative.
+No result exists yet. Source/config bytes stay frozen and no other heavy job runs.
+This job uses real saved provider text and actual extraction/replay; no mocks.
+Candidate replay alone does not establish source qualification or authorize training.
 Unit receipts: historical-observation-units.*; actual metadata stdout:
 historical-observation-actual-metadata.log. No fixture result is market evidence.
 
@@ -40,7 +61,7 @@ Named inspected examples are development regressions only. Exit gates: affected
 unit/tamper/parity tests, Ruff/strict typing, one bounded consolidated review, and
 actual derivative/requalification with unchanged statistical thresholds. All
 training/promotion/serving flags remain false until their required evidence passes.
-The running comparison's 131 source dependencies exclude content_review.py and
+The completed comparison's 131 source dependencies excluded content_review.py and
 this new helper. Its exact inventory is saved in workspace review-results/
 relationship-reuse-frozen-implementation.json and must remain byte-identical.
 The CLI exposes derive-saved-issuer-candidates and verify-saved-issuer-candidates.
@@ -53,8 +74,9 @@ Python files; strict typing passed all three source owners. Initial strict check
 had 19 narrowing errors, repaired without removing runtime checks. One bounded
 consolidated review found no further issues. Logs: issuer-semantic-initial.*,
 issuer-semantic-final.*, issuer-cli-inventory-final.*, issuer-cli-inventory-corrected.*.
-Actual original-population derivative, independent replay, fresh full-packet reviews
-and qualification consumer integration remain unperformed; no training admission.
+Actual original-population derivative now runs as session 64326. Independent replay,
+fresh full-packet reviews and qualification consumer integration remain pending;
+no training admission.
 All 131 running comparison source hashes were rechecked unchanged after application.
 Only these independent files/tests may change during the job; no concurrent heavy
 run or modification of its pinned source/config/data is permitted.

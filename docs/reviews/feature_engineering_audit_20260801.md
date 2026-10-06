@@ -14,7 +14,7 @@ No extra model specification or API version is introduced.
 | Source clocks and aliases | Filing availability and issuer identity clocks remain distinct. Original historical capture gaps remain declared proxies; no past observation timestamps are invented. |
 | Candidate precision and recall | Both independent source-only model-assisted reviewers completed all 1,750 samples. Their immutable project copies are hash-bound. Actual qualification session 64007 stopped at system memory use 90.4%, leaving no completed manifest. Its intermediate review metrics reject both families: earnings joint positives 225/300; guidance 216/250. Reviewer False issuer counts include disagreements, not proof every article names another company. Disk-backed history repair 1d0d3be is pushed and unit-verified; exact causal behavior, sources, reviews and gates remain frozen. |
 | Historical/live calculation | Shared 124-to-126 projection and complete 120-to-126 candidate adapter are implemented and unit-tested. The adapter requires explicit baseline observation semantics and compatible component authorities. Actual qualified publication and observed live source binding remain pending. |
-| Ordered feature contract | Reaction profile fixes 126 columns and three-day selection. Monthly publication and independent replay are implemented and unit-tested. Preserved 124 source/value/clock reuse comparison is implemented, including WTW/ATVI/INFO/SBNY exclusions. Actual preserved-source 124 reuse attempt 39985 failed on an inspector field-location bug; diagnostic 87347 identifies baseline month-level ownership. Inspector repair 1d0d3be is pushed; 91 other focused units passed, and all 18 corrected ownership units passed separately. No passed real report, current 124 derivative or actual 126 authority exists yet. Original artifacts and targets remain unchanged. |
+| Ordered feature contract | Reaction profile fixes 126 columns and three-day selection. Monthly publication and independent replay are implemented and unit-tested. Preserved 124 source/value/clock reuse comparison is implemented, including WTW/ATVI/INFO/SBNY exclusions. Actual reuse report SHA5f480f56...83265 is failed_differences: all 586,305 rows/inherited columns unchanged, but 359 stock-input groups, all 549 SPY-input groups and 547 relationship-feature groups differ. INFO/SBNY fail complete physical-prefix verification. Current 124 publication is not authorized; actual source-choice design remains pending. Original artifacts and targets remain unchanged. |
 | Training/serving consumers | Explicit 126 research dispatch and matching receipt checks are implemented and unit-tested. Original folds, weights, estimators and targets remain frozen; two issuer-profile fits remain pending. V1 return-regressor serving design is frozen but not implemented. Current serving still assumes classifier probabilities. |
 | API representation | Public API remains V1. Pure candidate construction grants no training, promotion or serving admission. Live reaction values require observed sources, profile binding and an accepted return model. |
 | Poison/tamper/parity | Unit fixtures exercise future revisions, identity clocks, unknown coverage, parent preservation, interrupted checkpoints, source/value replay and resource pressure. The positive synthetic source-chain unit uses actual calculation/replay code and independent reaction-value checks. It is not market-data integration evidence. |
@@ -65,7 +65,7 @@ failed its stale CLI inventory; 23 inventory/boundary cases then passed, and the
 remaining alphabetical-order error was fixed and its one case passed separately.
 Ruff six-file and strict three-source checks passed; one bounded review found no
 further issues. Initial strict narrowing errors were repaired with checks retained.
-No actual derivative, new independent qualification or feature admission is claimed.
+Actual derivative session 64326/PID 92408 started at 00:06:59 UTC October 6 on the original saved population; no completed derivative, new independent qualification or feature admission is claimed.
 The actual comparison's separate 131 dependencies remain byte-identical.
 
 These software results do not prove SPY outperformance or satisfy the future 252
@@ -82,7 +82,7 @@ Ruff/strict two-source typing passed, and one bounded review found no issues.
 An actual leased read verified the four metadata references and original report
 bytes. It did not replay source values/features. The complete actual retained-data
 reuse restarted at 23:17:18 UTC as session 95557/PID 37332, with unchanged config
-SHA95dd86ec...209c and no other heavy job. It has no result yet.
+SHA95dd86ec...209c. It ended exit 2 at 23:56:34 UTC with the real price/feature differences recorded above; no passed reuse report.
 
 ## User-Confirmed Astra Plan (October 4)
 
@@ -322,7 +322,7 @@ and fiscal-period evidence, independent unavailable/ambiguous reasons and causal
 clock replay share one historical/live implementation. Candidates remain unadmitted.
 All 548 affected checks, Ruff and strict mypy pass. Thirty-two pinned saved Alpaca
 records passed adapter/spans smoke (20 headlines, 12 bodies); this is not event
-precision/recall evidence. Corrected initial-fit SEC bodies `b3041a07…69318` exist;
+precision/recall evidence. Corrected initial-fit SEC bodies `b3041a07â€¦69318` exist;
 older metadata-only wording below is historical. Full-content review authority,
 source-linked candidate/rejected annotations, precision/recall, exact model columns,
 reaction profile publication and its two fits remain outstanding. Existing title
