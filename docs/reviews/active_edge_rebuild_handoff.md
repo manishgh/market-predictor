@@ -1,6 +1,15 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: measured packet occurrence scan repair
+### Current continuation: repaired actual packet retry running
+
+Fresh actual publication/verification chain started 11:17:05 UTC October 6,
+session 59799, worker PID 75040 (venv launcher 6832), implementation d228191.
+Frozen 24-file inventory actual-issuer-review-packets-retry-frozen-implementation.json
+SHA256 4b0a6a94a5fa4997854782df54c4d26ca0ce3aeb12bd4660954cc727ca8c4768.
+Both operations use actual retained sources and installed owners; no mocked data,
+admissions or model outputs. Freeze all executed code/config/source pins until the
+whole chain ends. Durable phase is publishing_actual_source_review_packets; no
+completed packet authority, independent verification or source quality is claimed.
 
 Actual packet chain started at 10:10:38 UTC October 6: session 12774,
 PID 4688, publish-issuer-review-packets run fa253e8c773a475a80cbc5ba787e1726.
@@ -3076,7 +3085,7 @@ the frozen numeric training boundary or authorize promotion.
 ## Next Actions
 
 Exact next checkpoint: original Astra ordered checkpoint 3 remains in progress;
-finish the measured occurrence scan repair after stopped chain 12774/PID 4688.
+await repaired actual chain 59799/PID 75040 at d228191 after stopped 12774/PID 4688.
 Use configs/swing_initial_fit_issuer_review_packets.json SHA7edd26c7...103fd and
 a fresh destination data/research/swing_initial_fit_issuer_review_packets_retry.
 Preserve the first incomplete private stage. Freeze executed code/input/config pins
