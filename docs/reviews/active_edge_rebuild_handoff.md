@@ -1,6 +1,60 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: actual original input reader passed; news correspondence next
+### Current continuation: source-only packet and exclusion-frame implementation
+
+Frozen first slice of news correspondence (October 6): new strict research packet
+contract and publisher/verifier over the already verified candidate sidecar, plus
+thin CLI adapters and focused units. Do not edit the original population producer,
+candidate core/derivative, numerical sampler or any of the protected 133 original
+input files/12 derivative files. No provider collection, outcome/model access,
+annotation ingestion, qualification/event projection, model fit or serving change
+belongs to this slice. APIs remain V1; no compatibility aliases.
+
+Measured original review metadata: exact original sample hash
+f19f46917b1d629bfd55515556b5732b7b4f45cfb7669b1e0901f1a0b59d25c1 has
+1,750 entries but 1,748 distinct announcement clusters. Both immutable reviewer
+files cover those same 1,750 sample IDs. New exclusion D is the deduplicated union
+of all those clusters (both families/roles) and all cluster identities resolving
+the five exact development source IDs listed in PACKET_SLICE.md, including copies,
+revisions and SEC exhibits. An absent named source rejects publication. Retain D
+outside U separately. F=U minus D; every excluded original record/version remains
+accounted for and cannot project a newly qualified event. Preserve original text,
+database, aliases, clocks and old labels; do not use old judgments as fresh truth.
+
+Use select_content_review_sample(F) with unchanged policy/hash/seed 42, 300 earnings
+and 250 guidance candidate draws plus 600 noncandidate draws each. Freeze separate
+frame/document/correspondence policy identities before labels. Report full, excluded
+and fresh counts and actual F-only N/n weights; shortages stay explicit. No complete-
+population quality claim follows from fresh-only samples or packet publication.
+
+Output: hash-bound request, exclusions, complete U frame, F sample, full-version
+blind packets and manifest. Bind all original record/version inventory counts and
+ordered digests without copying the 7.4 GB database. Every sampled version/exhibit/
+revision appears, including future/unknown/unreadable metadata-only entries. Text
+display preserves the exact normalized Unicode and separate original clocks.
+Candidate IDs/roles/spans/rules/dispositions, old labels and outcomes are absent
+from blind packets. Annotation offsets are half-open Unicode code points.
+
+Future correspondence is frozen now: same version/text/security/family; exact
+issuer/action/result/fiscal-period offsets and quotes; reviewer anchor within the
+candidate statement; exactly one structural match before considering verdicts.
+Any unresolved/unsupported candidate fails cluster success. No true exhibit or
+unrelated same-document event rescues another candidate. Full document assessments
+are required; an omitted/unreadable version cannot become a resolved negative.
+This slice records that policy but does not create labels or qualification metrics.
+
+Publisher/verifier each owns one heavy lease and actual canonical derivative
+reproduction. Stream into a fresh private stage; no automatic overwrite, deletion
+or resume. Final connection/source/code/config/review and artifact checks complete
+before atomic directory publication. Independent verifier rebuilds exact exclusions,
+frame/sample/packets and hashes, not a claimed JSON pass. All admission flags false.
+Exit: focused contract/poison tests, Ruff and strict types, one consolidated review,
+then actual retained-data publication and independently pinned full verification.
+Review metadata evidence: workspace review-results/revised-packet-original-review-metadata.json.
+Frozen designs: PACKET_SLICE.md, CORRESPONDENCE_RULE.md and EXCLUDED_FRAME_AMENDMENT.md
+under workspace work/revised-issuer-packet-design. Original input component is closed.
+
+Completed original input reader evidence:
 
 Actual reader check 39766/PID 17544 completed exit 0 at 09:22:38 UTC October 6.
 Its installed owner independently reproduced the original receipt, read all 59
@@ -2951,15 +3005,14 @@ the frozen numeric training boundary or authorize promotion.
 ## Next Actions
 
 Exact next checkpoint: original Astra ordered checkpoint 3 remains in progress;
-freeze the revised source-only packet/correspondence and development-excluded
-sampling frame, then implement its explicit derivative consumer and real packet
-publication. Use the actual candidate sidecar manifest 9c5f5580...f82d0; keep original
-review judgments immutable and numeric gates unchanged. All inspected versions
-remain accounted for, without family-wide admission or full-population claims from
-fresh-only labels. Original input component 852f43f and actual receipt 34719979...3af21
-are closed; do not repeat passed units or original replay without a supported issue.
-Protect its 133 executed sources and all original input/model bytes. No TradingFlow,
-main, extra learner, news aggregation trial, provider rescan or API-version change.
+implement the frozen source-only packet/exclusion/frame contract and publisher/
+verifier over actual candidate sidecar 9c5f5580...f82d0, then thin CLI and focused
+units. Do not change protected original/candidate code, source files or numeric
+sampling/gates. Freeze the document correspondence policy before any new labels;
+both original review authorities remain immutable. After code/review checks, publish
+and independently verify actual packets; no unit fixture substitutes for that run.
+Original component 852f43f/receipt34719979...3af21 stays closed. No model/funded/
+serving/Main/TradingFlow or provider-collection work in this first packet slice.
 The earlier qualification/reuse reruns exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
 Saved-config implementation b589725 and actual byte/fold proof are complete.
