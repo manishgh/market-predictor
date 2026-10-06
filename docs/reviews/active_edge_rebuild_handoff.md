@@ -1,5 +1,24 @@
 # Active Edge Rebuild Handoff
 
+### Current bounded slice: pinned complete review ingestion
+
+Implement only research/issuer_annotation_ingestion.py and focused unit tests.
+The reviewed design is workspace work/revised-issuer-packet-design/DESIGN_INGESTION_SLICE.md.
+Inputs: exact completed packet manifest plus two new physical JSONL reviewer pins;
+each file has existing strict PacketAssessment records in sample-ID order with
+stable distinct reviewer declarations and complete sample/version coverage.
+Canonical public packet verification finishes before the ingestion processing
+lease. Recheck every returned source, physical DB and packet output pin at entry
+and exit; use only the existing canonical derivative connection for candidate reads.
+Outputs: deterministic full assessments and exact candidate correspondence, all
+qualification/training/serving/promotion/economic flags false. No label generation,
+metrics, event projection, model fits, serving, targets, gates or protected-owner edits.
+Exit: focused pin/order/coverage/strict-type/mutation/private-publication units,
+Ruff/strict types and one consolidated code review, then actual publication/replay
+with TWO new complete real independent reviewer files. Those files do not yet exist;
+unit fixtures cannot close the actual-data requirement. Retain any failed private
+stage; reject changed/missing/ambiguous evidence without publishing an authority.
+
 ### Current continuation: complete-version annotation component closed
 
 Implementation 75791f4 is pushed. The installed pure annotation reader and exact
