@@ -1,6 +1,42 @@
 # Active Edge Rebuild Plan
 
-### Current continuation: real news replay passed; repaired actual candle replay running
+### Current continuation: original candles independently reproduced; reaction input binding next
+
+Actual original-candle chain 35051/PID 72924 completed exit 0 at 01:51:57 UTC
+October 6. First full replay passed at 01:32:40 UTC with zero differences, followed
+by independent full receipt reproduction. All 586,305 decisions across 59 months
+retain their inherited predictors and exact four relationship additions under
+current code from the original stock/SPY snapshot. Receipt:
+data/reports/swing_original_relationship_replay.json, SHA256
+aa8000577dd9628d5edfc5557758238394ebf36aaa8a26f8fae0177fc7d9cec9.
+All 132 executed implementation hashes still match the frozen inventory. Its worker
+and lease are gone. Durable log/state/exit: review-results/actual-original-candle-checks.*.
+No mock reader, invented candle, model refit or overwritten old artifact was used.
+The failed newer-price comparison remains failed; original replay is a distinct,
+explicit research-input proof. Training, serving and promotion flags remain false.
+Real news candidate extraction and independent 516,679-version replay also passed;
+document-level source qualification remains pending, not implied by extraction replay.
+
+Next bounded implementation: one original research-input owner, used by reaction
+publication and independent verification. Require the exact original receipt and
+120/124 ownership; reproduce that receipt under the caller's sole lease; use original
+monthly rows and stock/SPY reads with unchanged quarantines and corrections. Bind
+current implementation and recheck all input hashes through operation exit. No
+modern-price fallback, source waiver, copied feature store or archived code execution.
+Public operations own their lease; internal reuse is owner-created, never a public
+skip-verification flag. Both publisher and verifier share the same context, avoiding
+duplicate full replay in one operation. Current-source equality gates stay strict.
+Direct scope: new research/original_relationship_inputs.py, reaction policy,
+publisher/verifier, training implementation inventory and affected unit tests.
+Numerical kernels, feature order, targets, four fits and TradingFlow stay unchanged.
+Exit checks: wrong receipt/parents/ownership/prices/clocks/abstention and mutation
+reject; exact monthly inheritance and one-context use; focused units/Ruff/strict
+types plus one consolidated review. Actual original-input owner checks use retained
+data; actual reaction publication/replay additionally requires real qualified news,
+which remains a separate pending dependency. No fixtures substitute for that run.
+Reviewed scratch design: work/original-relationship-replay/INPUT_INTERFACE_DESIGN.md.
+
+Historical running checkpoint (superseded by the actual completion above):
 
 Actual chain 60410 ended exit 1 at 01:06:53 UTC October 6 after its news
 verification passed. Original candle replay failed with TypeError: datetime64 type
