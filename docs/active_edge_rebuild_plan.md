@@ -1,6 +1,38 @@
 # Active Edge Rebuild Plan
 
-### Current continuation: original-data reader implemented; retained-data exercise running
+### Current continuation: actual original input reader passed; news correspondence next
+
+Actual reader check 39766/PID 17544 completed exit 0 at 09:22:38 UTC October 6.
+Its installed owner independently reproduced the original receipt, read all 59
+months and verified every one of the 586,305 decisions under original ownership,
+then read all 551 original stock groups and 1,510 SPY history rows. One stock group
+has empty usable history: the preserved original quarantine, not invented candles.
+Completed actual report data/reports/swing_original_reaction_input_verification.json:
+SHA256 347199797d1521967194c85885632040a7065e713b7e9b23efdec6612123af21,
+status passed_actual_retained_input_interface. All 133 executed hashes are unchanged;
+its worker and lease are gone. No mock readers, fabricated qualifier or model outputs
+were used. Source qualification, reaction publication, training/serving/promotion
+flags remain false. This closes the original-input consumer component at 852f43f.
+The newer-price comparison stays failed, and main/TradingFlow remain untouched.
+
+Next demonstrated source conflict: existing blind packets contain SEC exhibits, but
+old reviews select one document while metrics/projection can admit another candidate
+version without exact same-document support. A true exhibit must not rescue a false
+candidate elsewhere. Preserve original text/database/reviews and the passed revised
+candidate sidecar. Freeze complete document/version annotation correspondence and
+the development-inspected exclusion/sampling frame before new labels. Keep numeric
+precision, issuer, agreement/kappa and rule gates unchanged. Inspected clusters must
+remain explicitly nonqualified, with no projected event; their known history and
+unknown coverage remain preserved. Fresh-frame estimates cannot be presented as
+full-population estimates. Full-population recall remains unmeasured, with a disclosed
+conservative bound that treats excluded clusters as possible missed events.
+Reviewed design preparation: work/revised-issuer-packet-design/CHECKPOINT.md and
+EXCLUDED_FRAME_AMENDMENT.md. No new packet, review authority or admission is claimed.
+The completed actual reader proof is protected evidence; do not change its 133-file
+closure to implement the new outer source-review orchestration. No provider rescan,
+target/model access, refit of existing models, extra trial or API version change.
+
+Historical running checkpoint (completed above):
 
 Actual retained-data reader check started at 08:25:36 UTC October 6:
 session 39766/PID 17544, verify-original-reaction-input-interface,

@@ -1,6 +1,38 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: original-data reader implemented; retained-data exercise running
+### Current continuation: actual original input reader passed; news correspondence next
+
+Actual reader check 39766/PID 17544 completed exit 0 at 09:22:38 UTC October 6.
+Its installed owner independently reproduced the original receipt, read all 59
+months and verified every one of the 586,305 decisions under original ownership,
+then read all 551 original stock groups and 1,510 SPY history rows. One stock group
+has empty usable history: the preserved original quarantine, not invented candles.
+Completed actual report data/reports/swing_original_reaction_input_verification.json:
+SHA256 347199797d1521967194c85885632040a7065e713b7e9b23efdec6612123af21,
+status passed_actual_retained_input_interface. All 133 executed hashes are unchanged;
+its worker and lease are gone. No mock readers, fabricated qualifier or model outputs
+were used. Source qualification, reaction publication, training/serving/promotion
+flags remain false. This closes the original-input consumer component at 852f43f.
+The newer-price comparison stays failed, and main/TradingFlow remain untouched.
+
+Next demonstrated source conflict: existing blind packets contain SEC exhibits, but
+old reviews select one document while metrics/projection can admit another candidate
+version without exact same-document support. A true exhibit must not rescue a false
+candidate elsewhere. Preserve original text/database/reviews and the passed revised
+candidate sidecar. Freeze complete document/version annotation correspondence and
+the development-inspected exclusion/sampling frame before new labels. Keep numeric
+precision, issuer, agreement/kappa and rule gates unchanged. Inspected clusters must
+remain explicitly nonqualified, with no projected event; their known history and
+unknown coverage remain preserved. Fresh-frame estimates cannot be presented as
+full-population estimates. Full-population recall remains unmeasured, with a disclosed
+conservative bound that treats excluded clusters as possible missed events.
+Reviewed design preparation: work/revised-issuer-packet-design/CHECKPOINT.md and
+EXCLUDED_FRAME_AMENDMENT.md. No new packet, review authority or admission is claimed.
+The completed actual reader proof is protected evidence; do not change its 133-file
+closure to implement the new outer source-review orchestration. No provider rescan,
+target/model access, refit of existing models, extra trial or API version change.
+
+Historical running checkpoint (completed above):
 
 Actual retained-data reader check started at 08:25:36 UTC October 6:
 session 39766/PID 17544, verify-original-reaction-input-interface,
@@ -2919,14 +2951,15 @@ the frozen numeric training boundary or authorize promotion.
 ## Next Actions
 
 Exact next checkpoint: original Astra ordered checkpoint 3 remains in progress;
-await actual session 39766/PID 17544 at implementation 852f43f, then inspect
-its actual outcome and independently bound pins using its durable state/log/exit,
-and freeze its 133-file implementation plus all sources/configs throughout the run.
-Do not repeat the completed news extraction replay or original snapshot receipt
-outside this owner-required reproduction. Only one heavy job. No unit fixture or
-fake qualifier can replace the real input check or subsequent news qualification.
-Preserve failed current-price comparison SHA5f480f56...83265 and original passed
-receipt aa800057...d9cec9. No new general review or repeated passed units is required.
+freeze the revised source-only packet/correspondence and development-excluded
+sampling frame, then implement its explicit derivative consumer and real packet
+publication. Use the actual candidate sidecar manifest 9c5f5580...f82d0; keep original
+review judgments immutable and numeric gates unchanged. All inspected versions
+remain accounted for, without family-wide admission or full-population claims from
+fresh-only labels. Original input component 852f43f and actual receipt 34719979...3af21
+are closed; do not repeat passed units or original replay without a supported issue.
+Protect its 133 executed sources and all original input/model bytes. No TradingFlow,
+main, extra learner, news aggregation trial, provider rescan or API-version change.
 The earlier qualification/reuse reruns exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
 Saved-config implementation b589725 and actual byte/fold proof are complete.
