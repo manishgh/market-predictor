@@ -11,6 +11,18 @@ admissions or model outputs. Freeze all executed code/config/source pins until t
 whole chain ends. Durable phase is publishing_actual_source_review_packets; no
 completed packet authority, independent verification or source quality is claimed.
 
+Independent preparation only while that run is frozen: reviewed annotation design
+work/revised-issuer-packet-design/DESIGN_ANNOTATION_SLICE.md; off-repository draft
+work/annotation-draft/research/issuer_source_annotations.py and
+issuer_annotation_correspondence.py with two tiny unit modules. Final 67 synthetic
+unit cases pass (0.88s), Ruff and strict typing over workspace package copies pass;
+one consolidated draft review found no supported issue. Hash inventory:
+review-results/issuer-annotation-draft-inventory.json. No draft is installed,
+committed, imported by the actual worker or a source authority. It prepares strict
+complete-version validation and pure exact-role matching only; operational pinned
+ingestion, new independent labels, metrics and event projection are still absent.
+Adoption awaits completed actual packet proof and packet-slice documentation closure.
+
 Actual packet chain started at 10:10:38 UTC October 6: session 12774,
 PID 4688, publish-issuer-review-packets run fa253e8c773a475a80cbc5ba787e1726.
 Workspace work/run_actual_issuer_review_packets.py sequentially invokes installed
