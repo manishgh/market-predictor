@@ -65,7 +65,7 @@ failed its stale CLI inventory; 23 inventory/boundary cases then passed, and the
 remaining alphabetical-order error was fixed and its one case passed separately.
 Ruff six-file and strict three-source checks passed; one bounded review found no
 further issues. Initial strict narrowing errors were repaired with checks retained.
-Actual derivative session 64326/PID 92408 started at 00:06:59 UTC October 6 on the original saved population; no completed derivative, new independent qualification or feature admission is claimed.
+Actual derivative session 64326 completed exit 0 at 00:46:30 UTC October 6: manifest SHA9c5f5580...f82d0, 516,679 versions fully replayed before publication, 14,182 candidate versions, 470,541 unclassified and 31,956 unavailable. All training/qualification/serving flags remain false. Independent verification and original-candle replay now run sequentially as session 60410; no new qualification or feature admission is claimed.
 The actual comparison's separate 131 dependencies remain byte-identical.
 
 These software results do not prove SPY outperformance or satisfy the future 252
@@ -91,7 +91,7 @@ existing data/fits and current-source gates stay unchanged. Its 419 affected uni
 cases passed; final 29 units after lease-before-input ordering passed. Ruff and
 strict two-source typing passed; one bounded static review found no further issue.
 Actual replay and reaction consumer integration remain pending; no fixture pass is
-market evidence. Running news derivative's 12 executed source hashes are unchanged.
+market evidence. The running chain's combined 134 executed source hashes are frozen and unchanged.
 
 ## User-Confirmed Astra Plan (October 4)
 
@@ -331,7 +331,7 @@ and fiscal-period evidence, independent unavailable/ambiguous reasons and causal
 clock replay share one historical/live implementation. Candidates remain unadmitted.
 All 548 affected checks, Ruff and strict mypy pass. Thirty-two pinned saved Alpaca
 records passed adapter/spans smoke (20 headlines, 12 bodies); this is not event
-precision/recall evidence. Corrected initial-fit SEC bodies `b3041a07Ã¢â‚¬Â¦69318` exist;
+precision/recall evidence. Corrected initial-fit SEC bodies `b3041a07ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦69318` exist;
 older metadata-only wording below is historical. Full-content review authority,
 source-linked candidate/rejected annotations, precision/recall, exact model columns,
 reaction profile publication and its two fits remain outstanding. Existing title

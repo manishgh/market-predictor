@@ -1,6 +1,6 @@
 # Active Edge Rebuild Plan
 
-### Current continuation: measured candle differences; real saved-news derivative running
+### Current continuation: real news sidecar published; independent source checks running
 
 Latest original-input replay implementation c81c70a and source-semantic implementation
 77ff5f5 are pushed on
@@ -37,17 +37,34 @@ tolerance, source waiver, retraining or original-data rewrite follows from this 
 Its process and lease have ended. Durable stdout/exit prefix:
 review-results/relationship-reuse-real-observation-fixed.
 
-The next independent real-data job started at 00:06:59 UTC October 6:
-derive-saved-issuer-candidates, session 64326/PID 92408 (launcher 93416),
-run 86425b3802554752900eec1d78d24221. It reads the exact original 516,679-version
-news/SEC population and publishes only a candidate sidecar after full replay.
-Parent SHA256 3c59845761740dc1a07a2f994cceaba53354c6f9486f4baa634ebd422a6a84ce;
-output data/research/swing_initial_fit_issuer_candidates_revised.
-At start system memory was 77.00% used / 3.609 GiB available; output/stage absent.
-Durable log/exit prefix: review-results/issuer-candidate-real-derivative.
-No result exists yet. Source/config bytes stay frozen and no other heavy job runs.
-This job uses real saved provider text and actual extraction/replay; no mocks.
-Candidate replay alone does not establish source qualification or authorize training.
+Actual news candidate publication completed exit 0 at 00:46:30 UTC October 6
+(session 64326/PID 92408, run 86425b3802554752900eec1d78d24221). Output:
+data/research/swing_initial_fit_issuer_candidates_revised/_manifest.json,
+SHA256 9c5f55807e9614c2e64d85902130e72c1dafdce73ba5f101f783daa9ac2f82d0.
+The candidate-only SQLite sidecar is 368,517,120 bytes. Actual full source population:
+516,679 versions; 14,182 review-candidate versions; 470,541 unclassified;
+31,956 preserved unavailable; candidate output changed for 14,268 versions.
+These are extraction counts, not candidate precision, recall or model improvement.
+Publisher rechecked every original input/current code hash and replayed every output
+row before atomic publication. Original 7.4 GB population, reviews and raw sources
+are unchanged. All qualification/training/serving/promotion flags remain false.
+Durable actual log/exit: review-results/issuer-candidate-real-derivative.*.
+
+A sequential actual-data chain started at 00:47:47 UTC October 6, session 60410,
+PID 93872 (launcher 93248). Current lease verify-saved-issuer-candidates,
+run 84c2d684857c4e9ca7a194d2f6cf0621. Workspace wrapper
+work/run_actual_saved_input_checks.py invokes only installed actual data owners:
+(1) independently verify the published news derivative using its actual manifest
+SHA, (2) replay original candle relationships to a fresh receipt, (3) independently
+reproduce that receipt only if it passes. No mocks, fixtures or model builds.
+Current phase/status: review-results/actual-saved-input-checks-state.json.
+Durable stdout/exit: review-results/actual-saved-input-checks.log/.exit.json.
+Combined executed source inventory has 134 unchanged files, frozen in workspace
+review-results/actual-saved-input-checks-frozen-implementation.json SHA256
+f731e868299df147d71e7adbd201f1d83bc1f39d173ac65d4a3d06a5456f97cf.
+Freeze all those sources, inputs and configs until the whole chain exits; it imports
+both data owners at start. Only one heavy job runs at any time. No independent news
+verification or original-candle receipt pass is claimed yet.
 
 Bounded checkpoint amendment after measured price differences (October 6):
 The user's explicit priority to reuse original matched data supports independently
@@ -88,8 +105,8 @@ passed both source owners. One bounded static code review found no further issue
 no actual original-input replay or passing receipt exists yet.
 Unit logs: original-replay-units-first.log, original-replay-consumers.log,
 original-replay-consumers-final.log/.xml/.exit.json and original-replay-final-units.log/.xml.
-The actual original replay must wait until session 64326 and its independent news
-verification release the lease. Use replay_original_relationships from the installed
+The actual original replay is scheduled sequentially in session 60410, after the
+independent news verification releases its lease. Use replay_original_relationships from the installed
 research.original_relationship_replay owner with the unchanged reuse config
 SHA95dd86ec733a70a72c0d0a2f05de78e0111b71e31fef1786d424136141cc209c,
 failed_comparison SourcePin(data/reports/swing_return_relationships_current_reuse_verification.json,
