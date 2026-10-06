@@ -2,7 +2,8 @@
 
 ### Current continuation: measured candle differences; real saved-news derivative running
 
-Latest source-semantic implementation 77ff5f5 and documentation 1a7d974 are pushed on
+Latest original-input replay implementation c81c70a and source-semantic implementation
+77ff5f5 are pushed on
 codex/v1-canonical-cleanup. Astra step 3 remains in progress; four
 existing fits are retained. Main and TradingFlow are untouched. APIs remain V1,
 internal identities unversioned. No compatibility fallback or accepted model claim.
@@ -31,8 +32,8 @@ These are actual price/feature differences, not naming differences or fixture ou
 Two further groups (INFO and SBNY) fail complete physical-prefix verification.
 Original sources/features/models remain unchanged. This report cannot authorize
 current 124 publication or claim that existing fits used the current candle inputs.
-A bounded source-choice design review is pending; no equality tolerance, source
-waiver, retraining or original-data rewrite is authorized by this failed comparison.
+A bounded source-choice design review is completed as recorded below; no equality
+tolerance, source waiver, retraining or original-data rewrite follows from this failed comparison.
 Its process and lease have ended. Durable stdout/exit prefix:
 review-results/relationship-reuse-real-observation-fixed.
 
@@ -47,6 +48,56 @@ Durable log/exit prefix: review-results/issuer-candidate-real-derivative.
 No result exists yet. Source/config bytes stay frozen and no other heavy job runs.
 This job uses real saved provider text and actual extraction/replay; no mocks.
 Candidate replay alone does not establish source qualification or authorize training.
+
+Bounded checkpoint amendment after measured price differences (October 6):
+The user's explicit priority to reuse original matched data supports independently
+verifying the original candle snapshot for the frozen experiment. Plan and design
+review agree on one research orchestration owner and a narrowly typed receipt over
+existing files, without new row copies. First slice: replay the four additions under
+current numerical code from exactly the original stock/SPY snapshot, original group
+ownership/corrections and WTW/ATVI/INFO/SBNY abstentions. Bind original 120/124
+manifests, requests, receipts, physical OHLCV/interval/availability metadata, source
+hashes, the failed comparison, current executed code and separate old provenance.
+Require all 59 months and 586,305 decisions, exact additions/clocks/null reasons and
+all inherited values/targets/eligibility/order. Recheck pins before publishing;
+any discrepancy prevents the new receipt. Mutation, substituted SPY, ambiguous
+ownership, current-price injection and changed prefix/clock must be rejected.
+No new source collection, old-code execution, tolerance, source waiver, retraining,
+model specification or production/live approval follows. _verified_authority's
+current-source equality gate remains unchanged. Later reaction publisher/verifier
+must use one verified research-input interface for original parent, ownership and
+both stock/SPY reads; their current adjusted-binding calls would mix price snapshots.
+The first slice does not alter those consumers before actual original-input replay.
+The reviewed three-file implementation is outside the running job's pinned closure;
+all 12 executed source files and original inputs remain frozen. This receipt will provide an explicitly
+original-input research route, not a passed comparison against newer candles.
+
+
+Original-input replay implementation c81c70a is reviewed, tested and pushed.
+The three changed files are outside the running news job's 12 pinned dependencies;
+all 12 hashes were checked unchanged before application and after checks. Original
+source/data/config/model files remain unchanged. This standalone research owner
+adds no current-source admission or consumer fallback. Its receipt verifier reruns
+the calculation and acquires the lease before reading inputs. First new unit scope
+28 passed (5.06s); affected historical/reuse/kernel/command/schema/package/continuity
+scope 419 passed (55.36s). A missing test filename caused one earlier invocation to
+collect zero cases; the corrected scope is the 419-pass run. Ruff found import
+formatting and a loop-lambda warning, both repaired. After the final lease ordering
+fix, all 29 new unit cases passed (4.39s), Ruff passed three files and strict typing
+passed both source owners. One bounded static code review found no further issue;
+no actual original-input replay or passing receipt exists yet.
+Unit logs: original-replay-units-first.log, original-replay-consumers.log,
+original-replay-consumers-final.log/.xml/.exit.json and original-replay-final-units.log/.xml.
+The actual original replay must wait until session 64326 and its independent news
+verification release the lease. Use replay_original_relationships from the installed
+research.original_relationship_replay owner with the unchanged reuse config
+SHA95dd86ec733a70a72c0d0a2f05de78e0111b71e31fef1786d424136141cc209c,
+failed_comparison SourcePin(data/reports/swing_return_relationships_current_reuse_verification.json,
+5f480f56179e054ad4f621f780d72e49e50ac2482af74536c9a3b4aad5e83265),
+and a fresh data/reports/swing_original_relationship_replay.json destination.
+Inspect its actual result and SHA; only passed_original_snapshot_replay may be
+submitted to verify_original_relationship_receipt. Never invent a receipt hash.
+
 Unit receipts: historical-observation-units.*; actual metadata stdout:
 historical-observation-actual-metadata.log. No fixture result is market evidence.
 
@@ -2709,7 +2760,8 @@ inspect the outcome of real candidate derivative session 64326 and, if it publis
 independently verify the resulting actual manifest SHA. Freeze its source/config
 bytes and run no other heavy job. The completed comparison 95557 has demonstrated
 actual price/feature differences and INFO/SBNY prefix failures; preserve its failed
-report and await the bounded source-choice design before any 124 publication.
+report and prepare the reviewed original-input receipt described above. No current-source
+124 publication follows from the failed comparison.
 No more general review or repeat of passed units is required.
 The earlier qualification/reuse reruns exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
@@ -2724,8 +2776,10 @@ Preserve failed qualification 64007, reuse 39985/diagnostic 87347, and the faile
 unit attempt 60429 alongside corrected 18-case unit receipt. Intermediate real
 review metrics reject both families; preserve exact judgments/gates and report
 final measured results without invented events or assumed training admission.
-Only a passed exact reuse comparison authorizes current 124 derivative/receipt;
-qualified source and 124 authorities precede actual 126 publication, receipt/readiness
+Only a passed exact reuse comparison authorizes the current-source 124 derivative/receipt.
+The reviewed original-input research route instead requires its independently passed
+original-snapshot receipt and explicit reaction consumer binding. Qualified source and
+verified 124 parent precede actual 126 publication, receipt/readiness
 and the two remaining fits. No generic news trial, target rebuild, API-version change
 or TradingFlow write. The no-synthetic CI correction is closed in 892100c/88fd60a.
 Main and TradingFlow remain untouched.

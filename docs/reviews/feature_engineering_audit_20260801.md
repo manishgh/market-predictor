@@ -84,6 +84,15 @@ bytes. It did not replay source values/features. The complete actual retained-da
 reuse restarted at 23:17:18 UTC as session 95557/PID 37332, with unchanged config
 SHA95dd86ec...209c. It ended exit 2 at 23:56:34 UTC with the real price/feature differences recorded above; no passed reuse report.
 
+Original-input replay implementation c81c70a is pushed after the measured candle
+changes. It verifies the original saved OHLCV/ownership/quarantines under current
+four-feature calculations and publishes only an independently replayable receipt;
+existing data/fits and current-source gates stay unchanged. Its 419 affected unit
+cases passed; final 29 units after lease-before-input ordering passed. Ruff and
+strict two-source typing passed; one bounded static review found no further issue.
+Actual replay and reaction consumer integration remain pending; no fixture pass is
+market evidence. Running news derivative's 12 executed source hashes are unchanged.
+
 ## User-Confirmed Astra Plan (October 4)
 
 The user confirmed that the saved plan's Bounded Experiment and Ordered Checkpoints
@@ -322,7 +331,7 @@ and fiscal-period evidence, independent unavailable/ambiguous reasons and causal
 clock replay share one historical/live implementation. Candidates remain unadmitted.
 All 548 affected checks, Ruff and strict mypy pass. Thirty-two pinned saved Alpaca
 records passed adapter/spans smoke (20 headlines, 12 bodies); this is not event
-precision/recall evidence. Corrected initial-fit SEC bodies `b3041a07â€¦69318` exist;
+precision/recall evidence. Corrected initial-fit SEC bodies `b3041a07Ã¢â‚¬Â¦69318` exist;
 older metadata-only wording below is historical. Full-content review authority,
 source-linked candidate/rejected annotations, precision/recall, exact model columns,
 reaction profile publication and its two fits remain outstanding. Existing title
