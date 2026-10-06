@@ -1,5 +1,14 @@
 # Current Feature Engineering Audit
 
+Current saved review checkpoint (99% account usage):
+- Reviewer A: 173 fully inspected packets, 1 partial packet; 200 saved version assessments (3 partial, 0 metadata-only).
+- Reviewer B: 648 fully inspected packets, 2 partial packets; 651 saved version assessments (3 partial, 8 metadata-only).
+Actual schema/exact-quote checks passed; complete two-review ingestion/qualification
+remain OPEN. Partial packets retain truthful incomplete inspection; no uninspected
+negatives or accepted features/models/SPY result are invented. Software5cf8208 and
+its focused unit/lint/types/real candidate parser evidence are pushed. Resume own
+source-review progress, then full actual ingestion/replay and unchanged metrics.
+
 Latest software checkpoint 5cf8208 implements pinned complete two-review
 ingestion/correspondence and independent byte replay. Unit checks 336 passed;
 supported pre-lease bulk-read finding fixed, final21 passed; Ruff/types passed.
