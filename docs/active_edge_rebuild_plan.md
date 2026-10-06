@@ -1,6 +1,29 @@
 # Active Edge Rebuild Plan
 
-### Current continuation: real news replay passed; original candle replay running
+### Current continuation: real news replay passed; measured empty-clock repair pushed
+
+Actual chain 60410 ended exit 1 at 01:06:53 UTC October 6 after its news
+verification passed. Original candle replay failed with TypeError: datetime64 type
+does not support operation all. The WTW quarantine correctly supplies an empty
+typed candle table; pandas map retained its datetime dtype and the timezone check
+attempted a boolean reduction on that empty datetime array. No candle receipt was
+published, no market rows were filled and no fit ran. PID 93872 and its lease ended.
+All 134 frozen implementation files were hash-checked unchanged before repair.
+The measured one-line repair cc64716 is reviewed and pushed: Python all over each
+timestamp preserves nonempty timezone validation and accepts empty stock history;
+empty SPY still rejects. Added two UNIT cases for typed-empty/empty-SPY and naive
+timestamps. Corrected unit fixture reproduced the actual TypeError before repair
+(its first attempt lacked schema_version and failed earlier); after repair all 31
+focused units passed in 4.20s, two-file Ruff and strict typing of the source owner
+passed. One read-only targeted code review found no further issue. An accidental
+.venvenv executable typo launched no test process; no full suite was run.
+Logs: review-results/original-empty-clock-units.log/.xml and original actual
+chain actual-saved-input-checks.log/.exit.json. Unit passes do not prove market replay.
+Next execute workspace work/run_actual_original_candle_checks.py: actual original
+candle replay followed by independent receipt reproduction only if it passes.
+Do not repeat the passed real news verification; the fix touches none of its twelve
+executed source files. Fresh frozen inventory/state/log prefix:
+review-results/actual-original-candle-checks. No actual rerun pass is claimed.
 
 Latest original-input replay implementation c81c70a and source-semantic implementation
 77ff5f5 are pushed on
@@ -50,10 +73,11 @@ row before atomic publication. Original 7.4 GB population, reviews and raw sourc
 are unchanged. All qualification/training/serving/promotion flags remain false.
 Durable actual log/exit: review-results/issuer-candidate-real-derivative.*.
 
-A sequential actual-data chain started at 00:47:47 UTC October 6, session 60410,
+Historical attempt: sequential actual-data chain 60410 started at 00:47:47 UTC
+and ended at 01:06:53 UTC October 6 as described above.
 PID 93872 (launcher 93248). News verification lease
 verify-saved-issuer-candidates, run 84c2d684857c4e9ca7a194d2f6cf0621, completed
-at 01:04:16.738752 UTC. Current phase is original-relationship-replay. Workspace wrapper
+at 01:04:16.738752 UTC. Its subsequent original replay failed. Workspace wrapper
 work/run_actual_saved_input_checks.py invokes only installed actual data owners:
 (1) independently verify the published news derivative using its actual manifest
 SHA, (2) replay original candle relationships to a fresh receipt, (3) independently
@@ -63,7 +87,7 @@ Durable stdout/exit: review-results/actual-saved-input-checks.log/.exit.json.
 Combined executed source inventory has 134 unchanged files, frozen in workspace
 review-results/actual-saved-input-checks-frozen-implementation.json SHA256
 f731e868299df147d71e7adbd201f1d83bc1f39d173ac65d4a3d06a5456f97cf.
-Freeze all those sources, inputs and configs until the whole chain exits; it imports
+Those sources, inputs and configs were frozen until the chain exited; it imported
 both data owners at start. Only one heavy job runs at any time. Independent
 post-publication news verification passed at 01:04:16.738752 UTC October 6: all
 516,679 versions and published counts were reproduced from retained original inputs.
@@ -108,7 +132,7 @@ collect zero cases; the corrected scope is the 419-pass run. Ruff found import
 formatting and a loop-lambda warning, both repaired. After the final lease ordering
 fix, all 29 new unit cases passed (4.39s), Ruff passed three files and strict typing
 passed both source owners. One bounded static code review found no further issue;
-actual original-input replay is running; no passing receipt exists yet.
+the first actual original-input replay failed as recorded above; no passing receipt exists yet.
 Unit logs: original-replay-units-first.log, original-replay-consumers.log,
 original-replay-consumers-final.log/.xml/.exit.json and original-replay-final-units.log/.xml.
 Actual original replay began in session 60410 at 01:04:16 UTC after independent
