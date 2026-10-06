@@ -1,6 +1,27 @@
 # Active Edge Rebuild Plan
 
-### Current continuation: repaired actual packet retry running
+### Current continuation: real packet publication and independent replay complete
+
+Packet component at d228191 is CLOSED. Actual chain 59799/PID 75040 completed
+13:44:20 UTC October 6 with exit 0. It independently reproduced all 1,750 packets,
+complete source inventory, exclusions, frame, sample and manifest bytes/hashes.
+All 24 executed implementation pins remained unchanged throughout both operations.
+Worker is gone; no new labels, source quality, model training or serving is claimed.
+Durable receipt actual-issuer-review-packets-retry-state.json SHA256
+9a3348774be1835abb61b2444d3b6f099cd4bc6279d807de198cd5162b889995.
+All source/qualification/training/serving/promotion flags remain false.
+
+Next bounded slice: adopt the reviewed off-repository pure annotation DTO/validator
+and same-version/four-role correspondence kernel, replacing only draft test loaders
+with normal package imports. No original producer, sampler, 24 packet owners, 133
+original input owners, targets, trained fits, metrics or event projection changes.
+Exit: focused source/version/quote/duplicate/partial-inspection regression units,
+Ruff/strict types and actual complete published-packet shape checks; operational
+pinned two-review ingestion and real independent source judgments remain required
+before qualification. No aggregate text-hash workaround or API version increment.
+
+Historical run details below describe preparation and intermediate states; the
+completed actual receipt above supersedes their running/pending narration.
 
 Fresh actual publication/verification chain started 11:17:05 UTC October 6,
 session 59799, worker PID 75040 (venv launcher 6832), implementation d228191.

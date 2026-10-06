@@ -2,6 +2,14 @@
 
 Last updated: 2026-10-06
 
+Actual complete-document review packet publication and independent byte replay at
+d228191 passed (exit 0, October 6 13:44:20 UTC). Manifest 2b4b933565704a06fae86e815f3edab56412c2d2717254f4eb39e5ad5f50b3a9:
+516,679 original versions, 539,399 records, 22,722 aliases; 1,750 fresh review samples
+and 1,977 packet version/occurrence entries (15 metadata-only). All 24 executed code
+pins unchanged. U=466,635; excluded development D=1,748; fresh F=464,887. Original
+judgments/data remain unchanged; no new labels, measured source quality, 126 features,
+remaining model fits, serving or SPY improvement follows from this packet result.
+
 ## Qualified Reaction Profile: Current Acceptance Matrix
 
 Current input binding implementation 852f43f is pushed: shared original-data reader
