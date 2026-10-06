@@ -1,6 +1,16 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: packet implementation pushed; actual publication next
+### Current continuation: packet implementation pushed; actual publication/replay running
+
+Actual packet chain started at 10:10:38 UTC October 6: session 12774,
+PID 4688, publish-issuer-review-packets run fa253e8c773a475a80cbc5ba787e1726.
+Workspace work/run_actual_issuer_review_packets.py sequentially invokes installed
+actual publisher and independent verifier. Frozen 24-file implementation inventory:
+review-results/actual-issuer-review-packets-frozen-implementation.json SHA256
+3c28655bc697c09de95d3b9d0feff1d93fbc5e373d083c52d4f1392a5d2eb4b8.
+Freeze every executed source, config and data pin until the entire chain ends.
+State/log/exit prefix: review-results/actual-issuer-review-packets. One heavy process.
+No new packet pass, review label, qualification, training or serving result is claimed.
 
 Implementation a543fe7 is reviewed and pushed: strict packet config/version contract,
 frozen frame/document/correspondence identities, complete inventory/exclusion/sample/
@@ -3038,10 +3048,12 @@ the frozen numeric training boundary or authorize promotion.
 ## Next Actions
 
 Exact next checkpoint: original Astra ordered checkpoint 3 remains in progress;
-publish and independently verify actual source-only packets at a543fe7 using
+await actual source-only packet chain 12774/PID 4688 at a543fe7 using
 configs/swing_initial_fit_issuer_review_packets.json SHA7edd26c7...103fd and fresh
 data/research/swing_initial_fit_issuer_review_packets. Freeze executed code/input/
 config pins until both sequential actual operations end; one heavy worker only.
+Use durable actual-issuer-review-packets state/log/exit; preserve any failed private
+stage and inspect its exact error before a retry. No blind labels before a passed packet.
 Actual candidate9c5f5580...f82d0 is the source, not a fixture. Keep all old judgments
 and numeric gates unchanged. No labels/qualification/model/serving acceptance
 follows from software tests or packet publication. Original component remains closed.
