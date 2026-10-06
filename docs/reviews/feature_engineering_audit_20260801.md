@@ -1,5 +1,15 @@
 # Current Feature Engineering Audit
 
+Latest software checkpoint 5cf8208 implements pinned complete two-review
+ingestion/correspondence and independent byte replay. Unit checks 336 passed;
+supported pre-lease bulk-read finding fixed, final21 passed; Ruff/types passed.
+Actual retained strict candidate parser checked 14,182 versions/16,004 candidates;
+decoder/dependencies unchanged after lock fix. Original133/packet24 owners unchanged.
+Two fresh independent model-assisted source reviewers are now inspecting real
+blinded packets. Genuine partial reviews are not complete-frame qualification:
+no new quality/feature/model/SPY acceptance yet. Full1750packet/1977version coverage
+per reviewer and actual ingestion publication/replay remain required.
+
 Latest component 75791f4: complete-version annotation validation and exact event
 correspondence are installed and pushed. Selected unit checks: 314 passed; Ruff
 and strict typing passed. Actual installed reader checked all 1,750 published

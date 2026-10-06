@@ -1,5 +1,53 @@
 # Active Edge Rebuild Handoff
 
+### Current continuation: ingestion software pushed; real source reviews underway
+
+Implementation 5cf8208 is pushed. New canonical research owner
+research/issuer_annotation_ingestion.py reads two physically pinned complete JSONL
+review files, calls the existing public packet verifier, then acquires a separate
+processing lease and checks all source/DB/packet/config/code hashes before and after.
+It streams complete assessments and exact-version candidate correspondence to a
+private stage, preserves every unresolved judgment, and grants no qualification,
+training, serving, economic or promotion permission. Independent verification
+repeats the actual calculations and compares all output bytes. No old owner changed.
+
+Selected synthetic UNIT checks: 336 passed in 21.46s. One consolidated code review
+found pre-lease bulk output hashing; moved it under the processing lease and bounded
+the preliminary routing metadata. Final affected 21 units passed in 5.20s, including
+busy-lock rejection without assessment/correspondence reads. Ruff and strict mypy
+passed. Real retained candidate parser check separately passed for all 14,182
+candidate versions/16,004 candidates (exit 0), with manifest/DB hashes unchanged.
+The later lock fix leaves that exact decoder and every dependency unchanged; proved
+in workspace review-results/issuer-ingestion-final-decoder-equivalence.json. All
+protected original 133 and packet 24 code pins still match. No full-suite release.
+
+Actual complete review ingestion/publication/replay remains OPEN: each reviewer
+must inspect 1,750 actual packets/1,977 versions, including 15 metadata-only. Fresh
+independent model-assisted source reviewers A and B are inspecting only blinded
+source text and identity evidence, with no extractor/old-label/outcome access.
+Their genuine partial files are workspace work/source-review-fresh-a and -b;
+do not treat them as complete review artifacts or use them for qualification.
+Installed schema/quote checks passed on the recorded snapshot A=30 packets/31
+versions and B=40 packets/40 versions. Report:
+review-results/issuer-source-genuine-partial-review-check.json. Source judgments
+are made after actual text inspection; code only checks quotes and serializes them.
+Never generate rows for uninspected remainder or infer missing negatives/years.
+Common source-only fiscal-period criterion requires source year (or explicit end
+date); Q3 alone cannot identify the complete fiscal period. Preserve such quoted
+partial evidence with explicit_fiscal_period false, never publication-derived year.
+Model assistance is declared honestly; these are not human gold judgments.
+
+Next finish both real independent reviews, validate exact complete coverage/pins,
+then run the installed actual publisher and independent verifier with fresh output
+and all source/config/code pins frozen. Actual receipt is required before later
+metrics integration/event projection, reaction features, two remaining fits and
+funded SPY comparisons. Public API V1, targets and four completed fits stay fixed;
+TradingFlow/main remain untouched. User requested current handoff at 99% account
+usage; latest observed usage is 92%, no reset consumed.
+
+Historical details below are superseded where they describe uninstalled ingestion
+code, absent partial reviews or still-running packet/candidate checks.
+
 ### Current bounded slice: pinned complete review ingestion
 
 Implement only research/issuer_annotation_ingestion.py and focused unit tests.
@@ -3185,18 +3233,22 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: original Astra ordered checkpoint 3 remains in progress;
-implement the bounded operational pinned two-review ingestion/correspondence owner
-after closed pure component 75791f4. Use completed packet publication
+Exact next checkpoint: Astra ordered checkpoint 3 remains in progress;
+finish NEW independent source-only reviews of completed packet publication
 data/research/swing_initial_fit_issuer_review_packets_retry/_manifest.json
 SHA2b4b933565704a06fae86e815f3edab56412c2d2717254f4eb39e5ad5f50b3a9.
-Do not rerun packet publication or change its 24 owners. New independent complete
-source-only reviewer artifacts are still missing; preserve old judgments as historical.
-Follow sequential canonical verification/processing leases, strict physical pins,
-complete sample/version coverage, entry/exit mutation checks and exact source spans.
-All admissions false; metrics/event projection/model fits remain later checkpoints.
-Do not reconstruct matched candles/news, refit the four completed models, change
-targets or versions, waive numerical gates, or write to TradingFlow/main.
+Ingestion software 5cf8208 is pushed; real complete ingestion exit is still OPEN.
+Use actual work/source-review-fresh-a and -b progress/per-packet files; inspect only
+remaining source packets, never fill uninspected negatives or reuse old labels.
+At complete1750/1977 coverage per reviewer, assemble sorted JSONL, preserve physical
+hashes, adopt immutable real reviewer files under research data, and create a strict
+AnnotationIngestionConfig with exact pins/policy identities. Run installed
+publish_issuer_annotation_correspondence to a fresh research destination, then
+verify_issuer_annotation_correspondence on its independently pinned manifest.
+Keep one heavy worker and freeze all executed/input/config pins across both jobs.
+No review or quality admission is implied by partial/schema/parser checks.
+Do not rerun closed packet publication or change its 24 owners, matched candles,
+targets, four trained fits, numeric gates, public V1, TradingFlow or main.
 The earlier qualification/reuse reruns exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
 Saved-config implementation b589725 and actual byte/fold proof are complete.
