@@ -1,6 +1,6 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: real news sidecar published; independent source checks running
+### Current continuation: real news replay passed; original candle replay running
 
 Latest original-input replay implementation c81c70a and source-semantic implementation
 77ff5f5 are pushed on
@@ -51,8 +51,9 @@ are unchanged. All qualification/training/serving/promotion flags remain false.
 Durable actual log/exit: review-results/issuer-candidate-real-derivative.*.
 
 A sequential actual-data chain started at 00:47:47 UTC October 6, session 60410,
-PID 93872 (launcher 93248). Current lease verify-saved-issuer-candidates,
-run 84c2d684857c4e9ca7a194d2f6cf0621. Workspace wrapper
+PID 93872 (launcher 93248). News verification lease
+verify-saved-issuer-candidates, run 84c2d684857c4e9ca7a194d2f6cf0621, completed
+at 01:04:16.738752 UTC. Current phase is original-relationship-replay. Workspace wrapper
 work/run_actual_saved_input_checks.py invokes only installed actual data owners:
 (1) independently verify the published news derivative using its actual manifest
 SHA, (2) replay original candle relationships to a fresh receipt, (3) independently
@@ -63,8 +64,12 @@ Combined executed source inventory has 134 unchanged files, frozen in workspace
 review-results/actual-saved-input-checks-frozen-implementation.json SHA256
 f731e868299df147d71e7adbd201f1d83bc1f39d173ac65d4a3d06a5456f97cf.
 Freeze all those sources, inputs and configs until the whole chain exits; it imports
-both data owners at start. Only one heavy job runs at any time. No independent news
-verification or original-candle receipt pass is claimed yet.
+both data owners at start. Only one heavy job runs at any time. Independent
+post-publication news verification passed at 01:04:16.738752 UTC October 6: all
+516,679 versions and published counts were reproduced from retained original inputs.
+This establishes extraction replay only; source judgments, training eligibility and
+model improvement are not established. Original candle replay started immediately
+at 01:04:16.739147 UTC. No original-candle receipt pass is claimed yet.
 
 Bounded checkpoint amendment after measured price differences (October 6):
 The user's explicit priority to reuse original matched data supports independently
@@ -85,13 +90,14 @@ current-source equality gate remains unchanged. Later reaction publisher/verifie
 must use one verified research-input interface for original parent, ownership and
 both stock/SPY reads; their current adjusted-binding calls would mix price snapshots.
 The first slice does not alter those consumers before actual original-input replay.
-The reviewed three-file implementation is outside the running job's pinned closure;
-all 12 executed source files and original inputs remain frozen. This receipt will provide an explicitly
+The reviewed three-file implementation was outside the earlier news publication
+job's 12-file closure. It is included in the current chain's frozen 134-file inventory.
+This receipt will provide an explicitly
 original-input research route, not a passed comparison against newer candles.
 
 
 Original-input replay implementation c81c70a is reviewed, tested and pushed.
-The three changed files are outside the running news job's 12 pinned dependencies;
+The three changed files were outside the then-running news job's 12 pinned dependencies;
 all 12 hashes were checked unchanged before application and after checks. Original
 source/data/config/model files remain unchanged. This standalone research owner
 adds no current-source admission or consumer fallback. Its receipt verifier reruns
@@ -102,11 +108,11 @@ collect zero cases; the corrected scope is the 419-pass run. Ruff found import
 formatting and a loop-lambda warning, both repaired. After the final lease ordering
 fix, all 29 new unit cases passed (4.39s), Ruff passed three files and strict typing
 passed both source owners. One bounded static code review found no further issue;
-no actual original-input replay or passing receipt exists yet.
+actual original-input replay is running; no passing receipt exists yet.
 Unit logs: original-replay-units-first.log, original-replay-consumers.log,
 original-replay-consumers-final.log/.xml/.exit.json and original-replay-final-units.log/.xml.
-The actual original replay is scheduled sequentially in session 60410, after the
-independent news verification releases its lease. Use replay_original_relationships from the installed
+Actual original replay began in session 60410 at 01:04:16 UTC after independent
+news verification passed and released its lease. Use replay_original_relationships from the installed
 research.original_relationship_replay owner with the unchanged reuse config
 SHA95dd86ec733a70a72c0d0a2f05de78e0111b71e31fef1786d424136141cc209c,
 failed_comparison SourcePin(data/reports/swing_return_relationships_current_reuse_verification.json,
@@ -141,8 +147,22 @@ were added; a 23-pass rerun still exposed alphabetical order, then its corrected
 single case passed (2.92s). Six-file Ruff and three-source strict typing passed.
 Initial 19 strict narrowing errors are repaired with all runtime checks preserved.
 One consolidated review found no further issues. All logs are unit-only evidence
-in review-results/issuer-semantic-* and issuer-cli-inventory-*; no actual derivative
-or new source qualification pass is claimed. The running job's 131 hashes are exact.
+in review-results/issuer-semantic-* and issuer-cli-inventory-*; actual derivative
+publication is now complete as recorded above, but new source qualification remains
+pending. The completed comparison's 131 hashes stayed unchanged.
+
+Next source-review design preparation is scratch only. Existing packets already
+contain readable SEC exhibits, but each review chooses only one document and the
+current metric/projection does not tie each candidate to its exact supporting
+version/text/span. Revise that demonstrated correspondence conflict; do not recollect
+or rebuild matched news. Old judgments stay immutable. Before new annotation, freeze
+the previously inspected-cluster exclusion list and the statistical population:
+a fresh frame with excluded clusters has zero inclusion probability for those
+clusters, so its N/n estimates cannot be claimed to cover the full population.
+Disclose full/excluded/fresh counts and define conservative treatment of excluded
+candidates before any admission decision. Numerical precision/agreement thresholds
+remain unchanged. Proposal: workspace work/revised-issuer-packet-design/CHECKPOINT.md.
+No new packets, labels, sampling population or qualifier have been published.
 
 The user clarified October 5: mocks/synthetic inputs are allowed only in unit tests.
 AGENTS.md records this. Fixture tests below are unit/regression evidence, not
@@ -2774,8 +2794,9 @@ the frozen numeric training boundary or authorize promotion.
 
 Exact next checkpoint: original Astra ordered checkpoint 3 remains in progress;
 await and inspect sequential actual-data chain 60410 using its durable state/log.
-It independently verifies news manifest 9c5f5580...f82d0, then replays and verifies
-the original candle snapshot using implementation c81c70a. Freeze the combined 134
+It independently verified news manifest 9c5f5580...f82d0 at 01:04:16 UTC and is
+now replaying the original candle snapshot using implementation c81c70a. Only a
+passed original replay proceeds to its independent receipt verification. Freeze the combined 134
 source files and all inputs/configs until the chain ends; no other heavy job.
 Preserve failed current-price comparison SHA5f480f56...83265. Any failed original
 replay is a specific discrepancy to inspect, never a tolerance/source waiver or
