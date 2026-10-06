@@ -2,8 +2,12 @@
 from __future__ import annotations
 
 import json
+import shutil
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pandas as pd
@@ -11,13 +15,16 @@ import pytest
 
 from market_predictor.canonical.store import file_sha256, load_canonical_artifact
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import write_json_object
+from market_predictor.heavy_jobs import HeavyJobBusyError, heavy_job_lease
 from market_predictor.research import issuer_reaction_publication as owner
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.issuer_reaction import REACTION_COLUMNS
 from market_predictor.swing.contracts.issuer_reaction_publication import ARTIFACT_TYPE, PROFILE, IssuerReactionPublicationPolicy
 from market_predictor.swing.datasets import return_relationship_verification as relationship_verifier
 from market_predictor.swing.features.issuer_reaction_profile import build_issuer_reaction_profile
+from tests.support.issuer_reaction_inputs import install_synthetic_original_inputs, synthetic_replay_pin
 from tests.test_issuer_content_qualification_authority import _publish as publish_qualification
 from tests.test_issuer_content_qualification_authority import fixture as _qualification_fixture
 from tests.test_swing_issuer_reaction_profile import bundle as bundle
@@ -32,14 +39,20 @@ def _pin(root: Path, path: Path) -> SourcePin:
 @pytest.fixture
 def reaction_publication(publication_fixture: dict[str, Any], qualification_fixture: dict[str, Any],
                          monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    """Actual publication/review kernels; parent fixture admits only synthetic bars.
+    """Unit publication/review kernels; original-input admission is explicitly doubled.
 
     The tiny 354-row fixture explicitly replaces the production row-count constant;
-    all 59 months, original parent targets and real source/hash readers remain.
+    All 59 months, parent targets and real qualification/source/hash readers remain.
+    The current synthetic parent is NOT evidence of original-snapshot admission.
     """
     parent = publication_fixture
     root = parent["root"]
     assert root == qualification_fixture["root"]
+    for name in ("original_relationship_inputs.py", "original_relationship_replay.py"):
+        helper = Path("src/market_predictor/research") / name
+        (root / helper).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(Path(__file__).resolve().parents[1] / helper, root / helper)
+    lifecycle = install_synthetic_original_inputs(monkeypatch, root)
     monkeypatch.setattr(owner, "__file__", str(root / "src/market_predictor/research/issuer_reaction_publication.py"))
     monkeypatch.setattr(owner, "guard", lambda limit: None)
     monkeypatch.setattr(owner, "release_process_memory", lambda: None)
@@ -54,6 +67,7 @@ def reaction_publication(publication_fixture: dict[str, Any], qualification_fixt
     qualification_folder = qualification_fixture["output"]
     policy = IssuerReactionPublicationPolicy(schema_version="market_predictor.issuer_reaction_publication_config",
         parent_publication=parent["publication"], parent_saved_row_verification=_pin(root, receipt_path),
+        original_snapshot_replay=synthetic_replay_pin(root),
         qualification_publication=_pin(root, qualification_folder / "_manifest.json"),
         qualification_authority=_pin(root, qualification_folder / "_authority.json"))
     config_path = root / "configs/issuer_reactions.json"
@@ -69,7 +83,8 @@ def reaction_publication(publication_fixture: dict[str, Any], qualification_fixt
     publication = _pin(root, output / "_manifest.json")
     return {"root": root, "publication": publication, "output": output, "sessions": parent["sessions"],
             "policy": policy, "config": _pin(root, config_path), "parent": parent["parent"],
-            "relationship": parent, "relationship_parent": parent, "result": result, "partial": partial}
+            "relationship": parent, "relationship_parent": parent, "result": result, "partial": partial,
+            "synthetic_original_lifecycle": lifecycle}
 
 
 def test_native_publication_preserves_all_parent_rows_and_unknown_coverage(reaction_publication: dict[str, Any]) -> None:
@@ -79,6 +94,12 @@ def test_native_publication_preserves_all_parent_rows_and_unknown_coverage(react
     assert len(verified.months) == 59 and verified.manifest["rows"] == 354
     assert verified.request["coverage"] == "unknown" and verified.request["baseline_numerical_replayed"] is False
     assert verified.request["qualification_source_replayed"] is True
+    assert verified.request["original_snapshot_replay"] == value["policy"].original_snapshot_replay.model_dump(mode="json")
+    original_sources = value["synthetic_original_lifecycle"]["contexts"][-1].original_sources.model_dump(mode="json")
+    assert verified.request["original_bar_sources"] == original_sources
+    assert verified.request["sources"]["bars"] == {
+        **original_sources, "baseline_authority_sha256": value["policy"].parent_publication.sha256,
+    }
     for month, record in verified.months.items():
         child = record["profiles"][PROFILE]
         frame, _ = load_canonical_artifact(value["output"] / child["path"], expected_type=ARTIFACT_TYPE, allow_research=True)
@@ -129,3 +150,95 @@ def test_complete_state_cannot_drop_a_month_or_rewrite_row_count(reaction_public
     path.write_text(json.dumps(manifest), encoding="utf-8")
     with pytest.raises(DataReadinessError, match="total differs|incomplete"):
         owner.verify_issuer_reaction_publication(value["root"], _pin(value["root"], path))
+
+
+def test_source_mutation_during_context_exit_prevents_completed_manifest(
+    tmp_path: Path, bundle: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Synthetic one-row UNIT admission; real writes and exit-time pin checks."""
+    root = tmp_path
+    source = root / "synthetic_unit_source.txt"
+    source.write_text("synthetic unit evidence only", encoding="utf-8")
+    source_pin = _pin(root, source)
+    # These metadata pins stand in for admission only inside this unit test.
+    # No original population, reviewer corpus or operational authority is built.
+    policy = IssuerReactionPublicationPolicy(
+        schema_version="market_predictor.issuer_reaction_publication_config",
+        parent_publication=source_pin, parent_saved_row_verification=source_pin,
+        original_snapshot_replay=source_pin, qualification_publication=source_pin,
+        qualification_authority=source_pin,
+    )
+    config = root / "configs/synthetic_exit_boundary.json"
+    config.parent.mkdir(parents=True)
+    write_json_object(config, policy.model_dump(mode="json"))
+    baseline = bundle["baseline"]
+    month = baseline.rows.session_date_et.iloc[0].isoformat()[:7]
+    record = {"rows": len(baseline.rows), "decision_ids_sha256": json_sha256(sorted(baseline.rows.decision_id))}
+    parent = SimpleNamespace(
+        request={"cohort_sha256": "a" * 64, "synthetic_unit_test_only": True},
+        manifest={"rows": len(baseline.rows)}, months={month: record},
+        model_columns=baseline.model_columns, availability_columns=baseline.availability_columns,
+    )
+    files = {source_pin.path: source_pin.sha256}
+    inputs = SimpleNamespace(
+        policy=policy, parent=parent, sources=bundle["sources"], source_files=files,
+        context=SimpleNamespace(original_sources=bundle["sources"].bars), historical_implementation_files={},
+    )
+    monkeypatch.setenv("MARKET_PREDICTOR_RUNTIME_DIR", str(root / "isolated-runtime"))
+    monkeypatch.setattr(owner, "load_policy", lambda *args: policy)
+    monkeypatch.setattr(owner, "current_implementation", lambda root: {})
+    monkeypatch.setattr(owner, "guard", lambda limit: None)
+    monkeypatch.setattr(owner, "release_process_memory", lambda: None)
+    monkeypatch.setattr(owner, "load_parent_month", lambda inputs, key: baseline.rows.copy())
+
+    def one_group(actual_root: Path, actual_inputs: Any, key: str) -> Iterator[Any]:
+        assert actual_root == root and actual_inputs is inputs and key == month
+        yield "synthetic-unit-group", baseline, {name: value for name, value in bundle.items() if name != "baseline"}
+
+    monkeypatch.setattr(owner, "iter_reaction_inputs", one_group)
+
+    @contextmanager
+    def mutate_on_exit(actual_root: Path, actual_policy: IssuerReactionPublicationPolicy) -> Iterator[Any]:
+        assert actual_root == root and actual_policy is policy
+        owner.check_files(root, files)
+        yield inputs
+        source.write_bytes(b"unit exit-time mutation")
+        owner.check_files(root, files)
+
+    monkeypatch.setattr(owner, "load_reaction_inputs", mutate_on_exit)
+    output = root / "data/features/reaction_exit_mutation"
+    with pytest.raises(DataReadinessError, match="changed"):
+        owner.materialize_issuer_reactions(root, config, file_sha256(config), output)
+    assert source.read_bytes() == b"unit exit-time mutation"
+    assert (output / "_checkpoint.json").is_file()
+    assert (output / month / f"{PROFILE}.parquet").is_file()
+    assert not (output / "_manifest.json").exists()
+
+
+def test_public_verification_opens_one_scoped_original_input_context(reaction_publication: dict[str, Any]) -> None:
+    state = reaction_publication
+    lifecycle = state["synthetic_original_lifecycle"]
+    before = lifecycle["entered"]
+    owner.verify_issuer_reaction_publication(state["root"], state["publication"])
+    assert lifecycle["entered"] == lifecycle["exited"] == before + 1
+    with pytest.raises(DataReadinessError, match="context is closed"):
+        lifecycle["contexts"][-1].read_spy()
+
+
+def test_public_verification_busy_before_private_input_loading(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = tmp_path / "isolated-runtime"
+    monkeypatch.setenv("MARKET_PREDICTOR_RUNTIME_DIR", str(runtime))
+    monkeypatch.setattr(owner, "_verified_reaction_publication_inputs", lambda *args: pytest.fail("input read before lease"))
+    with heavy_job_lease("synthetic-public-owner", runtime_dir=runtime):
+        with pytest.raises(HeavyJobBusyError):
+            owner.verify_issuer_reaction_publication(tmp_path, SourcePin(path="missing.json", sha256="a" * 64))
+
+
+def test_synthetic_original_receipt_bytes_remain_bound(reaction_publication: dict[str, Any]) -> None:
+    state = reaction_publication
+    path = state["root"] / state["policy"].original_snapshot_replay.path
+    path.write_bytes(path.read_bytes() + b" ")
+    with pytest.raises(DataReadinessError, match="hash mismatch"):
+        owner.verify_issuer_reaction_publication(state["root"], state["publication"])

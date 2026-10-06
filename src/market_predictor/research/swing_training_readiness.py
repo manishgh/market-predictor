@@ -44,6 +44,8 @@ REACTION_IMPLEMENTATION_PATHS = (
     "swing/contracts/issuer_reaction.py", "research/issuer_reaction_publication.py",
     "research/issuer_reaction_verification.py", "swing/features/issuer_reaction_profile.py",
     "swing/features/issuer_reaction.py",
+    "research/original_relationship_inputs.py",
+    "research/original_relationship_replay.py",
 )
 
 

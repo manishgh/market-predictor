@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import shutil
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -26,6 +28,7 @@ from market_predictor.swing.contracts.issuer_reaction_publication import (
     VerifiedIssuerReactionPublication,
 )
 from market_predictor.swing.features.issuer_reaction_profile import build_issuer_reaction_profile
+from tests.support.issuer_reaction_inputs import synthetic_replay_pin
 from tests.test_swing_issuer_reaction_profile import bundle as bundle
 
 REPO = Path(__file__).resolve().parents[1]
@@ -79,9 +82,12 @@ def derivative(tmp_path: Path, bundle: dict[str, Any], monkeypatch: pytest.Monke
     policy = IssuerReactionPublicationPolicy(schema_version="market_predictor.issuer_reaction_publication_config",
         parent_publication=parent_pin,
         parent_saved_row_verification=SourcePin(path="data/reports/relationships.json", sha256="b" * 64),
+        original_snapshot_replay=synthetic_replay_pin(root),
         qualification_publication=qualification, qualification_authority=authority)
     request = {"policy": policy.model_dump(mode="json"), "profile_sha256": result.audit["profile_sha256"],
         "sources": bundle["sources"].model_dump(mode="json"), "qualification_publication": qualification.model_dump(mode="json"),
+        "original_snapshot_replay": policy.original_snapshot_replay.model_dump(mode="json"),
+        "original_bar_sources": bundle["sources"].bars.model_dump(mode="json"),
         "historical_implementation_files": {"historical/producer.py": "c" * 64}}
     request_pin = _json(directory / "_request.json", request)
     path = directory / month / f"{PROFILE}.parquet"
@@ -92,6 +98,7 @@ def derivative(tmp_path: Path, bundle: dict[str, Any], monkeypatch: pytest.Monke
     manifest = {"rows": len(parent.rows), "months": months, "request_sha256": request_pin}
     publication = SourcePin(path="data/features/reactions/_manifest.json", sha256=_json(directory / "_manifest.json", manifest))
     sources: dict[str, str] = {publication.path: publication.sha256, parent_pin.path: parent_pin.sha256,
+        policy.original_snapshot_replay.path: policy.original_snapshot_replay.sha256,
         (directory / "_request.json").relative_to(root).as_posix(): request_pin}
     for artifact, descriptor in ((path, child), (parent_path, parent_child)):
         sources[artifact.relative_to(root).as_posix()] = descriptor["sha256"]
@@ -105,11 +112,27 @@ def derivative(tmp_path: Path, bundle: dict[str, Any], monkeypatch: pytest.Monke
         parent_manifest=parent_manifest, parent_path=root / parent_pin.path, model_columns=result.model_columns,
         availability_columns=dict(result.availability_columns), months=months)
     inputs = SimpleNamespace(source_files={event_pin: sources[event_pin]}, sources=bundle["sources"])
-    monkeypatch.setattr(owner, "verify_issuer_reaction_publication", lambda root, pin: verified)
-    monkeypatch.setattr(owner, "load_reaction_inputs", lambda root, policy: inputs)
+    lifecycle = {"entered": 0, "exited": 0, "active": False}
+
+    @contextmanager
+    def verified_inputs(actual_root: Path, pin: SourcePin) -> Iterator[tuple[VerifiedIssuerReactionPublication, Any]]:
+        assert actual_root == root and pin == publication
+        assert lifecycle["active"] is False
+        lifecycle["entered"] += 1
+        lifecycle["active"] = True
+        try:
+            yield verified, inputs
+        finally:
+            lifecycle["active"] = False
+            lifecycle["exited"] += 1
+
+    # This unit fixture isolates parent admission. The canonical selector,
+    # physical math, saved-row/hash checks and receipt identity are not doubled.
+    monkeypatch.setattr(owner, "_verified_reaction_publication_inputs", verified_inputs)
     monkeypatch.setattr(owner, "load_parent_month", lambda inputs, key: parent.rows.copy())
 
     def iterator(root: Path, inputs: Any, key: str) -> Any:
+        assert lifecycle["active"] is True
         kwargs = {name: value for name, value in bundle.items() if name != "baseline"}
         kwargs["qualified_events"] = pd.read_parquet(events_path)
         yield "one-source-group", parent, kwargs
@@ -120,11 +143,12 @@ def derivative(tmp_path: Path, bundle: dict[str, Any], monkeypatch: pytest.Monke
     monkeypatch.setattr(owner, "assemble_reaction_month", lambda parent, groups: groups[0])
     return dict(root=root, publication=publication, output=root / "data/reports/reaction.json", verified=verified,
         path=path, parent=parent.rows, frame=result.rows, child=child, bundle=bundle, inputs=inputs,
-        sources=sources, event_pin=event_pin, events_path=events_path)
+        sources=sources, event_pin=event_pin, events_path=events_path, lifecycle=lifecycle)
 
 
 def test_real_projection_replay_and_receipt_preserve_parent(derivative: dict[str, Any]) -> None:
     value = owner.verify_issuer_reaction_rows(derivative["root"], derivative["publication"], derivative["output"])
+    assert derivative["lifecycle"] == {"entered": 1, "exited": 1, "active": False}
     assert value["rows"] == value["unique_decisions"] == 1
     assert value["original_outcome_values_exact"] and value["additions_source_replayed"]
     assert value["profiles"][PROFILE]["unknown_coverage_rows"] == 1
@@ -135,6 +159,8 @@ def test_real_projection_replay_and_receipt_preserve_parent(derivative: dict[str
     assert value["historical_implementation_files"] == {"historical/producer.py": "c" * 64}
     assert value["report_sha256"] == file_sha256(derivative["output"])
     assert owner.validate_issuer_reaction_receipt(derivative["root"], derivative["publication"], value) is derivative["verified"]
+    assert derivative["lifecycle"] == {"entered": 2, "exited": 2, "active": False}
+    assert value["original_snapshot_replay"] == derivative["verified"].request["original_snapshot_replay"]
 
 
 @pytest.mark.parametrize("poison", [
@@ -199,7 +225,8 @@ def test_known_rejected_revision_cannot_match_saved_old_event(derivative: dict[s
 
 @pytest.mark.parametrize("field,value", [("event_authority_sha256", "f" * 64), ("qualification_source_replayed", False),
                                          ("original_columns_exact", 1), ("training_eligible", True),
-                                         ("rows", True), ("historical_implementation_files", {})])
+                                         ("rows", True), ("historical_implementation_files", {}),
+                                         ("original_snapshot_replay", {})])
 def test_receipt_cannot_replace_authority_or_replay_claims(derivative: dict[str, Any], field: str, value: Any) -> None:
     report = owner.verify_issuer_reaction_rows(derivative["root"], derivative["publication"], derivative["output"])
     report[field] = value
@@ -215,8 +242,26 @@ def test_source_mutation_prevents_receipt(derivative: dict[str, Any]) -> None:
     assert not derivative["output"].exists()
 
 
+def test_source_mutation_during_context_exit_prevents_completed_receipt(
+    derivative: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = owner._verified_reaction_publication_inputs
+
+    @contextmanager
+    def mutate_on_exit(root: Path, publication: SourcePin) -> Iterator[Any]:
+        with original(root, publication) as value:
+            yield value
+            derivative["events_path"].write_bytes(b"unit exit-time mutation")
+            owner.check_files(root, value[0].source_files)
+
+    monkeypatch.setattr(owner, "_verified_reaction_publication_inputs", mutate_on_exit)
+    with pytest.raises(DataReadinessError, match="changed"):
+        owner.verify_issuer_reaction_rows(derivative["root"], derivative["publication"], derivative["output"])
+    assert not derivative["output"].exists()
+
+
 def test_receipt_immutable_and_lease_precedes_input_loading(derivative: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(owner, "verify_issuer_reaction_publication", lambda *args: pytest.fail("read before lease"))
+    monkeypatch.setattr(owner, "_verified_reaction_publication_inputs", lambda *args: pytest.fail("read before lease"))
     with heavy_job_lease("synthetic-owner", runtime_dir=derivative["root"] / "data/runtime"):
         with pytest.raises(HeavyJobBusyError):
             owner.verify_issuer_reaction_rows(derivative["root"], derivative["publication"], derivative["output"])
@@ -225,3 +270,11 @@ def test_receipt_immutable_and_lease_precedes_input_loading(derivative: dict[str
     with pytest.raises(FileExistsError):
         owner.verify_issuer_reaction_rows(derivative["root"], derivative["publication"], derivative["output"])
     assert derivative["output"].read_text() == "original"
+
+
+def test_replay_rejects_input_source_identity_change(derivative: dict[str, Any]) -> None:
+    derivative["inputs"].sources = derivative["inputs"].sources.model_copy(update={"event_authority_sha256": "e" * 64})
+    with pytest.raises(DataReadinessError, match="source semantics differ"):
+        owner.verify_issuer_reaction_rows(derivative["root"], derivative["publication"], derivative["output"])
+    assert derivative["lifecycle"] == {"entered": 1, "exited": 1, "active": False}
+    assert not derivative["output"].exists()

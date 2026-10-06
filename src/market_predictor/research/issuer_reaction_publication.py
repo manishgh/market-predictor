@@ -9,14 +9,13 @@ from __future__ import annotations
 import os
 import sqlite3
 from collections.abc import Iterator, Sequence
-from contextlib import closing
+from contextlib import ExitStack, closing, contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, cast
 from uuid import uuid4
 
-import exchange_calendars as xcals
 import pandas as pd
 
 from market_predictor.canonical.audits import CanonicalAuditCheck, CanonicalAuditReport
@@ -33,6 +32,10 @@ from market_predictor.governance.issuer_content_qualification import (
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.research import issuer_content_qualification_authority as qualification
 from market_predictor.research import issuer_content_review_population as population
+from market_predictor.research.original_relationship_inputs import (
+    OriginalRelationshipInputs,
+    _verified_original_relationship_inputs,
+)
 from market_predictor.resources import release_process_memory
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.issuer_reaction import REACTION_COLUMNS, IssuerReactionSources
@@ -45,11 +48,7 @@ from market_predictor.swing.contracts.issuer_reaction_publication import (
     IssuerReactionPublicationPolicy,
     VerifiedIssuerReactionPublication,
 )
-from market_predictor.swing.contracts.return_relationship_publication import (
-    ReturnRelationshipPublicationPolicy,
-    VerifiedReturnRelationshipPublication,
-)
-from market_predictor.swing.datasets.adjusted_history_bindings import bind_adjusted_history_decisions
+from market_predictor.swing.contracts.return_relationship_publication import VerifiedReturnRelationshipPublication
 from market_predictor.swing.datasets.return_relationship_integrity import (
     assert_closed,
     check_files,
@@ -61,14 +60,6 @@ from market_predictor.swing.datasets.return_relationship_integrity import (
 from market_predictor.swing.datasets.return_relationship_integrity import (
     current_implementation as relationship_implementation,
 )
-from market_predictor.swing.datasets.return_relationship_parent import verify_parent
-from market_predictor.swing.datasets.return_relationship_rows import read_spy, read_stock
-from market_predictor.swing.datasets.return_relationship_sources import (
-    RelationshipSourceContext,
-    relationship_sources,
-    verify_source_context,
-)
-from market_predictor.swing.datasets.return_relationship_verification import validate_return_relationship_receipt
 from market_predictor.swing.features.issuer_reaction_profile import build_issuer_reaction_profile
 from market_predictor.swing.features.research_partition import ResearchFeaturePartition
 
@@ -85,6 +76,8 @@ def current_implementation(root: Path) -> dict[str, str]:
     package = Path(__file__).resolve().parents[1]
     names = (*qualification.IMPLEMENTATION_PATHS,
         "swing/contracts/issuer_reaction_publication.py", "research/issuer_reaction_publication.py",
+        "research/original_relationship_inputs.py",
+        "research/original_relationship_replay.py",
         "swing/features/issuer_reaction_profile.py", "swing/features/issuer_reaction.py",
         "swing/contracts/issuer_reaction_profile.py", "swing/contracts/issuer_reaction.py")
     return pins(root, relationship_implementation(root),
@@ -173,66 +166,56 @@ class ReactionPublicationInputs:
     policy: IssuerReactionPublicationPolicy
     parent: VerifiedReturnRelationshipPublication
     parent_path: Path
-    context: RelationshipSourceContext
+    context: OriginalRelationshipInputs
     events_path: Path
     sources: IssuerReactionSources
     source_files: dict[str, str]
     historical_implementation_files: dict[str, str]
 
 
-def load_reaction_inputs(root: Path, policy: IssuerReactionPublicationPolicy) -> ReactionPublicationInputs:
+@contextmanager
+def load_reaction_inputs(root: Path, policy: IssuerReactionPublicationPolicy) -> Iterator[ReactionPublicationInputs]:
     """Verify all parents without acquiring a nested lease; caller owns one."""
     root = root.resolve()
     guard(policy.maximum_system_used_percent)
-    receipt_path = inside(root, policy.parent_saved_row_verification.path)
-    receipt = read_object(receipt_path, policy.parent_saved_row_verification.sha256)
-    parent = validate_return_relationship_receipt(root, policy.parent_publication, receipt)
-    _require(len(parent.model_columns) == 124 and parent.manifest["rows"] == EXPECTED_ROWS
-             and len(parent.months) == EXPECTED_MONTHS, "reaction parent must be the complete frozen 124-column cohort")
-    relationship_policy = ReturnRelationshipPublicationPolicy.model_validate(parent.request["policy"])
-    base = verify_parent(root, relationship_policy)
-    context = verify_source_context(root, relationship_policy, base)
-    bars = relationship_sources(policy.parent_publication.sha256, context, parent.request["stock_inventory"])
-    events, qualification_pins, historical = _qualification(root, policy)
-    sources = IssuerReactionSources(bars=bars, event_authority_sha256=policy.qualification_authority.sha256,
-        identity_authority_sha256=policy.qualification_authority.sha256,
-        event_availability_semantics="historical_proxy", identity_availability_semantics="historical_proxy",
-        event_availability_policy_sha256=json_sha256({"authority": policy.qualification_authority.model_dump(mode="json"),
-            "field": "event_available_at_utc", "basis": "source_only_saved_qualification"}),
-        identity_availability_policy_sha256=json_sha256({"authority": policy.qualification_authority.model_dump(mode="json"),
-            "field": "identity_available_at_utc", "basis": "causal_source_bound_identity"}))
-    files = pins(root, parent.source_files, qualification_pins, context.source_files,
-        {policy.parent_saved_row_verification.path: policy.parent_saved_row_verification.sha256})
-    check_files(root, files)
-    provenance = {f"relationship_parent/{name}": digest
-                  for name, digest in parent.request.get("historical_implementation_files", {}).items()}
-    provenance.update({f"qualification_producer/{name}": digest for name, digest in historical.items()})
-    return ReactionPublicationInputs(root, policy, parent, inside(root, policy.parent_publication.path), context,
-        events, sources, files, provenance)
+    with _verified_original_relationship_inputs(root, policy) as context:
+        parent = context.parent
+        _require(len(parent.model_columns) == 124 and parent.manifest["rows"] == EXPECTED_ROWS
+                 and len(parent.months) == EXPECTED_MONTHS, "reaction parent must be the complete frozen 124-column cohort")
+        # Extending the original 124 parent changes only the baseline reference;
+        # original stock/SPY price and availability identities remain exact.
+        bars = context.original_sources.model_copy(update={"baseline_authority_sha256": policy.parent_publication.sha256})
+        events, qualification_pins, historical = _qualification(root, policy)
+        sources = IssuerReactionSources(bars=bars, event_authority_sha256=policy.qualification_authority.sha256,
+            identity_authority_sha256=policy.qualification_authority.sha256,
+            event_availability_semantics="historical_proxy", identity_availability_semantics="historical_proxy",
+            event_availability_policy_sha256=json_sha256({"authority": policy.qualification_authority.model_dump(mode="json"),
+                "field": "event_available_at_utc", "basis": "source_only_saved_qualification"}),
+            identity_availability_policy_sha256=json_sha256({"authority": policy.qualification_authority.model_dump(mode="json"),
+                "field": "identity_available_at_utc", "basis": "causal_source_bound_identity"}))
+        files = pins(root, parent.source_files, qualification_pins, context.source_files)
+        check_files(root, files)
+        provenance = {f"relationship_parent/{name}": digest for name, digest in context.historical_implementation_files.items()}
+        provenance.update({f"qualification_producer/{name}": digest for name, digest in historical.items()})
+        yield ReactionPublicationInputs(root, policy, parent, inside(root, policy.parent_publication.path), context,
+            events, sources, files, provenance)
+        check_files(root, files)
 
 
 def load_parent_month(inputs: ReactionPublicationInputs, month: str) -> pd.DataFrame:
-    record = inputs.parent.months[month]["profiles"]["technical_relationships"]
-    path = inside(inputs.parent_path.parent, record["path"])
-    frame, _ = load_canonical_artifact(path, expected_type="swing_return_relationships", allow_research=True)
-    _require(file_sha256(path) == record["sha256"] and len(frame) == record["rows"]
-             and json_sha256(sorted(frame.decision_id)) == record["decision_ids_sha256"], "reaction parent month changed")
-    return frame
+    return inputs.context.read_parent_month(month)
 
 
 def iter_reaction_inputs(root: Path, inputs: ReactionPublicationInputs, month: str
                         ) -> Iterator[tuple[str, ResearchFeaturePartition, dict[str, Any]]]:
     """Read one exact ownership query at a time, retaining every parent decision."""
-    parent = load_parent_month(inputs, month)
-    bound = bind_adjusted_history_decisions(parent, inputs.context.bindings)
-    spy = read_spy(inputs.context)
-    history = tuple(value.date() for value in xcals.get_calendar("XNYS").sessions_in_range("2018-05-29", "2024-05-28"))
-    for (identity, unit), group in bound.groupby(["security_id", "source_group"], sort=True):
+    spy = inputs.context.read_spy()
+    history = inputs.context.history_sessions
+    for key, baseline_rows in inputs.context.iter_month_groups(month):
         guard(inputs.policy.maximum_system_used_percent)
-        key = json_sha256([identity, unit])
-        item = inputs.parent.request["stock_inventory"].get(key)
-        _require(item is not None, "reaction parent decision lacks exact source ownership")
-        baseline_rows = parent.loc[parent.decision_id.isin(group.decision_id)].copy().reset_index(drop=True)
+        identities = baseline_rows.security_id.unique()
+        _require(len(identities) == 1, "reaction original source group has mixed security ownership")
+        identity = str(identities[0])
         upper = pd.to_datetime(baseline_rows.decision_time_utc, utc=True).max()
         # Retain the full prior history: an old original announcement can defeat
         # a newer duplicate even when the original is outside the lookback.
@@ -242,7 +225,7 @@ def iter_reaction_inputs(root: Path, inputs: ReactionPublicationInputs, month: s
             "available_at_utc": pd.Series(pd.NaT, index=baseline_rows.index, dtype="datetime64[ns, UTC]")})
         baseline = ResearchFeaturePartition(baseline_rows, inputs.parent.model_columns, inputs.parent.availability_columns, {})
         yield key, baseline, {"qualified_events": events, "coverage": coverage,
-            "stock_bars": read_stock(root, inputs.context, item), "spy_bars": spy,
+            "stock_bars": inputs.context.read_stock(key), "spy_bars": spy,
             "history_sessions": history, "sources": inputs.sources, "purpose": "historical_research"}
     check_files(root, inputs.source_files)
 
@@ -287,6 +270,8 @@ def _request(root: Path, config: SourcePin, inputs: ReactionPublicationInputs) -
         "qualification_replay_scope": "pinned_review_population_labels_metrics_all_version_dispositions_not_raw_source_extraction",
         "parent_publication": inputs.policy.parent_publication.model_dump(mode="json"),
         "parent_saved_row_verification": inputs.policy.parent_saved_row_verification.model_dump(mode="json"),
+        "original_snapshot_replay": inputs.policy.original_snapshot_replay.model_dump(mode="json"),
+        "original_bar_sources": inputs.context.original_sources.model_dump(mode="json"),
         "qualification_publication": inputs.policy.qualification_publication.model_dump(mode="json"),
         "qualification_authority": inputs.policy.qualification_authority.model_dump(mode="json"),
         "rows": inputs.parent.manifest["rows"], "profile": PROFILE, "model_columns": list(names), "availability_columns": clocks,
@@ -335,22 +320,37 @@ def _state_files(folder: Path, state: dict[str, Any], request: dict[str, Any], d
     return files
 
 
-def verify_issuer_reaction_publication(root: Path, publication: SourcePin) -> VerifiedIssuerReactionPublication:
+@contextmanager
+def _verified_reaction_publication_inputs(root: Path, publication: SourcePin
+                                        ) -> Iterator[tuple[VerifiedIssuerReactionPublication, ReactionPublicationInputs]]:
+    """One owner-created input context throughout already-leased verification."""
     root = root.resolve()
     path = inside(root, publication.path)
     _require(path.name == "_manifest.json", "reaction requires a completed publication manifest")
     manifest = read_object(path, publication.sha256)
     request = read_object(path.parent / "_request.json", manifest["request_sha256"])
     config = SourcePin.model_validate(request["config"])
-    inputs = load_reaction_inputs(root, load_policy(root, Path(config.path), config.sha256))
-    _require(request == _request(root, config, inputs), "reaction request source or implementation differs")
-    children = _state_files(path.parent, manifest, request, manifest["request_sha256"], inputs, complete=True)
-    files = pins(root, request["source_files"],
-        {inside(path.parent, name).relative_to(root).as_posix(): digest for name, digest in children.items()},
-        {publication.path: publication.sha256, (path.parent / "_request.json").relative_to(root).as_posix(): manifest["request_sha256"]})
-    check_files(root, files)
-    return VerifiedIssuerReactionPublication(request, manifest, files, inputs.parent.manifest, inputs.parent_path,
-        tuple(request["model_columns"]), dict(request["availability_columns"]), dict(manifest["months"]))
+    with load_reaction_inputs(root, load_policy(root, Path(config.path), config.sha256)) as inputs:
+        _require(request == _request(root, config, inputs), "reaction request source or implementation differs")
+        children = _state_files(path.parent, manifest, request, manifest["request_sha256"], inputs, complete=True)
+        files = pins(root, request["source_files"],
+            {inside(path.parent, name).relative_to(root).as_posix(): digest for name, digest in children.items()},
+            {publication.path: publication.sha256,
+             (path.parent / "_request.json").relative_to(root).as_posix(): manifest["request_sha256"]})
+        check_files(root, files)
+        verified = VerifiedIssuerReactionPublication(request, manifest, files, inputs.parent.manifest, inputs.parent_path,
+            tuple(request["model_columns"]), dict(request["availability_columns"]), dict(manifest["months"]))
+        yield verified, inputs
+        check_files(root, files)
+
+
+def verify_issuer_reaction_publication(root: Path, publication: SourcePin) -> VerifiedIssuerReactionPublication:
+    """Own the lease and reproduce inputs before returning publication metadata."""
+    root = root.resolve()
+    runtime = heavy_job_runtime_dir()
+    with heavy_job_lease("verify-issuer-reaction-publication", runtime_dir=runtime if runtime.is_absolute() else root / runtime):
+        with _verified_reaction_publication_inputs(root, publication) as (verified, _):
+            return verified
 
 
 def materialize_issuer_reactions(root: Path, config: Path, expected_config_sha256: str, output: Path,
@@ -364,9 +364,9 @@ def materialize_issuer_reactions(root: Path, config: Path, expected_config_sha25
     runtime = heavy_job_runtime_dir()
     if not runtime.is_absolute():
         runtime = root / runtime
-    with heavy_job_lease("materialize-issuer-reactions", runtime_dir=runtime, config_path=config_path):
+    with heavy_job_lease("materialize-issuer-reactions", runtime_dir=runtime, config_path=config_path), ExitStack() as stack:
         policy = load_policy(root, config_path, expected_config_sha256)
-        inputs = load_reaction_inputs(root, policy)
+        inputs = stack.enter_context(load_reaction_inputs(root, policy))
         config_pin = SourcePin(path=config_path.relative_to(root).as_posix(), sha256=expected_config_sha256)
         request = _request(root, config_pin, inputs)
         for name in request["source_files"]:
@@ -425,6 +425,10 @@ def materialize_issuer_reactions(root: Path, config: Path, expected_config_sha25
         _state_files(destination, state, request, digest, inputs, complete=complete)
         check_files(root, request["source_files"])
         _require(file_sha256(destination / "_request.json") == digest, "reaction request changed before publication")
+        # Exit-time source and memory checks must succeed before a completed
+        # manifest can appear; the outer workspace lease is still held.
+        stack.close()
+        check_files(root, request["source_files"])
         if complete:
             temporary = destination / f".manifest.{uuid4().hex}.pending"
             final = destination / "_manifest.json"

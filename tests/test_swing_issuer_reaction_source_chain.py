@@ -1,4 +1,4 @@
-"""Positive synthetic source-to-publication chain; never retained provider evidence."""
+"""Unit source-to-publication chain with explicit synthetic original-input admission."""
 from __future__ import annotations
 
 import hashlib
@@ -142,21 +142,26 @@ def test_native_reviewed_source_populates_completed_reaction_and_preserves_paren
         assert foreign[f"missing_reason_{name}"].eq("unknown_source_coverage").all()
         assert unfinished[f"available_at_{name}"].isna().all() and foreign[f"available_at_{name}"].isna().all()
 
-    # Replay all 59 native months with the actual source readers, assembly and
-    # qualifier replay. Only fixture-root discovery and resource hooks are scoped;
-    # verifier totals use its real manifest/parent/unique-decision equality checks.
+    # Replay all 59 synthetic months using actual bar readers, assembly and
+    # qualifier replay. The reaction fixture explicitly doubles original-input
+    # admission; this is not evidence of admission of a retained original receipt.
     receipt_path = root / "data/reports/issuer_reaction_native_source_chain.json"
+    lifecycle = value["synthetic_original_lifecycle"]
+    entered = lifecycle["entered"]
     with monkeypatch.context() as scoped:
         scoped.setattr(verifier, "__file__", str(root / "src/market_predictor/research/issuer_reaction_verification.py"))
         scoped.setattr(verifier, "_guard", lambda: None)
         scoped.setattr(verifier, "release_process_memory", lambda: None)
         receipt = verifier.verify_issuer_reaction_rows(root, value["publication"], receipt_path)
+        assert lifecycle["entered"] == lifecycle["exited"] == entered + 1
         verified = verifier.validate_issuer_reaction_receipt(root, value["publication"], receipt)
+        assert lifecycle["entered"] == lifecycle["exited"] == entered + 2
     assert receipt["status"] == "passed"
     assert receipt["rows"] == receipt["unique_decisions"] == verified.manifest["rows"] == 354
     assert receipt["months"] == len(receipt["monthly"]) == len(verified.months) == 59
     assert receipt["original_columns_exact"] and receipt["original_outcome_values_exact"]
     assert receipt["qualification_source_replayed"] and receipt["additions_source_replayed"]
+    assert receipt["original_snapshot_replay"] == value["policy"].original_snapshot_replay.model_dump(mode="json")
     assert receipt["event_authority_sha256"] == row.selected_qualification_authority_sha256
     assert receipt["source_files"][value["policy"].qualification_authority.path] == row.selected_qualification_authority_sha256
     totals = receipt["profiles"][PROFILE]

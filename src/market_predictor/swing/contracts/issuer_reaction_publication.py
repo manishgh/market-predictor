@@ -20,6 +20,7 @@ class IssuerReactionPublicationPolicy(HoldingContract):
     schema_version: Literal["market_predictor.issuer_reaction_publication_config"]
     parent_publication: SourcePin
     parent_saved_row_verification: SourcePin
+    original_snapshot_replay: SourcePin
     qualification_publication: SourcePin
     qualification_authority: SourcePin
     coverage: Literal["unknown"] = "unknown"

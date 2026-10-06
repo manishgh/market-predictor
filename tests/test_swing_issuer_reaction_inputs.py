@@ -1,4 +1,4 @@
-"""Explicit reaction-profile consumption; fixtures contain synthetic evidence only."""
+"""Reaction consumers with explicitly synthetic original-input admission, never real replay evidence."""
 from __future__ import annotations
 
 import json
@@ -132,6 +132,7 @@ def test_real_reaction_publication_receipt_readiness_and_126_loader_chain(
     output124.write_bytes(original_report124)
     receipt_path = root / "data/reports/reaction_rows_for_training.json"
     receipt = verifier.verify_issuer_reaction_rows(root, state["publication"], receipt_path)
+    assert receipt["original_snapshot_replay"] == state["policy"].original_snapshot_replay.model_dump(mode="json")
     config = root / "configs/reaction_readiness.json"
     memory_policy = {**relationship["parent"]["policy"], "published_profile": ISSUER_REACTION_PROFILE,
         "publication": state["publication"].model_dump(mode="json"),
