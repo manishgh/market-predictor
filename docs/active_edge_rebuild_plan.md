@@ -1,6 +1,16 @@
 # Active Edge Rebuild Plan
 
-### Current continuation: original-data reader implemented; retained-data exercise next
+### Current continuation: original-data reader implemented; retained-data exercise running
+
+Actual retained-data reader check started at 08:25:36 UTC October 6:
+session 39766/PID 17544, verify-original-reaction-input-interface,
+run f938dfa19cba491ab868f767629ad97a. It is reproducing the actual original receipt
+before reading every original month and stock/SPY group. Frozen 133-file inventory:
+review-results/actual-original-input-interface-frozen-implementation.json SHA256
+0ca65f07e96d09987f17c06265c3d63ecbd57cfde2aa65a52204c035be411573.
+Freeze these code files and all input/config bytes until this process exits. State/log/
+exit prefix: review-results/actual-original-input-interface. No other heavy job runs.
+Actual reader pass, qualified news, 126 publication and new model fits are not claimed.
 
 Implementation 852f43f is reviewed, unit-verified and pushed on
 codex/v1-canonical-cleanup. One original_relationship_inputs owner independently
