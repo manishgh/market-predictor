@@ -1,6 +1,39 @@
 # Active Edge Rebuild Plan
 
-### Current continuation: source-only packet and exclusion-frame implementation
+### Current continuation: packet implementation pushed; actual publication next
+
+Implementation a543fe7 is reviewed and pushed: strict packet config/version contract,
+frozen frame/document/correspondence identities, complete inventory/exclusion/sample/
+blind packet publisher and deterministic verifier, and two thin research commands.
+Original sample/review headers and coverage are verified without reusing old judgments.
+Full records retain (phase, ordinal) ownership and original JSON hashes; versions,
+aliases, query copies, all documents/exhibits and explicit unavailable metadata remain
+accounted for. D is removed only from new review eligibility, never from raw sources.
+Blind output omits extraction status/spans/rules and old labels. Final source-context
+checks and output checks complete before atomic directory publication. Private failed
+stages are retained, with no automatic overwrite or resume. All admission flags false.
+
+Focused units/direct CLI/package/schema scope: 338 passed in 35.11s. Ruff found only
+import formatting and one long line; strict typing found one missing empty-set dict
+annotation. Those were repaired without changing behavior. Final affected packet/
+command/inventory scope: 27 passed in 15.20s. Ruff five Python files and strict typing
+three source modules pass; one consolidated code/ML review reported no supported
+finding. All mocks/fixtures are unit-only. No real packet publication, new labels,
+qualification, model fit, serving, SPY result or full-suite release claim is made.
+Unit log/XML prefixes: review-results/issuer-packet-focused-units and issuer-packet-final-units.
+Protected original-input 133 files and candidate 12 files remain unchanged.
+
+Actual config configs/swing_initial_fit_issuer_review_packets.json binds five real
+source pins (population, candidate derivative, sample and both old reviews), each
+independently checked. Config byte SHA256:
+7edd26c71ad88038ebf0e450f42967aaba13e5791037f160c29b6b1762d103fd.
+Next call installed publish_issuer_review_packets to fresh
+data/research/swing_initial_fit_issuer_review_packets under one workspace lease,
+then independently pin the completed manifest and call verify_issuer_review_packets.
+Only those actual outcomes close the packet slice. Freeze its executed code/config/
+source files during the sequential run; no fake approvals or extra heavy worker.
+
+Frozen source packet scope:
 
 Frozen first slice of news correspondence (October 6): new strict research packet
 contract and publisher/verifier over the already verified candidate sidecar, plus
