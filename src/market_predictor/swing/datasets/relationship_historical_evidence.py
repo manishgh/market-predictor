@@ -5,6 +5,7 @@ and configurations are provenance, not executed instructions or current sources.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ from market_predictor.swing.datasets.return_relationship_integrity import check_
 
 HISTORICAL_MANIFEST_SCHEMA = "market_data.artifact_manifest.v1"
 HISTORICAL_CANONICAL_SCHEMA = "market_data.v1"
+ORIGINAL_SOURCE_COMPARISON_SHA256 = "5f480f56179e054ad4f621f780d72e49e50ac2482af74536c9a3b4aad5e83265"
 
 
 @dataclass(frozen=True)
@@ -190,3 +192,75 @@ def historical_bars(root: Path, request: dict[str, Any], item: dict[str, Any],
         raise DataReadinessError("historical projection escaped initial-fit bounds")
     frame["security_id"] = item["security_id"]
     return frame
+
+
+def inspect_original_source_comparison(root: Path, pin: SourcePin,
+    parent: HistoricalFeatureEvidence, relationships: HistoricalFeatureEvidence,
+) -> dict[str, Any]:
+    """Bind the measured source change without converting its failure into a pass."""
+    if pin.sha256 != ORIGINAL_SOURCE_COMPARISON_SHA256:
+        raise DataReadinessError("original replay requires the exact failed source comparison")
+    report = read_object(inside(root, pin.path), pin.sha256)
+    if (report.get("schema") != "market_predictor.relationship_reuse_equivalence"
+            or report.get("status") != "failed_differences" or report.get("source_inputs_equal") is not False
+            or report.get("additions_equal") is not False or report.get("inherited_columns_equal") is not True
+            or report.get("population_equal") is not True or report.get("rows") != parent.manifest["rows"]
+            or report.get("policy", {}).get("historical_parent_publication", {}).get("sha256") != file_sha256(parent.path)
+            or report.get("policy", {}).get("historical_relationship_publication", {}).get("sha256") != file_sha256(relationships.path)
+            or any(report.get(key) is not False for key in ("training_eligible", "promotion_eligible", "serving_eligible"))):
+        raise DataReadinessError("original source comparison changed scope or admission claims")
+    return report
+
+
+def original_stock_bars(root: Path, evidence: HistoricalFeatureEvidence, key: str,
+    files: dict[str, str],
+) -> pd.DataFrame:
+    """Read one original owner and preserve its independently recorded abstention."""
+    from market_predictor.swing.datasets.predictor_abstention_derivation import ReviewedPredictorFailure
+    from market_predictor.swing.datasets.preserved_relationship_abstentions import (
+        HISTORICAL_OBSERVATION_SHA256,
+        pinned_original_observation_report,
+        preserved_physical_prefix,
+    )
+
+    item = evidence.request["stock_inventory"][key]
+    if key != json_sha256([item["security_id"], item["source_group"]]):
+        raise DataReadinessError("original stock owner key differs")
+    frame = historical_bars(root, evidence.request, item, files)
+    if item["quarantine"] is None:
+        return frame
+    fact = ReviewedPredictorFailure.model_validate_json(json.dumps(item["quarantine"]))
+    if (fact.group_key != key or fact.security_id != item["security_id"] or fact.rows != item["rows"]
+            or fact.symbol != item["source_group"] or len(fact.source_artifacts) != 1
+            or evidence.receipt.get("additions_source_replayed") is not True):
+        raise DataReadinessError("original quarantine differs from its source owner")
+    observations = [pin for pin in fact.reviewed_evidence if pin.sha256 == HISTORICAL_OBSERVATION_SHA256]
+    if len(observations) != 1:
+        raise DataReadinessError("original quarantine lacks its exact observation")
+    declared = pins(root, evidence.request["source_files"])
+    for pin in (*fact.source_artifacts, *fact.reviewed_evidence):
+        name = inside(root, pin.path).relative_to(root).as_posix()
+        if declared.get(name) != pin.sha256:
+            raise DataReadinessError("original quarantine source is not request-bound")
+        files.update(pins(root, {name: pin.sha256}))
+    artifact = item["artifact"]
+    digest = artifact["bars_sha256"] if item["kind"] == "corrected" else artifact["sha256"]
+    suffix = artifact["bars_path"] if item["kind"] == "corrected" else artifact["path"]
+    source = fact.source_artifacts[0]
+    if (source.sha256 != digest or inside(root, source.path) != historical_source_path(root, evidence.request, digest, suffix)):
+        raise DataReadinessError("original quarantine substituted its physical bars")
+    report = pinned_original_observation_report(root, observations[0])
+    matches = [row for row in report.get("observations", ()) if row.get("security_id") == fact.security_id
+        and row.get("ticker") == fact.symbol and row.get("source_sha256") == source.sha256
+        and row.get("source_path") == inside(root, source.path).relative_to(root).as_posix()]
+    if len(matches) != 1 or len(frame) != matches[0].get("bounded_rows"):
+        raise DataReadinessError("original quarantine observation is incomplete or ambiguous")
+    if fact.first_invalid_session is not None:
+        invalid = matches[0].get("invalid_rows", [])
+        first = min(invalid, key=lambda row: row["session_date_et"]) if invalid else None
+        if (first is None or first["session_date_et"] != str(fact.first_invalid_session)
+                or json_sha256(first) != fact.boundary_observation_sha256
+                or first["invalid_fields"] != ["volume"] or first["ohlcv"]["volume"] != 0):
+            raise DataReadinessError("original first-invalid boundary differs")
+    check_files(root, files)
+    return preserved_physical_prefix(frame, fact, matches[0], tuple(sorted(frame.session_date_et)))
