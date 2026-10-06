@@ -1,6 +1,6 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: packet implementation pushed; actual publication/replay running
+### Current continuation: measured packet occurrence scan repair
 
 Actual packet chain started at 10:10:38 UTC October 6: session 12774,
 PID 4688, publish-issuer-review-packets run fa253e8c773a475a80cbc5ba787e1726.
@@ -8,9 +8,37 @@ Workspace work/run_actual_issuer_review_packets.py sequentially invokes installe
 actual publisher and independent verifier. Frozen 24-file implementation inventory:
 review-results/actual-issuer-review-packets-frozen-implementation.json SHA256
 3c28655bc697c09de95d3b9d0feff1d93fbc5e373d083c52d4f1392a5d2eb4b8.
-Freeze every executed source, config and data pin until the entire chain ends.
-State/log/exit prefix: review-results/actual-issuer-review-packets. One heavy process.
-No new packet pass, review label, qualification, training or serving result is claimed.
+Stopped only this identified worker at 11:11:17 UTC, exit -1, after more than
+1.86 TB logical reads. All 24 frozen implementation files remained unchanged.
+Actual EXPLAIN disproved repeated candidate scans: its cluster query uses indexes.
+The packet occurrence query scans the original records table for each sample;
+there is no cluster index. Evidence: review-results/issuer-packet-actual-query-plan.json.
+Private stage and state/log/exit prefix actual-issuer-review-packets remain retained;
+no public manifest, packet pass, new labels or qualification is claimed.
+
+Bounded amendment: only the new packet owner reads records once after unchanged
+sampling, retaining ordered phase/ordinal/version IDs and exact record JSON hashes
+for sampled clusters. Reuse references across both family packets; preserve empty
+version IDs, every occurrence, memory guards and source checks. Original DB, producer,
+sampler, candidate policy, model inputs and numeric gates stay unchanged. Exit test:
+interleaved phase/ordinal/query copies/unavailable versions produce identical
+occurrence bytes, counts and digests; packet rendering performs no per-cluster
+records query. One narrow design/code review, focused units, lint/types, then fresh
+actual publication and independent verification close this measured repair.
+
+Repair d228191 is pushed. Focused 29 units/continuity pass (7.49s); final affected
+19 units pass (6.44s), Ruff and strict source typing pass. Narrow review identified
+only the sampler tuple/list annotation; repaired with Sequence. All 133 protected
+original input implementations are unchanged; only the new packet owner changed
+within the 24-file closure. Actual read-only occurrence equivalence passed against
+all 884 complete preserved packets; one interrupted JSON remains incomplete.
+Original database SHA858c929a1f683745999d9fad085676c4dd6ebfae833b7bc7e5ceea3c8ba56386
+matched its authority before and after. Report:
+review-results/issuer-packet-actual-occurrence-equivalence.json; this is occurrence
+equivalence evidence only, not complete packet publication or source qualification.
+Retry work/run_actual_issuer_review_packets_retry.py uses fresh
+data/research/swing_initial_fit_issuer_review_packets_retry and durable
+actual-issuer-review-packets-retry state/log/exit/inventory files; no old stage reuse.
 
 Implementation a543fe7 is reviewed and pushed: strict packet config/version contract,
 frozen frame/document/correspondence identities, complete inventory/exclusion/sample/
@@ -3048,10 +3076,11 @@ the frozen numeric training boundary or authorize promotion.
 ## Next Actions
 
 Exact next checkpoint: original Astra ordered checkpoint 3 remains in progress;
-await actual source-only packet chain 12774/PID 4688 at a543fe7 using
-configs/swing_initial_fit_issuer_review_packets.json SHA7edd26c7...103fd and fresh
-data/research/swing_initial_fit_issuer_review_packets. Freeze executed code/input/
-config pins until both sequential actual operations end; one heavy worker only.
+finish the measured occurrence scan repair after stopped chain 12774/PID 4688.
+Use configs/swing_initial_fit_issuer_review_packets.json SHA7edd26c7...103fd and
+a fresh destination data/research/swing_initial_fit_issuer_review_packets_retry.
+Preserve the first incomplete private stage. Freeze executed code/input/config pins
+during the new sequential publication/verification chain; one heavy worker only.
 Use durable actual-issuer-review-packets state/log/exit; preserve any failed private
 stage and inspect its exact error before a retry. No blind labels before a passed packet.
 Actual candidate9c5f5580...f82d0 is the source, not a fixture. Keep all old judgments
