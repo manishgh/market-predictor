@@ -1,6 +1,35 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: source reviews complete; request comparison repaired; real retry running
+### Current continuation: source reviews complete; real ingestion awaiting RAM headroom
+
+Requested step 1 is complete and preserved: each independent model-assisted
+source-only set covers 1,750 packets and 1,977 versions, with no missing or partial
+inspections. Requested step 2 has no publication or independent annotation pass.
+
+The fresh actual retry, session38719/PID84748, exited with code 1 at
+2026-10-07T05:09:45.2536390Z. During canonical packet verification, the existing
+system memory guard measured 90.1% RAM used and 1.55 GiB available, exceeding its
+90.0% usage limit. The failure was before the repaired annotation consumer and
+before creating an annotation private stage. Preserve retry state, stdout/stderr,
+27-file inventory and natural exit under actual-issuer-annotation-ingestion-retry.
+The original session50119 representation failure receipts also remain preserved.
+
+After exit, the 15.69 GiB machine had only 1.92 GiB free and no task Python workers
+remained to clear. Another approximately 0.45 GiB worker at that baseline could
+cross the same limit again. User was asked to free about 1 GiB by closing unused
+browser/ChatGPT windows while keeping TradingFlow running. Recheck actual RAM;
+wait for roughly 3 GiB of stable free memory before launching the next fresh run.
+This start margin does not change or bypass the installed 90%/0.75 GiB guard.
+Do not terminate unrelated applications, waive memory checks, use mocked readers
+or invent a successful replay. No new code defect is established by this failure.
+
+Post-failure physical checks confirmed both adopted review files, the config and
+all 27 retry implementation files remain unchanged. No annotation stage or output
+exists. Software fix bf3bf5a remains verified by its 25 unit/document checks,
+Ruff, strict mypy and bounded review; the second real run did not reach that
+comparison, so it is not an actual ingestion pass. Source reviews must not repeat.
+
+### Historical continuation: source reviews complete; request comparison repaired; real retry running
 
 Step 1 remains complete: each independent model-assisted source-only set covers
 1,750 packets and 1,977 versions with no missing or partial inspections. Their
@@ -3452,13 +3481,13 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: wait on the active actual retry session38719/PID84748.
-Inspect actual-issuer-annotation-ingestion-retry state, stdout/stderr and natural
-exit receipt. Preserve the failed original run and immutable adopted reviews.
-Only actual publication, independent byte/count replay and exit 0 close requested
-step 2. Record its manifest/counts/source and 27-code rechecks and push closure.
-If it fails, preserve evidence and identify the exact supported cause. Source
-step 1 and software repair bf3bf5a are complete; do not repeat source reviews.
+Exact next checkpoint: recheck system RAM and wait for roughly 3 GiB of stable
+free memory before launching another fresh real ingestion attempt. User was asked
+to close unused windows; no task Python workers remain. Preserve both failed-run
+receipts, adopted A/B/config pins and code bf3bf5a. Use a new state/inventory/log/exit
+prefix, one heavy worker and unchanged installed memory limits. Only actual
+publication plus independent annotation replay and natural exit 0 closes step 2.
+Source step 1 is complete. Do not repeat reviews or claim a source/model/SPY pass.
 The earlier qualification/reuse reruns exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
 Saved-config implementation b589725 and actual byte/fold proof are complete.

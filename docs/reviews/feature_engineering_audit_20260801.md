@@ -1,34 +1,33 @@
 # Current Feature Engineering Audit
 
-Source step 1 is complete: each independent model-assisted set contains 1,750
-packets and 1,977 versions, with no missing or partial inspections. Actual step 2
-failed after canonical packet replay because JSON lists were compared with Python
-tuples. No annotation stage or publication was created.
+### Current continuation: source reviews complete; real ingestion awaiting RAM headroom
 
-Software repair completed: canonical JSON request comparison fixes the observed
-list/tuple mismatch without changing stored JSON or policy values. Implementation
-commit: bf3bf5a. Before the fix, the unit publisher reproduced the exact
-"verified packet request differs" failure using installed tuple-containing policies.
-After the fix: 25 affected unit/document checks passed; targeted Ruff passed;
-strict mypy passed for the changed module; one bounded independent review found
-no supported issue. Unit fixtures are tests only, not actual ingestion evidence.
-Frozen packet/candidate/original owners, adopted A/B reviews and config did not
-change. The original actual failure and natural exit 1 remain preserved.
+Requested step 1 is complete and preserved: each independent model-assisted
+source-only set covers 1,750 packets and 1,977 versions, with no missing or partial
+inspections. Requested step 2 has no publication or independent annotation pass.
 
-The fresh real retry is now active: native session38719, worker84748, started
-2026-10-07T03:40:09.077611+00:00. Config hash remains
-0d947752ad95397fda707b2f600593bcf9a15cf649fbed8f29dfc86640cfa902.
-Its 27-file inventory hash is
-6740805d6e13066eb7ef1e5f99623cf19c46a10b95e6b53f5186d8761e3b29bb.
-Exactly one executed file differs from the failed run: the repaired annotation
-consumer. Packet/candidate/original owners remain unchanged. Current phase:
-publishing_actual_complete_source_annotations. No real publication/replay pass is
-claimed yet. Do not change code, reviews, config or original data during the run.
+The fresh actual retry, session38719/PID84748, exited with code 1 at
+2026-10-07T05:09:45.2536390Z. During canonical packet verification, the existing
+system memory guard measured 90.1% RAM used and 1.55 GiB available, exceeding its
+90.0% usage limit. The failure was before the repaired annotation consumer and
+before creating an annotation private stage. Preserve retry state, stdout/stderr,
+27-file inventory and natural exit under actual-issuer-annotation-ingestion-retry.
+The original session50119 representation failure receipts also remain preserved.
 
-Fresh retry runner: work/run_actual_issuer_annotation_ingestion_retry.py.
-Fresh state/inventory/log/exit names use actual-issuer-annotation-ingestion-retry.
-Retry must still run the installed publisher and independent verifier on real
-retained data. A software pass alone does not close requested step 2.
+After exit, the 15.69 GiB machine had only 1.92 GiB free and no task Python workers
+remained to clear. Another approximately 0.45 GiB worker at that baseline could
+cross the same limit again. User was asked to free about 1 GiB by closing unused
+browser/ChatGPT windows while keeping TradingFlow running. Recheck actual RAM;
+wait for roughly 3 GiB of stable free memory before launching the next fresh run.
+This start margin does not change or bypass the installed 90%/0.75 GiB guard.
+Do not terminate unrelated applications, waive memory checks, use mocked readers
+or invent a successful replay. No new code defect is established by this failure.
+
+Post-failure physical checks confirmed both adopted review files, the config and
+all 27 retry implementation files remain unchanged. No annotation stage or output
+exists. Software fix bf3bf5a remains verified by its 25 unit/document checks,
+Ruff, strict mypy and bounded review; the second real run did not reach that
+comparison, so it is not an actual ingestion pass. Source reviews must not repeat.
 
 Historical saved review checkpoint (99% account usage):
 - Reviewer A: 173 fully inspected packets, 1 partial packet; 200 saved version assessments (3 partial, 0 metadata-only).
