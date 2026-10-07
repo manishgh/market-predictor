@@ -1,6 +1,6 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: source reviews complete; request comparison repaired; real retry pending
+### Current continuation: source reviews complete; request comparison repaired; real retry running
 
 Step 1 remains complete: each independent model-assisted source-only set covers
 1,750 packets and 1,977 versions with no missing or partial inspections. Their
@@ -35,6 +35,16 @@ strict mypy passed for the changed module; one bounded independent review found
 no supported issue. Unit fixtures are tests only, not actual ingestion evidence.
 Frozen packet/candidate/original owners, adopted A/B reviews and config did not
 change. The original actual failure and natural exit 1 remain preserved.
+
+The fresh real retry is now active: native session38719, worker84748, started
+2026-10-07T03:40:09.077611+00:00. Config hash remains
+0d947752ad95397fda707b2f600593bcf9a15cf649fbed8f29dfc86640cfa902.
+Its 27-file inventory hash is
+6740805d6e13066eb7ef1e5f99623cf19c46a10b95e6b53f5186d8761e3b29bb.
+Exactly one executed file differs from the failed run: the repaired annotation
+consumer. Packet/candidate/original owners remain unchanged. Current phase:
+publishing_actual_complete_source_annotations. No real publication/replay pass is
+claimed yet. Do not change code, reviews, config or original data during the run.
 
 Fresh retry runner: work/run_actual_issuer_annotation_ingestion_retry.py.
 Fresh state/inventory/log/exit names use actual-issuer-annotation-ingestion-retry.
@@ -3442,12 +3452,13 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: source step 1 and the observed request representation
-software repair are complete. Start the fresh actual retry wrapper with unchanged
-A/B/config/source pins and a new 27-file inventory. Preserve original failed
-session50119/PID97320 logs and exit 1. Run installed publication plus independent
-verification sequentially; only those actual results and natural exit 0 close
-requested step 2. No repeated source reviews or mocked operational data.
+Exact next checkpoint: wait on the active actual retry session38719/PID84748.
+Inspect actual-issuer-annotation-ingestion-retry state, stdout/stderr and natural
+exit receipt. Preserve the failed original run and immutable adopted reviews.
+Only actual publication, independent byte/count replay and exit 0 close requested
+step 2. Record its manifest/counts/source and 27-code rechecks and push closure.
+If it fails, preserve evidence and identify the exact supported cause. Source
+step 1 and software repair bf3bf5a are complete; do not repeat source reviews.
 The earlier qualification/reuse reruns exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
 Saved-config implementation b589725 and actual byte/fold proof are complete.
