@@ -5,6 +5,7 @@ import hashlib
 import json
 import sqlite3
 from contextlib import contextmanager
+from copy import deepcopy
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -59,7 +60,9 @@ def unit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
             connection.execute("INSERT INTO versions VALUES(?,?,?,?,?,?)", (version.version_id, version.cluster_id,
                 version.security_id, version.source_family, encoded, owner.packets._json(candidates).decode()))
     derivative_pin = _pin(root, database)
-    request = {"implementation_files": {}, "settings": {"candidate_derivative": derivative_pin.model_dump(mode="json")}}
+    request = {"implementation_files": {}, "settings": {"candidate_derivative": derivative_pin.model_dump(mode="json")},
+               "frame_policy": deepcopy(owner.packets.FRAME_POLICY),
+               "correspondence_policy": deepcopy(owner.packets.CORRESPONDENCE_POLICY), **CLOSED}
     artifacts = {"_request.json": _write(folder / "_request.json", request),
                  "sample.json": _write(folder / "sample.json", {"samples": [{"sample_id": packet.sample_id}]}),
                  "frame.jsonl": _write(folder / "frame.jsonl", {"synthetic_unit_only": True}),
@@ -267,3 +270,18 @@ def test_verifier_replays_complete_inventory_and_bytes(unit: dict[str, Any], mod
     _write(path, manifest)
     with pytest.raises(DataReadinessError):
         owner.verify_issuer_annotation_correspondence(root=unit["root"], publication=_pin(unit["root"], path))
+
+
+@pytest.mark.parametrize("change", ["boolean_to_number", "array_order"])
+def test_packet_request_rejects_wire_value_changes(unit: dict[str, Any], change: str) -> None:
+    # UNIT only: emulate a canonical verifier returning changed policy values.
+    request = unit["verified"].request
+    if change == "boolean_to_number":
+        request["training_eligible"] = 0
+    else:
+        request["correspondence_policy"]["roles"] = tuple(reversed(request["correspondence_policy"]["roles"]))
+    with pytest.raises(DataReadinessError, match="verified packet request differs"):
+        _publish(unit)
+    assert not unit["output"].exists()
+    assert not unit["output"].with_name("." + unit["output"].name + ".private_stage").exists()
+    assert unit["events"] == ["packet_verified"]

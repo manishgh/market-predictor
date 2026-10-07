@@ -129,7 +129,9 @@ def _inputs(root: Path, config_pin: SourcePin, config: AnnotationIngestionConfig
         path = _path(root, folder / name)
         packets._pin(root, SourcePin(path=path.relative_to(root).as_posix(), sha256=digest), files)
     packet_request = packets._object(folder / "_request.json")
-    _require(packet_request == verified.request, "verified packet request differs")
+    # Replayed policies contain tuples; immutable JSON represents them as arrays.
+    # Compare their canonical wire bytes, preserving value types and array order.
+    _require(packets._json(packet_request) == packets._json(verified.request), "verified packet request differs")
     reviewer_paths = [_path(root, pin.path) for pin in config.reviewer_files]
     _require(reviewer_paths[0] != reviewer_paths[1] and not os.path.samefile(*reviewer_paths),
              "reviewer artifacts resolve to the same physical file")
