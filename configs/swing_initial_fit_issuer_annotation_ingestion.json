@@ -1,0 +1,20 @@
+{
+  "correspondence_policy_sha256": "c9e45a21963fed8ad66b83e736d946279b54713c9ad1548c774ce63a7ae35370",
+  "document_policy_sha256": "c045561d236cbf2e740709faac369be9eafe972873600d8b34244a4c2482f75a",
+  "frame_policy_sha256": "a3e85264e3cfcf45f17853b6bb1c73f574390dd6431f30d58af296bb6c8f6794",
+  "packet_publication": {
+    "path": "data/research/swing_initial_fit_issuer_review_packets_retry/_manifest.json",
+    "sha256": "2b4b933565704a06fae86e815f3edab56412c2d2717254f4eb39e5ad5f50b3a9"
+  },
+  "reviewer_files": [
+    {
+      "path": "data/research/swing_initial_fit_issuer_complete_source_reviews/reviewer-a.jsonl",
+      "sha256": "24ceb555fdd9a4fc13cd9830ed4d259f92239dcda0c447a498c18a1241325ce1"
+    },
+    {
+      "path": "data/research/swing_initial_fit_issuer_complete_source_reviews/reviewer-b.jsonl",
+      "sha256": "910222705531959b8b2e174117ec9023bfaa36c036c64eef4584d96f00190a2d"
+    }
+  ],
+  "schema": "market_predictor.issuer_annotation_ingestion_config"
+}

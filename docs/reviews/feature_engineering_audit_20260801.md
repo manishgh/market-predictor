@@ -1,11 +1,14 @@
 # Current Feature Engineering Audit
 
-Current user scope: finish the two independent source-review sets and actual
-ingestion/publication plus independent replay only. A uses disjoint main [0,1000)
-and source-only continuation [1000,1750) contexts; B remains independent. All source
-judgments and inspection receipts are preserved. No new source-quality measurement,
-feature publication, model fit, SPY improvement, serving or main merge is claimed.
-Current details and prepared wrappers are in the existing plan and handoff.
+Current actual source-review closure: each independent model-assisted set has
+1,750 packets/1,977 versions (1,962 readable completely inspected,15metadata-only),
+zero partial/missing. Combined strict bindings/Unicodequotes passed, immutable
+A/Bfiles and inspection receipts adopted with physical hashes. Exact pins and
+authorized own-identical-text reuse are recorded in current plan/handoff.
+Actual ingestion is RUNNING: worker97320/session50119 startedOctober7 01:43:53UTC,
+27code files frozen. Publication and independent replay/naturalexit remain OPEN;
+no qualification/features/models/SPY/serving/main acceptance follows from source
+review or software checks. Four existing fits and TradingFlow remain unchanged.
 
 Historical saved review checkpoint (99% account usage):
 - Reviewer A: 173 fully inspected packets, 1 partial packet; 200 saved version assessments (3 partial, 0 metadata-only).

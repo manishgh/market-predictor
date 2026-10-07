@@ -1,6 +1,58 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: finish source reviews and real ingestion only
+### Current continuation: source reviews complete; actual ingestion running
+
+User scope: finish the two independent complete source-review sets and actual
+installed ingestion/publication plus independent verification. Source review is
+complete; the ingestion run is genuinely active, not a passing publication yet.
+
+Actual combined strict DTO/source-quote check and adoption completed October 7 at
+01:42 UTC: EACH reviewer has 1,750 packets / 1,977 version assessments, including
+1,962 completely inspected readable versions and 15 metadata-only unavailable
+versions. Zero missing packets or partial inspections. Complete source ambiguities
+remain explicitly unresolved; unavailable text never became a negative. Judgments
+are honestly model-assisted source-only inspections, not human-certified gold.
+The assembly created no judgments and changed no supplied judgments.
+
+Completed immutable copies: data/research/swing_initial_fit_issuer_complete_source_reviews
+- reviewer-a.jsonl SHA256 24ceb555fdd9a4fc13cd9830ed4d259f92239dcda0c447a498c18a1241325ce1
+- reviewer-b.jsonl SHA256 910222705531959b8b2e174117ec9023bfaa36c036c64eef4584d96f00190a2d
+- _manifest.json SHA256 a740b463d25b071997e9c3c190a64167b958a48052d897b7cf7d147b0308d4d1
+Source inspections preserve disjoint context receipts: A prefix[0,1000), A
+tail[1000,1750); B main1,733 packets and B helper17 physically pinned assignments.
+Both sets remained isolated from extractor/candidates, old development labels,
+other independent reviewer judgments, models and outcomes. Own identical-text
+read reuse for packet988 is explicitly hash/length/physical-key bound to own fully
+read926 text with fresh target identity/clock/family/manual adjudication; no A/B
+label sharing or blind label copying. Source receipts are copied with hash checks.
+
+Strict config configs/swing_initial_fit_issuer_annotation_ingestion.json SHA256
+0d947752ad95397fda707b2f600593bcf9a15cf649fbed8f29dfc86640cfa902.
+Actual run started01:43:53 UTC, worker97320, native session50119. One heavy worker,
+27 frozen executed files; workspace review-results/actual-issuer-annotation-ingestion-frozen-implementation.json
+SHA256 f92e8885c576458164ea08b5728d3c3e3a4de56dfb4c5dcdeb5359f880abdb2d.
+Current phase at this documentation checkpoint: publishing_actual_complete_source_annotations.
+Installed publisher invokes the canonical packet verifier before processing, then
+installed independent annotation verifier runs sequentially. No patched owner,
+mock source, invented model/admission or skipped replay. Do not edit frozen code,
+config, review files or original sources while this run is active.
+
+Workspace run evidence: review-results/actual-issuer-annotation-ingestion-state.json,
+actual-issuer-annotation-ingestion.stdout.log, .stderr.log, eventual .exit.json.
+Prepared runner: work/run_actual_issuer_annotation_ingestion.py. Destination:
+data/research/swing_initial_fit_issuer_annotation_correspondence (fresh publication).
+Do not rerun the runner or overwrite state/private stage; wait on the owned process
+and inspect actual completion/failure. Independent replay and natural exit remain
+OPEN. Annotation publication alone grants no source qualification or model approval.
+
+The adopted source-review/config component is complete. Existing software5cf8208
+and its unit/lint/types/actual decoder evidence remain closed. No new quality metrics,
+features, model fits, SPY improvement, serving or main merge are claimed. Four fits,
+matched candles/news, targets, TradingFlow and main remain unchanged. Communicating
+APIs remain V1. Later Astra metrics/event/features/model work follows these two steps.
+Earlier partial-review/running-context claims below are historical and superseded.
+
+### Historical continuation: finish source reviews and real ingestion only
 
 User scope (October 6): finish the two independent complete source-review artifact
 sets, then run actual installed annotation ingestion/publication and its independent
@@ -3349,15 +3401,16 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: finish source-only A main [0,1000), A tail
-[1000,1750) and independent B [0,1750) from their OWN workspace directories and read
-receipts. Root checks and assembles disjoint A segments without changing judgments.
-At full genuine coverage, freeze complete A/B physical JSONL pins and strict config,
-then run installed ingestion publication and independent verification sequentially
-using the prepared wrappers and one heavy worker. Save actual output manifest/hash,
-replay counts, frozen code/source checks and natural exit; close user steps 1 and 2.
-Stop this continuation after those steps; metrics/features/training/serving remain
-later Astra work. Preserve the four fits, matched data, V1, TradingFlow and main.
+Exact next checkpoint: source review step1 is complete and immutable A/B
+copies/config are physically pinned above. Wait for actual ingestion worker97320
+(native session50119), inspect workspace actual-issuer-annotation-ingestion-state,
+stdout/stderr and natural .exit.json. No second heavy job; no changed frozen inputs.
+Only actual complete publication plus independent annotation byte replay and exit0
+close step2. Record manifest/counts/source+27code rechecks and push factual closure.
+If failure occurs, preserve exact failed stage/log/exit; identify supported cause
+before any fix/retry. Do not fabricate labels, source/memory waivers or replay pass.
+Then follow reviewed multi-version metrics design and later Astra checkpoints;
+do not reinterpret these reviews as accepted extraction quality, model or SPY win.
 The earlier qualification/reuse reruns exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
 Saved-config implementation b589725 and actual byte/fold proof are complete.
