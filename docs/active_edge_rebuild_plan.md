@@ -1,6 +1,47 @@
 # Active Edge Rebuild Plan
 
-### Current continuation: source reviews complete; actual ingestion running
+### Current continuation: source reviews complete; request comparison repaired; real retry pending
+
+Step 1 remains complete: each independent model-assisted source-only set covers
+1,750 packets and 1,977 versions with no missing or partial inspections. Their
+adopted files, judgments, config and physical hashes remain unchanged.
+
+Step 2's real run exited with code 1 at 2026-10-07T03:35:09.8381625Z. The canonical
+packet verifier completed, then annotation ingestion failed at _inputs with
+"verified packet request differs" before creating its private output stage.
+The saved request has JSON lists for frame_policy.development_sources and
+correspondence_policy.roles/verdict_fields; the verifier returns Python tuples.
+Those installed policy values have exactly equal canonical JSON bytes but unequal
+Python container types. This prevents annotation publication despite successful
+packet byte replay. It is not missing credentials, source timestamps or reviews.
+
+Bounded repair: compare the two requests using the existing canonical JSON encoder
+at this new annotation consumer boundary. Preserve exact bytes, value types and
+array order; do not normalize source content or change the frozen packet owner,
+candidate owner, policies, hashes, labels, models, targets or TradingFlow.
+Exit checks: unit reproduction using installed tuple-containing policies, rejection
+of changed boolean/number values and array order, affected annotation tests,
+Ruff/strict mypy, one consolidated bounded review, then actual publication and
+independent verification with a fresh run inventory and natural exit code 0.
+Preserve all failed-run state, logs, 27-file inventory and exit receipt. No bypass
+of the canonical verifier or replacement of actual data with unit fixtures.
+
+Software repair completed: canonical JSON request comparison fixes the observed
+list/tuple mismatch without changing stored JSON or policy values. Implementation
+commit: bf3bf5a. Before the fix, the unit publisher reproduced the exact
+"verified packet request differs" failure using installed tuple-containing policies.
+After the fix: 25 affected unit/document checks passed; targeted Ruff passed;
+strict mypy passed for the changed module; one bounded independent review found
+no supported issue. Unit fixtures are tests only, not actual ingestion evidence.
+Frozen packet/candidate/original owners, adopted A/B reviews and config did not
+change. The original actual failure and natural exit 1 remain preserved.
+
+Fresh retry runner: work/run_actual_issuer_annotation_ingestion_retry.py.
+Fresh state/inventory/log/exit names use actual-issuer-annotation-ingestion-retry.
+Retry must still run the installed publisher and independent verifier on real
+retained data. A software pass alone does not close requested step 2.
+
+### Historical continuation: source reviews complete; actual ingestion running
 
 User scope: finish the two independent complete source-review sets and actual
 installed ingestion/publication plus independent verification. Source review is

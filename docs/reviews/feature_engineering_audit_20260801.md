@@ -1,14 +1,24 @@
 # Current Feature Engineering Audit
 
-Current actual source-review closure: each independent model-assisted set has
-1,750 packets/1,977 versions (1,962 readable completely inspected,15metadata-only),
-zero partial/missing. Combined strict bindings/Unicodequotes passed, immutable
-A/Bfiles and inspection receipts adopted with physical hashes. Exact pins and
-authorized own-identical-text reuse are recorded in current plan/handoff.
-Actual ingestion is RUNNING: worker97320/session50119 startedOctober7 01:43:53UTC,
-27code files frozen. Publication and independent replay/naturalexit remain OPEN;
-no qualification/features/models/SPY/serving/main acceptance follows from source
-review or software checks. Four existing fits and TradingFlow remain unchanged.
+Source step 1 is complete: each independent model-assisted set contains 1,750
+packets and 1,977 versions, with no missing or partial inspections. Actual step 2
+failed after canonical packet replay because JSON lists were compared with Python
+tuples. No annotation stage or publication was created.
+
+Software repair completed: canonical JSON request comparison fixes the observed
+list/tuple mismatch without changing stored JSON or policy values. Implementation
+commit: bf3bf5a. Before the fix, the unit publisher reproduced the exact
+"verified packet request differs" failure using installed tuple-containing policies.
+After the fix: 25 affected unit/document checks passed; targeted Ruff passed;
+strict mypy passed for the changed module; one bounded independent review found
+no supported issue. Unit fixtures are tests only, not actual ingestion evidence.
+Frozen packet/candidate/original owners, adopted A/B reviews and config did not
+change. The original actual failure and natural exit 1 remain preserved.
+
+Fresh retry runner: work/run_actual_issuer_annotation_ingestion_retry.py.
+Fresh state/inventory/log/exit names use actual-issuer-annotation-ingestion-retry.
+Retry must still run the installed publisher and independent verifier on real
+retained data. A software pass alone does not close requested step 2.
 
 Historical saved review checkpoint (99% account usage):
 - Reviewer A: 173 fully inspected packets, 1 partial packet; 200 saved version assessments (3 partial, 0 metadata-only).

@@ -1,6 +1,47 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: source reviews complete; actual ingestion running
+### Current continuation: source reviews complete; request comparison repaired; real retry pending
+
+Step 1 remains complete: each independent model-assisted source-only set covers
+1,750 packets and 1,977 versions with no missing or partial inspections. Their
+adopted files, judgments, config and physical hashes remain unchanged.
+
+Step 2's real run exited with code 1 at 2026-10-07T03:35:09.8381625Z. The canonical
+packet verifier completed, then annotation ingestion failed at _inputs with
+"verified packet request differs" before creating its private output stage.
+The saved request has JSON lists for frame_policy.development_sources and
+correspondence_policy.roles/verdict_fields; the verifier returns Python tuples.
+Those installed policy values have exactly equal canonical JSON bytes but unequal
+Python container types. This prevents annotation publication despite successful
+packet byte replay. It is not missing credentials, source timestamps or reviews.
+
+Bounded repair: compare the two requests using the existing canonical JSON encoder
+at this new annotation consumer boundary. Preserve exact bytes, value types and
+array order; do not normalize source content or change the frozen packet owner,
+candidate owner, policies, hashes, labels, models, targets or TradingFlow.
+Exit checks: unit reproduction using installed tuple-containing policies, rejection
+of changed boolean/number values and array order, affected annotation tests,
+Ruff/strict mypy, one consolidated bounded review, then actual publication and
+independent verification with a fresh run inventory and natural exit code 0.
+Preserve all failed-run state, logs, 27-file inventory and exit receipt. No bypass
+of the canonical verifier or replacement of actual data with unit fixtures.
+
+Software repair completed: canonical JSON request comparison fixes the observed
+list/tuple mismatch without changing stored JSON or policy values. Implementation
+commit: bf3bf5a. Before the fix, the unit publisher reproduced the exact
+"verified packet request differs" failure using installed tuple-containing policies.
+After the fix: 25 affected unit/document checks passed; targeted Ruff passed;
+strict mypy passed for the changed module; one bounded independent review found
+no supported issue. Unit fixtures are tests only, not actual ingestion evidence.
+Frozen packet/candidate/original owners, adopted A/B reviews and config did not
+change. The original actual failure and natural exit 1 remain preserved.
+
+Fresh retry runner: work/run_actual_issuer_annotation_ingestion_retry.py.
+Fresh state/inventory/log/exit names use actual-issuer-annotation-ingestion-retry.
+Retry must still run the installed publisher and independent verifier on real
+retained data. A software pass alone does not close requested step 2.
+
+### Historical continuation: source reviews complete; actual ingestion running
 
 User scope: finish the two independent complete source-review sets and actual
 installed ingestion/publication plus independent verification. Source review is
@@ -3401,16 +3442,12 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: source review step1 is complete and immutable A/B
-copies/config are physically pinned above. Wait for actual ingestion worker97320
-(native session50119), inspect workspace actual-issuer-annotation-ingestion-state,
-stdout/stderr and natural .exit.json. No second heavy job; no changed frozen inputs.
-Only actual complete publication plus independent annotation byte replay and exit0
-close step2. Record manifest/counts/source+27code rechecks and push factual closure.
-If failure occurs, preserve exact failed stage/log/exit; identify supported cause
-before any fix/retry. Do not fabricate labels, source/memory waivers or replay pass.
-Then follow reviewed multi-version metrics design and later Astra checkpoints;
-do not reinterpret these reviews as accepted extraction quality, model or SPY win.
+Exact next checkpoint: source step 1 and the observed request representation
+software repair are complete. Start the fresh actual retry wrapper with unchanged
+A/B/config/source pins and a new 27-file inventory. Preserve original failed
+session50119/PID97320 logs and exit 1. Run installed publication plus independent
+verification sequentially; only those actual results and natural exit 0 close
+requested step 2. No repeated source reviews or mocked operational data.
 The earlier qualification/reuse reruns exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
 Saved-config implementation b589725 and actual byte/fold proof are complete.
