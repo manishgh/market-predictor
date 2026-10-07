@@ -1,33 +1,35 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: source reviews complete; real ingestion awaiting RAM headroom
+### Current continuation: source reviews complete; resumed actual ingestion running
 
-Requested step 1 is complete and preserved: each independent model-assisted
-source-only set covers 1,750 packets and 1,977 versions, with no missing or partial
-inspections. Requested step 2 has no publication or independent annotation pass.
+Requested step 1 remains complete: each independent model-assisted source-only
+review set covers 1,750 packets and 1,977 versions, with no missing or partial
+inspections. The adopted review files, config and all 27 implementation files
+matched their saved physical hashes before this resumption. No reviews repeated.
 
-The fresh actual retry, session38719/PID84748, exited with code 1 at
-2026-10-07T05:09:45.2536390Z. During canonical packet verification, the existing
-system memory guard measured 90.1% RAM used and 1.55 GiB available, exceeding its
-90.0% usage limit. The failure was before the repaired annotation consumer and
-before creating an annotation private stage. Preserve retry state, stdout/stderr,
-27-file inventory and natural exit under actual-issuer-annotation-ingestion-retry.
-The original session50119 representation failure receipts also remain preserved.
+User resumed October 8. Actual free RAM measured 4.24 then 4.19 GiB (73.0 then
+73.3% used), with no task Python workers remaining from the failed attempts.
+Fresh actual run started 2026-10-07T22:22:59.490392+00:00, native session25502,
+worker93460. Exactly one heavy worker, unchanged installed memory
+limits, real retained data and actual installed publisher/verifier; no mocked
+operational inputs or admissions. Frozen 27-file inventory SHA256:
+6740805d6e13066eb7ef1e5f99623cf19c46a10b95e6b53f5186d8761e3b29bb.
+Config SHA256: 0d947752ad95397fda707b2f600593bcf9a15cf649fbed8f29dfc86640cfa902.
 
-After exit, the 15.69 GiB machine had only 1.92 GiB free and no task Python workers
-remained to clear. Another approximately 0.45 GiB worker at that baseline could
-cross the same limit again. User was asked to free about 1 GiB by closing unused
-browser/ChatGPT windows while keeping TradingFlow running. Recheck actual RAM;
-wait for roughly 3 GiB of stable free memory before launching the next fresh run.
-This start margin does not change or bypass the installed 90%/0.75 GiB guard.
-Do not terminate unrelated applications, waive memory checks, use mocked readers
-or invent a successful replay. No new code defect is established by this failure.
+Run evidence uses workspace review-results/actual-issuer-annotation-ingestion-headroom
+state, frozen-implementation, stdout/stderr and eventual natural exit receipt.
+Runner: work/run_actual_issuer_annotation_ingestion_headroom.py. Current phase:
+publishing_actual_complete_source_annotations. Publication, independent annotation byte/count
+replay and natural exit 0 remain pending. Do not alter frozen code, config,
+reviews or original inputs during this run, or launch another heavy worker.
 
-Post-failure physical checks confirmed both adopted review files, the config and
-all 27 retry implementation files remain unchanged. No annotation stage or output
-exists. Software fix bf3bf5a remains verified by its 25 unit/document checks,
-Ruff, strict mypy and bounded review; the second real run did not reach that
-comparison, so it is not an actual ingestion pass. Source reviews must not repeat.
+Preserve original session50119 request representation failure and session38719
+system-RAM failure receipts. Software repair bf3bf5a and its 25 affected checks,
+Ruff, strict mypy and bounded review remain closed; this running job is not yet
+real ingestion proof. No features, model fits, SPY improvement, serving or main
+merge are claimed. Existing fits, matched data, targets and TradingFlow remain
+unchanged; communicating APIs remain V1. Finish requested step 2 before later
+Astra statistical measurement/feature/model checkpoints.
 
 ### Historical continuation: source reviews complete; request comparison repaired; real retry running
 
@@ -3481,13 +3483,13 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: recheck system RAM and wait for roughly 3 GiB of stable
-free memory before launching another fresh real ingestion attempt. User was asked
-to close unused windows; no task Python workers remain. Preserve both failed-run
-receipts, adopted A/B/config pins and code bf3bf5a. Use a new state/inventory/log/exit
-prefix, one heavy worker and unchanged installed memory limits. Only actual
-publication plus independent annotation replay and natural exit 0 closes step 2.
-Source step 1 is complete. Do not repeat reviews or claim a source/model/SPY pass.
+Exact next checkpoint: wait on active actual headroom run session25502/PID93460.
+Inspect its state, stdout/stderr and natural exit receipt under the headroom prefix.
+Only real publication, independent annotation byte/count reconstruction and exit 0
+close requested step 2. Record manifest/counts and unchanged source/code pins;
+update existing plan, handoff and audit and push factual closure. Preserve both
+earlier failures and complete A/B reviews. If this run fails, inspect its exact
+exception and stage before a supported fix or resource remedy; no invented pass.
 The earlier qualification/reuse reruns exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
 Saved-config implementation b589725 and actual byte/fold proof are complete.
