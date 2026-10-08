@@ -1,48 +1,75 @@
 # Current Feature Engineering Audit
 
-### Current continuation: reviews and publication complete; verifier awaiting more RAM
+### Current continuation: publication-first news interpretation and semantic event association
 
-Requested step 1 is complete: each independent model-assisted source-only set
-covers 1,750 packets and 1,977 versions without missing or partial inspections.
-Actual annotation publication also completed, with manifest:
+User supersedes identical-character review matching (October 8). Exact saved-source
+quotes must remain authentic, but independent evidence may use different passages
+supporting the same company/event/period/claim. A contract announcement published
+December 3 is usable from its actual availability timestamp onward; delivery date
+and earnings reporting period are separate facts. Natural language date context
+must be resolved with its basis recorded, not discarded because one sentence lacks
+an explicit fiscal year. Fiscal calendar ambiguities remain partial/unknown.
+
+Verified count units and scope, from actual manifests and published result files:
+- Retained issuer-review input: 516,679 source versions and 539,399 record rows.
+- Readable, company-attributable review frame: 466,635 source groups, comprising
+  443,915 Alpaca news groups and 22,720 SEC groups. These are not a distinct-article
+  count across every configured provider; versions/copies and source grouping differ.
+- QA sample: 1,750 packets / 1,745 distinct groups / 1,977 source versions.
+  It selects 300 earnings-candidate packets, 250 guidance-candidate packets and
+  600 noncandidate controls for each family. Noncandidate does not mean irrelevant
+  to prediction or absent from the broader news data.
+- Published sample output: 603 event occurrences (347 earnings, 256 guidance),
+  in 550 packets and 561 distinct source documents (426 Alpaca, 135 SEC).
+  One document may contain multiple events. The current extractor recognizes only
+  earnings/guidance patterns and seeks fiscal periods inside the same statement;
+  it does not categorize contract, merger, analyst, product or other news here.
+
+The zero-support result is historical evidence of the old rule, not measured event
+accuracy. A concrete Caesars Q1-2024 release has authentic headline evidence in
+the extractor/A and authentic body/financial-results evidence in B. Both accept
+the company, announcement and period; old matching rejects the differing positions.
+338 sampled candidates also lack an explicit same-statement fiscal period and
+3 have ambiguous periods, which must be distinguished from span-selection failures.
+
+Bounded amended design, reviewed by the senior design agent with no jobs/edits:
+1. Keep immutable source/version identity, exact quote authenticity and completed
+   A/B judgments; compare normalized company/event/action/period/assertions rather
+   than identical offsets. Determine unique associations before consulting verdicts.
+2. Separate information availability, announcement/described event date and economic
+   period. Preserve existing cutoff/revision rules and matched candle/news inputs.
+   Relative expressions may use publication date and relevant source/calendar
+   context; never blindly assign the publication year to a fiscal period.
+3. Record explicit, context-resolved, partial, ambiguous or missing temporal facts
+   with supporting evidence. A missing fiscal period cannot erase useful contract
+   or general article context; numerical earnings comparisons require an appropriate
+   period, actual-versus-guidance distinction, currency/unit and GAAP basis.
+4. Preserve old false/null/unknown answers; do not relabel them as new-policy positives.
+   A new hash-bound association artifact references original reviews, packet/version
+   identities, quotes and the revised policy/code. Historical hashes are not forged.
+5. Keep the existing six specifications/twelve policies and four completed fits.
+   Preserve broader news without silently adding new family predictors or experiments.
+   Scope implementation to assertion/temporal normalization, one canonical semantic
+   association owner, its publication/verifier and focused tests. APIs stay V1.
+
+Exit tests: real Caesars headline/body example; wrong company/version/exhibit,
+different same-company events or periods, conflicting figures/unit/GAAP basis,
+ambiguous associations and missing fiscal-calendar context; December 3 publication
+versus later delivery; after-cutoff or later revised text cannot backdate features;
+raw reviews/hashes remain unchanged. Actual revised association must be published
+and independently reconstructed before claiming source quality or model improvement.
+Implementation and new real-data replay have NOT run yet.
+
+Completed source reviews and old publication remain preserved. Old manifest:
 data/research/swing_initial_fit_issuer_annotation_correspondence/_manifest.json
 SHA256 5b8b401105f28785761fc929da9b6aedbdaefb9b37703b2cd9aa9a5af4e98472.
-Counts: 1,750 samples, 3,954 assessments, 603 candidate occurrences, zero supported
-by both reviewers under the installed exact-source role-span rule. All five
-source/model/economic admission flags are false. Zero strict correspondence is
-not a measured event precision or a claim that all events are false.
-
-The headroom run session25502/PID93460 published successfully, then its independent
-verifier exited 1 at 2026-10-08T00:39:30.4817774Z. The unchanged memory guard saw
-90.1% RAM used and 1.56 GiB available while _sample_occurrences gathered original
-sample references. Minute-level monitoring immediately before/after showed more
-free memory; it did not capture that brief peak. Preserve the headroom state,
-logs, 27-file inventory and natural exit receipt. Independent annotation replay
-has not passed. Both earlier failure receipts remain preserved as well.
-
-After failure, actual RAM was 3.33 GiB free and no task Python workers remained.
-User was asked to free about 2 GiB more by closing unused apps/windows while
-keeping TradingFlow running. Aim for roughly 5 GiB of stable free RAM before a
-verification-only retry to leave a larger buffer for the observed peak. This is
-an operational start margin, not a changed or bypassed 90%/0.75 GiB memory guard.
-Do not terminate unrelated applications or claim a replay pass from file hashes.
-
-Prepared work/run_actual_issuer_annotation_verification_only.py invokes only the
-installed verifier against the preserved exact manifest. Fresh proof names:
-review-results/actual-issuer-annotation-verification-only state, inventory, logs
-and exit receipt. It freezes/checks the same 27 code files and actual counts;
-there is no republishing path. Bounded static review found no supported issue.
-The verifier-only runner has NOT launched. Prepared closure wrapper:
-work/record_verified_annotation_verification_only.py, guarded by real pass/exit0.
-
-Post-failure lightweight physical checks confirmed published artifacts, both
-review files and all 27 code files are unchanged; these checks are not independent
-replay. Source reviews and publication must not repeat. Software bf3bf5a remains
-closed. Existing fits, matched data, targets, main and TradingFlow are unchanged;
-communicating APIs remain V1. Later Astra work must separate missing fiscal/role
-evidence (338 missing periods, 3 ambiguous; overlapping inventory reasons) from
-span correspondence failures (A18 structural matches, B0), before qualification,
-features or the remaining fits. No label changes, gate waivers or SPY win claimed.
+Its independent verifier stopped at the RAM guard and has not passed. Keep its
+failed receipts honestly; retrying obsolete identical-span matching is no longer
+the critical path under this changed user requirement. Do not mark that old replay
+complete. No repeated wholesale source reviews to force offset agreement.
+Finviz/Seeking Alpha inclusion is not established by these Alpaca/SEC manifests;
+credentials alone are not evidence of provider coverage in this pinned corpus.
+Raw data, matched inputs, targets/splits/parameters, main and TradingFlow unchanged.
 
 Historical saved review checkpoint (99% account usage):
 - Reviewer A: 173 fully inspected packets, 1 partial packet; 200 saved version assessments (3 partial, 0 metadata-only).

@@ -90,6 +90,39 @@ snapshot was captured after the prediction's decision time. Using it would give 
 prediction information unavailable at that time. We need a snapshot observed before
 that decision; collecting data for future decisions can continue."
 
+User clarification (October 8): explain every reported count with its unit,
+scope, selection/filter and denominator. Articles, versions, source clusters,
+review packets, extracted event occurrences and model examples are different units.
+Always elaborate the observed cause and its effect, using a concrete example when
+helpful; concision must not hide those distinctions.
+
+News is information available from its publication/version availability time.
+A contract-win announcement published December 3 may inform decisions from that
+time onward; a later delivery date does not postpone the announcement's availability.
+Keep publication/available time, described event/effective date and financial
+reporting period separate. Apply the existing prediction cutoff and version timing
+rules. Never backdate a feature to an earlier event date described in a later article.
+
+Independent reviews check company, event, action, period and any claimed figures;
+they must not be required to select identical character positions. Keep exact
+saved-source quote authenticity and document/version ownership checks. Associate
+the same supported event and normalized assertions, allowing headline/body evidence
+from the same version. Preserve review judgments and their original hashes.
+
+Use explicit and nearby relevant date/period context, anchored by publication time
+for relative expressions. Record normalization/inference basis and unresolved
+alternatives. Publication year alone is not a company's fiscal year; use known
+issuer-calendar context where necessary. Do not force fiscal-period fields onto
+contract, product, legal, analyst or other general news. Missing period information
+limits period-dependent numerical features, not the article's general availability.
+Old false/null reviewer answers must not become positive by silently changing their
+meaning. Preserve such answers and identify any question they did not assess.
+
+The current 603 counter is an earnings/guidance QA-sample event count, not the whole
+news corpus. Preserve broader matched news. Newly recognized event families must
+not silently expand the frozen six-model/twelve-policy experiment. Communicating
+APIs remain V1; no compatibility aliases or artificial version increments.
+
 ## 2. Source-Of-Truth Order
 
 When instructions disagree, use this order:
