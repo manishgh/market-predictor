@@ -1,54 +1,48 @@
 # Active Edge Rebuild Handoff
 
-### Current continuation: source reviews complete; resumed actual ingestion running
+### Current continuation: reviews and publication complete; verifier awaiting more RAM
 
-Requested step 1 remains complete: each independent model-assisted source-only
-review set covers 1,750 packets and 1,977 versions, with no missing or partial
-inspections. The adopted review files, config and all 27 implementation files
-matched their saved physical hashes before this resumption. No reviews repeated.
+Requested step 1 is complete: each independent model-assisted source-only set
+covers 1,750 packets and 1,977 versions without missing or partial inspections.
+Actual annotation publication also completed, with manifest:
+data/research/swing_initial_fit_issuer_annotation_correspondence/_manifest.json
+SHA256 5b8b401105f28785761fc929da9b6aedbdaefb9b37703b2cd9aa9a5af4e98472.
+Counts: 1,750 samples, 3,954 assessments, 603 candidate occurrences, zero supported
+by both reviewers under the installed exact-source role-span rule. All five
+source/model/economic admission flags are false. Zero strict correspondence is
+not a measured event precision or a claim that all events are false.
 
-User resumed October 8. Actual free RAM measured 4.24 then 4.19 GiB (73.0 then
-73.3% used), with no task Python workers remaining from the failed attempts.
-Fresh actual run started 2026-10-07T22:22:59.490392+00:00, native session25502,
-worker93460. Exactly one heavy worker, unchanged installed memory
-limits, real retained data and actual installed publisher/verifier; no mocked
-operational inputs or admissions. Frozen 27-file inventory SHA256:
-6740805d6e13066eb7ef1e5f99623cf19c46a10b95e6b53f5186d8761e3b29bb.
-Config SHA256: 0d947752ad95397fda707b2f600593bcf9a15cf649fbed8f29dfc86640cfa902.
+The headroom run session25502/PID93460 published successfully, then its independent
+verifier exited 1 at 2026-10-08T00:39:30.4817774Z. The unchanged memory guard saw
+90.1% RAM used and 1.56 GiB available while _sample_occurrences gathered original
+sample references. Minute-level monitoring immediately before/after showed more
+free memory; it did not capture that brief peak. Preserve the headroom state,
+logs, 27-file inventory and natural exit receipt. Independent annotation replay
+has not passed. Both earlier failure receipts remain preserved as well.
 
-Run evidence uses workspace review-results/actual-issuer-annotation-ingestion-headroom
-state, frozen-implementation, stdout/stderr and eventual natural exit receipt.
-Runner: work/run_actual_issuer_annotation_ingestion_headroom.py. Current phase:
-independently_verifying_actual_complete_source_annotations. Publication is complete;
-independent annotation byte/count replay and natural exit 0 remain pending. Do not alter frozen code, config,
-reviews or original inputs during this run, or launch another heavy worker.
+After failure, actual RAM was 3.33 GiB free and no task Python workers remained.
+User was asked to free about 2 GiB more by closing unused apps/windows while
+keeping TradingFlow running. Aim for roughly 5 GiB of stable free RAM before a
+verification-only retry to leave a larger buffer for the observed peak. This is
+an operational start margin, not a changed or bypassed 90%/0.75 GiB memory guard.
+Do not terminate unrelated applications or claim a replay pass from file hashes.
 
-Actual publication completed; independent verification is now running.
-Manifest: data/research/swing_initial_fit_issuer_annotation_correspondence/_manifest.json
-SHA256: 5b8b401105f28785761fc929da9b6aedbdaefb9b37703b2cd9aa9a5af4e98472
-Published counts: 1,750 samples, 3,954 reviewer assessments, 603 candidate
-occurrences, zero occurrences satisfying the installed two-reviewer exact-source
-correspondence rule. This is not zero measured extraction precision or proof that
-all 603 events are false. All five source/model/economic admission flags are false.
-Independent annotation byte/count replay and natural exit 0 remain pending.
+Prepared work/run_actual_issuer_annotation_verification_only.py invokes only the
+installed verifier against the preserved exact manifest. Fresh proof names:
+review-results/actual-issuer-annotation-verification-only state, inventory, logs
+and exit receipt. It freezes/checks the same 27 code files and actual counts;
+there is no republishing path. Bounded static review found no supported issue.
+The verifier-only runner has NOT launched. Prepared closure wrapper:
+work/record_verified_annotation_verification_only.py, guarded by real pass/exit0.
 
-Read-only published-result inspection found 338 candidate occurrences missing an
-explicit fiscal period, 3 with ambiguous periods, and 341 with an invalid required
-role inventory; these reason counts overlap. 262 have no candidate-side rejection
-reason. Reviewer A has 18 structural matches; B has zero. Document-level verdicts
-are all true for 360 A occurrences and 322 B occurrences, but those do not establish
-a same-event match under the strict role-span rule. After independent replay,
-later Astra work must distinguish incomplete candidate evidence from source-span
-correspondence failures before any source qualification, feature admission or fit.
-Do not change labels, frozen matching rules or code during the active verifier.
-
-Preserve original session50119 request representation failure and session38719
-system-RAM failure receipts. Software repair bf3bf5a and its 25 affected checks,
-Ruff, strict mypy and bounded review remain closed; this running job is not yet
-real ingestion proof. No features, model fits, SPY improvement, serving or main
-merge are claimed. Existing fits, matched data, targets and TradingFlow remain
-unchanged; communicating APIs remain V1. Finish requested step 2 before later
-Astra statistical measurement/feature/model checkpoints.
+Post-failure lightweight physical checks confirmed published artifacts, both
+review files and all 27 code files are unchanged; these checks are not independent
+replay. Source reviews and publication must not repeat. Software bf3bf5a remains
+closed. Existing fits, matched data, targets, main and TradingFlow are unchanged;
+communicating APIs remain V1. Later Astra work must separate missing fiscal/role
+evidence (338 missing periods, 3 ambiguous; overlapping inventory reasons) from
+span correspondence failures (A18 structural matches, B0), before qualification,
+features or the remaining fits. No label changes, gate waivers or SPY win claimed.
 
 ### Historical continuation: source reviews complete; request comparison repaired; real retry running
 
@@ -3502,14 +3496,13 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: wait for the actual independent verifier in native
-session25502/PID93460. Publication 5b8b401105f28785761fc929da9b6aedbdaefb9b37703b2cd9aa9a5af4e98472
-contains 1,750 samples, 3,954 assessments and 603 occurrences, with zero supported
-under the installed exact-source rule. Only independent byte/count reconstruction
-and natural exit 0 close requested step 2. Preserve all source/code pins and failed
-receipts. Record factual closure, then distinguish missing fiscal/role evidence
-from exact span correspondence failures in the later Astra checkpoint; do not
-reinterpret zero correspondence as measured event precision or alter labels.
+Exact next checkpoint: recheck real RAM and wait for roughly 5 GiB of stable
+free memory, then launch the prepared verification-only runner with fresh proof
+files. Preserve publication 5b8b401105f28785761fc929da9b6aedbdaefb9b37703b2cd9aa9a5af4e98472;
+do not republish it or repeat source reviews. The existing memory limits remain
+unchanged. Only actual independent byte/count reconstruction and natural exit 0
+close requested step 2. Record verified counts/source+27code checks and push
+closure. Zero current strict support must remain explicit, not model approval.
 The earlier qualification/reuse reruns exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
 Saved-config implementation b589725 and actual byte/fold proof are complete.
