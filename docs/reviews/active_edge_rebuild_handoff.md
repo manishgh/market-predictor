@@ -19,9 +19,28 @@ Config SHA256: 0d947752ad95397fda707b2f600593bcf9a15cf649fbed8f29dfc86640cfa902.
 Run evidence uses workspace review-results/actual-issuer-annotation-ingestion-headroom
 state, frozen-implementation, stdout/stderr and eventual natural exit receipt.
 Runner: work/run_actual_issuer_annotation_ingestion_headroom.py. Current phase:
-publishing_actual_complete_source_annotations. Publication, independent annotation byte/count
-replay and natural exit 0 remain pending. Do not alter frozen code, config,
+independently_verifying_actual_complete_source_annotations. Publication is complete;
+independent annotation byte/count replay and natural exit 0 remain pending. Do not alter frozen code, config,
 reviews or original inputs during this run, or launch another heavy worker.
+
+Actual publication completed; independent verification is now running.
+Manifest: data/research/swing_initial_fit_issuer_annotation_correspondence/_manifest.json
+SHA256: 5b8b401105f28785761fc929da9b6aedbdaefb9b37703b2cd9aa9a5af4e98472
+Published counts: 1,750 samples, 3,954 reviewer assessments, 603 candidate
+occurrences, zero occurrences satisfying the installed two-reviewer exact-source
+correspondence rule. This is not zero measured extraction precision or proof that
+all 603 events are false. All five source/model/economic admission flags are false.
+Independent annotation byte/count replay and natural exit 0 remain pending.
+
+Read-only published-result inspection found 338 candidate occurrences missing an
+explicit fiscal period, 3 with ambiguous periods, and 341 with an invalid required
+role inventory; these reason counts overlap. 262 have no candidate-side rejection
+reason. Reviewer A has 18 structural matches; B has zero. Document-level verdicts
+are all true for 360 A occurrences and 322 B occurrences, but those do not establish
+a same-event match under the strict role-span rule. After independent replay,
+later Astra work must distinguish incomplete candidate evidence from source-span
+correspondence failures before any source qualification, feature admission or fit.
+Do not change labels, frozen matching rules or code during the active verifier.
 
 Preserve original session50119 request representation failure and session38719
 system-RAM failure receipts. Software repair bf3bf5a and its 25 affected checks,
@@ -3483,13 +3502,14 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: wait on active actual headroom run session25502/PID93460.
-Inspect its state, stdout/stderr and natural exit receipt under the headroom prefix.
-Only real publication, independent annotation byte/count reconstruction and exit 0
-close requested step 2. Record manifest/counts and unchanged source/code pins;
-update existing plan, handoff and audit and push factual closure. Preserve both
-earlier failures and complete A/B reviews. If this run fails, inspect its exact
-exception and stage before a supported fix or resource remedy; no invented pass.
+Exact next checkpoint: wait for the actual independent verifier in native
+session25502/PID93460. Publication 5b8b401105f28785761fc929da9b6aedbdaefb9b37703b2cd9aa9a5af4e98472
+contains 1,750 samples, 3,954 assessments and 603 occurrences, with zero supported
+under the installed exact-source rule. Only independent byte/count reconstruction
+and natural exit 0 close requested step 2. Preserve all source/code pins and failed
+receipts. Record factual closure, then distinguish missing fiscal/role evidence
+from exact span correspondence failures in the later Astra checkpoint; do not
+reinterpret zero correspondence as measured event precision or alter labels.
 The earlier qualification/reuse reruns exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
 Saved-config implementation b589725 and actual byte/fold proof are complete.
