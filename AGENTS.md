@@ -118,10 +118,33 @@ limits period-dependent numerical features, not the article's general availabili
 Old false/null reviewer answers must not become positive by silently changing their
 meaning. Preserve such answers and identify any question they did not assess.
 
-The current 603 counter is an earnings/guidance QA-sample event count, not the whole
-news corpus. Preserve broader matched news. Newly recognized event families must
-not silently expand the frozen six-model/twelve-policy experiment. Communicating
-APIs remain V1; no compatibility aliases or artificial version increments.
+User scope expansion (October 8): recognize contract wins/losses, acquisitions,
+analyst changes, product/commercial milestones, lawsuits/regulatory developments,
+financing/capital returns, management/operational incidents and other material
+company/sector/market stories as swing catalysts. Multiple categories and mixed
+sentiments can coexist in an article and decision snapshot. Preserve unknown and
+other-story content. The old earnings/guidance review does not certify new categories.
+
+Process the full eligible news corpus for feature engineering. Sampling is for
+checking recognition/sentiment/evidence quality; it is not a training-news filter.
+Build bounded, reproducible QA sample buckets during enrichment, across categories,
+sources, years, sentiment and uncertain/multi-event cases. Never rank these samples
+by future price outcomes. Explain "event family" as news category in user prose.
+
+The user explicitly expands the untrained third source-reaction feature profile.
+Freeze its revised columns/aggregation before fitting. Preserve four baseline fits,
+the two learners, existing targets/splits/costs and six-specification/twelve-policy
+comparison unless the user explicitly amends them. A three-day recovery example
+does not silently replace the current ten-session target with a new objective.
+
+Feature-first priority (user before sleep, October 8): freeze the existing collection,
+canonical schemas, matched candles/news, technical indicators and API V1 foundation.
+The missing deliverable is useful feature engineering and learned conditional future
+returns. Do not restart base-structure, naming, provenance or matching rebuilds as
+routine work. Reopen foundation code only for a demonstrated affected value/clock,
+source/consumer conflict or explicit changed requirement; record the smallest remedy.
+Spend the critical path on new features, actual fitting and measured comparison.
+Communicating APIs remain V1; no compatibility aliases or version increments.
 
 ## 2. Source-Of-Truth Order
 

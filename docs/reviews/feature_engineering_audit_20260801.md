@@ -1,75 +1,97 @@
 # Current Feature Engineering Audit
 
-### Current continuation: publication-first news interpretation and semantic event association
+### Current continuation: full-news feature engineering on the existing foundation
 
-User supersedes identical-character review matching (October 8). Exact saved-source
-quotes must remain authentic, but independent evidence may use different passages
-supporting the same company/event/period/claim. A contract announcement published
-December 3 is usable from its actual availability timestamp onward; delivery date
-and earnings reporting period are separate facts. Natural language date context
-must be resolved with its basis recorded, not discarded because one sentence lacks
-an explicit fiscal year. Fiscal calendar ambiguities remain partial/unknown.
+User correction and priority (October 8): the project already has candles, matched
+news and technical indicators. Freeze that foundation. Complete useful news feature
+engineering, learn conditional future returns and measure results against SPY.
+Do not spend the critical path rebuilding schemas/matching or replaying the obsolete
+identical-character gate. Current public APIs remain V1; TradingFlow is untouched.
 
-Verified count units and scope, from actual manifests and published result files:
-- Retained issuer-review input: 516,679 source versions and 539,399 record rows.
-- Readable, company-attributable review frame: 466,635 source groups, comprising
-  443,915 Alpaca news groups and 22,720 SEC groups. These are not a distinct-article
-  count across every configured provider; versions/copies and source grouping differ.
-- QA sample: 1,750 packets / 1,745 distinct groups / 1,977 source versions.
-  It selects 300 earnings-candidate packets, 250 guidance-candidate packets and
-  600 noncandidate controls for each family. Noncandidate does not mean irrelevant
-  to prediction or absent from the broader news data.
-- Published sample output: 603 event occurrences (347 earnings, 256 guidance),
-  in 550 packets and 561 distinct source documents (426 Alpaca, 135 SEC).
-  One document may contain multiple events. The current extractor recognizes only
-  earnings/guidance patterns and seeks fiscal periods inside the same statement;
-  it does not categorize contract, merger, analyst, product or other news here.
+At each decision cutoff, combine available stock/price history, fundamentals and
+deduplicated company, sector and market news. Preserve simultaneous positive earnings,
+negative guidance, sector disruption and war/macro context; do not collapse them
+into one exclusive category or one overall sentiment. Future price paths are labels
+and evaluation outcomes only. Fundamentals and consensus expectations must have
+been available at the decision, not restated or captured later without evidence.
 
-The zero-support result is historical evidence of the old rule, not measured event
-accuracy. A concrete Caesars Q1-2024 release has authentic headline evidence in
-the extractor/A and authentic body/financial-results evidence in B. Both accept
-the company, announcement and period; old matching rejects the differing positions.
-338 sampled candidates also lack an explicit same-statement fiscal period and
-3 have ambiguous periods, which must be distinguished from span-selection failures.
+Recognize earnings/guidance, contracts/partnerships, corporate transactions, analyst
+rating/target changes, products/commercial/clinical milestones, legal/regulatory
+actions, financing/capital returns, management/operations/security incidents and
+other material stories. Record actor, affected company, counterparties, event status,
+scope and available time. Rumours, proposed deals and completed events differ.
+Fiscal periods are conditional financial fields, never mandatory for every story.
 
-Bounded amended design, reviewed by the senior design agent with no jobs/edits:
-1. Keep immutable source/version identity, exact quote authenticity and completed
-   A/B judgments; compare normalized company/event/action/period/assertions rather
-   than identical offsets. Determine unique associations before consulting verdicts.
-2. Separate information availability, announcement/described event date and economic
-   period. Preserve existing cutoff/revision rules and matched candle/news inputs.
-   Relative expressions may use publication date and relevant source/calendar
-   context; never blindly assign the publication year to a fiscal period.
-3. Record explicit, context-resolved, partial, ambiguous or missing temporal facts
-   with supporting evidence. A missing fiscal period cannot erase useful contract
-   or general article context; numerical earnings comparisons require an appropriate
-   period, actual-versus-guidance distinction, currency/unit and GAAP basis.
-4. Preserve old false/null/unknown answers; do not relabel them as new-policy positives.
-   A new hash-bound association artifact references original reviews, packet/version
-   identities, quotes and the revised policy/code. Historical hashes are not forged.
-5. Keep the existing six specifications/twelve policies and four completed fits.
-   Preserve broader news without silently adding new family predictors or experiments.
-   Scope implementation to assertion/temporal normalization, one canonical semantic
-   association owner, its publication/verifier and focused tests. APIs stay V1.
+Full-corpus processing and QA sampling have different purposes. Every eligible
+retained article/version remains eligible for enrichment and feature construction;
+the QA sample is only a subset used to check the extractor's classifications and
+misses. The old policy checked just two news categories: 300 labelled-earnings +
+600 not-labelled-earnings; 250 labelled-guidance + 600 not-labelled-guidance = 1,750
+review packets. Not-labelled-earnings can still be a useful contract or analyst story.
+The fixed numbers were the old quality-measurement policy, not article/model quotas.
 
-Exit tests: real Caesars headline/body example; wrong company/version/exhibit,
-different same-company events or periods, conflicting figures/unit/GAAP basis,
-ambiguous associations and missing fiscal-calendar context; December 3 publication
-versus later delivery; after-cutoff or later revised text cannot backdate features;
-raw reviews/hashes remain unchanged. Actual revised association must be published
-and independently reconstructed before claiming source quality or model improvement.
-Implementation and new real-data replay have NOT run yet.
+Actual retained review input: 516,679 versions / 539,399 record rows. Readable,
+company-attributable groups: 466,635 (443,915 Alpaca, 22,720 SEC); groups/versions are
+not a unique-article count across all providers. The old sample includes 1,745 groups
+and 1,977 versions. It emitted 603 candidate EVENT occurrences, 347 earnings and
+256 guidance, in 550 packets / 561 documents (426 Alpaca, 135 SEC). This counter
+does not count all news. Finviz/Seeking Alpha coverage is not established by these
+specific manifests; credentials or a collector class alone do not establish coverage.
 
-Completed source reviews and old publication remain preserved. Old manifest:
-data/research/swing_initial_fit_issuer_annotation_correspondence/_manifest.json
-SHA256 5b8b401105f28785761fc929da9b6aedbdaefb9b37703b2cd9aa9a5af4e98472.
-Its independent verifier stopped at the RAM guard and has not passed. Keep its
-failed receipts honestly; retrying obsolete identical-span matching is no longer
-the critical path under this changed user requirement. Do not mark that old replay
-complete. No repeated wholesale source reviews to force offset agreement.
-Finviz/Seeking Alpha inclusion is not established by these Alpaca/SEC manifests;
-credentials alone are not evidence of provider coverage in this pinned corpus.
-Raw data, matched inputs, targets/splits/parameters, main and TradingFlow unchanged.
+The user requests sample buckets while sentiment/category/vector processing runs.
+Implement bounded streaming, reproducible buckets by category/source/year and
+sentiment/confidence, including mixed and uncertain/other examples. Store references
+and small metadata, not the whole text/vector corpus in RAM. The sampling branch
+must not discard unsampled records from features or use future returns to choose
+examples. Preserve old 1,750 earnings/guidance judgments; targeted new-category
+checks are distinct and cannot be declared already qualified by the old labels.
+
+Source interpretation remains publication-first: December 3 contract news can inform
+decisions from that availability timestamp; later delivery dates are context.
+Preserve exact authentic quotes but compare company/event/period/claims semantically,
+not identical reviewer offsets. Resolve relevant explicit/relative temporal context
+with its basis and ambiguities recorded; unknown periods limit only dependent
+numerical features. Revised text cannot backdate earlier snapshots. No old false/
+null answers are silently relabelled as positives, and original hashes are preserved.
+
+Amend only the untrained third news-reaction profile. Freeze its revised feature
+columns, missingness and aggregation before its two fits; its width may change.
+Retain four baseline fits, two learners, official ten-session return target, splits,
+costs and six-specification/twelve-policy comparison. Three-day recovery can be a
+future-path diagnostic; predicting T+1/T+3 explicitly would be a separate target/output
+amendment. Chronological training/validation/test and overlap purging remain required;
+preprocessing fits on training only. Repeatedly inspected historical test is development
+evidence, not an untouched final assessment. No new model search or extra experiment.
+
+Supplied Downloads/event_driven_ml_architecture.md is a proposal, not authoritative
+instructions. Its point-in-time/mixed-numerical-feature ideas agree with this plan.
+Corrections: do not assume exact 5PM intraday VWAP exists in daily inputs; EPS surprise
+needs a zero/negative-consensus rule and consistent periods/units/basis; horizon labels
+use trading sessions, not calendar days; the stated embargo inequality would remove
+earlier training rows instead of only the post-validation interval. CPCV is not a
+replacement for the existing past-to-future evaluation and is not being adopted.
+Multi-output learning is not already provided by the existing ten-session models.
+
+Actual delivered foundation: matched inputs/technical relationships across 586,305
+decision rows / 59 months; four final baseline return models and their temporal fits;
+FinBERT sentiment scorer and existing aggregate feature plumbing; serving/admission
+code. Broad structured catalyst feature integration and an accepted SPY-beating V1
+predictor are NOT delivered. A full-corpus semantic embedding store/training path was
+not found in the inspected source; sentiment scores and embeddings are different.
+
+Feature-side streaming QA bucket helper is complete in software commit 44d8c2d:
+src/market_predictor/research/news_sample_buckets.py and its unit tests. Final checks:
+28 synthetic UNIT cases plus 2 continuity checks passed (30 total); targeted Ruff
+and strict source mypy passed. One consolidated review found the unsupported
+multi_event label; it is now multi_category, with direct one/two-label regressions.
+The helper stores bounded immutable references, records input occurrence counts,
+keeps other/unavailable/mixed strata, and samples reproducibly regardless of batch
+order. It does not enrich text, create embeddings, discard unsampled feature rows,
+qualify sources or fit models. No actual corpus job or integration proof is claimed.
+No collection/base/schema changes. Full-news classifier/sentiment/embedding-stream
+integration and the revised real feature pilot remain unfinished. Old zero-support
+publication 5b8b401105f28785761fc929da9b6aedbdaefb9b37703b2cd9aa9a5af4e98472 remains
+unverified historical output after the RAM failure; no fabricated replay/model win.
 
 Historical saved review checkpoint (99% account usage):
 - Reviewer A: 173 fully inspected packets, 1 partial packet; 200 saved version assessments (3 partial, 0 metadata-only).
