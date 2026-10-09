@@ -10,16 +10,75 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | Step | Status | Work and concrete completion condition |
 | --- | --- | --- |
 | 0. Reuse the foundation | Done | Existing matched 586,305 decision rows / 59 months and four fitted baseline models are retained. No new collection/schema/matching rebuild. |
-| 1. Streaming quality-check buckets | Software and real pilot integration done; full-corpus run pending | Helper 44d8c2d retained 309 QA buckets during the real 190-version pilot; 28 unit tests pass. Sampling remains separate from the full training-news stream. |
+| 1. Streaming quality-check buckets | Done for the full retained corpus | 540 deterministic QA buckets retain 661,658 metadata bytes from 484,723 enriched versions. Samples do not filter the training-news stream. |
 | 2. Broad news feature enrichment | Cue component and real pilot done; quality/attribution pending | Implement one feature-layer recognizer for multiple swing-news categories and mixed signals. Preserve source evidence, availability and uncertain/other stories. Connect buckets to a real retained-news pilot; report actual coverage and examples. |
-| 3. Full-corpus enrichment | In progress | Stream every eligible retained article/version through category/sentiment processing in bounded batches. Reuse existing FinBERT outputs/model where available. Persist enriched output and QA references with resumable batch accounting; no unsampled-row filtering. |
-| 4. Prediction-time news features | Pending | Aggregate company/sector/market signals and recency at each existing decision cutoff. Combine with existing price/fundamentals. Later revisions/prices cannot enter earlier inputs. Preserve positive earnings and negative guidance simultaneously. |
+| 3. Full-corpus enrichment | Done for the retained corpus and available saved sentiment | All 516,679 versions accounted for in 505 durable shards; 484,723 enriched, 31,781 unavailable clocks, 175 missing text. Actual sentiment reused for 437,599 enriched versions; missing scores remain explicit. |
+| 4. Prediction-time news features | In progress | Aggregate company/sector/market signals and recency at each existing decision cutoff. Combine with existing price/fundamentals. Later revisions/prices cannot enter earlier inputs. Preserve positive earnings and negative guidance simultaneously. |
 | 5. Freeze the third feature profile | Pending | Record exact columns, definitions, missingness, source coverage, clocks and train-only preprocessing. Embeddings are optional feature work, not assumed implemented; any encoder must be locally available/pinned and evaluated within the amended profile. |
 | 6. Fit remaining two models | Pending | Fit existing Ridge and shallow XGBoost for the amended news profile on the same official ten-session targets, splits, weights and costs. Four fitted baselines remain unchanged. |
 | 7. Compare performance | Pending | Evaluate all six specifications and twelve frozen policies with prediction error, ranking, funded NAV, fees, turnover and drawdown against SPY. State measured losses as plainly as gains. No claim of outperformance from a feature/test pass. |
 | 8. Independent final assessment | Pending | Preserve genuinely unseen assessment data. Previously repeatedly inspected historical test remains development evidence. Follow the existing prospective assessment requirement without fabricating future observations. |
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
+
+### Step 3 completed real execution — October 9
+
+Corrected implementation 4632428 / corpus implementation 952c4f0 completed with
+natural exit 0 at 2026-10-09T12:03:39.8412567Z. Native session 68464 / PID 103644
+ended; no Python worker or shared lease remains. All retained input versions were
+accounted for; original input/code pins and completed output hashes passed the
+implementation's final checks. No source collection/matching/baseline was rebuilt.
+
+Published saved-sentiment index:
+- data/research/swing_news_sentiment_reuse_index_retry/_manifest.json
+- SHA256 6308f37d9cbd9e0c79c0ac0e8f700ebb45d30f318d2bba709a04f2608a33ab57
+- 469,232 original query-associated score rows within the May 28, 2024 source cutoff.
+  These are not distinct articles across stock queries. Index SQLite SHA256
+  b20b6a5ede53d5ccce4444c55e22b2a2d340c347b99ddbd5326df7670248e6ff;
+  size 1,062,629,376 bytes. 22,720 source files are pinned.
+- 20 physically verified empty score files (early 6, later 1, corrected 13) contain
+  zero scores and are explicitly accounted for without invented event bindings.
+
+Published full retained-version cue output:
+- data/research/swing_news_full_corpus_enrichment/_manifest.json
+- SHA256 28004a469753e44202400327416ae3e41b8795bd10f161d55a7de92dc121f6c5
+- Request SHA256 d6da3e3296ecac2f59c657226fe8c51d2e455e28494ef1cbf095df2dc236f97f.
+- All 516,679 retained versions in 505 shards: 484,723 enriched, 31,781 with
+  unavailable clocks and 175 without usable text. Those dispositions are kept.
+- Of 484,723 enriched versions, 437,599 reuse actual saved sentiment; 277 Alpaca
+  versions lack an exact score binding and 46,847 SEC versions have no scores in
+  this original sentiment source. Missing values are not zero/neutral substitutes.
+- QA references: 540 buckets, 484,723 records_seen, 661,658 encoded metadata bytes.
+  Sampling did not discard an input version or select on future price outcomes.
+
+Overlapping topic-cue version counts (denominator 484,723 enriched versions):
+earnings 193,927; guidance 68,705; contracts/partnerships 56,341; corporate
+transactions 62,788; analyst ratings/targets 194,895; products/clinical 100,162;
+legal/regulatory 44,419; financing/capital returns 52,925; management/operations
+93,129; sector/market 120,786; other/unresolved 86,481. One version may appear in
+several categories. 4,726,478 quote-backed lexical cue occurrences are not a count
+of confirmed world events, nor measured classification precision.
+
+All enriched clocks retain historical_proxy semantics; this is not live capture
+proof. Stock/event attribution and category precision remain unmeasured; no new
+FinBERT inference or embedding store was executed. Standalone outputs remain
+training/serving/promotion ineligible until the feature contract and applicable
+source/consumer/assessment layers are completed. No model or SPY-win claim follows.
+
+Final software evidence remains 56 focused UNIT/document checks plus 233 boundary
+checks, affected Ruff/strict mypy, one consolidated review and its supported fixes.
+Actual logs/state/exit are workspace review-results/news-corpus-enrichment-retry3.*;
+executed operator work/run_news_corpus_enrichment_retry3.py SHA256
+ d2da7baa973314993bc2f488a17b7287575d5527f1815fd3ce09cc6777c59868.
+Keep the three prior failure receipts and unpublished first index stage as history.
+
+Step 4 now: reuse existing stock/news assignments, trusted issuer/relationship
+bindings and price/fundamental state to aggregate these signals at each existing
+prediction cutoff. Preserve separate cue and sentiment times, simultaneous positive
+and negative categories, latest-known versions and company/sector/market scope.
+Define useful recency and price-state interactions, then freeze exact third-profile
+columns before the two pending fits. Do not repeat source collection, matching,
+completed four fits, old strict-span reviews, targets/splits/learners/costs or API V1.
 
 ### Step 3 scope and execution — October 9
 
@@ -112,9 +171,9 @@ cue enrichment, inspect actual accounting/coverage, and update statuses before s
 The latest pre-retry observation was81.3%RAMused/2.93GiBfree; check again at startup.
 Do not repeat passed unit scopes or claim completed corpus/model/SPY evaluation.
 
-### Step 3 active real execution — October 9
+### Step 3 historical active-run receipt — October 9
 
-Corrected real run is active in native session 68464 / Python PID103644, with
+At this earlier receipt, the corrected real run was active in native session 68464 / Python PID103644, with
 shared lease saved-news-sentiment-index. Executed operator is chat workspace
 work/run_news_corpus_enrichment_retry3.py; SHA256
 d2da7baa973314993bc2f488a17b7287575d5527f1815fd3ce09cc6777c59868.
@@ -221,7 +280,7 @@ Below are retained detailed/historical records. Their dated statuses are not
 additional current to-do lists. This ordered table and the one checkpoint below
 control execution; original artifact hashes and completed evidence are unchanged.
 
-Current checkpoint: **Full-corpus bounded enrichment and existing sentiment integration** (`in progress`).
+Current checkpoint: **Prediction-time news aggregation on existing matched inputs** (`in progress`).
 
 ### Current continuation: full-news feature engineering on the existing foundation
 
@@ -3768,19 +3827,16 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: ordered step 3. Follow active real session68464/PID103644
-and retry3 state/logs. Do not duplicate the running heavy job or edit its pinned
-sources/code. The corrected reader4632428 builds the fresh sentiment index first,
-then streams all retained versions with corpus implementation952c4f0. Verify exit,
-actual output manifests, source/code pins, score coverage and every-version counts
-before marking step3 complete. Failed stages and prior receipts stay preserved.
-Stream full retained news in bounded batches and reuse actual sentiment
-where available and inspect the existing FinBERT cache for missing scoring. Preserve
-real source/proxy clocks and unresolved attribution. Do not call cues verified events
-or claim embeddings/classification quality. Keep all enriched records, checkpoint
-outputs/counts, and validate source samples. Then build existing-decision news
-features and freeze the expanded third profile before its two fits. No base rebuild,
-old exact-span replay, changed targets/splits/learners/costs or fabricated SPY win.
+Exact next checkpoint: ordered step 4. The real index/full-corpus run is complete
+and its artifacts/hashes/counts are recorded above; no worker remains. Design the
+prediction-time aggregation on existing matched inputs and trusted issuer/relationship
+links. Reuse existing price/fundamental state and all four fitted baselines. Preserve
+separate cue/sentiment clocks, deduplicate latest-known source versions, keep mixed
+categories and missing scores explicit, and distinguish company macro mentions from
+verified global/sector overlays. Implement one shared historical/live transformation
+with affected clock/missingness/poison/parity tests and real retained-input evidence.
+Freeze the amended third feature profile before its two fits. No collector/schema,
+matching, target/split/learner/cost/API-version change or TradingFlow write.
 The earlier qualification/reuse reruns exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
 Saved-config implementation b589725 and actual byte/fold proof are complete.
