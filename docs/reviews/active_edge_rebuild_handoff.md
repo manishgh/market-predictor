@@ -10,7 +10,7 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | Step | Status | Work and concrete completion condition |
 | --- | --- | --- |
 | 0. Reuse the foundation | Done | Existing matched 586,305 decision rows / 59 months and four fitted baseline models are retained. No new collection/schema/matching rebuild. |
-| 1. Streaming quality-check buckets | Software done; integration pending | Helper 44d8c2d retains bounded references by category/source/year/sentiment/confidence; 28 unit tests pass. It has not processed the full corpus. |
+| 1. Streaming quality-check buckets | Software and real pilot integration done; full-corpus run pending | Helper 44d8c2d retained 309 QA buckets during the real 190-version pilot; 28 unit tests pass. Sampling remains separate from the full training-news stream. |
 | 2. Broad news feature enrichment | Cue component and real pilot done; quality/attribution pending | Implement one feature-layer recognizer for multiple swing-news categories and mixed signals. Preserve source evidence, availability and uncertain/other stories. Connect buckets to a real retained-news pilot; report actual coverage and examples. |
 | 3. Full-corpus enrichment | In progress | Stream every eligible retained article/version through category/sentiment processing in bounded batches. Reuse existing FinBERT outputs/model where available. Persist enriched output and QA references with resumable batch accounting; no unsampled-row filtering. |
 | 4. Prediction-time news features | Pending | Aggregate company/sector/market signals and recency at each existing decision cutoff. Combine with existing price/fundamentals. Later revisions/prices cannot enter earlier inputs. Preserve positive earnings and negative guidance simultaneously. |
@@ -20,6 +20,31 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 8. Independent final assessment | Pending | Preserve genuinely unseen assessment data. Previously repeatedly inspected historical test remains development evidence. Follow the existing prospective assessment requirement without fabricating future observations. |
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
+
+### Step 3 scope and execution — October 9
+
+Reuse the retained population.sqlite version inventory and existing FinBERT outputs.
+Do not repeat collection, candle/news matching, base schemas or four baseline fits.
+Three original sentiment archives are available (early, later and corrected issuer
+queries); their raw row totals overlap across companies and include dates beyond
+this experiment. Those totals are not current eligible unique-article coverage.
+
+1. Bind each reused score through its pinned original canonical event artifact,
+   original event ID/query identity, raw article-version hash and scored input hash.
+   Reconstruct title/summary input with the existing transformation. Missing or
+   mismatched scores remain explicit; never join merely by ticker/date/story ID.
+2. Stream every retained version into bounded durable shards, including dispositions
+   for missing text/clocks. Keep lexical cues and sentiment availability separate:
+   a cue can be available before the configured sentiment processing delay expires.
+   Preserve historical proxy semantics and unresolved company/event attribution.
+3. Resume only verified completed shards under the same source/code/options identity;
+   account for every input version and reproduce bounded QA references from outputs.
+4. Run focused unit/clock/tamper/resume checks, lint/types and one consolidated
+   review, then the real full-corpus job under the shared heavy-job lease and existing
+   memory guard. Report actual coverage, missingness, limits and source examples.
+5. Close this checkpoint with pushed code/evidence and proceed to decision-time
+   aggregation. Cue recognition is not measured event-extraction precision, embeddings
+   or model outperformance. Those claims require their own observed evidence.
 
 ### Step 2 execution result — October 9
 
