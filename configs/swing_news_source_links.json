@@ -1,0 +1,54 @@
+{
+  "schema": "market_predictor.news_source_links_config",
+  "corpus_manifest": {
+    "path": "data/research/swing_news_full_corpus_enrichment/_manifest.json",
+    "sha256": "28004a469753e44202400327416ae3e41b8795bd10f161d55a7de92dc121f6c5"
+  },
+  "population_manifest": {
+    "path": "data/research/swing_initial_fit_issuer_content_review_population_source_bound/_manifest.json",
+    "sha256": "3c59845761740dc1a07a2f994cceaba53354c6f9486f4baa634ebd422a6a84ce"
+  },
+  "population_database": {
+    "path": "data/research/swing_initial_fit_issuer_content_review_population_source_bound/population.sqlite",
+    "sha256": "858c929a1f683745999d9fad085676c4dd6ebfae833b7bc7e5ceea3c8ba56386"
+  },
+  "identity_manifest": {
+    "path": "data/research/swing_initial_fit_source_proven_news/_manifest.json",
+    "sha256": "e150475190fe0efbafecb115cd5f08bb7acb58576b2661b680fad832ffc00d98"
+  },
+  "archives": [
+    {
+      "name": "early",
+      "collection_manifest": {
+        "path": "data/raw/alpaca_news_20190709_20210708_v1/_manifest.json",
+        "sha256": "2289abcb4a2cf770557d06e6b69a7f7395e02c0c386f67660ed392afc838e0c6"
+      },
+      "attribution_manifest": {
+        "path": "data/research/alpaca_news_20190709_20210708_v1_attribution_v2_strict/_manifest.json",
+        "sha256": "66c881906b8e0188f165d1833b994e8d94903874e1d99692ae0467bc88c101f6"
+      }
+    },
+    {
+      "name": "later",
+      "collection_manifest": {
+        "path": "data/raw/alpaca_news_20210709_20260708_v1/_manifest.json",
+        "sha256": "e55bad121076023e79b3813d5500bee12ceca2eee7c4965baca9e2de682a6c70"
+      },
+      "attribution_manifest": {
+        "path": "data/research/alpaca_news_20210709_20260708_v1_attribution_v2_strict/_manifest.json",
+        "sha256": "c100dc102936bc8bccae95b83569e3ef30bf4542ccd12e3a1d37dbbc763f781d"
+      }
+    },
+    {
+      "name": "corrected",
+      "collection_manifest": {
+        "path": "data/raw/swing_issuer_news_corrections/_manifest.json",
+        "sha256": "4da07ce57bf864845b79b0043816e49c104dc047eb81a30372ad952519f855d8"
+      },
+      "attribution_manifest": {
+        "path": "data/research/swing_issuer_news_corrections_attribution_v1/_manifest.json",
+        "sha256": "ccf3a5ea9a8c057672579be230ece1a7aabac7f4067f12beba3c98d411cbf93e"
+      }
+    }
+  ]
+}
