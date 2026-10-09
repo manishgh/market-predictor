@@ -1,5 +1,42 @@
 # Current Feature Engineering Audit
 
+### Step 2 execution result — October 9
+
+Software 189242f adds only research/news_feature_enrichment.py and its unit tests.
+The component produces lexical category/direction/status cues with authentic source
+quotes, source/version clocks, true missing sentiment and a QA bucket adapter.
+It does not assert verified world events, stock attribution or stock-return direction.
+Consolidated review fixed integer-sentence direction leakage and chunked-negation
+loss. Final 64 enrichment + 28 sampler + 2 continuity UNIT/document checks passed
+(94 total); targeted Ruff/strict mypy passed. Synthetic fixtures prove unit behavior
+only, not actual sentiment inference or data/model acceptance.
+
+Real retained-input pilot completed with natural exit 0, without mocked sources:
+data/research/swing_news_feature_pilot_retry/_manifest.json
+SHA256 d1499480bd6ecf731ac913c20c686a4519f6d9b222797a2383144d09d2942c01.
+192 stored versions selected (16 per Alpaca/SEC source-year, 2019–2024), 190 enriched;
+2 retained SEC records lack event_available_at_utc and remain unavailable. Outputs
+preserve the existing historical_proxy clock semantics, not live observation proof.
+Existing corpus/input files and executed feature code stayed unchanged; the actual
+feature calculation reconstructed identically. 309 QA buckets retain small refs.
+
+Counts are overlapping per-version topic cues, not confirmed events or precision:
+earnings89, guidance34, contracts27, corporate transactions53, analyst48, products51,
+legal43, financing55, management/operations47, sector/market59 and other31. 104
+versions have multiple categories; 30 have mixed rule directions. No FinBERT or
+embeddings executed; original model sentiment was not supplied in this pilot.
+Stock attribution and classification precision remain unmeasured. Source limits
+were reached for 21 cue lists, 31 quote windows and one text prefix, explicitly
+recorded rather than disguised as complete full-text recognition.
+
+The first pilot stopped at system memory90.2% before enriching a record (empty
+partial file). Preserve its logs/stage. A fresh retry used a 2MiB SQLite page cache
+and file-backed temp work; source bytes and memory thresholds did not change.
+Retry logs/state/exit: workspace review-results/news-feature-pilot-retry.*.
+This closes the code/real execution pilot component only. Full corpus processing,
+actual sentiment reuse/inference, verified stock association, learned feature
+acceptance, two remaining fits and SPY comparison are not completed by these cues.
+
 ### Current continuation: full-news feature engineering on the existing foundation
 
 User correction and priority (October 8): the project already has candles, matched

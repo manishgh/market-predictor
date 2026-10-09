@@ -11,8 +11,8 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | --- | --- | --- |
 | 0. Reuse the foundation | Done | Existing matched 586,305 decision rows / 59 months and four fitted baseline models are retained. No new collection/schema/matching rebuild. |
 | 1. Streaming quality-check buckets | Software done; integration pending | Helper 44d8c2d retains bounded references by category/source/year/sentiment/confidence; 28 unit tests pass. It has not processed the full corpus. |
-| 2. Broad news feature enrichment | In progress | Implement one feature-layer recognizer for multiple swing-news categories and mixed signals. Preserve source evidence, availability and uncertain/other stories. Connect buckets to a real retained-news pilot; report actual coverage and examples. |
-| 3. Full-corpus enrichment | Pending | Stream every eligible retained article/version through category/sentiment processing in bounded batches. Reuse existing FinBERT outputs/model where available. Persist enriched output and QA references with resumable batch accounting; no unsampled-row filtering. |
+| 2. Broad news feature enrichment | Cue component and real pilot done; quality/attribution pending | Implement one feature-layer recognizer for multiple swing-news categories and mixed signals. Preserve source evidence, availability and uncertain/other stories. Connect buckets to a real retained-news pilot; report actual coverage and examples. |
+| 3. Full-corpus enrichment | In progress | Stream every eligible retained article/version through category/sentiment processing in bounded batches. Reuse existing FinBERT outputs/model where available. Persist enriched output and QA references with resumable batch accounting; no unsampled-row filtering. |
 | 4. Prediction-time news features | Pending | Aggregate company/sector/market signals and recency at each existing decision cutoff. Combine with existing price/fundamentals. Later revisions/prices cannot enter earlier inputs. Preserve positive earnings and negative guidance simultaneously. |
 | 5. Freeze the third feature profile | Pending | Record exact columns, definitions, missingness, source coverage, clocks and train-only preprocessing. Embeddings are optional feature work, not assumed implemented; any encoder must be locally available/pinned and evaluated within the amended profile. |
 | 6. Fit remaining two models | Pending | Fit existing Ridge and shallow XGBoost for the amended news profile on the same official ten-session targets, splits, weights and costs. Four fitted baselines remain unchanged. |
@@ -20,6 +20,43 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 8. Independent final assessment | Pending | Preserve genuinely unseen assessment data. Previously repeatedly inspected historical test remains development evidence. Follow the existing prospective assessment requirement without fabricating future observations. |
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
+
+### Step 2 execution result — October 9
+
+Software 189242f adds only research/news_feature_enrichment.py and its unit tests.
+The component produces lexical category/direction/status cues with authentic source
+quotes, source/version clocks, true missing sentiment and a QA bucket adapter.
+It does not assert verified world events, stock attribution or stock-return direction.
+Consolidated review fixed integer-sentence direction leakage and chunked-negation
+loss. Final 64 enrichment + 28 sampler + 2 continuity UNIT/document checks passed
+(94 total); targeted Ruff/strict mypy passed. Synthetic fixtures prove unit behavior
+only, not actual sentiment inference or data/model acceptance.
+
+Real retained-input pilot completed with natural exit 0, without mocked sources:
+data/research/swing_news_feature_pilot_retry/_manifest.json
+SHA256 d1499480bd6ecf731ac913c20c686a4519f6d9b222797a2383144d09d2942c01.
+192 stored versions selected (16 per Alpaca/SEC source-year, 2019–2024), 190 enriched;
+2 retained SEC records lack event_available_at_utc and remain unavailable. Outputs
+preserve the existing historical_proxy clock semantics, not live observation proof.
+Existing corpus/input files and executed feature code stayed unchanged; the actual
+feature calculation reconstructed identically. 309 QA buckets retain small refs.
+
+Counts are overlapping per-version topic cues, not confirmed events or precision:
+earnings89, guidance34, contracts27, corporate transactions53, analyst48, products51,
+legal43, financing55, management/operations47, sector/market59 and other31. 104
+versions have multiple categories; 30 have mixed rule directions. No FinBERT or
+embeddings executed; original model sentiment was not supplied in this pilot.
+Stock attribution and classification precision remain unmeasured. Source limits
+were reached for 21 cue lists, 31 quote windows and one text prefix, explicitly
+recorded rather than disguised as complete full-text recognition.
+
+The first pilot stopped at system memory90.2% before enriching a record (empty
+partial file). Preserve its logs/stage. A fresh retry used a 2MiB SQLite page cache
+and file-backed temp work; source bytes and memory thresholds did not change.
+Retry logs/state/exit: workspace review-results/news-feature-pilot-retry.*.
+This closes the code/real execution pilot component only. Full corpus processing,
+actual sentiment reuse/inference, verified stock association, learned feature
+acceptance, two remaining fits and SPY comparison are not completed by these cues.
 
 ### What is genuinely done
 
@@ -73,7 +110,7 @@ Below are retained detailed/historical records. Their dated statuses are not
 additional current to-do lists. This ordered table and the one checkpoint below
 control execution; original artifact hashes and completed evidence are unchanged.
 
-Current checkpoint: **Broad news feature enrichment and real retained-input pilot** (`in progress`).
+Current checkpoint: **Full-corpus bounded enrichment and existing sentiment integration** (`in progress`).
 
 ### Current continuation: full-news feature engineering on the existing foundation
 
