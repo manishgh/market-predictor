@@ -46,6 +46,43 @@ this experiment. Those totals are not current eligible unique-article coverage.
    aggregation. Cue recognition is not measured event-extraction precision, embeddings
    or model outperformance. Those claims require their own observed evidence.
 
+### Step 3 implementation and actual run — October 9
+
+Implementation 952c4f0 is pushed. New news_corpus_enrichment.py and
+news_sentiment_reuse.py reuse the existing source inventory and saved FinBERT scores.
+They add no collection/schema/API change and do not touch TradingFlow or baseline fits.
+The full eligible original sentiment range ends at 2024-05-28T22:00Z; later archive
+rows cannot enter the index. Every retained version receives an enriched record or
+an explicit unavailable disposition. Output contains bounded cues/references, not
+full article text. Category cues remain unverified lexical signals; issuer attribution
+and classification precision are not established by this checkpoint.
+
+One consolidated review closed three supported findings: resumed records now
+reconstruct and compare actual features against their original source, all output
+hashes are checked immediately before publication, and valid never-updated articles
+preserve null update timestamps while using the existing publication-time version rule.
+Final verification: 24 corpus + 27 sentiment + 2 continuity synthetic UNIT/document
+checks passed (53, 7.32s); 233 dependency/architecture/continuity checks passed (35.54s).
+Ruff --no-cache passed for both modules/tests and the operator; strict mypy passed
+for both modules and the operator. No broad release suite or model fit was run.
+
+Actual execution used real implementations and retained source artifacts, without
+mocked readers or scores. It exited 1 at 2026-10-09T10:15:59.4010450Z, BEFORE loading
+an article or creating an output stage. Windows had 91.4% memory used / 1.34 GiB
+free; the unchanged full-job guard requires below 85% used AND at least 2 GiB free.
+There is no index, enriched corpus, fitted model or acceptance claim from this run.
+No leftover Python worker or job lease remains. Original inputs are unchanged.
+
+Failure evidence in the chat workspace: review-results/news-corpus-enrichment-state.json,
+news-corpus-enrichment.stdout.log, news-corpus-enrichment.stderr.log and
+news-corpus-enrichment.exit.json. Executed operator: work/run_news_corpus_enrichment.py,
+SHA256 4eab23f515f3e0a14426e005f41b0818a53bc197c1d0ab04db32f7caaa3d9901.
+Full corpus execution remains the current step. Preserve these failure logs; a retry
+must use fresh log/state filenames, the same source/code/options and unchanged guard.
+Once physical memory permits startup, run the reviewed operator, inspect real index
+coverage and every-version accounting, then record actual output hashes/counts before
+advancing to decision-time aggregation. Do not repeat completed tests or base matching.
+
 ### Step 2 execution result — October 9
 
 Software 189242f adds only research/news_feature_enrichment.py and its unit tests.
