@@ -112,6 +112,26 @@ cue enrichment, inspect actual accounting/coverage, and update statuses before s
 The latest pre-retry observation was81.3%RAMused/2.93GiBfree; check again at startup.
 Do not repeat passed unit scopes or claim completed corpus/model/SPY evaluation.
 
+### Step 3 active real execution — October 9
+
+Corrected real run is active in native session 68464 / Python PID103644, with
+shared lease saved-news-sentiment-index. Executed operator is chat workspace
+work/run_news_corpus_enrichment_retry3.py; SHA256
+d2da7baa973314993bc2f488a17b7287575d5527f1815fd3ce09cc6777c59868.
+Fresh index destination: data/research/swing_news_sentiment_reuse_index_retry;
+full corpus destination remains data/research/swing_news_full_corpus_enrichment.
+Neither final output is published yet. At 10:43:39Z, early archive had verified
+58,459 score rows /1,352 processed chunks (of148,784 rows/4,024 chunks). Counts are
+stored query-associated score rows, not distinct articles. Later/corrected archive
+processing and full516,679 retained-version enrichment remain pending in this run.
+
+Monitor workspace review-results/news-corpus-enrichment-retry3-state.json and
+matching stdout/stderr/exit logs; do not launch another heavy job or edit pinned
+source/code files. Keep previous failed stages/logs. Once the process finishes,
+inspect actual exit and final manifests/hashes; record completion only after
+source/code checks and every-version counts pass. No tests need repeating unless
+new supported data/software evidence changes this implementation.
+
 ### Step 2 execution result — October 9
 
 Software 189242f adds only research/news_feature_enrichment.py and its unit tests.
