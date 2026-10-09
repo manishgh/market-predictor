@@ -21,7 +21,7 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Step 4 reviewed bridge/publisher and active execution — October 9
+### Step 4 reviewed bridge/publisher and real execution failures — October 9
 
 Source-link bridge 71c9f32 and monthly209 publisher f8ea4e6 are reviewed/pushed.
 Bridge26 syntheticUNIT tests passed13.18s; publisher15 syntheticUNIT tests passed
@@ -44,12 +44,36 @@ relations, versions and links; SHA256
 96d532d644dd39b576484b863ec14d858ab5a1194823721fac1fef0c4b0b772d).
 
 After Windows memory recovered to80.2% /3.11GiB free, the unchanged source/config
-started a fresh retry at2026-10-09T14:34:44.174955Z. Native session95107/PID60044
-owns shared lease news-source-link-index. Workspace operator
-work/run_news_source_links_retry.py; state/stdout/stderr/exit prefix
-review-results/news-source-links-retry. Destination
-data/research/swing_news_source_links_retry; no final index published yet.
-Inputs/code and the85% memory limit remain fixed; do not launch a duplicate job.
+started a fresh retry at2026-10-09T14:34:44.174955Z (native95107/PID60044).
+It exited1 at2026-10-09T15:37:58.4960721Z: Windows RAM reached85.2% /2.32GiB free
+during _load_corpus after _load_alpaca and _load_sec had returned. The original
+source loading finished; prediction versions were not materialized or published.
+The unfinished SQLite transaction rolled back. All eight retained stage tables
+(events, relations, sec_receipts, enriched, versions, links, candidates, proofs)
+contain zero committed rows; stage index SHA256
+96d532d644dd39b576484b863ec14d858ab5a1194823721fac1fef0c4b0b772d.
+This is a resource failure, not missing credentials or an observed source mismatch.
+No final bridge or209-column monthly output exists. PID60044 ended and the shared
+lease was released. Preserve work/run_news_source_links_retry.py and
+review-results/news-source-links-retry state/stdout/stderr/exit logs, plus
+data/research/swing_news_source_links_retry.partial. Earlier failure stays retained.
+
+Windows subsequently showed89.3% used /1.67GiB free. The user was asked to free
+at least3GiB and keep headroom during the run. Do not start another heavy attempt
+while RAM remains above the existing limit. Inputs/code and the below85% /at least
+2GiB guard remain unchanged; no unrelated process may be stopped automatically.
+Retry requires a NEW output/stage path because this builder does not resume an
+unpublished stage. The failed transaction does not supply reusable source rows.
+
+Prepared workspace operators (not executed): work/pin_actual_news_publication.py
+creates the config only from a completed actual index; work/run_news_monthly_pilot.py
+(SHA256 aa6ab0138ad02e30b12f7648536a20f6a91b7b40dbf2c690be0e90b62d394c4a)
+requires the external config SHA and publishes only July2019 /7884 retained rows;
+work/verify_news_monthly_pilot.py (SHA256
+da5c2c9a3ab71c0ed29bb3b8b084e8a7c12a1139dca4efe0052aa92effa8ee48)
+requires external config/checkpoint SHA, checks every inherited July field and
+compares actual monthly/single news results for up to48 decisions from16 stocks.
+These scripts passed syntax compilation only; no pilot/parity result is claimed.
 
 After the bridge finishes, inspect actual counts/dispositions and final manifest,
 then set publisher config to its exactSourcePin. Run one real monthly209 projection
@@ -3949,8 +3973,11 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: ordered step4. Follow active retry native95107/PID60044
-source-link build state/logs; do not duplicate it or edit its pinned source/code.
+Exact next checkpoint: ordered step4. Both source-link attempts exited for
+system RAM pressure; no owned source-link worker/lease remains. Read the current
+retry failure receipts, wait for freed sustained RAM, and check the unchanged
+below85% /at least2GiB limit before a fresh output/stage attempt. Do not reuse the
+failed zero-row transaction or change input/code pins without demonstrated evidence.
 Reviewed/pushed components: kernel1449a97,parentloader1dbd5f6,bridge71c9f32,
 publisherf8ea4e6. Fullcorpus/index andactualparentpilot are complete; sourcebridge
 and monthly209 publication still require actual run evidence. On sourcebridge exit,
