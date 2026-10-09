@@ -21,6 +21,42 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Step 4 parent-loading component and real evidence — October 9
+
+Reviewed parent-loading adapter 1dbd5f6 is pushed. It reuses existing historical
+inspectors and the exact closed parent/verification/original-replay receipts.
+It verifies all 59 months /586,305 unique decision IDs through metadata-only
+bounded SQLite ownership checks and reads one unchanged monthly frame at a time.
+No raw candle load, peer/technical calculation, target construction or old numerical
+replay is invoked. All four fitted baseline models and inherited values stay fixed.
+14 synthetic UNIT tests passed in64.64s; affected Ruff/strictmypy passed; one bounded
+review found no open issues. These tests are not real-data/model-performance claims.
+
+Actual retained-parent pilot exited0 at2026-10-09T13:20:28.8788272Z. July2019 loaded
+7,884 decision rows /124 model columns and matched the original saved monthly
+DataFrame exactly, including values, dtypes and clocks. Original monthly SHA256
+1528e02075b3d2b130d14c99cf33e243055ae58ee9eda1ba9d1b4e4cef9f3670.
+The actual loader checked59-month metadata ownership, not a new58-month numeric
+replay. It rechecked123 consumed source files and13 current implementation files.
+Report: workspace review-results/news-parent-pilot.json, SHA256
+15e2b1dd4531a55891b23ed80c90193acfc0cf0286f7b97862f13f004a693e1d;
+stdout/stderr/exit logs share news-parent-pilot prefix. Native80674 ended naturally;
+no parent worker or lease remains. No model fit or admission was performed.
+
+Current incomplete work: research/news_source_links.py and its focused unit tests
+are being implemented. They must reuse the FULL original direct-issuer attribution
+relations independently of score presence; retained saved_v1 relation copies were
+filtered through scores and cannot represent the complete cue stream. Validate
+exact original event/raw-version hashes before relation use. Independently mapped
+valid direct targets are allowed, not only the query's cohort target; each target
+needs its own causal identity/mapping proof. Query association alone is never proof.
+SEC ownership uses its existing corrected document/filing/identity/acceptance
+bindings and preserves individual document IDs. Unresolved revisions stay explicit.
+Complete retained inventory processing is not provider coverage; unknown remains
+unknown. After one bounded bridge review and real-source evidence, publish new
+monthly209-column data with exact parent preservation and actual batch/live parity.
+The two pending fits, full SPY comparison and accepted V1/main work are still pending.
+
 ### Step 4 frozen design and calculation component — October 9
 
 The calculation-only component is pushed as 1449a97 in
@@ -3875,16 +3911,18 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: ordered step 4. The real index/full-corpus run is complete
-and its artifacts/hashes/counts are recorded above; no worker remains. Design the
-prediction-time aggregation on existing matched inputs and trusted issuer/relationship
-links. Reuse existing price/fundamental state and all four fitted baselines. Preserve
-separate cue/sentiment clocks, deduplicate latest-known source versions, keep mixed
-categories and missing scores explicit, and distinguish company macro mentions from
-verified global/sector overlays. Implement one shared historical/live transformation
-with affected clock/missingness/poison/parity tests and real retained-input evidence.
-Freeze the amended third feature profile before its two fits. No collector/schema,
-matching, target/split/learner/cost/API-version change or TradingFlow write.
+Exact next checkpoint: ordered step4. Pure85-column aggregation1449a97 and
+unchanged parent loader1dbd5f6 are reviewed/pushed; actual parent pilot passed.
+Finish news_source_links.py/tests, currently dirty owned by consumer_review;
+review once, verify focused source/clock/schema cases, then run actual bounded
+stock/version bridge using full original direct relations and correctedSECownership.
+Root must publish/verify real monthly209-column features with exact124 parent prefix
+and source/cue/sentiment/identity/link clocks. Do not duplicate source/scoring/model
+reconstruction or raw matching. Currentfullcorpus/index hashes and past failures are
+above. No worker/lease remains after parentpilot. Coverage/actor/world qualification
+must not be inferred from query security or topic words. Keep existing targets,
+weights/splits/costs/learners/fourfits/API V1 and TradingFlow unchanged. Step5 profile
+freeze/acceptance matrix precedes two fits; no SPY or model admission claim yet.
 The earlier qualification/reuse reruns exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
 Saved-config implementation b589725 and actual byte/fold proof are complete.
