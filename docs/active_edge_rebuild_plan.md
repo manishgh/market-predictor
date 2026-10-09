@@ -21,6 +21,54 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Step 4 frozen design and calculation component — October 9
+
+The calculation-only component is pushed as 1449a97 in
+src/market_predictor/research/news_decision_features.py. It defines 85 additions:
+11 categories each with 1d/3d observed presence and four 3d direction shares (66);
+five status shares; three sentiment/score-coverage values; mixed-direction share,
+latest availability age and truncated-text share; four source-coverage indicators;
+and four fixed interactions with existing technical parent values. Combined profile
+will have 209 columns only after step5 freezes and binds it; no such full feature
+publication or model fit exists from this kernel alone.
+
+Use existing inclusive one/three CALENDAR-day windows anchored on effective cue
+availability (source/version/identity/relation dependencies), not new target horizons.
+Sentiment additionally waits for its processing clock. Latest-known revisions are
+selected before usability/link filtering; unreadable/unavailable newer content must
+not resurrect older usable text. Proven query copies retain all verified company
+links and collapse only exact source-version copies. Different SEC exhibits are
+separate documents. Negation contributes category/status evidence, not direction
+or mixed-direction numerators. Opposing sentiment components do not cancel.
+
+Shares and presence describe the observed readable document pool, not complete
+provider/world-event absence. With a nonempty pool, absent-category presence0
+means not observed among those documents; source-coverage flags remain explicit.
+Unknown-empty pools yield null; verified known-empty may yield presence0; zero
+share denominators are null. No missing sentiment becomes neutral. Company-linked
+war/inflation mentions are not global/sector broadcasts. Unproved scope is unavailable.
+
+The verified124 parent contains120 price/volume transforms and4 relationship terms,
+NO accounting fundamentals. The technical interactions cannot be called underlying
+financial strength. Existing targets/splits/weights/eligibility and4fits stay fixed.
+Parent loading will reuse inspect_historical_publication/historical_month and exact
+original manifest/verification/replay receipt hashes; it will not call the existing
+constructor that recomputes the already completed numerical baseline replay.
+
+One consolidated review fixed future copy-proof timing: an independently available
+original article must stay usable when a second known query copy has equivalence
+proof arriving later; only cross-copy operations wait for that proof. Final33
+synthetic UNIT tests passed0.28s; affected Ruff/strictmypy passed. This is software
+evidence, not actual stock-linked aggregation or model performance. All kernel
+outputs keep training/serving/promotion admission false.
+
+Current work is the bounded parent loader and actual source-link bridge, then real
+retained-input projection/parity. Reuse exact existing direct-issuer relations and
+cohort identity bridge; SEC document ownership needs its causal filer binding.
+The retained query security alone is not company/event actor proof. Preserve
+unmatched revisions and unknown coverage. Actual full209-column publication,
+its feature acceptance matrix, two remaining fits and SPY comparison remain pending.
+
 ### Step 3 completed real execution — October 9
 
 Corrected implementation 4632428 / corpus implementation 952c4f0 completed with
