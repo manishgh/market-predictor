@@ -211,7 +211,7 @@ def _binding(event: dict[str, Any], score: dict[str, Any], request: dict[str, An
 
 
 def _load_archive(root: Path, archive: SentimentArchive, db: sqlite3.Connection, files: dict[str, str],
-                  progress: Callable[[dict[str, Any]], None] | None) -> None:
+                  progress: Callable[[dict[str, Any]], None] | None) -> int:
     collection_path = _pin(root, archive.collection_manifest.path, archive.collection_manifest.sha256, files)
     sentiment_path = _pin(root, archive.sentiment_manifest.path, archive.sentiment_manifest.sha256, files)
     collection, sentiment = _object(collection_path), _object(sentiment_path)
@@ -227,8 +227,21 @@ def _load_archive(root: Path, archive: SentimentArchive, db: sqlite3.Connection,
              "provider_publication_proxy_plus_fixed_inference_latency", "unexpected saved FinBERT method")
     events, scores = _artifacts(collection), _artifacts(sentiment)
     rows_so_far = int(db.execute("SELECT COUNT(*) FROM scores").fetchone()[0])
+    empty_without_events = 0
     for position, (chunk, item) in enumerate(scores.items(), 1):
-        _require(chunk in events, "sentiment chunk has no original source events")
+        if chunk not in events:
+            _require(type(item.get("rows")) is int and item["rows"] == 0,
+                     "nonempty sentiment chunk has no original source events")
+            # Original collection manifests omit zero-event artifacts. Verify the
+            # independently pinned empty score child; never fabricate an event.
+            _artifact(root, item, files, {"chunk_id": chunk, "sentiment_request_sha256": sentiment["request_sha256"],
+                                         "source_event_artifact_sha256": item["source_event_artifact_sha256"]})
+            empty_without_events += 1
+            if progress is not None:
+                progress({"archive": archive.name, "chunk_id": chunk, "completed_chunks": position,
+                          "total_chunks": len(scores), "rows_so_far": rows_so_far,
+                          "disposition": "verified_empty_score_artifact_without_source_events"})
+            continue
         original = events[chunk]
         if _clock(original["start_utc"]) > END:
             continue
@@ -265,6 +278,7 @@ def _load_archive(root: Path, archive: SentimentArchive, db: sqlite3.Connection,
         if progress is not None:
             progress({"archive": archive.name, "chunk_id": chunk, "completed_chunks": position,
                       "total_chunks": len(scores), "rows_so_far": rows_so_far})
+    return empty_without_events
 
 
 def build_sentiment_reuse_index(*, root: Path, output: Path, sources: Sequence[SentimentArchive],
@@ -280,6 +294,7 @@ def build_sentiment_reuse_index(*, root: Path, output: Path, sources: Sequence[S
         _guard()
         implementation = _implementation(root)
         files: dict[str, str] = {}
+        empty_by_archive: dict[str, int] = {}
         stage.mkdir(parents=True)
         with closing(sqlite3.connect(stage / "index.sqlite")) as db:
             db.execute("PRAGMA cache_size=-8192")
@@ -290,12 +305,14 @@ def build_sentiment_reuse_index(*, root: Path, output: Path, sources: Sequence[S
                        "raw_sha256 TEXT,payload TEXT,origin TEXT)")
             db.execute("CREATE INDEX lookup ON scores(archive,event_id,security_id,ticker,raw_sha256)")
             for archive in sources:
-                _load_archive(root, archive, db, files, progress)
+                empty_by_archive[archive.name] = _load_archive(root, archive, db, files, progress)
             rows = int(db.execute("SELECT COUNT(*) FROM scores").fetchone()[0])
             db.execute("DROP TABLE events")
             db.commit()
         manifest = {"schema": SCHEMA, "rows": rows, "cutoff_utc": END.isoformat(),
                     "availability_semantics": "historical_proxy", "source_files": files,
+                    "empty_sentiment_artifacts_without_source_events": {
+                        "files": sum(empty_by_archive.values()), "scores": 0, "by_archive": empty_by_archive},
                     "implementation_files": implementation, "database_sha256": _hash(stage / "index.sqlite"),
                     "archives": [{"name": item.name, "collection_manifest": item.collection_manifest.model_dump(mode="json"),
                                   "sentiment_manifest": item.sentiment_manifest.model_dump(mode="json")} for item in sources], **CLOSED}

@@ -218,3 +218,64 @@ def test_reject_observed_claim_and_changed_version_clock(tmp_path: Path, monkeyp
         assert resolver.resolve(record).status == "mismatched_source_clock"
     finally:
         resolver.close()
+
+
+def _without_source_events(root: Path, archive: reuse.SentimentArchive, *, empty: bool,
+                           declare_empty: bool = False) -> reuse.SentimentArchive:
+    collection_path = root / archive.collection_manifest.path
+    collection = json.loads(collection_path.read_text())
+    collection["artifacts"] = []
+    _write(collection_path, collection)
+    collection_pin = SourcePin(path=archive.collection_manifest.path, sha256=_hash(collection_path))
+    request_path = root / "sentiment/_request.json"
+    request = json.loads(request_path.read_text())
+    request.pop("request_sha256")
+    request["collection_manifest_sha256"] = collection_pin.sha256
+    request_sha = _request(request_path, request)
+    manifest_path = root / archive.sentiment_manifest.path
+    manifest = json.loads(manifest_path.read_text())
+    item = manifest["artifacts"][0]
+    score_path = root / item["path"]
+    if empty:
+        pd.read_parquet(score_path).iloc[:0].to_parquet(score_path, index=False)
+        item["sha256"] = _hash(score_path)
+    if empty or declare_empty:
+        item["rows"] = 0
+    sidecar_path = root / item["manifest_path"]
+    sidecar = json.loads(sidecar_path.read_text())
+    sidecar.update(artifact_sha256=item["sha256"], rows=item["rows"])
+    sidecar["inputs"]["sentiment_request_sha256"] = request_sha
+    _write(sidecar_path, sidecar)
+    manifest["request_sha256"] = request_sha
+    _write(manifest_path, manifest)
+    return reuse.SentimentArchive(archive.name, collection_pin,
+                                 SourcePin(path=archive.sentiment_manifest.path, sha256=_hash(manifest_path)))
+
+
+def test_verified_empty_score_without_event_artifact_is_disclosed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    archive, record = _fixture(tmp_path, monkeypatch)
+    archive = _without_source_events(tmp_path, archive, empty=True)
+    progress: list[dict[str, Any]] = []
+    result = reuse.build_sentiment_reuse_index(root=tmp_path, output=Path("index"), sources=[archive], progress=progress.append)
+    assert result["rows"] == 0
+    assert result["empty_sentiment_artifacts_without_source_events"] == {"files": 1, "scores": 0, "by_archive": {"early": 1}}
+    assert progress[0]["disposition"] == "verified_empty_score_artifact_without_source_events"
+    assert "sentiment/scores.parquet" in result["source_files"]
+    assert "sentiment/scores.parquet.manifest.json" in result["source_files"]
+    assert "collection/events.parquet" not in result["source_files"]
+    resolver = reuse.open_sentiment_reuse_index(root=tmp_path,
+                                               index=SourcePin(path="index/_manifest.json", sha256=result["manifest_sha256"]))
+    try:
+        assert resolver.resolve(record).status == "missing_exact_source_version"
+    finally:
+        resolver.close()
+
+
+@pytest.mark.parametrize("declare_empty,match", [(False, "nonempty sentiment"), (True, "row count")])
+def test_missing_event_source_never_admits_nonempty_scores(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                                          declare_empty: bool, match: str) -> None:
+    archive, _ = _fixture(tmp_path, monkeypatch)
+    archive = _without_source_events(tmp_path, archive, empty=False, declare_empty=declare_empty)
+    with pytest.raises(DataReadinessError, match=match):
+        _build(tmp_path, archive)
+    assert not (tmp_path / "index").exists()
