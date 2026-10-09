@@ -35,11 +35,21 @@ actual bridge/monthly output, training or benchmark assessment.
 Concrete source policy configs/swing_news_source_links.json SHA256
 f148c1f0a7123d18a9a35c6b750ec7891866fdb0ab8c10d1a4b980ff4c56fece
 pins original attribution/collection/identity authorities and the completed corpus.
-Actual source-link build is active in native session15245/PythonPID105292 under
-shared lease news-source-link-index. Workspace operator work/run_news_source_links.py;
-state/stdout/stderr/exit prefix review-results/news-source-links. Destination
- data/research/swing_news_source_links; no final index published yet.
-Inputs/code must remain fixed during this job; do not launch a duplicate heavy job.
+The first source-link run (session15245/PID105292) exited1 at
+2026-10-09T14:13:46.0807478Z during original-artifact verification: Windows RAM
+used reached85.0% /2.35GiB free and failed the strict below85% requirement.
+No final bridge or prediction features were published. Preserve its logs and
+data/research/swing_news_source_links.partial/index.sqlite (zero rows in events,
+relations, versions and links; SHA256
+96d532d644dd39b576484b863ec14d858ab5a1194823721fac1fef0c4b0b772d).
+
+After Windows memory recovered to80.2% /3.11GiB free, the unchanged source/config
+started a fresh retry at2026-10-09T14:34:44.174955Z. Native session95107/PID60044
+owns shared lease news-source-link-index. Workspace operator
+work/run_news_source_links_retry.py; state/stdout/stderr/exit prefix
+review-results/news-source-links-retry. Destination
+data/research/swing_news_source_links_retry; no final index published yet.
+Inputs/code and the85% memory limit remain fixed; do not launch a duplicate job.
 
 After the bridge finishes, inspect actual counts/dispositions and final manifest,
 then set publisher config to its exactSourcePin. Run one real monthly209 projection
@@ -71,8 +81,8 @@ Report: workspace review-results/news-parent-pilot.json, SHA256
 stdout/stderr/exit logs share news-parent-pilot prefix. Native80674 ended naturally;
 no parent worker or lease remains. No model fit or admission was performed.
 
-Current incomplete work: research/news_source_links.py and its focused unit tests
-are being implemented. They must reuse the FULL original direct-issuer attribution
+Source-link software and focused unit tests are complete/pushed as71c9f32;
+actual source association output remains pending. They must reuse the FULL original direct-issuer attribution
 relations independently of score presence; retained saved_v1 relation copies were
 filtered through scores and cannot represent the complete cue stream. Validate
 exact original event/raw-version hashes before relation use. Independently mapped
@@ -126,8 +136,8 @@ synthetic UNIT tests passed0.28s; affected Ruff/strictmypy passed. This is softw
 evidence, not actual stock-linked aggregation or model performance. All kernel
 outputs keep training/serving/promotion admission false.
 
-Current work is the bounded parent loader and actual source-link bridge, then real
-retained-input projection/parity. Reuse exact existing direct-issuer relations and
+Parent loader and source-link software are complete; current work is the actual
+source-link retry, then real retained-input projection/parity. Reuse exact existing direct-issuer relations and
 cohort identity bridge; SEC document ownership needs its causal filer binding.
 The retained query security alone is not company/event actor proof. Preserve
 unmatched revisions and unknown coverage. Actual full209-column publication,
