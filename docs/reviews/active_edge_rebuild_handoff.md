@@ -21,6 +21,34 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Step 4 reviewed bridge/publisher and active execution — October 9
+
+Source-link bridge 71c9f32 and monthly209 publisher f8ea4e6 are reviewed/pushed.
+Bridge26 syntheticUNIT tests passed13.18s; publisher15 syntheticUNIT tests passed
+7.06s; affected Ruff/strictmypy passed. Source bridge's single supported review
+finding fixed legitimateSEC co-filers: retrievalCIK must belong to the proven filer
+set, not equal every independently proven filer. Typed uncertainties apply at each
+decision cutoff so a later-in-month revision cannot null an earlier decision.
+Publisher review found no open issues. These software checks do not substitute for
+actual bridge/monthly output, training or benchmark assessment.
+
+Concrete source policy configs/swing_news_source_links.json SHA256
+f148c1f0a7123d18a9a35c6b750ec7891866fdb0ab8c10d1a4b980ff4c56fece
+pins original attribution/collection/identity authorities and the completed corpus.
+Actual source-link build is active in native session15245/PythonPID105292 under
+shared lease news-source-link-index. Workspace operator work/run_news_source_links.py;
+state/stdout/stderr/exit prefix review-results/news-source-links. Destination
+ data/research/swing_news_source_links; no final index published yet.
+Inputs/code must remain fixed during this job; do not launch a duplicate heavy job.
+
+After the bridge finishes, inspect actual counts/dispositions and final manifest,
+then set publisher config to its exactSourcePin. Run one real monthly209 projection
+as a bounded partial checkpoint, preserve its external checkpoint SHA, verify actual
+parentprefix/cutoffs/missingness/single-batch parity, and resume unchanged to59months.
+No old stock/news matching, raw collection, numericalparent rebuild, target/learner/
+split/cost change or TradingFlow write is authorized by this checkpoint. Step4 stays
+in progress; step5 exactfeature acceptance/freeze precedes the two remaining fits.
+
 ### Step 4 parent-loading component and real evidence — October 9
 
 Reviewed parent-loading adapter 1dbd5f6 is pushed. It reuses existing historical
@@ -3911,18 +3939,18 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: ordered step4. Pure85-column aggregation1449a97 and
-unchanged parent loader1dbd5f6 are reviewed/pushed; actual parent pilot passed.
-Finish news_source_links.py/tests, currently dirty owned by consumer_review;
-review once, verify focused source/clock/schema cases, then run actual bounded
-stock/version bridge using full original direct relations and correctedSECownership.
-Root must publish/verify real monthly209-column features with exact124 parent prefix
-and source/cue/sentiment/identity/link clocks. Do not duplicate source/scoring/model
-reconstruction or raw matching. Currentfullcorpus/index hashes and past failures are
-above. No worker/lease remains after parentpilot. Coverage/actor/world qualification
-must not be inferred from query security or topic words. Keep existing targets,
-weights/splits/costs/learners/fourfits/API V1 and TradingFlow unchanged. Step5 profile
-freeze/acceptance matrix precedes two fits; no SPY or model admission claim yet.
+Exact next checkpoint: ordered step4. Follow active native15245/PID105292
+source-link build state/logs; do not duplicate it or edit its pinned source/code.
+Reviewed/pushed components: kernel1449a97,parentloader1dbd5f6,bridge71c9f32,
+publisherf8ea4e6. Fullcorpus/index andactualparentpilot are complete; sourcebridge
+and monthly209 publication still require actual run evidence. On sourcebridge exit,
+verify manifest/counts, create exactpublisher indexpinconfig and run one real month
+with external checkpoint SHA, actual parentprefix and single/batch/clock parity,
+then resume same209request through59months/586305decisions. Keep all dispositions,
+unknowncoverage/attribution and missing scores explicit. Oldfourfits/targets/splits/
+weights/costs/learners/API V1 and TradingFlow remainfixed; no olddata/model rebuild.
+Step5 featurecontract freeze/acceptance matrix before the two pending fits; no
+model/stock-return/SPY outperformance claim from software or feature calculations.
 The earlier qualification/reuse reruns exited for system memory pressure. Preserve
 4422/PID 87284 and 37426/PID 87492 failure receipts and artifacts; both leases gone.
 Saved-config implementation b589725 and actual byte/fold proof are complete.

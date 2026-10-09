@@ -21,6 +21,34 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Step 4 reviewed bridge/publisher and active execution — October 9
+
+Source-link bridge 71c9f32 and monthly209 publisher f8ea4e6 are reviewed/pushed.
+Bridge26 syntheticUNIT tests passed13.18s; publisher15 syntheticUNIT tests passed
+7.06s; affected Ruff/strictmypy passed. Source bridge's single supported review
+finding fixed legitimateSEC co-filers: retrievalCIK must belong to the proven filer
+set, not equal every independently proven filer. Typed uncertainties apply at each
+decision cutoff so a later-in-month revision cannot null an earlier decision.
+Publisher review found no open issues. These software checks do not substitute for
+actual bridge/monthly output, training or benchmark assessment.
+
+Concrete source policy configs/swing_news_source_links.json SHA256
+f148c1f0a7123d18a9a35c6b750ec7891866fdb0ab8c10d1a4b980ff4c56fece
+pins original attribution/collection/identity authorities and the completed corpus.
+Actual source-link build is active in native session15245/PythonPID105292 under
+shared lease news-source-link-index. Workspace operator work/run_news_source_links.py;
+state/stdout/stderr/exit prefix review-results/news-source-links. Destination
+ data/research/swing_news_source_links; no final index published yet.
+Inputs/code must remain fixed during this job; do not launch a duplicate heavy job.
+
+After the bridge finishes, inspect actual counts/dispositions and final manifest,
+then set publisher config to its exactSourcePin. Run one real monthly209 projection
+as a bounded partial checkpoint, preserve its external checkpoint SHA, verify actual
+parentprefix/cutoffs/missingness/single-batch parity, and resume unchanged to59months.
+No old stock/news matching, raw collection, numericalparent rebuild, target/learner/
+split/cost change or TradingFlow write is authorized by this checkpoint. Step4 stays
+in progress; step5 exactfeature acceptance/freeze precedes the two remaining fits.
+
 ### Step 4 parent-loading component and real evidence — October 9
 
 Reviewed parent-loading adapter 1dbd5f6 is pushed. It reuses existing historical
