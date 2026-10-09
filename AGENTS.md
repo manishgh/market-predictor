@@ -486,6 +486,15 @@ separate request. Model/data admission invariants elsewhere in this file still a
   non-queueing workspace lease before loading inputs. Do not bypass the lease
   from scripts, tests, notebooks, or deployment wrappers.
 
+User memory amendment (October9): new source-link indexing and monthly
+parent/news feature jobs use the
+existing swing percentage-only system ceiling: strictly below90% RAM used,
+without an independent2GiB free-memory floor. Keep the5GiB process budget,
+0.75GiB process headroom and shared non-queueing heavy-job lease. Unknown memory
+measurements still stop work. Preserve completed corpus/sentiment producer bytes
+that immutable requests pin; use the new runtime for current bridge/monthly work.
+Other workloads retain their configured limits.
+
 ## 6. Change Workflow
 
 For every checkpoint:

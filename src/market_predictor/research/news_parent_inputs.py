@@ -20,10 +20,9 @@ import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.core.system_memory import assert_system_memory_available
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside
-from market_predictor.resources import assert_memory_budget
+from market_predictor.research.news_runtime_memory import guard
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.relationship_historical_evidence import (
     HistoricalFeatureEvidence,
@@ -44,7 +43,7 @@ MONTHS = tuple(f"{year}-{month:02}" for year in range(2019, 2025) for month in r
                if "2019-07" <= f"{year}-{month:02}" <= "2024-05")
 IDENTITY_COLUMNS = ("decision_id", "security_id", "ticker", "decision_time_utc", "session_date_et")
 IMPLEMENTATION_PATHS = (
-    "research/news_parent_inputs.py", "swing/datasets/relationship_historical_evidence.py",
+    "research/news_parent_inputs.py", "research/news_runtime_memory.py", "swing/datasets/relationship_historical_evidence.py",
     "swing/datasets/return_relationship_integrity.py", "canonical/store.py", "evidence/hashing.py", "evidence/io.py",
     "core/errors.py", "core/json_integrity.py", "core/system_memory.py", "resources.py", "process_memory.py",
     "swing/contracts/holding_materialization.py", "swing/contracts/holding_accounting.py",
@@ -57,8 +56,7 @@ def _require(condition: bool, message: str) -> None:
 
 
 def _guard() -> None:
-    assert_memory_budget(stage="saved news parent", hard_budget_gib=5.0, headroom_gib=0.75)
-    assert_system_memory_available(minimum_available_gib=2.0, maximum_used_percent=85.0)
+    guard(stage="saved news parent")
 
 
 def _implementation(root: Path) -> dict[str, str]:

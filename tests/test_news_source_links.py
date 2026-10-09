@@ -16,10 +16,18 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
+from market_predictor.core.system_memory import SystemMemory
 from market_predictor.research import news_source_links as n
+from market_predictor.research.news_runtime_memory import guard as _runtime_guard
 
 CUT = datetime(2024, 1, 10, 22, tzinfo=UTC)
 STAMP = CUT - timedelta(hours=2)
+
+
+@pytest.fixture(autouse=True)
+def synthetic_resource_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Resource boundaries have their own UNIT suite; these test source bindings.
+    monkeypatch.setattr(n.runtime, "guard", lambda stage="news source links": None)
 
 
 def _sha(value: str) -> str:
@@ -583,3 +591,23 @@ def test_period_uncertainty_only_applies_after_its_known_clock(db: sqlite3.Conne
     assert not period.uncertainties[0].applies_at(STAMP)
     assert period.uncertainties[0].applies_at(CUT)
     assert reader.for_decision("A", STAMP).uncertainties == ()
+
+
+def test_original_binding_io_does_not_reenter_old_eightyfive_guard(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    db: sqlite3.Connection,
+) -> None:
+    archive, metadata = _original_archive(tmp_path, monkeypatch)
+    monkeypatch.setattr(n.runtime, "guard", _runtime_guard)
+    monkeypatch.setattr(n.runtime, "assert_memory_budget", lambda **kwargs: None)
+    monkeypatch.setattr(n.runtime, "system_memory_snapshot", lambda: SystemMemory(1000, 110))
+
+    def obsolete_guard() -> None:
+        raise AssertionError("new bridge reentered completed producer memory policy")
+
+    monkeypatch.setattr(n.saved, "_guard", obsolete_guard)
+    files: dict[str, str] = {}
+    n._load_alpaca(tmp_path, archive, db, pd.DataFrame(), pd.DataFrame(), files)
+    n.runtime.recheck_files(tmp_path, files)
+    assert n._alpaca_links(metadata, db)[0][0] == "cohort-company-A"

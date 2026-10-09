@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 import pandas as pd
+import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict, Field
 
 from market_predictor.catalysts.issuer_events import attribution as original_attribution
@@ -33,6 +34,7 @@ from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.research import issuer_content_review_sources as sec_sources
 from market_predictor.research import news_corpus_enrichment as corpus
 from market_predictor.research import news_decision_features as features
+from market_predictor.research import news_runtime_memory as runtime
 from market_predictor.research import news_sentiment_reuse as saved
 from market_predictor.research.legacy_query_identity_proofs import load_legacy_query_proofs
 from market_predictor.swing.contracts.holding_materialization import SourcePin as HoldingSourcePin
@@ -53,6 +55,7 @@ IMPLEMENTATION_PATHS = tuple(
             *saved.IMPLEMENTATION_PATHS,
             *corpus._IMPLEMENTATION_PATHS,
             "research/news_source_links.py",
+            "research/news_runtime_memory.py",
             "research/news_decision_features.py",
             "research/issuer_content_review_sources.py",
             "research/legacy_query_identity_proofs.py",
@@ -123,7 +126,7 @@ def _clock(value: Any) -> datetime:
 
 def _implementation(root: Path) -> dict[str, str]:
     package = Path(__file__).resolve().parents[1]
-    return {(package / name).relative_to(root).as_posix(): saved._hash(package / name) for name in IMPLEMENTATION_PATHS}
+    return {(package / name).relative_to(root).as_posix(): runtime.file_sha256(package / name) for name in IMPLEMENTATION_PATHS}
 
 
 def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
@@ -160,7 +163,7 @@ def _schema(db: sqlite3.Connection) -> None:
 
 def _pin(root: Path, pin: SourcePin, files: dict[str, str]) -> Path:
     corpus._no_links(root / pin.path)
-    return saved._pin(root, pin.path, pin.sha256, files)
+    return runtime.pin_file(root, pin.path, pin.sha256, files)
 
 
 def _proof(db: sqlite3.Connection, value: dict[str, Any]) -> str:
@@ -184,7 +187,7 @@ def _bookends(root: Path, policy: NewsSourceLinkPolicy, files: dict[str, str]) -
         and artifacts.get("population.sqlite") == policy.population_database.sha256,
         "population database is not bound to its original manifest",
     )
-    request_path = saved._pin(root, str(population_path.parent / "_request.json"), parent["request_sha256"], files)
+    request_path = runtime.pin_file(root, str(population_path.parent / "_request.json"), parent["request_sha256"], files)
     _require(artifacts.get("_request.json") == parent["request_sha256"], "population request artifact differs")
     settings = saved._object(request_path)["settings"]
     _require(
@@ -193,7 +196,7 @@ def _bookends(root: Path, policy: NewsSourceLinkPolicy, files: dict[str, str]) -
     # Raw pages, SEC bodies and identities remain original evidence. Historical
     # producer implementation maps are provenance, not current executed code.
     for name, digest in parent["source_files"].items():
-        saved._pin(root, name, digest, files)
+        runtime.pin_file(root, name, digest, files)
     corpus_path = _pin(root, policy.corpus_manifest, files)
     manifest = saved._object(corpus_path)
     _require(
@@ -201,12 +204,12 @@ def _bookends(root: Path, policy: NewsSourceLinkPolicy, files: dict[str, str]) -
         and all(manifest.get(key) is False for key in ("training_eligible", "serving_eligible", "promotion_eligible")),
         "corpus is not closed feature-only evidence",
     )
-    request = saved._object(saved._pin(root, str(corpus_path.parent / "_request.json"), manifest["request_sha256"], files))
+    request = saved._object(runtime.pin_file(root, str(corpus_path.parent / "_request.json"), manifest["request_sha256"], files))
     _require(request["input_database"] == policy.population_database.model_dump(mode="json"), "corpus source database differs")
     for name, digest in request["source_files"].items():
-        saved._pin(root, name, digest, files)
+        runtime.pin_file(root, name, digest, files)
     for name, digest in manifest["artifacts"].items():
-        saved._pin(root, str(inside(corpus_path.parent, name)), digest, files)
+        runtime.pin_file(root, str(inside(corpus_path.parent, name)), digest, files)
     return database, settings, manifest, corpus_path.parent
 
 
@@ -219,7 +222,7 @@ def _identities(
     bridge_path = path.parent / "identity_bridge.parquet"
     for item in (bridge_path, Path(str(bridge_path) + ".manifest.json")):
         name = item.relative_to(root).as_posix()
-        saved._pin(root, name, manifest["source_files"][name], files)
+        runtime.pin_file(root, name, manifest["source_files"][name], files)
     sidecar = saved._object(Path(str(bridge_path) + ".manifest.json"))
     _require(
         sidecar["artifact_sha256"] == files[bridge_path.relative_to(root).as_posix()]
@@ -234,7 +237,41 @@ def _identities(
 
 def _child(root: Path, item: dict[str, Any], files: dict[str, str], inputs: dict[str, str]) -> Path:
     adapted = {**item, "manifest_path": item.get("manifest_path", str(item["path"]) + ".manifest.json")}
-    return saved._artifact(root, adapted, files, inputs)
+    return _original_artifact(root, adapted, files, inputs)
+
+
+def _original_request(root: Path, manifest_path: Path, manifest: dict[str, Any], files: dict[str, str]) -> dict[str, Any]:
+    """Original request validation with new runtime I/O, unchanged semantic hash."""
+    path = manifest_path.parent / "_request.json"
+    runtime.capture_file(root, path, files)
+    request = saved._object(path)
+    digest = request.pop("request_sha256", None)
+    _require(
+        digest == manifest["request_sha256"] and hashlib.sha256(saved._json(request).encode()).hexdigest() == digest,
+        "original sentiment request hash differs",
+    )
+    return request
+
+
+def _original_artifact(root: Path, item: dict[str, Any], files: dict[str, str], inputs: dict[str, str]) -> Path:
+    """Retain every original child/sidecar check without its old resource policy."""
+    path = runtime.pin_file(root, str(item["path"]), str(item["sha256"]), files)
+    sidecar_path = inside(root, str(item["manifest_path"]))
+    _require(sidecar_path == Path(str(path) + ".manifest.json"), "unexpected original sidecar location")
+    runtime.capture_file(root, sidecar_path, files)
+    sidecar = saved._object(sidecar_path)
+    _require(
+        sidecar.get("schema") == "market_data.artifact_manifest.v1"
+        and sidecar.get("artifact_sha256") == item["sha256"]
+        and sidecar.get("rows") == item["rows"],
+        "original sentiment child sidecar differs",
+    )
+    _require(
+        all(sidecar.get("inputs", {}).get(key) == value for key, value in inputs.items()), "original sentiment child input binding differs"
+    )
+    runtime.guard()
+    _require(cast(Any, pq).ParquetFile(path).metadata.num_rows == item["rows"], "original sentiment child row count differs")
+    return path
 
 
 def _batches(rows: Iterator[dict[str, Any]], size: int = 256) -> Iterator[list[dict[str, Any]]]:
@@ -260,8 +297,8 @@ def _load_alpaca(
         and attribution.get("status") == "complete",
         "original source/attribution manifest differs",
     )
-    saved._request(root, collection_path, collection, files)
-    request = saved._request(root, relation_path, attribution, files)
+    _original_request(root, collection_path, collection, files)
+    request = _original_request(root, relation_path, attribution, files)
     _require(
         request["collection_manifest_sha256"] == archive.collection_manifest.sha256
         and request["collection_request_sha256"] == collection["request_sha256"]
@@ -269,7 +306,7 @@ def _load_alpaca(
         "attribution is not bound to original collection",
     )
     for stem in ("security_identities", "business_labels", "collection_audit"):
-        saved._pin(root, request[stem + "_path"], request[stem + "_sha256"], files)
+        runtime.pin_file(root, request[stem + "_path"], request[stem + "_sha256"], files)
     identities = original_attribution._prepare_identities(
         pd.read_parquet(inside(root, request["security_identities_path"]), columns=sorted(original_attribution._IDENTITY_REQUIRED))
     )
@@ -277,7 +314,7 @@ def _load_alpaca(
     identities_by_security = original_attribution._identities_by_security(identities)
     events = saved._artifacts(collection)
     for chunk, item in sorted(saved._artifacts(attribution).items()):
-        saved._guard()
+        runtime.guard()
         _require(chunk in events, "relation child lacks original source events")
         original = events[chunk]
         if saved._clock(original["start_utc"]) > saved.END:
@@ -298,7 +335,7 @@ def _load_alpaca(
             },
         )
         event_columns = tuple(name for name in saved.EVENT_COLUMNS if name not in {"title", "summary", "text"})
-        for event in saved._rows(event_path, event_columns):
+        for event in runtime.parquet_rows(event_path, event_columns):
             if saved._clock(event["available_at_utc"]) > saved.END or saved._version_clock(event) > saved.END:
                 continue
             payload = {
@@ -323,7 +360,7 @@ def _load_alpaca(
             _require(previous is None or previous[0] == _json(payload), "conflicting original event copies")
             db.execute("INSERT OR IGNORE INTO events VALUES (?,?,?,?,?,?,?)", (*key, _json(payload), _json(proof)))
         sidecar = saved._object(Path(str(rel_path) + ".manifest.json"))
-        for batch in _batches(saved._rows(rel_path, sidecar["columns"])):
+        for batch in _batches(runtime.parquet_rows(rel_path, sidecar["columns"])):
             direct = [row for row in batch if row["relation_channel"] == "direct_issuer"]
             if not direct:
                 continue
@@ -384,12 +421,12 @@ def _load_sec(root: Path, settings: dict[str, Any], db: sqlite3.Connection, file
     archive = HoldingSourcePin.model_validate(settings["sec_archive"])
     inventory = HoldingSourcePin.model_validate(settings["sec_inventory"])
     directory, manifest, _, parent = sec_sources._sec_metadata(root, archive, inventory, files)
-    filings, clock_pin = sec_sources._filing_map(root, inventory, parent, files, saved._guard)
+    filings, clock_pin = sec_sources._filing_map(root, inventory, parent, files, runtime.guard)
     terminal: set[str] = set()
     for name, shard in sorted(manifest["shards"].items()):
-        path = saved._pin(root, str(directory / "shards" / f"{name}.parquet"), shard["parquet_sha256"], files)
+        path = runtime.pin_file(root, str(directory / "shards" / f"{name}.parquet"), shard["parquet_sha256"], files)
         count, zip_checked = 0, False
-        for row in sec_sources._rows(path, saved._guard):
+        for row in sec_sources._rows(path, runtime.guard):
             count += 1
             clean = {
                 key: int(row[key]) if row[key] is not None and key in {"attempt", "status_code", "body_length"} else row[key]
@@ -407,7 +444,7 @@ def _load_sec(root: Path, settings: dict[str, Any], db: sqlite3.Connection, file
             filer_ciks = {str(filing["sec_cik"]).zfill(10) for filing in filings[row["accession_number"]]}
             _require(str(row["sec_cik"]).zfill(10) in filer_ciks, "SEC receipt retrieval CIK is outside the proven filer set")
             if row["member"] is not None and not zip_checked:
-                saved._pin(root, str(directory / "shards" / f"{name}.zip"), shard["zip_sha256"], files)
+                runtime.pin_file(root, str(directory / "shards" / f"{name}.zip"), shard["zip_sha256"], files)
                 zip_checked = True
             for filing in filings[row["accession_number"]]:
                 proof = {
@@ -435,7 +472,7 @@ def _load_corpus(directory: Path, manifest: dict[str, Any], source: sqlite3.Conn
             continue
         for record in corpus._read_lines(directory / name):
             if count % 256 == 0:
-                saved._guard()
+                runtime.guard()
             row = source.execute(
                 "SELECT cluster_id,security_id,source_family,content_json FROM versions WHERE version_id=?", (record["version_id"],)
             ).fetchone()
@@ -635,7 +672,7 @@ def _materialize_versions(
     )
     for row in cursor:
         if counts["query_copy_records"] % 256 == 0:
-            saved._guard()
+            runtime.guard()
         counts["query_copy_records"] += 1
         metadata = _metadata(row["record_json"])
         found = db.execute("SELECT payload,metadata FROM enriched WHERE version_id=?", (row["version_id"],)).fetchone()
@@ -712,10 +749,10 @@ def build_news_source_link_index(
     stage = output.with_name(output.name + ".partial")
     corpus._no_links(output)
     corpus._no_links(stage)
-    runtime = heavy_job_runtime_dir()
-    runtime = runtime if runtime.is_absolute() else root / runtime
-    with heavy_job_lease("news-source-link-index", runtime_dir=runtime):
-        saved._guard()
+    runtime_dir = heavy_job_runtime_dir()
+    runtime_dir = runtime_dir if runtime_dir.is_absolute() else root / runtime_dir
+    with heavy_job_lease("news-source-link-index", runtime_dir=runtime_dir):
+        runtime.guard()
         _require(not output.exists() and not stage.exists(), "source-link output or partial stage already exists")
         files: dict[str, str] = {}
         policy = NewsSourceLinkPolicy.model_validate_json(_pin(root, config, files).read_bytes())
@@ -735,7 +772,7 @@ def build_news_source_link_index(
             **CLOSED,
         }
         write_json_object(stage / "_request.json", request)
-        request_sha = saved._hash(stage / "_request.json")
+        request_sha = runtime.file_sha256(stage / "_request.json")
         with closing(_connect(stage / "index.sqlite")) as db, closing(_connect(database, readonly=True)) as source:
             _schema(db)
             for archive in policy.archives:
@@ -747,11 +784,12 @@ def build_news_source_link_index(
                 db.execute(f"DROP TABLE {name}")
             db.commit()
             db.execute("VACUUM")
-        artifacts = {"index.sqlite": saved._hash(stage / "index.sqlite"), "_request.json": request_sha}
-        saved._recheck(root, files)
-        saved._recheck(root, implementation)
+        artifacts = {"index.sqlite": runtime.file_sha256(stage / "index.sqlite"), "_request.json": request_sha}
+        runtime.recheck_files(root, files)
+        runtime.recheck_files(root, implementation)
         _require(
-            all(saved._hash(stage / name) == digest for name, digest in artifacts.items()), "source-link output changed before publication"
+            all(runtime.file_sha256(stage / name) == digest for name, digest in artifacts.items()),
+            "source-link output changed before publication",
         )
         result = {
             "schema": SCHEMA,
@@ -766,7 +804,7 @@ def build_news_source_link_index(
         }
         write_json_object(stage / "_manifest.json", result)
         stage.rename(output)
-        return {**result, "manifest_sha256": saved._hash(output / "_manifest.json")}
+        return {**result, "manifest_sha256": runtime.file_sha256(output / "_manifest.json")}
 
 
 @dataclass(frozen=True)
@@ -891,9 +929,9 @@ def open_news_source_link_index(*, root: Path, index: SourcePin) -> Iterator[New
     )
     _require(manifest["implementation_files"] == _implementation(root), "source-link executed implementation differs")
     for name, digest in manifest["source_files"].items():
-        saved._pin(root, name, digest, files)
+        runtime.pin_file(root, name, digest, files)
     for name, digest in manifest["artifacts"].items():
-        saved._pin(root, str(inside(path.parent, name)), digest, files)
+        runtime.pin_file(root, str(inside(path.parent, name)), digest, files)
     _require(
         set(manifest["artifacts"]) == {"index.sqlite", "_request.json"}
         and manifest["artifacts"]["_request.json"] == manifest["request_sha256"],
@@ -913,5 +951,5 @@ def open_news_source_link_index(*, root: Path, index: SourcePin) -> Iterator[New
         try:
             yield NewsSourceLinkReader(files, manifest["implementation_files"], db)
         finally:
-            saved._recheck(root, files)
-            saved._recheck(root, manifest["implementation_files"])
+            runtime.recheck_files(root, files)
+            runtime.recheck_files(root, manifest["implementation_files"])
