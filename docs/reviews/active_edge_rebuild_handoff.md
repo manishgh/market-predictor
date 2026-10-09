@@ -21,6 +21,60 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### User-authorized news-job memory amendment — October 9
+
+The user explicitly requested "lets make that90% and start" after the85.2%
+source-link failure. Use the established swing percentage-only policy for the current source-link
+and monthly parent/news projection jobs:
+system RAM for the new bridge and monthly jobs must remain strictly below90%;
+no additional absolute2GiB floor. Completed producer code stays pinned unchanged.
+The separate5GiB process budget,0.75GiB process headroom, shared non-queueing
+lease and source/code/output checks remain mandatory. Other callers retain their
+existing default memory rules. This amendment supersedes the current85% recovery
+instructions below; their failure measurements remain historical evidence.
+
+Bounded design review found a concrete input-contract conflict: the completed
+corpus request also pins the original core/system_memory.py and corpus/sentiment
+producer bytes. Editing those files would fail the new bridge's existing source
+checks. Preserve those exact files and completed artifacts. Add one new news
+runtime owner with percentage-only90% checking and bounded guard-aware I/O; use it
+from the new bridge and monthly parent loader. Replace indirect85% guarded reads
+in that bridge while preserving exact source hashes, source proofs and pure clock
+semantics. Do not monkeypatch production guards or skip existing source checks.
+Unit checks cover85–90% admission, exact90% rejection, unknown readings and
+unchanged process limits; original bridge cases, affected lint/types and one review.
+Do not rewrite completed corpus or sentiment artifacts. New source-link attempt
+must use a fresh output/stage and record the changed executed implementation pins.
+Then complete the same real209-column monthly pilot/publication and pending fits.
+No model improvement, API admission or main merge is inferred from this change.
+
+Runtime implementation2b55ccb is reviewed and pushed. The bounded review has
+no open findings: original request/sidecar/hash/row-count checks remain intact,
+and the reviewed new bridge paths contain no indirect85% guard calls. Runtime12,
+bridge27 and parent9 synthetic UNIT cases were covered:46 passed initially; two
+public-builder cases failed on a local module-name shadow, which was fixed and
+those two rerun passed in2.29s. Final affected Ruff/strict mypy passed. Current
+continuity checks passed2 cases in0.10s. These are software checks, not actual
+news-feature output, training, benchmark results or V1 serving admission.
+Protected producer SHA256 values remain exactly37cd210e...8b042 (core memory),
+d3dae2ed...99ea (corpus) andac30eab9...97dff (saved sentiment). No artifact rewritten.
+
+The actual90% launch check passed at83.01% used /2.67GiB free. Fresh native
+session31175/PID86852 started2026-10-09T16:12:09.661135Z, shared lease
+news-source-link-index. Workspace operator work/run_news_source_links_90pct.py
+SHA25649e42cec43c4dfa0377d7e282b719177e9db04b386dbe71afc5dbdbb84bd4ad5;
+state/stdout/stderr/exit prefix review-results/news-source-links-90pct.
+Fresh destination data/research/swing_news_source_links_90pct; private stage
+data/research/swing_news_source_links_90pct.partial. Config remains
+configs/swing_news_source_links.json /f148c1f0a7123d18a9a35c6b750ec7891866fdb0ab8c10d1a4b980ff4c56fece.
+Initial state is original relation/filing binding; no final index published yet.
+Do not duplicate this worker or edit pinned runtime/source/config during the run.
+Earlier zero-row failure stages and all logs remain preserved. The pending RAM
+question is superseded by this explicit90% user instruction; no reply is needed.
+After completion, inspect final manifest/counts, use work/pin_actual_news_publication.py
+(now points to the90pct destination), then actual July pilot/parity and unchanged
+monthly continuation. Third-profile freeze and its two fits remain pending.
+
 ### Step 4 reviewed bridge/publisher and real execution failures — October 9
 
 Source-link bridge 71c9f32 and monthly209 publisher f8ea4e6 are reviewed/pushed.
@@ -3973,11 +4027,12 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: ordered step4. Both source-link attempts exited for
-system RAM pressure; no owned source-link worker/lease remains. Read the current
-retry failure receipts, wait for freed sustained RAM, and check the unchanged
-below85% /at least2GiB limit before a fresh output/stage attempt. Do not reuse the
-failed zero-row transaction or change input/code pins without demonstrated evidence.
+Exact next checkpoint: ordered step4. Follow active90% native31175/PID86852
+source-link run and its news-source-links-90pct state/logs. Runtime2b55ccb is pushed;
+do not duplicate the worker or edit its pinned input/implementation bytes. The
+user-approved rule is strictly below90%, without an independent2GiB floor; keep
+the5GiB process budget/.75GiB headroom and shared lease. Preserve both prior failed
+transactions; neither is a reusable published index.
 Reviewed/pushed components: kernel1449a97,parentloader1dbd5f6,bridge71c9f32,
 publisherf8ea4e6. Fullcorpus/index andactualparentpilot are complete; sourcebridge
 and monthly209 publication still require actual run evidence. On sourcebridge exit,
@@ -3995,7 +4050,8 @@ Publisher/verifier ownership repair c2063a8 is pushed and its full 314-case sele
 unit scope passed. Actual 124 reuse retains config SHA256
 95dd86ec733a70a72c0d0a2f05de78e0111b71e31fef1786d424136141cc209c.
 Check current headroom first, then run only one heavy job at a time; freeze pinned
-source/configs during each run. Do not relax the canonical 85%/2 GiB source guard.
+source/configs during each run. The October9 explicit90% news-runtime amendment
+supersedes the earlier85%/2GiB requirement for this new bridge/monthly path.
 Do not repeat completed export, matching, independent reviews or passed unit scopes.
 Preserve failed qualification 64007, reuse 39985/diagnostic 87347, and the failed
 unit attempt 60429 alongside corrected 18-case unit receipt. Intermediate real
