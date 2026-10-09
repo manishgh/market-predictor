@@ -83,6 +83,35 @@ Once physical memory permits startup, run the reviewed operator, inspect real in
 coverage and every-version accounting, then record actual output hashes/counts before
 advancing to decision-time aggregation. Do not repeat completed tests or base matching.
 
+### Step 3 real-input reader correction — October 9
+
+After memory was freed, actual session 60003 got past startup and bound 2,150
+saved score rows into an unpublished private SQLite stage. It then exited 1 at
+2026-10-09T10:29:27.458976Z because the original collection manifest omits event
+artifacts for some zero-row sentiment files. All 20 missing original chunks
+(early6, later1, corrected13) have declared zero score rows; this is not missing
+sentiment for 20 articles. Never treat their source-event hashes as real scored events.
+Failed stage: data/research/.swing_news_sentiment_reuse_index.building/index.sqlite,
+SHA256 fa22544b2f05e4fecc413e4f1df5295246f3bb61feeda7d0a97968b5fb2e61ab.
+It is retained failure evidence, not a published/usable index. Retry2 state/logs/exit
+are under workspace review-results/news-corpus-enrichment-retry2.*.
+An earlier retry also stopped before input loading at85.6%used/2.26GiBfree; preserve
+review-results/news-corpus-enrichment-retry.* alongside the first startup failure.
+
+Narrow correction 4632428 is pushed: only a hash/sidecar/request-verified physically
+zero-row score artifact may be accounted for without its original event artifact.
+Manifest counts those files explicitly; a missing source for nonempty scores or a
+falsely declared empty file still rejects. No source collection/schema/matching was
+rebuilt. One narrow review found no open issues. Final 30 sentiment +24 corpus +2
+continuity synthetic UNIT/document checks passed (56,8.81s); affected Ruff/strict
+mypy passed. Code corrected the new reader, not any baseline model or source bytes.
+
+Next execute the corrected reader into a fresh index destination while preserving
+the failed private stage and both memory failures. Then run full retained-version
+cue enrichment, inspect actual accounting/coverage, and update statuses before step4.
+The latest pre-retry observation was81.3%RAMused/2.93GiBfree; check again at startup.
+Do not repeat passed unit scopes or claim completed corpus/model/SPY evaluation.
+
 ### Step 2 execution result — October 9
 
 Software 189242f adds only research/news_feature_enrichment.py and its unit tests.
@@ -3719,11 +3748,12 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: ordered step 3. Retry the reviewed real corpus operator
-when Windows is below 85% RAM used and has at least 2 GiB free (roughly 2.35 GiB
-free is needed for the 85% bound on this machine). First preserve the October 9
-startup failure logs and use fresh retry logs/state. Implementation 952c4f0 and
-all focused checks are complete; no index/corpus output exists from the failed run.
+Exact next checkpoint: ordered step 3. Run corrected saved-sentiment reader
+4632428 into a fresh destination, preserving the unpublished failed index stage
+and all three run receipts above. Memory was freed to81.3%used/2.93GiBfree; the
+unchanged guard still checks below85%used and at least2GiBfree at startup/batches.
+Only verified physically empty score artifacts may omit original source artifacts;
+missing nonempty sources still reject. No corpus or accepted index is published yet.
 Stream full retained news in bounded batches and reuse actual sentiment
 where available and inspect the existing FinBERT cache for missing scoring. Preserve
 real source/proxy clocks and unresolved attribution. Do not call cues verified events
