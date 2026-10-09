@@ -1,5 +1,80 @@
 # Active Edge Rebuild Plan
 
+## Ordered execution plan — October 9
+
+Goal: learn future stock returns from existing price/fundamental state and all
+relevant news available at each decision, then measure the result against SPY.
+Collection, raw evidence, matched candles/news, technical indicators and API V1
+remain fixed. TradingFlow remains independently owned. Tests alone are not a win.
+
+| Step | Status | Work and concrete completion condition |
+| --- | --- | --- |
+| 0. Reuse the foundation | Done | Existing matched 586,305 decision rows / 59 months and four fitted baseline models are retained. No new collection/schema/matching rebuild. |
+| 1. Streaming quality-check buckets | Software done; integration pending | Helper 44d8c2d retains bounded references by category/source/year/sentiment/confidence; 28 unit tests pass. It has not processed the full corpus. |
+| 2. Broad news feature enrichment | In progress | Implement one feature-layer recognizer for multiple swing-news categories and mixed signals. Preserve source evidence, availability and uncertain/other stories. Connect buckets to a real retained-news pilot; report actual coverage and examples. |
+| 3. Full-corpus enrichment | Pending | Stream every eligible retained article/version through category/sentiment processing in bounded batches. Reuse existing FinBERT outputs/model where available. Persist enriched output and QA references with resumable batch accounting; no unsampled-row filtering. |
+| 4. Prediction-time news features | Pending | Aggregate company/sector/market signals and recency at each existing decision cutoff. Combine with existing price/fundamentals. Later revisions/prices cannot enter earlier inputs. Preserve positive earnings and negative guidance simultaneously. |
+| 5. Freeze the third feature profile | Pending | Record exact columns, definitions, missingness, source coverage, clocks and train-only preprocessing. Embeddings are optional feature work, not assumed implemented; any encoder must be locally available/pinned and evaluated within the amended profile. |
+| 6. Fit remaining two models | Pending | Fit existing Ridge and shallow XGBoost for the amended news profile on the same official ten-session targets, splits, weights and costs. Four fitted baselines remain unchanged. |
+| 7. Compare performance | Pending | Evaluate all six specifications and twelve frozen policies with prediction error, ranking, funded NAV, fees, turnover and drawdown against SPY. State measured losses as plainly as gains. No claim of outperformance from a feature/test pass. |
+| 8. Independent final assessment | Pending | Preserve genuinely unseen assessment data. Previously repeatedly inspected historical test remains development evidence. Follow the existing prospective assessment requirement without fabricating future observations. |
+| 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
+| 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
+
+### What is genuinely done
+
+- Existing technical and relationship source/feature work, matched input reuse,
+  four fitted baseline models and their temporal evaluation runs.
+- Completed source-only A/B reviews: each 1,750 packets / 1,977 versions; no missing
+  or partial inspections. They assess earnings/guidance, not all new categories.
+- Old annotation publication exists (603 candidate event occurrences, not articles);
+  its strict identical-span result is superseded and its independent replay failed
+  the RAM guard. It is historical evidence, not source or model acceptance.
+- FinBERT scoring implementation and existing generic aggregate feature plumbing.
+  A full semantic article-embedding store/training integration is not established.
+- QA bucket helper: deterministic bounded reference sampling, multi-category and
+  uncertain/mixed cases; final 28 synthetic unit tests, Ruff and strict mypy pass.
+
+### Step 2: bounded implementation now
+
+Problem: the current explicit content extractor only recognizes earnings/guidance.
+Contracts, acquisitions, analyst changes, products, legal/regulatory actions,
+financing/capital returns, management/operations and sector/market context can be
+useful swing signals and must be represented. One article can contain several.
+
+In scope: feature-layer text/cue recognition and category/action evidence; separate
+business direction/status from predicted stock return; source/version references;
+company versus sector/market/unresolved scope; publication-time availability;
+category-specific missingness, no universal fiscal-year demand; bounded QA bucket
+integration and a real retained-input pilot. Reuse existing sentiment values when
+available; unavailable scoring must stay unavailable, never synthetic or zero.
+A heuristic cue is not a verified world event: label its method/uncertainty and do
+not declare new-category source quality solely from matching a keyword.
+
+Out of scope: raw collection, canonical base schemas, new alias/compatibility
+layers/API versions, rematching candles/news, rewriting A/B judgments/hashes,
+additional learners, changed targets/costs/splits, CPCV, forced future-price
+correlation labels or manual changes to news sentiment based on observed returns.
+
+Exit checks: source-grounded positive/negative/ambiguous examples for each category;
+mixed earnings/guidance and macro stories; contract gain versus loss; rumours,
+negation and completion status; analyst actor versus affected company; authentic
+evidence references; after-cutoff/later-revision refusal; no fiscal requirement
+for nonfinancial stories; deterministic bounded QA samples. Actual pilot must run
+on retained data using real code, state its input/output counts and exclusions,
+and preserve the existing inputs. Unit fixtures cannot substitute for that pilot.
+
+Do one bounded design/code review, fix supported findings, run affected unit/source
+checks and lint/types, commit and update this plan/handoff before the next step.
+If a prerequisite is missing, name it exactly and continue independent authorized
+work. Do not replace feature work with another foundation project.
+
+Below are retained detailed/historical records. Their dated statuses are not
+additional current to-do lists. This ordered table and the one checkpoint below
+control execution; original artifact hashes and completed evidence are unchanged.
+
+Current checkpoint: **Broad news feature enrichment and real retained-input pilot** (`in progress`).
+
 ### Current continuation: full-news feature engineering on the existing foundation
 
 User correction and priority (October 8): the project already has candles, matched
@@ -1712,7 +1787,7 @@ review found no supported code issues. No real model fit, SPY outperformance, pr
 deployment, data reconstruction or C# build is claimed. Full test logs are local task
 artifacts, not model evidence. No full-suite rerun was needed after test-assertion fixes.
 
-Current checkpoint: **Qualified issuer-reaction feature engineering** (`in progress`).
+Current checkpoint: **Qualified issuer-reaction feature engineering** (`historical status`).
 
 Completed source sub-slice in `86f7d429487934494da9c587ad9536cbf993e2dd`, pushed on
 `codex/v1-canonical-cleanup`: explicit offline reconstruction into
