@@ -21,7 +21,51 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Sequential continuation enabled — October 18
+### Execution stopped; waiting for the user to free memory — October 18
+
+The user explicitly requested: "Wait until I can free memory." Start no new data
+jobs or continuation controller until the user confirms memory is available.
+Both processes have ended; no heavy-job lease owner remains. Step 4 is incomplete.
+The completed corpus and four baseline fits remain retained. TradingFlow is untouched.
+
+Source native session 38801 / PID 4136 ran from 2026-10-18T19:39:08.795617Z
+until natural exit 1 at 2026-10-18T21:18:37.2933159Z. Its final memory pause
+began at 21:16:35.721306Z and timed out at 21:18:35.792664Z after 120.071 seconds,
+with system RAM at 96.57%, above the user's 91% ceiling. The failure occurred
+while loading original Alpaca archives through runtime.pin_file/file_sha256.
+Initial source-file hashes had completed. The private index reached 529,518,592
+bytes before the unfinished transaction rolled back: events, relations,
+sec_receipts, enriched, versions, links, candidates and proofs all have zero
+committed rows. Surviving private SQLite SHA256:
+96d532d644dd39b576484b863ec14d858ab5a1194823721fac1fef0c4b0b772d.
+No final source-link index, 209-column dataset or additional model fit exists.
+
+Actual stderr contains 18 pauses, 17 recoveries and one timeout. The first pause
+at 19:42:27.859083Z measured 91.20%; it resumed 5.048 seconds later at 76.68%.
+The bounded pause therefore survived short real memory spikes; the final sustained
+pressure exceeded its two-minute limit. Native PowerShell stderr redirection
+buffered these records until exit; an empty live log was not evidence of no pauses.
+After the worker ended, the measured machine still used 97.33% of RAM, with only
+0.42 GiB free. No unrelated applications or TradingFlow processes were stopped.
+
+Controller native session 92713 / PID 106240 exited 1 at
+2026-10-18T21:18:44.7239176Z. Its state is stopped_without_retry because the
+named source run did not exit successfully. No monthly child was launched.
+Preserve workspace review-results/news-source-links-memory-pause.* (including
+state, stdout, stderr and exit receipts), review-results/news-step4-continuation,
+review-results/news-step4-controller.* and the repository private stage
+data/research/swing_news_source_links_memory_pause.partial.
+
+When the user confirms memory is freed, inspect actual RAM first. Use fresh
+source output/state/log paths and a fresh controller attempt directory; bind the
+controller to the new PID, start time, config and actual final manifest. Update
+the manifest-pin helper to that new output. The old controller is bound to PID
+4136 and must not simply be relaunched. The rolled-back private index cannot
+resume. Preserve failed attempts. After successful source publication, run the
+real July pilot, actual parity checks and remaining 59-month publication in order.
+Keep the 91% ceiling, completed corpus, four fits, targets, splits, costs and API V1.
+
+### Previous launch record — October 18 (historical; both processes now ended)
 
 A lightweight controller, native session 92713 / PID 106240, started at
 2026-10-18T19:52:14.028338Z. It is waiting only for source PID 4136's exact
@@ -4207,16 +4251,16 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: ordered step 4. Follow source native 38801 / PID 4136
-and the enabled lightweight controller native 92713 / PID 106240. Controller
-state/logs are under review-results/news-step4-continuation; outer native logs
-use news-step4-controller.*. Do not start manual monthly jobs or duplicate workers.
-After this exact source run exits successfully, the reviewed controller will pin
-its actual manifest, run the real July pilot/parity, and continue monthly publication
-only when each preceding phase passes. Source, code and operators stay fixed.
-The source runtime pauses valid >=91% pressure for up to 120 seconds; it never
-processes data while paused. Any timeout or invalid/process failure still stops.
-No final index/monthly output, model fit or API admission is claimed yet.
+Exact next checkpoint: ordered step 4, waiting at the user's explicit request
+until they confirm memory is available. Source session 38801 / PID 4136 exited 1
+after 120 seconds above 91% RAM (final 96.57%); controller 92713 / PID 106240
+also exited 1 without launching a monthly child. No active worker or shared lease
+remains. Preserve all source/controller receipts and the rolled-back private stage.
+After the user's confirmation, check actual RAM, start a fresh source destination
+and fresh controller attempt bound to the new PID/start/config/final manifest,
+then run the real July pilot/parity and remaining monthly publication sequentially.
+Do not reuse the failed index or relaunch the old PID-bound controller. No final
+index, monthly output, additional fit, SPY win or API admission is claimed.
 Reviewed/pushed components: kernel1449a97,parentloader1dbd5f6,bridge71c9f32,
 publisherf8ea4e6. Fullcorpus/index andactualparentpilot are complete; sourcebridge
 and monthly209 publication still require actual run evidence. On sourcebridge exit,
