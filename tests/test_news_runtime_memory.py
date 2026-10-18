@@ -13,16 +13,16 @@ from market_predictor.core.system_memory import SystemMemory
 from market_predictor.research import news_runtime_memory as runtime
 
 
-@pytest.mark.parametrize("available,allowed", [(200, True), (150, True), (101, True), (100, False), (99, False)])
-def test_percentage_only_below_ninety_boundary(monkeypatch: pytest.MonkeyPatch, available: int, allowed: bool) -> None:
+@pytest.mark.parametrize("available,allowed", [(200, True), (150, True), (101, True), (100, True), (91, True), (90, False), (89, False)])
+def test_percentage_only_requested_boundary(monkeypatch: pytest.MonkeyPatch, available: int, allowed: bool) -> None:
     calls: list[dict[str, object]] = []
     monkeypatch.setattr(runtime, "assert_memory_budget", lambda **kwargs: calls.append(kwargs))
-    # Even this tiny synthetic available byte count is admitted below90: no2GiB floor.
+    # Even this tiny synthetic available byte count is admitted below91: no2GiB floor.
     monkeypatch.setattr(runtime, "system_memory_snapshot", lambda: SystemMemory(1000, available))
     if allowed:
         runtime.guard(stage="unit")
     else:
-        with pytest.raises(MemoryBudgetError, match="strictly below 90"):
+        with pytest.raises(MemoryBudgetError, match="strictly below 91"):
             runtime.guard(stage="unit")
     assert calls == [{"stage": "unit", "hard_budget_gib": 5.0, "headroom_gib": 0.75}]
 

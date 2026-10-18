@@ -23,14 +23,14 @@ def _snapshot(monkeypatch: pytest.MonkeyPatch, percentage: float) -> list[dict[s
     return calls
 
 
-@pytest.mark.parametrize("percentage", [85.0, 89.999])
-def test_parent_allows_below_90_without_old_absolute_floor(monkeypatch: pytest.MonkeyPatch, percentage: float) -> None:
+@pytest.mark.parametrize("percentage", [85.0, 90.0, 90.999])
+def test_parent_allows_below_91_without_old_absolute_floor(monkeypatch: pytest.MonkeyPatch, percentage: float) -> None:
     calls = _snapshot(monkeypatch, percentage)
     parent._guard()
     assert calls == [{"stage": "saved news parent", "hard_budget_gib": 5.0, "headroom_gib": 0.75}]
 
 
-@pytest.mark.parametrize("percentage", [90.0, 90.001, float("nan"), float("inf")])
+@pytest.mark.parametrize("percentage", [91.0, 91.001, float("nan"), float("inf")])
 def test_parent_rejects_boundary_or_invalid_system_percentage(monkeypatch: pytest.MonkeyPatch, percentage: float) -> None:
     _snapshot(monkeypatch, percentage)
     with pytest.raises(MemoryBudgetError):

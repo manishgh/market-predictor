@@ -1,6 +1,6 @@
 """Runtime resource policy for new news work; completed producers stay unchanged.
 
-System memory must be strictly below 90 percent. There is no absolute free-memory
+System memory must be strictly below 91 percent. There is no absolute free-memory
 floor. The existing 5 GiB process budget and 0.75 GiB headroom remain unchanged.
 These bounded I/O helpers preserve byte hashes and source checks; they do not
 reinterpret old producer policy or grant data/model admission.
@@ -21,6 +21,8 @@ from market_predictor.core.system_memory import system_memory_snapshot
 from market_predictor.evidence.io import inside
 from market_predictor.resources import assert_memory_budget
 
+MAXIMUM_SYSTEM_USED_PERCENT = 91.0
+
 
 def guard(stage: str = "news source links") -> None:
     assert_memory_budget(stage=stage, hard_budget_gib=5.0, headroom_gib=0.75)
@@ -28,8 +30,11 @@ def guard(stage: str = "news source links") -> None:
     if snapshot is None or snapshot.total_bytes <= 0 or not 0 <= snapshot.available_bytes <= snapshot.total_bytes:
         raise MemoryBudgetError(f"memory guard stopped {stage}: system memory measurement unavailable")
     used = snapshot.used_percent
-    if not math.isfinite(used) or used >= 90.0:
-        raise MemoryBudgetError(f"memory guard stopped {stage}: system memory {used:.2f}% used; requires strictly below 90%")
+    if not math.isfinite(used) or used >= MAXIMUM_SYSTEM_USED_PERCENT:
+        raise MemoryBudgetError(
+            f"memory guard stopped {stage}: system memory {used:.2f}% used; "
+            f"requires strictly below {MAXIMUM_SYSTEM_USED_PERCENT:g}%"
+        )
 
 
 def file_sha256(path: Path) -> str:
