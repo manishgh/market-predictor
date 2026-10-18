@@ -21,7 +21,40 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Execution stopped; waiting for the user to free memory — October 18
+### Overnight continuation resumed — October 18
+
+The user explicitly resumed work and authorized continuing through training while
+they sleep. This supersedes the previous request to wait. Actual launch RAM was
+78.02% used / 3.45 GiB free. The 91% system ceiling, 120-second pause, five-second
+polling, 5 GiB process budget and 0.75 GiB process headroom remain unchanged.
+
+Fresh source native session 1767 / PID 108064 started at
+2026-10-18T21:36:48.467938Z and owns the shared news-source-link-index lease.
+Output: data/research/swing_news_source_links_overnight; private stage adds .partial.
+Workspace logs/state/exit prefix: review-results/news-source-links-overnight.
+Source config SHA256 remains
+f148c1f0a7123d18a9a35c6b750ec7891866fdb0ab8c10d1a4b980ff4c56fece.
+
+Fresh lightweight controller session 81838 / PID 78828 started at
+2026-10-18T21:37:20.564485Z, waiting for this exact source run's successful exit.
+Its attempt/state/journal/child receipts live under review-results/news-step4-overnight;
+outer logs use review-results/news-step4-overnight-controller.*. It holds no heavy
+lease while waiting. On success it pins the actual manifest, runs the real July
+pilot and actual parity check, then publishes the remaining months sequentially.
+No monthly child or training has started. All failed older attempts are preserved.
+
+Fresh operators, with only attempt paths/PID/start bindings changed:
+- work/run_news_source_links_overnight.py: 58d7e6d5d9ba180b7997ebb9dc0f18a2172c92bbc30d8c40e917e8c33f86fa6c
+- work/pin_actual_news_publication_overnight.py: 29c6182bd92f3f0ad5fa8dad22f83e9e711a78ec37024772387aec3f585b3b3b
+- work/run_news_step4_overnight.py: c63e04cfda7eb65c1ebe2b7375d895c788d38b340051b89596ce63b678ed34fa
+
+Step 4 remains in progress. Next close its actual publication evidence, freeze the
+third profile and feature acceptance matrix, then fit the remaining Ridge and
+shallow XGBoost specifications using the existing targets/splits/costs. Four baseline
+fits and the completed corpus are retained. Training authorization does not imply
+SPY outperformance, serving or promotion acceptance. TradingFlow remains untouched.
+
+### Previous requested wait — October 18 (historical; superseded by resume)
 
 The user explicitly requested: "Wait until I can free memory." Start no new data
 jobs or continuation controller until the user confirms memory is available.
