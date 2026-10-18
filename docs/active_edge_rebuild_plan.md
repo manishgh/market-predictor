@@ -21,7 +21,47 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Active real source-link retry — October 18
+### Current user amendment:91% memory ceiling — October18
+
+The user explicitly raised the news-job system RAM ceiling to91%. This supersedes
+the previous90% limit for the new source-link/monthly runtime only. Keep the5GiB
+process budget,0.75GiB headroom, shared lease and all source/hash/time checks.
+There is no separate absolute free-RAM floor. At or above91% still stops work;
+unknown/malformed system measurements also stop work.
+
+The October18 native42930/PID12080 retry already exited1 at
+2026-10-18T19:00:03.9080134Z when RAM reached90.10%, during source-file checks
+before stage creation. The attempted owned-worker stop found no owner and stopped
+no process. Preserve review-results/news-source-links-90pct-retry logs/state/exit.
+No final index or new monthly features were published. Current measured RAM
+subsequently recovered to85.38% /2.29GiB free.
+
+Bounded change: one explicit ceiling constant and matching runtime/parent memory
+UNIT boundary cases. Do not alter completed producer files or stored artifact
+hashes, feature definitions, targets, model baselines or TradingFlow. Run affected
+UNIT checks/lint/types and one narrow review, then launch a fresh91pct destination
+with the new executed code fixed throughout. Step4 remains the current checkpoint.
+
+Implementationb810c22 is reviewed/pushed. Final24 synthetic memory UNIT checks
+and2 document checks passed (26total,1.16s); affected Ruff and strict mypy passed.
+The narrow review has no open findings. Existing protected core/corpus/sentiment
+producer hashes remain unchanged; no completed source artifact was rewritten.
+
+Actual launch check passed at84.88% used /2.37GiB free. Fresh native3565/PID81224
+started2026-10-18T19:02:57.888567Z under shared lease news-source-link-index.
+The recorded policy is maximum91.0%, no independent absolute free-RAM floor,
+5GiB process budget and0.75GiB process headroom. Workspace operator
+work/run_news_source_links_91pct.py SHA256
+273e032eebcde6beb358fe062bcebd8accfcaa20981ba0ac4a7c5971ac7c661d;
+state/stdout/stderr/exit prefix review-results/news-source-links-91pct.
+Destination data/research/swing_news_source_links_91pct; private stage adds.partial.
+Config remainsconfigs/swing_news_source_links.json SHA256
+f148c1f0a7123d18a9a35c6b750ec7891866fdb0ab8c10d1a4b980ff4c56fece.
+Initial state is source-file/relation/filing binding; no final index is published
+yet. Do not duplicate this worker or edit its pinned implementation/input/config.
+The publisher-pinning workspace helper now points to the91pct destination.
+
+### Historical90% source-link retry — October18
 
 The October9 native31175/PID86852 run exited1 at2026-10-09T17:34:52.3525416Z
 when Windows reached90.41% RAM used. It was loading retained corpus records,
