@@ -21,6 +21,8 @@ from market_predictor.edge_rebuild.temporal_manifest import build_temporal_sched
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.modeling.strategy_contract import StrategyContract, load_strategy_contract
+from market_predictor.research.news_decision_features import NEWS_COLUMNS
+from market_predictor.research.news_decision_verification import validate_news_decision_receipt
 from market_predictor.resources import assert_memory_budget
 from market_predictor.swing.contracts.holding_accounting import HoldingSpecification
 from market_predictor.swing.contracts.holding_materialization import SourcePin
@@ -45,11 +47,18 @@ from market_predictor.swing.features.panel import swing_model_feature_columns
 from market_predictor.swing.labels.frozen_exit import ExitPolicy
 from market_predictor.swing.selection import select_constrained_swing_portfolio
 from market_predictor.swing.training.return_artifacts import verify_unit
-from market_predictor.swing.training.return_comparison import _run
+from market_predictor.swing.training.return_comparison import NEWS_PROFILE, NEWS_RUNTIME_PATHS, _run
 from market_predictor.swing.training.return_validation import return_folds, security_transfer_mask
 
 Learner = Literal["regularized_linear_return", "shallow_boosted_return"]
 SCHEMA = "market_predictor.swing_saved_oof_policy_evaluation"
+CAMPAIGN_PROFILES = ("existing_technical", "technical_relationships", NEWS_PROFILE)
+CAMPAIGN_ROSTER = {"feature_profiles": list(CAMPAIGN_PROFILES),
+    "replaced_untrained_profile": "technical_relationships_issuer_reaction",
+    "learner_families": ["regularized_linear_return", "shallow_boosted_return"],
+    "exit_policies": ["target_stop_ten_session_timeout", "stop_ten_session_timeout"],
+    "maximum_learned_specifications": 6, "maximum_model_policy_trials": 12,
+    "historical_research_contract_unchanged": True}
 _IDENTITIES = ("decision_id", "security_id", "ticker", "sector", "session_date_et", "decision_time_utc")
 _OPTIONAL_SHARED = (
     "parent_decision_id", "parent_ticker", "timeframe", "bar_start_utc", "prediction_cutoff_policy_id",
@@ -89,6 +98,7 @@ class _SavedScores:
     historical_source_files: dict[str, str]
     request_sha256: str
     configuration_provenance: dict[str, Any] | None = None
+    news_verification: dict[str, Any] | None = None
 
 
 def _require(condition: bool, message: str) -> None:
@@ -99,6 +109,43 @@ def _require(condition: bool, message: str) -> None:
 def _guard() -> None:
     assert_memory_budget(stage="saved OOF policy evaluation", hard_budget_gib=5.0, headroom_gib=0.75)
     assert_system_memory_available(minimum_available_gib=0.75, maximum_used_percent=90.0)
+
+
+def _profile_guard(profile: str) -> None:
+    if profile == NEWS_PROFILE:
+        from market_predictor.research.news_runtime_memory import guard
+        guard(stage="saved news OOF policy evaluation")
+    else:
+        _guard()
+
+
+def _news_receipt(root: Path, publication: SourcePin, request: dict[str, Any], readiness: dict[str, Any],
+                  policy: TrainingReadinessPolicy, pins: dict[str, str]) -> dict[str, Any]:
+    receipt_pin = policy.saved_row_verification
+    receipt = _object(root, receipt_pin, pins)
+    verified = validate_news_decision_receipt(root, publication, receipt_pin)
+    expected_contracts = {role: getattr(policy, role).model_dump(mode="json")
+                          for role in ("strategy_contract", "research_contract", "temporal_contract")}
+    _require({role: pin.model_dump(mode="json") for role, pin in verified.contract_pins.items()} == expected_contracts,
+             "OOF news receipt contract bindings differ")
+    _require(readiness.get("saved_row_verification_sha256") == receipt_pin.sha256
+             and readiness.get("profile_sha256") == verified.request["profile_sha256"]
+             and readiness.get("model_columns") == list(verified.model_columns)
+             and readiness.get("availability_columns") == verified.availability_columns
+             and readiness.get("source_link_index") == verified.request["policy"]["source_link_index"]
+             and readiness.get("news_additions_source_replayed") is True
+             and readiness.get("inherited_parent_rows_exact") is True
+             and readiness.get("baseline_numerical_replayed") is False
+             and readiness.get("training_eligible") is False and readiness.get("serving_eligible") is False
+             and readiness.get("promotion_eligible") is False,
+             "OOF news readiness/verification identity differs")
+    for sources in ({receipt_pin.path: receipt_pin.sha256}, verified.source_files, verified.implementation_files):
+        for name, digest in sources.items():
+            _require(request["source_files"].get(name) == digest, "OOF news evidence lacks saved training request pin")
+            _pin(root, SourcePin(path=name, sha256=digest), pins)
+    return {"receipt": receipt_pin.model_dump(mode="json"), "profile_sha256": verified.request["profile_sha256"],
+            "source_link_index": receipt["source_link_index"], "consumption": "immutable_saved_verification_receipt",
+            "raw_sources_rechecked": False, "baseline_numerical_replayed": False}
 
 
 def _pin(root: Path, pin: SourcePin, pins: dict[str, str]) -> Path:
@@ -154,10 +201,12 @@ def _read_parent_metadata(
     parent_request = _object(root, SourcePin(path=(path.parent / "_request.json").relative_to(root).as_posix(),
                                           sha256=manifest["request_sha256"]), pins)
     names = tuple(swing_model_feature_columns(contract=strategy, catalyst=False))
-    if policy.feature_profile in ("technical_relationships", ISSUER_REACTION_PROFILE):
+    if policy.feature_profile in ("technical_relationships", ISSUER_REACTION_PROFILE, NEWS_PROFILE):
         names = (*names, *RETURN_RELATIONSHIP_COLUMNS)
     if policy.feature_profile == ISSUER_REACTION_PROFILE:
         names = (*names, *REACTION_COLUMNS)
+    if policy.feature_profile == NEWS_PROFILE:
+        names = (*names, *NEWS_COLUMNS)
     _require(request["feature_names"] == list(names), "OOF features differ from frozen profile order")
     _require(bool(parent_request), "parent feature request is empty")
     months = sorted({day.isoformat()[:7] for day in sessions})
@@ -165,9 +214,9 @@ def _read_parent_metadata(
     parquet: Any = pq
     pieces = []
     for month in months:
-        _guard()
+        _profile_guard(policy.feature_profile)
         record = manifest["months"][month]
-        child = record["profiles"][policy.published_profile]
+        child = record if policy.feature_profile == NEWS_PROFILE else record["profiles"][policy.published_profile]
         _require(child["path"] == f"{month}/{policy.published_profile}.parquet" and child["model_columns"] == list(names),
                  "parent feature child/profile order differs")
         clocks = {name: f"available_at_{name}" for name in names}
@@ -178,6 +227,8 @@ def _read_parent_metadata(
             _require(request["source_files"].get(key) == digest, "feature child lacks saved training request pin")
             _pin(root, SourcePin(path=key, sha256=digest), pins)
         sidecar = pinned_object(manifest_path_for(source), child["manifest_sha256"])
+        if policy.feature_profile == NEWS_PROFILE:
+            _require(sidecar.get("artifact_type") == "swing_news_decision_features", "OOF news child artifact type differs")
         _require(sidecar.get("artifact_sha256") == child["sha256"] and sidecar.get("production_ready") is False
                  and sidecar.get("inputs") == {"request_sha256": manifest["request_sha256"]}, "feature sidecar lineage differs")
         available = set(parquet.ParquetFile(source).schema.names)
@@ -192,8 +243,8 @@ def _read_parent_metadata(
         latest = pd.Series(pd.NaT, index=frame.index, dtype="datetime64[ns, UTC]")
         for column in clocks.values():
             values = frame[column].dropna().map(_clock)
-            _require(values.le(frame.loc[values.index, "decision_time_utc"]).all(), "feature availability exceeds decision cutoff")
             if len(values):
+                _require(values.le(frame.loc[values.index, "decision_time_utc"]).all(), "feature availability exceeds decision cutoff")
                 latest.loc[values.index] = pd.concat([latest.loc[values.index], values], axis=1).max(axis=1)
         frame = frame.drop(columns=list(clocks.values()))
         frame["maximum_feature_available_at_utc"] = latest
@@ -244,6 +295,8 @@ def _saved_scores(
         _require(request["source_files"].get(pin.path) == pin.sha256, "required metadata/config lacks original training pin")
     _require(readiness.get("publication_sha256") == feature_publication.sha256 and readiness.get("published_profile", "technical_market")
              == policy.published_profile, "saved readiness publication/profile differs")
+    news_verification = (_news_receipt(root, feature_publication, request, readiness, readiness_policy, pins)
+                         if policy.feature_profile == NEWS_PROFILE else None)
     temporal = load_temporal_manifest_config(temporal_path)
     sessions = build_temporal_schedule(temporal).folds[0].train_sessions
     folds = return_folds(sessions, count=policy.folds, minimum_train=policy.minimum_train_sessions, embargo=policy.embargo_sessions)
@@ -265,7 +318,7 @@ def _saved_scores(
     parameters = policy.linear.model_dump() if learner == "regularized_linear_return" else policy.boosted.model_dump()
     pieces = []
     for fold in folds:
-        _guard()
+        _profile_guard(policy.feature_profile)
         key = f"{learner}/temporal/fold-{fold.number}"
         record = manifest["units"][key]
         directory = inside(root, record["path"])
@@ -319,7 +372,7 @@ def _saved_scores(
         joined["fold"] = fold.number
         pieces.append(joined)
     return _SavedScores(pd.concat(pieces, ignore_index=True), score_days, score_days[:-10],
-                        request["source_files"], manifest["request_sha256"], configuration_provenance)
+                        request["source_files"], manifest["request_sha256"], configuration_provenance, news_verification)
 
 
 def _select(rows: pd.DataFrame, score_sessions: tuple[str, ...], entry_sessions: tuple[str, ...], strategy: StrategyContract
@@ -382,8 +435,15 @@ def publish_saved_oof_policy_evaluation(
     """
     root, output = root.resolve(), inside(root.resolve(), output)
     _require(output.parent == root / "data/research" and not output.exists(), "OOF output must be a new research directory")
+    preflight_pins: dict[str, str] = {}
+    _, fit_request = _run(root, inside(root, run_manifest.path).parent, run_manifest.sha256, preflight_pins)
+    fit_policy = ReturnTrainingPolicy.model_validate(fit_request["policy"])
+    _require(fit_policy.feature_profile in CAMPAIGN_PROFILES, "saved model profile is outside the current six-specification campaign")
     package = Path(__file__).resolve().parents[1]
     implementations = {f"src/market_predictor/{name}": file_sha256(package / name) for name in IMPLEMENTATION_PATHS}
+    if fit_policy.feature_profile == NEWS_PROFILE:
+        for name in (*NEWS_RUNTIME_PATHS, "research/news_decision_features.py", "research/news_decision_verification.py"):
+            implementations[f"src/market_predictor/{name}"] = file_sha256(package / name)
     request = {"schema": SCHEMA, "run_manifest": run_manifest.model_dump(mode="json"),
                "feature_publication": feature_publication.model_dump(mode="json"), "target_config": target_config.model_dump(mode="json"),
                "strategy_contract": strategy_contract.model_dump(mode="json"),
@@ -392,23 +452,28 @@ def publish_saved_oof_policy_evaluation(
                     if historical_configuration_evidence is not None else None),
                "learner": learner, "exit_policy": exit_policy, "action_projection_sha256": evidence.projection_sha256,
                "action_audit_sha256": evidence.audit_sha256, "implementation_files": implementations,
+               "campaign_roster": CAMPAIGN_ROSTER, "feature_profile": fit_policy.feature_profile,
                "selection": "feature_and_cross_section_and_temporal_scope_rank_without_target_or_score_threshold",
                "serving_eligible": False, "promotion_eligible": False}
     output.mkdir()
     write_json_object(output / "_request.json", request)
     request_sha256 = file_sha256(output / "_request.json")
-    pins = dict(implementations)
+    pins = {**implementations, **preflight_pins}
     strategy = load_strategy_contract(_pin(root, strategy_contract, pins))
     research = load_swing_research_contract(_pin(root, research_contract, pins))
     research.assert_strategy_matches(strategy)
     _require(exit_policy in research.exit_policies and learner in research.learner_families,
              "OOF learner/exit lies outside frozen research")
+    _require(list(research.learner_families) == CAMPAIGN_ROSTER["learner_families"]
+             and list(research.exit_policies) == CAMPAIGN_ROSTER["exit_policies"]
+             and research.maximum_learned_specifications == 6 and research.maximum_model_policy_trials == 12,
+             "current campaign must retain the frozen six-specification/twelve-policy budget")
     _pin(root, target_config, pins)
     state: dict[str, Any] = {}
 
     def selection_loader() -> tuple[pd.DataFrame, tuple[str, ...]]:
         _require(not state, "OOF selection loader invoked more than once")
-        _guard()
+        _profile_guard(fit_policy.feature_profile)
         evidence.recheck(root)
         for name, digest in evidence.source_files.items():
             _pin(root, SourcePin(path=name, sha256=digest), pins)
@@ -433,7 +498,7 @@ def publish_saved_oof_policy_evaluation(
         benchmarks: dict[str, HoldingSpecification] = {}
         gaps: list[dict[str, Any]] = []
         for decision in selected.itertuples(index=False):
-            _guard()
+            _profile_guard(fit_policy.feature_profile)
             lot = provider.lot(decision.decision_id)
             _require(lot.decision_id == decision.decision_id and lot.canonical_security_id == decision.security_id,
                      "funded lot changed selected identity")
@@ -445,7 +510,7 @@ def publish_saved_oof_policy_evaluation(
         expected_benchmarks = {"SPY", "QQQ", *selected.primary_benchmark.astype(str)}
         _require(set(provider.benchmark_tickers) == expected_benchmarks, "funded benchmark identities differ")
         for ticker in sorted(expected_benchmarks):
-            _guard()
+            _profile_guard(fit_policy.feature_profile)
             lot = provider.benchmark(ticker)
             if lot.missing_reasons or lot.specification is None:
                 gaps.append({"benchmark": ticker, "reasons": list(lot.missing_reasons) or ["benchmark_valuation_unavailable"]})
@@ -475,6 +540,8 @@ def publish_saved_oof_policy_evaluation(
                   "historical_training_request_sha256": saved.request_sha256,
                   "historical_training_source_provenance": saved.historical_source_files,
                   "historical_configuration_verification": saved.configuration_provenance,
+                  "news_saved_verification": saved.news_verification,
+                  "campaign_roster": CAMPAIGN_ROSTER,
                   "source_files": dict(sorted(pins.items())), "serving_eligible": False, "promotion_eligible": False,
                   "training_eligible": False, "economic_eligible": False, "source_admitted": False}
         write_json_object(output / "report.json", report)

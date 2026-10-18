@@ -20,6 +20,7 @@ from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.resources import assert_peak_memory_budget, release_process_memory
+from market_predictor.swing.contracts.return_training import ReturnTrainingPolicy
 from market_predictor.swing.datasets.symbol_corrections import pinned_object
 from market_predictor.swing.training.return_artifacts import verify_unit
 
@@ -29,6 +30,49 @@ SCOPES = ("temporal", "security_transfer")
 FLAGS = ("serving_eligible", "promotion_eligible", "portfolio_evaluated", "outer_validation_opened",
     "historical_test_opened")
 PROFILE_BINDINGS = {"feature_profile", "published_profile", "readiness", "readiness_config"}
+NEWS_PROFILE = "technical_relationships_news"
+NEWS_RUNTIME_PATHS = ("research/news_runtime_memory.py", "resources.py", "process_memory.py", "core/system_memory.py")
+
+
+def _paired_requests(requests: list[dict[str, Any]]) -> dict[str, Any]:
+    """Permit only the recorded operational ceiling amendment for the new news arm."""
+    memories = [request.get("memory_policy") for request in requests]
+    different_memory = memories[0] != memories[1]
+    if different_memory:
+        for request, memory in zip(requests, memories, strict=True):
+            try:
+                policy = ReturnTrainingPolicy.model_validate(request["policy"])
+            except ValueError as exc:
+                raise DataReadinessError("memory amendment requires validated frozen return-training policies") from exc
+            news = policy.feature_profile == NEWS_PROFILE
+            expected = {"maximum_system_used_percent": 91.0 if news else 90.0,
+                "minimum_system_free_gib": None, "maximum_process_memory_gib": 5.0,
+                "process_headroom_gib": 0.75}
+            if (memory != expected or not isinstance(memory, dict)
+                    or any(type(memory[key]) not in (int, float) for key in expected if expected[key] is not None)):
+                raise DataReadinessError("paired run memory policies differ beyond the news 90-to-91 ceiling amendment")
+        if sum(request["policy"]["feature_profile"] == NEWS_PROFILE for request in requests) != 1:
+            raise DataReadinessError("memory ceiling amendment requires exactly one news arm")
+    excluded = {"policy", "feature_names", "source_files"}
+    if different_memory:
+        excluded.add("memory_policy")
+    shared = [{name: value for name, value in request.items() if name not in excluded} for request in requests]
+    policies = [{name: value for name, value in request["policy"].items() if name not in PROFILE_BINDINGS}
+                for request in requests]
+    if json_sha256(policies[0]) != json_sha256(policies[1]) or json_sha256(shared[0]) != json_sha256(shared[1]):
+        raise DataReadinessError("paired runs use different calendars, populations, holdouts or fitting settings")
+    return {"baseline": memories[0], "candidate": memories[1],
+            "news_system_ceiling_amendment_applied": different_memory,
+            "numerical_fitting_settings_and_library_versions_equal": True}
+
+
+def _comparison_guard(news: bool) -> None:
+    if news:
+        from market_predictor.research.news_runtime_memory import guard
+        assert_peak_memory_budget(stage="saved news prediction comparison", hard_budget_gib=5.0, headroom_gib=0.75)
+        guard(stage="saved news prediction comparison")
+    else:
+        _guard()
 
 
 def paired_session_errors(baseline: pd.DataFrame, candidate: pd.DataFrame) -> pd.DataFrame:
@@ -143,7 +187,6 @@ def compare_saved_returns(*, root: Path, baseline: Path, baseline_sha256: str, c
     if not runtime.is_absolute():
         runtime = root / runtime
     with heavy_job_lease("compare-saved-swing-returns", runtime_dir=runtime):
-        _guard()
         pins: dict[str, str] = {}
         for module in (__file__, Path(__file__).with_name("return_artifacts.py")):
             path = Path(module)
@@ -151,22 +194,24 @@ def compare_saved_returns(*, root: Path, baseline: Path, baseline_sha256: str, c
         runs = [_run(root, path, digest, pins) for path, digest in
             ((baseline, baseline_sha256), (candidate, candidate_sha256))]
         requests = [run[1] for run in runs]
+        memory_comparison = _paired_requests(requests)
+        news = any(request["policy"]["feature_profile"] == NEWS_PROFILE for request in requests)
+        _comparison_guard(news)
+        if news:
+            package = Path(__file__).resolve().parents[2]
+            for name in NEWS_RUNTIME_PATHS:
+                path = package / name
+                pins[path.relative_to(root).as_posix()] = file_sha256(path)
         arms = {name: {"directory": inside(root, path).relative_to(root).as_posix(),
             "manifest_sha256": digest, "request_sha256": run[0]["request_sha256"],
             "feature_names": run[1]["feature_names"]} for name, path, digest, run in
             zip(("baseline", "candidate"), (baseline, candidate), (baseline_sha256, candidate_sha256), runs, strict=True)}
-        shared = [{name: value for name, value in request.items() if name not in
-            {"policy", "feature_names", "source_files"}} for request in requests]
-        policies = [{name: value for name, value in request["policy"].items() if name not in PROFILE_BINDINGS}
-            for request in requests]
-        if policies[0] != policies[1] or shared[0] != shared[1]:
-            raise DataReadinessError("paired runs use different calendars, populations, holdouts or fitting settings")
         groups = {}
         for family in FAMILIES:
             for scope in SCOPES:
                 pieces = []
                 for fold in requests[0]["folds"]:
-                    _guard()
+                    _comparison_guard(news)
                     key = f"{family}/{scope}/fold-{fold['number']}"
                     frames, units = [], []
                     for manifest, request in runs:
@@ -212,13 +257,14 @@ def compare_saved_returns(*, root: Path, baseline: Path, baseline_sha256: str, c
             "aggregation": "equal_weight_per_session_over_disjoint_scoring_folds",
             "difference_direction": "candidate_minus_baseline_negative_error_difference_is_improvement",
             "target": TARGET, "source_files": pins, "arms": arms, "groups": groups,
+            "request_memory_policy_comparison": memory_comparison,
             "comparison_runtime": {"python": platform.python_version(), "pandas": pd.__version__, "numpy": np.__version__},
             **dict.fromkeys(FLAGS, False), "new_fit_authorized": False,
             "independent_observations_assumed": False}
         for name, digest in pins.items():
             if file_sha256(inside(root, name)) != digest:
                 raise DataReadinessError("comparison source changed before report publication")
-        _guard()
+        _comparison_guard(news)
         output.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=output.parent, prefix=".comparison-") as temporary:
             staged = Path(temporary) / output.name
