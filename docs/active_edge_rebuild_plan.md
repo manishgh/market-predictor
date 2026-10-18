@@ -21,6 +21,28 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Latest verified execution status — October18
+
+The91% native3565/PID81224 source-link run exited1 at
+2026-10-18T19:11:50.1396711Z. Its actual measurement was91.18% system RAM used;
+the configured rule remains strictly below91%. The guard stopped source-file
+verification in _bookends/runtime.pin_file, before private-stage creation.
+No final source-link index or209-column monthly dataset was published. Worker
+and shared lease are gone. Preserve news-source-links-91pct state/stdout/stderr/
+exit files in the workspace review-results directory. The91% implementation and
+its previously passed tests remain pushed; a successful source/data run is absent.
+
+Three actual later memory samples at19:30:07–19:30:28Z measured75.70%,74.57%,
+74.72% used (3.81–3.99GiB free). Workspace receipt:
+review-results/news-91pct-memory-diagnostic.json. The samples are AFTER failure;
+they cannot identify the process responsible for the earlier91.18% peak. No
+unrelated process was stopped, and the ceiling has not been raised again.
+
+Full retained-corpus enrichment and four baseline fits remain complete. Decision-
+time news publication, its acceptance/feature freeze, two remaining model fits,
+SPY policy comparison, independent assessment, accepted API V1 and main merge
+remain pending. The previous "active91%" launch paragraph below is historical.
+
 ### Current user amendment:91% memory ceiling — October18
 
 The user explicitly raised the news-job system RAM ceiling to91%. This supersedes

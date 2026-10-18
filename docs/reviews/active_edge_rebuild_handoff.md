@@ -21,6 +21,28 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Latest verified execution status — October18
+
+The91% native3565/PID81224 source-link run exited1 at
+2026-10-18T19:11:50.1396711Z. Its actual measurement was91.18% system RAM used;
+the configured rule remains strictly below91%. The guard stopped source-file
+verification in _bookends/runtime.pin_file, before private-stage creation.
+No final source-link index or209-column monthly dataset was published. Worker
+and shared lease are gone. Preserve news-source-links-91pct state/stdout/stderr/
+exit files in the workspace review-results directory. The91% implementation and
+its previously passed tests remain pushed; a successful source/data run is absent.
+
+Three actual later memory samples at19:30:07–19:30:28Z measured75.70%,74.57%,
+74.72% used (3.81–3.99GiB free). Workspace receipt:
+review-results/news-91pct-memory-diagnostic.json. The samples are AFTER failure;
+they cannot identify the process responsible for the earlier91.18% peak. No
+unrelated process was stopped, and the ceiling has not been raised again.
+
+Full retained-corpus enrichment and four baseline fits remain complete. Decision-
+time news publication, its acceptance/feature freeze, two remaining model fits,
+SPY policy comparison, independent assessment, accepted API V1 and main merge
+remain pending. The previous "active91%" launch paragraph below is historical.
+
 ### Current user amendment:91% memory ceiling — October18
 
 The user explicitly raised the news-job system RAM ceiling to91%. This supersedes
@@ -4095,14 +4117,14 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: ordered step4. Follow active91% native3565/PID81224
-source-link run and review-results/news-source-links-91pct state/logs.
-Implementationb810c22 is pushed; preserve fixed source config and code while the
-worker runs. The user-approved current limit is strictly below91%, with no
-independent absolute free-RAM floor; keep5GiB process budget/.75GiB headroom and
-one shared lease. Preserve all previous failed stages/logs. On actual successful
-index publication, pin that final real manifest, run the prepared July pilot/parity,
-then continue the same209-column monthly publication. No model fit/output yet.
+Exact next checkpoint: ordered step4 remains incomplete. The91% source-link
+worker exited at91.18% system RAM; no worker/lease remains and no final index
+exists. Preserve the recorded failure and later memory samples. Keep the current
+91% ceiling/process limits; do not claim a published dataset or repeat completed
+source reviews/baseline fits. A next actual source-link attempt must use a fresh
+destination, unchanged verified sources, and record its memory/process state.
+Only actual final index publication permits its exact manifest pin and prepared
+July pilot/parity, then209-column monthly continuation and the two pending fits.
 Reviewed/pushed components: kernel1449a97,parentloader1dbd5f6,bridge71c9f32,
 publisherf8ea4e6. Fullcorpus/index andactualparentpilot are complete; sourcebridge
 and monthly209 publication still require actual run evidence. On sourcebridge exit,
