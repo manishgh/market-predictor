@@ -21,6 +21,68 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Training and comparison connection implemented — October 18
+
+Pushed software commits: 7843a14 (209-column news verification/readiness/training
+consumer) and 769ed1c (saved-score comparison and funded-policy news reader).
+These are software checkpoints; no actual209 publication or new fit has completed.
+Source PID108064 / controller PID78828 remain the active attempt described below.
+The running source's dependency files were not edited. Four baseline fits remain
+unchanged. Numerical runtime/package versions match both retained baseline runs.
+
+The new independent verifier compares all saved124 parent values/targets/eligibility
+against unchanged parent rows and recomputes the85 additions from the source index,
+one month at a time. It requires actual complete59-month/586,305-row evidence before
+writing its receipt. Original archive hashes stay in source_replay_files; training
+checks the receipt and exact saved209 artifacts/configs/current code it consumes.
+It does not reopen original archives around every fit or claim raw replay at fit time.
+Current contracts are tied to retained historical contracts through exact archived
+bytes and three naming-only differences. Existing evaluation-only evidence supplies
+byte correspondence, never new-fit permission. Offline fits are authorized by the
+user's experiment request and the frozen return-training policy; serving/promotion
+flags stay false. "Offline" still uses real retained articles/prices, not mock data.
+
+Actual parent metadata has124 model inputs but164 physical timestamp mappings.
+The new publication retains249 physical mappings while the model consumes209.
+The verifier preserves that distinction. A failed synthetic evaluation case also
+showed that comparing an empty timestamp array to UTC decisions raised an exception;
+the reader now retains absent clocks without comparing an empty array. Timestamp
+storage conversion in verification is allowed only if converting back loses no time
+value, and inherited parent dtype checks remain exact. No saved data format changed.
+
+Verification: new verifier18 UNIT cases passed (16 in127.67s,2 in1.94s); consumer
+focused UNIT runs passed31, then7, then3 cases (overlapping scopes, not41 distinct
+tests). After the empty-clock repair,22 new evaluation cases plus one existing
+temporal-score case passed in38.57s. Earlier mixed evaluation run had28 passes and
+one failed empty-clock case; its receipt is retained. Final affected Ruff/strict mypy
+and git diff --check passed. Synthetic data/mocks were confined to unit fixtures.
+Consolidated consumer/operator review has no open supported finding; root reviewed
+the verifier and evaluation changes and fixed the actual physical-clock conflict.
+
+Comparison retains exact numerical library versions, parameters, calendar, fit
+identities, label maturity, weights and targets. The sole permitted resource
+difference is old90% versus new-news91%, explicitly recorded for both arms.
+The current campaign roster replaces only the unfitted old reaction slot with
+technical_relationships_news; the other two profiles, two learners, two exits and
+six-specification/twelve-policy budget remain fixed. Original research/target config
+hashes are preserved. No model threshold, holding period or estimator was changed.
+
+Prepared operators (syntax/Ruff checked; not yet run on real outputs):
+- work/run_news_final_verification.py: a70089406b3f2e3aa7a66ae0d208593fede2e3068feaec3b3f87bcdc63732797
+- work/pin_news_training_configs.py: f5de5d470c65f8deca705773e905d308be6e078b3db4c4dc6b8141b6affdab9e
+- work/verify_news_fit_scope.py: 5c28bc428fe415b459ca5c2f7d273ab1b5d12cbd9f487d2a9d4a430ba625a47d
+- work/run_news_return_training.py: c418514d6e662656c35f34789bacf432c351df138c705bcd887e910bd3e0a8f6
+
+After actual step4 publication: run final verification with its actual manifest SHA;
+pin readiness config from the actual verification receipt; run the canonical readiness
+audit; pin training config from the actual audit; compare actual fit populations and
+weights against both retained baseline bundles; update/freeze the feature acceptance
+audit with actual results; run the existing two learners via the prepared operator.
+It requires external config, fit-scope and feature-audit hashes. Continue to the two
+paired diagnostics and12 funded-policy evaluations only after actual training ends.
+No future holdout data, SPY performance, source-wide coverage or accepted model is
+invented. TradingFlow remains untouched.
+
 ### Overnight continuation resumed — October 18
 
 The user explicitly resumed work and authorized continuing through training while

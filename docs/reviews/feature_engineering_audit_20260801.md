@@ -1,5 +1,32 @@
 # Current Feature Engineering Audit
 
+### Revised news profile: software connection complete; actual feature evidence pending — October18
+
+The current third slot is technical_relationships_news:124 unchanged parent model
+columns plus85 observed source-text cue statistics, not126 verified world-event
+columns. Existing six-specification/twelve-policy budget and four fits remain fixed.
+Code7843a14 connects exact saved209 rows to existing offline return fitting;
+769ed1c connects saved-score comparison and funded evaluation. No new fit or measured
+return improvement is claimed by these software changes.
+
+| Layer | Actual status and evidence before fitting |
+| --- | --- |
+| Existing parent/targets | Retain original124 publication e9ec4b...ef04c, saved-row receipt e10679...1086 and original replay aa8000...cec9; no numerical reconstruction. |
+| Source/cue inputs | Completed516,679-version corpus retained; fresh source-link run still active. Original clocks remain historical_proxy; provider-wide coverage/world actors remain unknown. |
+| Historical209 rows | Publisher/kernel reviewed and unit-tested; final59-month/586,305-row output and full new-addition replay receipt still absent. Actual completion is required before fitting. |
+| Model order/clocks | Exact kernel85 suffix and parent124 prefix;209 model clock keys,249 physical mappings preserved. Full replay checks values/nulls/reasons/clocks and parent parity; code verified, actual report pending. |
+| Training consumption | Flat monthly reader and explicit offline scope implemented; requires real receipt, contract correspondence, readiness masks/missingness and unchanged actual fit-ID/weight proof before fits. |
+| Batch/single construction | Same pure kernel; existing future/revision/copy/missingness UNIT evidence retained. Real July sampled parity and complete monthly replay still pending this run. |
+| API/serving/promotion | Not applicable to permission for this explicitly authorized offline experiment. No registry/release output; all serving/promotion/source admission flags stay false. Real live-source parity and accepted-model API V1 remain separate later work. |
+
+No embeddings or fresh sentiment model inference are claimed. News columns describe
+observed linked readable documents, multiple categories/directions/statuses, saved
+signed sentiment where present,1/3 calendar-day windows, age/truncation/coverage and
+four fixed interactions. Missing evidence remains null; a zero category share in an
+observed nonempty pool is not proof that no such world event occurred. Source/target
+exclusions and model settings are unchanged. Freeze this matrix with actual hashes,
+missingness and scope-proof counts before invoking the prepared training operator.
+
 ### Step 2 execution result — October 9
 
 Software 189242f adds only research/news_feature_enrichment.py and its unit tests.
