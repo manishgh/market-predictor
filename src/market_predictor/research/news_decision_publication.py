@@ -29,7 +29,8 @@ from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.research import news_decision_features as features
 from market_predictor.research import news_parent_inputs as parent_inputs
-from market_predictor.research.news_source_links import SourceLinkedNewsSlice, open_news_source_link_index
+from market_predictor.research.news_source_index_inputs import open_news_source_link_index
+from market_predictor.research.news_source_links import SourceLinkedNewsSlice
 from market_predictor.swing.datasets.return_relationship_integrity import check_files, pins, read_object
 from market_predictor.swing.features.research_partition import ResearchFeaturePartition
 
@@ -45,6 +46,7 @@ DIAGNOSTICS = ("news_projection_status", "news_suppressed_story_count", "news_se
 ADDITIONS = (*features.NEWS_COLUMNS, *NEWS_CLOCKS.values(), *NEWS_REASONS.values(), *DIAGNOSTICS)
 IMPLEMENTATION_PATHS = (
     "research/news_decision_publication.py", "research/news_decision_features.py", "research/news_source_links.py",
+    "research/news_source_index_inputs.py",
     "canonical/store.py", "canonical/contracts.py", "canonical/audits.py", "evidence/hashing.py", "evidence/io.py",
     "heavy_jobs.py", "locking.py", "swing/features/research_partition.py", "catalysts/issuer_events/news_query_scope.py",
 )
@@ -271,6 +273,9 @@ def materialize_news_decisions(*, root: Path, config: SourcePin, output: Path,
                        "rows": parent_inputs.EXPECTED_ROWS, "decision_ids_sha256": parent_inputs.EXPECTED_IDS,
                        "availability_semantics": "historical_proxy", "purpose": "research_proxy",
                        "source_files": files, "implementation_files": implementations,
+                       "source_index_producer_provenance": dict(reader.producer_source_provenance),
+                       "source_index_consumption_scope": reader.consumption_scope,
+                       "source_index_raw_sources_rechecked": reader.raw_sources_rechecked,
                        "historical_implementation_files": parent.historical_implementation_files,
                        "allowed_parent_column_changes": ["feature_profile"],
                        "uncertainty_policy": "all_news_columns_null_for_applicable_unrepresentable_source_history", **CLOSED}
@@ -341,6 +346,9 @@ def materialize_news_decisions(*, root: Path, config: SourcePin, output: Path,
                     "profile_sha256": request["profile_sha256"], "model_columns": list(columns),
                     "availability_columns": dict(clocks), "decision_ids_sha256": parent_inputs.EXPECTED_IDS,
                     "source_files": files, "implementation_files": implementations, "exclusions_added": [], **CLOSED}
+        manifest.update(source_index_producer_provenance=request["source_index_producer_provenance"],
+                        source_index_consumption_scope=request["source_index_consumption_scope"],
+                        source_index_raw_sources_rechecked=request["source_index_raw_sources_rechecked"])
         parent_inputs._guard()
         write_json_object(stage / "_manifest.json", manifest)
         stage.rename(output)

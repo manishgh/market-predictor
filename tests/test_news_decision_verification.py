@@ -38,7 +38,7 @@ def case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
                                        "non_model_diagnostic": "available_at_non_model_diagnostic"}
     raw = _write(tmp_path, "raw_payload.txt", "UNIT original news payload")
     with publisher.open_news_source_link_index(root=tmp_path, index=source.config) as reader:
-        reader.source_files[raw.path] = raw.sha256
+        assert reader.producer_source_provenance[raw.path] == raw.sha256
     monkeypatch.setattr(owner.runtime, "guard", lambda *args, **kwargs: None)
     monkeypatch.setattr(owner, "heavy_job_lease", lambda *args, **kwargs: nullcontext())
     code = _write(tmp_path, "verifier.py", "# UNIT verifier inventory")
@@ -199,7 +199,8 @@ def test_caller_and_proof_cannot_substitute_retained_temporal_authority(case: di
 
 def test_saved_receipt_consumption_does_not_claim_fresh_raw_replay(case: dict[str, Any]) -> None:
     report = owner.verify_news_decision_rows(**case["args"])
-    assert case["raw"].path in report["source_replay_files"]
+    assert report["source_index_producer_provenance"][case["raw"].path] == case["raw"].sha256
+    assert case["raw"].path not in report["source_replay_files"]
     assert case["raw"].path not in report["source_files"]
     (case["root"] / case["raw"].path).write_text("UNIT later raw mutation", encoding="utf-8")
     receipt = SourcePin(path=case["args"]["output"].as_posix(), sha256=file_sha256(case["root"] / case["args"]["output"]))

@@ -126,8 +126,12 @@ def test_future_technical_clock_is_rejected_by_shared_kernel() -> None:
 def _fixture(root: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     months = ("2024-01", "2024-02")
     parts = {months[0]: _parent(), months[1]: _parent(cut=datetime(2024, 2, 10, 22, tzinfo=UTC), ids=("d3", "d4"))}
+    raw = root / "raw_payload.txt"
+    raw.write_text("UNIT original news payload", encoding="utf-8")
+    producer_sources = {raw.name: file_sha256(raw)}
     source = root / "source.json"
-    source.write_text("UNIT retained input", encoding="utf-8")
+    write_json_object(source, {"schema": "market_predictor.news_source_links", "status": "complete_source_links_only",
+                               "source_files": producer_sources, "coverage": "unknown", **n.CLOSED})
     kernel = root / "src/market_predictor/research/news_decision_features.py"
     kernel.parent.mkdir(parents=True)
     kernel.write_text("# UNIT implementation pin", encoding="utf-8")
@@ -154,6 +158,9 @@ def _fixture(root: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     reader = Reader(_source())
     reader.source_files = files  # type: ignore[attr-defined]
     reader.implementation_files = implementations  # type: ignore[attr-defined]
+    reader.producer_source_provenance = producer_sources  # type: ignore[attr-defined]
+    reader.consumption_scope = "saved_source_link_index"  # type: ignore[attr-defined]
+    reader.raw_sources_rechecked = False  # type: ignore[attr-defined]
 
     @contextmanager
     def parent_context(**kwargs: Any):
