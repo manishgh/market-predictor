@@ -493,6 +493,12 @@ without an independent2GiB free-memory floor. Keep the5GiB process budget,
 0.75GiB process headroom and shared non-queueing heavy-job lease. Unknown memory
 measurements still stop work. Preserve completed corpus/sentiment producer bytes
 that immutable requests pin; use the new runtime for current bridge/monthly work.
+At valid system usage at/above91%, the new runtime may pause all data work for
+at most120seconds (monotonic deadline; polling at most every5seconds), keeping
+the lease and transaction; it resumes only below91% or raises on timeout.
+Invalid/unknown readings and process-budget failures still raise immediately.
+The pause must emit actual UTC pressure/recovery/timeout records. It does not
+permit work above91%, commit partial results or resume a failed old stage.
 Other workloads retain their configured limits.
 
 ## 6. Change Workflow

@@ -32,6 +32,7 @@ def test_parent_allows_below_91_without_old_absolute_floor(monkeypatch: pytest.M
 
 @pytest.mark.parametrize("percentage", [91.0, 91.001, float("nan"), float("inf")])
 def test_parent_rejects_boundary_or_invalid_system_percentage(monkeypatch: pytest.MonkeyPatch, percentage: float) -> None:
+    monkeypatch.setattr(runtime, "MAXIMUM_SYSTEM_PAUSE_SECONDS", 0.0)
     _snapshot(monkeypatch, percentage)
     with pytest.raises(MemoryBudgetError):
         parent._guard()
