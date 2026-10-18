@@ -21,6 +21,37 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Sequential continuation enabled — October 18
+
+A lightweight controller, native session 92713 / PID 106240, started at
+2026-10-18T19:52:14.028338Z. It is waiting only for source PID 4136's exact
+successful exit and final manifest. It does not hold the heavy-job lease or run
+another data worker while waiting. Source session 38801 / PID 4136 remains the
+only heavy worker. Do not launch the monthly operators manually alongside it.
+
+The reviewed controller then runs, sequentially: actual manifest-to-config pin,
+the prepared real July pilot, its actual parent/single-decision parity check,
+and the remaining monthly publication. Every child must exit zero and supply its
+exact evidence hashes before the next child starts. No failed stage reuse, retries,
+overwrites, synthetic data, model fitting, promotion or merge is performed. Existing
+canonical children own the shared lease and verify sources/code at their bookends.
+Full completion requires 59 months, 586,305 rows and 209 ordered model columns;
+all training/serving/promotion/source/world-actor admission flags remain false.
+
+Workspace operators (syntax compiled and narrow review found no open issues):
+- work/run_news_step4_continuation.py, SHA256
+  bd998fc8d670521937aa1cfac5e7211d1f671d5d2a7cdbdd782d9a083ce567b0.
+- work/run_news_monthly_full.py, SHA256
+  f559367f6ffbaf732818427fb52044bd8e0bb29d8c03f2824446e5c60c8dd447.
+
+Controller state/journal and exclusive per-phase stdout/stderr/exit receipts live
+under workspace review-results/news-step4-continuation. Outer native logs use
+review-results/news-step4-controller.*. No monthly child or actual parity proof
+exists yet; the observed controller state is waiting_only_for_named_source_exit.
+Its source-exit wait is capped at six hours. A child/source failure stops the
+sequence and leaves all actual evidence for inspection. Observe the controller
+before issuing any manual continuation. Step 4 remains incomplete.
+
 ### Active real-data retry with a memory pause — October 18
 
 The runtime remedy is reviewed and pushed as da6d501. All 38 focused synthetic

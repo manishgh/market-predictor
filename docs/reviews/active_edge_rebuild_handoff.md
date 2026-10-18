@@ -21,6 +21,37 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Sequential continuation enabled — October 18
+
+A lightweight controller, native session 92713 / PID 106240, started at
+2026-10-18T19:52:14.028338Z. It is waiting only for source PID 4136's exact
+successful exit and final manifest. It does not hold the heavy-job lease or run
+another data worker while waiting. Source session 38801 / PID 4136 remains the
+only heavy worker. Do not launch the monthly operators manually alongside it.
+
+The reviewed controller then runs, sequentially: actual manifest-to-config pin,
+the prepared real July pilot, its actual parent/single-decision parity check,
+and the remaining monthly publication. Every child must exit zero and supply its
+exact evidence hashes before the next child starts. No failed stage reuse, retries,
+overwrites, synthetic data, model fitting, promotion or merge is performed. Existing
+canonical children own the shared lease and verify sources/code at their bookends.
+Full completion requires 59 months, 586,305 rows and 209 ordered model columns;
+all training/serving/promotion/source/world-actor admission flags remain false.
+
+Workspace operators (syntax compiled and narrow review found no open issues):
+- work/run_news_step4_continuation.py, SHA256
+  bd998fc8d670521937aa1cfac5e7211d1f671d5d2a7cdbdd782d9a083ce567b0.
+- work/run_news_monthly_full.py, SHA256
+  f559367f6ffbaf732818427fb52044bd8e0bb29d8c03f2824446e5c60c8dd447.
+
+Controller state/journal and exclusive per-phase stdout/stderr/exit receipts live
+under workspace review-results/news-step4-continuation. Outer native logs use
+review-results/news-step4-controller.*. No monthly child or actual parity proof
+exists yet; the observed controller state is waiting_only_for_named_source_exit.
+Its source-exit wait is capped at six hours. A child/source failure stops the
+sequence and leaves all actual evidence for inspection. Observe the controller
+before issuing any manual continuation. Step 4 remains incomplete.
+
 ### Active real-data retry with a memory pause — October 18
 
 The runtime remedy is reviewed and pushed as da6d501. All 38 focused synthetic
@@ -4176,14 +4207,16 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: ordered step 4. Follow active native 38801 / PID 4136
-and review-results/news-source-links-memory-pause state/stdout/stderr/exit files.
-Runtime da6d501 is fixed for this run; no duplicate worker or pinned-code edits.
-At valid RAM usage >=91% it pauses all data work for up to 120 seconds, then
-resumes only below 91% or raises. Unknown readings/process-limit failures still
-raise immediately. Preserve all old failed stages and logs. After actual final
-index publication, pin its manifest and execute the real July pilot/parity before
-the same 209-column monthly continuation. Training and API admission remain pending.
+Exact next checkpoint: ordered step 4. Follow source native 38801 / PID 4136
+and the enabled lightweight controller native 92713 / PID 106240. Controller
+state/logs are under review-results/news-step4-continuation; outer native logs
+use news-step4-controller.*. Do not start manual monthly jobs or duplicate workers.
+After this exact source run exits successfully, the reviewed controller will pin
+its actual manifest, run the real July pilot/parity, and continue monthly publication
+only when each preceding phase passes. Source, code and operators stay fixed.
+The source runtime pauses valid >=91% pressure for up to 120 seconds; it never
+processes data while paused. Any timeout or invalid/process failure still stops.
+No final index/monthly output, model fit or API admission is claimed yet.
 Reviewed/pushed components: kernel1449a97,parentloader1dbd5f6,bridge71c9f32,
 publisherf8ea4e6. Fullcorpus/index andactualparentpilot are complete; sourcebridge
 and monthly209 publication still require actual run evidence. On sourcebridge exit,
