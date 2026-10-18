@@ -21,6 +21,65 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Active real-data retry with a memory pause — October 18
+
+The runtime remedy is reviewed and pushed as da6d501. All 38 focused synthetic
+UNIT cases passed in 10.08 seconds, covering the runtime, parent guard and two
+public source-link builder cases. Affected Ruff and strict mypy passed. Two
+continuity checks passed in 0.12 seconds; root git diff --check passed. The narrow
+review has no open findings. These checks are software evidence, not a completed
+data publication or model result. Protected producer files remain byte-identical.
+
+Fresh native session 38801 / PID 4136 started at 2026-10-18T19:39:08.795617Z.
+It owns the shared news-source-link-index lease. The recorded policy is strictly
+below 91% system RAM, no absolute free-RAM floor, a 120-second maximum pause and
+five-second polling; the 5 GiB process budget and 0.75 GiB headroom are unchanged.
+Workspace operator: work/run_news_source_links_memory_pause.py, SHA256
+d12a15e16e66d6d15beba618efeebe7cf4c2cd0de3de012c1a7c987375fbe5de.
+Logs/state/exit prefix: review-results/news-source-links-memory-pause.
+Fresh destination: data/research/swing_news_source_links_memory_pause;
+private stage: data/research/swing_news_source_links_memory_pause.partial.
+Source config remains configs/swing_news_source_links.json, SHA256
+f148c1f0a7123d18a9a35c6b750ec7891866fdb0ab8c10d1a4b980ff4c56fece.
+Initial state is original source/relation/filing verification. No final index or
+monthly feature output has been published yet. Follow this single worker; do not
+duplicate it or edit pinned implementation/input/config while it runs.
+
+Observe actual pause/recovery/timeout JSON records in stderr. A timeout still
+ends the job and does not make a failed stage resumable. On successful final
+publication, pin the actual manifest, run the prepared real July pilot and parity
+checks, then continue the unchanged 209-column publication through 59 months.
+Keep the completed corpus, four baseline fits, targets, costs and TradingFlow fixed.
+
+### Current remedy: pause while RAM is at or above 91% — October 18
+
+The last reviewed run stopped at 91.18% during source-file checks. Later actual
+readings were 74.57–75.70%. Earlier runs also stopped under memory pressure.
+An immediate exception ends the job and can roll back its unfinished source-index
+transaction. This observed failure justifies changing the new runtime's response
+to temporary pressure; it does not identify the process that caused a peak.
+
+The design review approved a 120-second pause, measured with a monotonic clock,
+when a valid system reading is at or above 91%. Sleep no longer than five seconds
+between checks. Keep all data/file/feature work stopped while waiting. Recheck the
+5 GiB process budget, 0.75 GiB headroom and OS snapshot on every poll. Resume only
+after a valid reading strictly below 91%. Invalid or missing measurements and
+process-budget failures still raise immediately. Sustained pressure raises after
+the bounded wait. Emit flushed UTC pause, recovery and timeout records containing
+the stage, measured usage, ceiling and elapsed wait.
+
+A pause neither commits SQLite work nor releases the shared job lease. It does
+not provide recovery after a process exit: a timeout can still roll back unfinished
+work, and an old failed stage cannot be reused under changed code. Preserve the
+completed producer files, source/hash checks, features, targets and API V1.
+
+Required checks use synthetic UNIT inputs and a fake clock: healthy state without
+waiting, exactly 91% followed by recovery, sustained pressure, invalid measurement
+or process failure during a pause, truthful transition records, and no I/O advance
+while waiting. Run affected caller cases, Ruff, strict mypy and one narrow review.
+Then push the implementation and start a fresh real-data output with fixed code
+hashes. Software checks alone do not complete step 4 or permit model training.
+
 ### Latest verified execution status — October18
 
 The91% native3565/PID81224 source-link run exited1 at
