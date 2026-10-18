@@ -21,6 +21,35 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Completed-index consumer narrowed; creator continues unchanged — October19
+
+Implementation99a753a is pushed. The actual source creator remains PID108064;
+no creator/runtime/parser dependency was edited. Its initial source-file checks
+were still running after25minutes (~12.9GB process read transfers/~900CPU seconds).
+The completed corpus itself is2.719GiB/505shards; those measurements do not prove
+which check dominates runtime. Repeating original archive hashes at every later
+publisher/parity/verifier open would repeat work unrelated to their SQLite reads.
+
+New news_source_index_inputs is the canonical reader for these new consumers.
+It inherits original NewsSourceLinkReader methods without overriding SQL, revision,
+uncertainty, company-link, proof or clock behavior. It checks externally pinned
+complete manifest/request/config/indexSQLite and unchanged executed code at both
+context ends under the caller's lease. It rejects partial/inventory/flag/policy/
+hash changes. Original source_files remain immutable producer_source_provenance;
+the consumer explicitly records saved_source_link_index/raw_sources_rechecked=False.
+Publisher and verifier preserve that entire producer map separately from files
+they actually read/check. Initial creation still checks original source files;
+no source coverage, first-seen proof or source admission is added by the adapter.
+
+All61 focused UNIT cases passed32.93s (29adapter,14publisher,18verifier), including
+original inherited query methods, input/exit tamper and preserved provenance.
+Affected Ruff and strict mypy3 sources passed; git diff --check passed. Root reviewed
+the bounded adapter/integration after the design assessment. No real monthly row
+or model fit was created by those tests. Actual output/receipt/training are pending.
+The real July operator now imports this canonical reader and verifies producer
+provenance/scope. Its current SHA256 isac100c50dfe916f2769bcc58592f6cf0fbb8205636ac926da65ff15807e24a50; syntax compiled, not run yet.
+The waiting controller freezes actual operator/source hashes after source success.
+
 ### Training and comparison connection implemented — October 18
 
 Pushed software commits: 7843a14 (209-column news verification/readiness/training

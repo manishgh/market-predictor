@@ -2,6 +2,14 @@
 
 ### Revised news profile: software connection complete; actual feature evidence pending — October18
 
+Completed-index consumption amendment99a753a (October19): original source
+creation is unchanged. Later projection uses the identical original SQLite reader
+methods, hashes every consumed index/config/code artifact at entry/exit and retains
+all original source hashes separately as producer provenance. It does not claim a
+fresh raw-provider replay.61 focused synthetic UNIT cases and affected static checks
+passed. This changes no numerical columns, target, saved row or API version; actual
+source/monthly/fit evidence is still required below.
+
 The current third slot is technical_relationships_news:124 unchanged parent model
 columns plus85 observed source-text cue statistics, not126 verified world-event
 columns. Existing six-specification/twelve-policy budget and four fits remain fixed.
