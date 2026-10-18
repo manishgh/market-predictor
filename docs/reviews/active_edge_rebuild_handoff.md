@@ -21,6 +21,33 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Active real source-link retry — October 18
+
+The October9 native31175/PID86852 run exited1 at2026-10-09T17:34:52.3525416Z
+when Windows reached90.41% RAM used. It was loading retained corpus records,
+after original Alpaca/SEC source loading, and published no final source-link index
+or monthly features. Its logs, exit receipt and private stage remain preserved.
+No source mismatch, missing credential or model result was reported by that run.
+
+October18 continuation measured79.50% RAM used /3.22GiB free. The unchanged
+reviewed implementation2b55ccb and unchanged source configf148c1f0...56fece now
+run in fresh native42930/PID12080, started2026-10-18T18:57:53.755804Z.
+Shared lease news-source-link-index; maximum system usage remains strictly below
+90%, without an absolute free-RAM floor; process budget5GiB/headroom0.75GiB.
+Workspace operator work/run_news_source_links_90pct_retry.py SHA256
+5959572156918a3b06dc2379005ae91820f10d49462cee202f6f8cd0e35a51dd;
+state/stdout/stderr/exit prefix review-results/news-source-links-90pct-retry.
+Fresh output data/research/swing_news_source_links_90pct_retry; private stage
+adds.partial. No final index is published yet. Follow this worker; do not launch
+duplicates or edit pinned code/config/source inputs. This run changes no features,
+targets, baselines, matching, API versions or TradingFlow files.
+
+On successful exit inspect final manifest/counts and exact hashes, create the
+publisher config from that real manifest (workspace pin_actual_news_publication.py
+now points to this retry), run the real July pilot/parity, then continue the same
+209-column publication through59 months/586305 decisions. Step4 remains current;
+feature acceptance/freeze, two remaining fits and SPY assessment remain pending.
+
 ### User-authorized news-job memory amendment — October 9
 
 The user explicitly requested "lets make that90% and start" after the85.2%
@@ -67,7 +94,8 @@ state/stdout/stderr/exit prefix review-results/news-source-links-90pct.
 Fresh destination data/research/swing_news_source_links_90pct; private stage
 data/research/swing_news_source_links_90pct.partial. Config remains
 configs/swing_news_source_links.json /f148c1f0a7123d18a9a35c6b750ec7891866fdb0ab8c10d1a4b980ff4c56fece.
-Initial state is original relation/filing binding; no final index published yet.
+Historical October9 launch state was original relation/filing binding; that
+run subsequently failed at90.41% as recorded in the October18 continuation above.
 Do not duplicate this worker or edit pinned runtime/source/config during the run.
 Earlier zero-row failure stages and all logs remain preserved. The pending RAM
 question is superseded by this explicit90% user instruction; no reply is needed.
@@ -4027,12 +4055,12 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: ordered step4. Follow active90% native31175/PID86852
-source-link run and its news-source-links-90pct state/logs. Runtime2b55ccb is pushed;
-do not duplicate the worker or edit its pinned input/implementation bytes. The
-user-approved rule is strictly below90%, without an independent2GiB floor; keep
-the5GiB process budget/.75GiB headroom and shared lease. Preserve both prior failed
-transactions; neither is a reusable published index.
+Exact next checkpoint: ordered step4. Follow active90% native42930/PID12080
+source-link retry and review-results/news-source-links-90pct-retry state/logs.
+The unchanged implementation2b55ccb is running against the same source config;
+do not duplicate its worker or edit pinned bytes. Preserve prior failure stages.
+After actual final index publication, pin the real manifest and run the prepared
+July pilot/parity before unchanged monthly continuation. No model fit/output yet.
 Reviewed/pushed components: kernel1449a97,parentloader1dbd5f6,bridge71c9f32,
 publisherf8ea4e6. Fullcorpus/index andactualparentpilot are complete; sourcebridge
 and monthly209 publication still require actual run evidence. On sourcebridge exit,
