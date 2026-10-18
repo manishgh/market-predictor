@@ -23,6 +23,13 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 
 ### Completed-index consumer narrowed; creator continues unchanged — October19
 
+Temporary idle-sleep hold: native session25022 runs workspace
+work/keep_news_job_awake.py. It does not require the display to stay on or alter
+persistent power settings. The status monitor refreshes
+review-results/news-overnight-heartbeat.txt; the hold releases if that heartbeat
+is older than15minutes or review-results/news-overnight-finished.json exists.
+Write the finished receipt and verify this helper exits when overnight work ends.
+
 Implementation99a753a is pushed. The actual source creator remains PID108064;
 no creator/runtime/parser dependency was edited. Its initial source-file checks
 were still running after25minutes (~12.9GB process read transfers/~900CPU seconds).
