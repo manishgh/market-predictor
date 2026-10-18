@@ -37,8 +37,12 @@ class ReturnTrainingPolicy(HoldingContract):
     scope: Literal["initial_fit_research_only"]
     readiness: SourcePin
     readiness_config: SourcePin
-    feature_profile: Literal["existing_technical", "technical_relationships", "technical_relationships_issuer_reaction"]
-    published_profile: Literal["technical_market", "technical_relationships", "technical_relationships_issuer_reaction"]
+    feature_profile: Literal[
+        "existing_technical", "technical_relationships", "technical_relationships_issuer_reaction", "technical_relationships_news"
+    ]
+    published_profile: Literal[
+        "technical_market", "technical_relationships", "technical_relationships_issuer_reaction", "technical_relationships_news"
+    ]
     target: Literal["spy_fixed_horizon_excess_return"]
     folds: Literal[4]
     minimum_train_sessions: Literal[503]

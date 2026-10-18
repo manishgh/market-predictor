@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -16,8 +17,14 @@ from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.modeling.strategy_contract import load_strategy_contract
+from market_predictor.research import news_runtime_memory
 from market_predictor.research.issuer_reaction_verification import validate_issuer_reaction_receipt
+from market_predictor.research.news_decision_publication import ARTIFACT_TYPE as NEWS_ARTIFACT_TYPE
+from market_predictor.research.news_decision_publication import CLOSED as NEWS_CLOSED
+from market_predictor.research.news_decision_publication import PROFILE as NEWS_PROFILE
+from market_predictor.research.news_decision_verification import validate_news_decision_receipt
 from market_predictor.resources import assert_memory_budget, release_process_memory
+from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.issuer_reaction_profile import ISSUER_REACTION_PROFILE
 from market_predictor.swing.contracts.issuer_reaction_publication import ARTIFACT_TYPE as REACTION_ARTIFACT_TYPE
 from market_predictor.swing.contracts.research import load_swing_research_contract
@@ -49,7 +56,18 @@ REACTION_IMPLEMENTATION_PATHS = (
 )
 
 
+NEWS_IMPLEMENTATION_PATHS = (
+    "research/swing_return_inputs.py", "swing/contracts/return_training.py",
+    "research/news_decision_verification.py", "research/news_decision_publication.py",
+    "research/news_decision_features.py", "research/news_runtime_memory.py",
+    "core/system_memory.py", "resources.py", "process_memory.py",
+)
+
+
 def _guard(policy: TrainingReadinessPolicy) -> None:
+    if policy.published_profile == NEWS_PROFILE:
+        news_runtime_memory.guard(stage="swing news training readiness")
+        return
     assert_memory_budget(stage="swing training readiness", hard_budget_gib=5.0, headroom_gib=0.75)
     snapshot = system_memory_snapshot()
     if snapshot is None:
@@ -66,6 +84,14 @@ def _verify(root: Path, pins: dict[str, str]) -> None:
     for name, digest in pins.items():
         if file_sha256(inside(root, name)) != digest:
             raise DataReadinessError(f"training readiness evidence changed: {name}")
+
+
+def _news_contracts(policy: TrainingReadinessPolicy, proven: Mapping[str, SourcePin]) -> None:
+    """Require the exact current pins whose retained-parent equivalence was verified."""
+    expected = {"research_contract": policy.research_contract, "strategy_contract": policy.strategy_contract,
+                "temporal_contract": policy.temporal_contract}
+    if dict(proven) != expected:
+        raise DataReadinessError("news readiness contracts differ from independently verified parent settings")
 
 
 def audit_swing_training_readiness(*, root: Path, config: Path, config_sha256: str, output: Path) -> dict[str, Any]:
@@ -100,22 +126,34 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
     _verify(root, pins)
     relationship = policy.published_profile == RETURN_RELATIONSHIP_PROFILE
     reaction = policy.published_profile == ISSUER_REACTION_PROFILE
-    derivative = relationship or reaction
+    news = policy.published_profile == NEWS_PROFILE
+    derivative = relationship or reaction or news
     publication_path = inside(root, policy.publication.path)
     manifest = pinned_object(publication_path, policy.publication.sha256)
     request_path = publication_path.parent / "_request.json"
     request = pinned_object(request_path, manifest["request_sha256"])
     pins[request_path.relative_to(root).as_posix()] = manifest["request_sha256"]
     receipt = pinned_object(inside(root, policy.saved_row_verification.path), policy.saved_row_verification.sha256)
-    verified = (validate_issuer_reaction_receipt(root, policy.publication, receipt) if reaction else
+    news_verified = validate_news_decision_receipt(root, policy.publication, policy.saved_row_verification) if news else None
+    if news and any(record.get(name) is not False for record in (manifest, request, receipt) for name in NEWS_CLOSED):
+        raise DataReadinessError("news publication and verification must retain all false admission flags")
+    verified = (news_verified if news_verified is not None else
+                validate_issuer_reaction_receipt(root, policy.publication, receipt) if reaction else
                 validate_return_relationship_receipt(root, policy.publication, receipt) if relationship else None)
     if verified is not None:
-        current_sources = verified.source_files if relationship else receipt["source_files"]
+        current_sources = dict(verified.source_files) if relationship or news else receipt["source_files"]
+        if news_verified is not None:
+            for name, digest in news_verified.implementation_files.items():
+                if name in current_sources and current_sources[name] != digest:
+                    raise DataReadinessError("conflicting news verification implementation pins")
+                current_sources[name] = digest
         for name, digest in current_sources.items():
             if name in pins and pins[name] != digest:
                 raise DataReadinessError("conflicting current derivative readiness pins")
             pins[name] = digest
-        for name in REACTION_IMPLEMENTATION_PATHS if reaction else RELATIONSHIP_IMPLEMENTATION_PATHS:
+        dependencies = (NEWS_IMPLEMENTATION_PATHS if news else
+                        REACTION_IMPLEMENTATION_PATHS if reaction else RELATIONSHIP_IMPLEMENTATION_PATHS)
+        for name in dependencies:
             source = Path(__file__).parents[1] / name
             key, digest = source.relative_to(root).as_posix(), file_sha256(source)
             if key in pins and pins[key] != digest:
@@ -124,10 +162,13 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
     provenance = request.get("source_files")
     if not isinstance(provenance, dict):
         raise DataReadinessError("publication provenance must bind source policies")
-    for source_pin in (policy.research_contract, policy.strategy_contract):
-        name = inside(root, source_pin.path).relative_to(root).as_posix()
-        if provenance.get(name) != source_pin.sha256:
-            raise DataReadinessError("readiness policy differs from publication provenance")
+    if news_verified is not None:
+        _news_contracts(policy, news_verified.contract_pins)
+    else:
+        for source_pin in (policy.research_contract, policy.strategy_contract):
+            name = inside(root, source_pin.path).relative_to(root).as_posix()
+            if provenance.get(name) != source_pin.sha256:
+                raise DataReadinessError("readiness policy differs from publication provenance")
     if not derivative and (manifest.get("schema") != "market_predictor.research_join"
             or manifest.get("status") != "complete_research_only"
             or manifest.get("training_eligible") is not False or manifest.get("promotion_eligible") is not False
@@ -162,6 +203,7 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
     totals: dict[str, Counter[str]] = {}
     missing: dict[str, Counter[str]] = {}
     groups: dict[str, dict[str, Counter[str]]] = {}
+    news_diagnostics: dict[str, Any] = {}
     monthly: dict[str, Any] = {}
     observed: set[Any] = set()
     securities: set[str] = set()
@@ -169,17 +211,19 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
         _guard(policy)
         record = manifest["months"][month]
         profiles = {policy.published_profile} if derivative else {"technical_market", "catalyst_full"}
-        if set(record["profiles"]) != profiles:
+        children = {NEWS_PROFILE: record} if news else record["profiles"]
+        if set(children) != profiles:
             raise DataReadinessError("profile inventory differs")
         monthly[month] = {}
         reference: pd.DataFrame | None = None
         masks: dict[str, pd.DataFrame] = {}
-        for profile, child in record["profiles"].items():
+        for profile, child in children.items():
             columns = (verified.model_columns if verified is not None else
                 tuple(swing_model_feature_columns(contract=strategy, catalyst=profile == "catalyst_full")))
+            admission = manifest if news else child["audit"]
             if (child["model_columns"] != list(columns) or child["path"] != f"{month}/{profile}.parquet"
-                    or child["audit"].get("training_eligible") is not False
-                    or child["audit"].get("promotion_eligible") is not False):
+                    or admission.get("training_eligible") is not False
+                    or admission.get("promotion_eligible") is not False):
                 raise DataReadinessError("ordered model feature contract or child scope differs")
             clocks = {name: child["availability_columns"][name] for name in columns}
             if any(clocks[name] != f"available_at_{name}" for name in columns):
@@ -190,7 +234,9 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
             pins.update(child_pins)
             _verify(root, child_pins)
             projected = list(dict.fromkeys((*CONTEXT_COLUMNS, *RETURN_COLUMNS, *columns, *clocks.values())))
-            artifact_type = (REACTION_ARTIFACT_TYPE if reaction else
+            if news:
+                projected.extend(("news_projection_status", "news_suppressed_story_count", "news_uncertainty_count"))
+            artifact_type = (NEWS_ARTIFACT_TYPE if news else REACTION_ARTIFACT_TYPE if reaction else
                              "swing_return_relationships" if relationship else "swing_research_join")
             frame, sidecar = load_canonical_artifact(path, expected_type=artifact_type, allow_research=True, columns=projected)
             if (sidecar["inputs"] != {"request_sha256": manifest["request_sha256"]}
@@ -214,6 +260,19 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
                 securities.update(frame.security_id)
             summary = {"rows": len(frame), **{name: int(state[name].sum()) for name in state}}
             monthly[month][profile] = summary
+            if news:
+                news_diagnostics[month] = {
+                    "decision_rows": len(frame),
+                    "observed_document_pool_rows": int(frame.news_direct_latest_age_hours_3d.notna().sum()),
+                    "projection_status_rows": {str(key): int(value) for key, value in
+                                               frame.news_projection_status.value_counts(dropna=False).items()},
+                    "rows_with_suppressed_stories": int(frame.news_suppressed_story_count.gt(0).sum()),
+                    "rows_with_source_uncertainty": int(frame.news_uncertainty_count.gt(0).sum()),
+                    "source_coverage_rows": {name: {
+                        "known": int(frame[name].eq(1).sum()), "unknown": int(frame[name].eq(0).sum()),
+                        "unavailable": int(frame[name].isna().sum()),
+                    } for name in columns if name.startswith("news_direct_source_coverage_known_")},
+                }
             totals.setdefault(profile, Counter()).update(summary)
             missing.setdefault(profile, Counter()).update({name: int(frame[name].isna().sum()) for name in columns})
             profile_groups = groups.setdefault(profile, {})
@@ -262,6 +321,14 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
         if reaction:
             report.update(event_authority_sha256=receipt["event_authority_sha256"],
                 qualification_publication=receipt["qualification_publication"], qualification_source_replayed=True)
+        if news_verified is not None:
+            report.update(news_additions_source_replayed=True, inherited_parent_rows_exact=True,
+                source_link_index=receipt["source_link_index"], news_diagnostics=news_diagnostics,
+                news_contract_pins={key: pin.model_dump(mode="json") for key, pin in news_verified.contract_pins.items()},
+                saved_row_verification_source_provenance=receipt["source_replay_files"],
+                raw_sources_rechecked=False,
+                news_evidence_scope="pinned_full_replay_receipt_and_current_saved_publication",
+                **NEWS_CLOSED)
     output.parent.mkdir(parents=True, exist_ok=True)
     write_json_object(output, report)
     return {**report, "report_sha256": file_sha256(output)}

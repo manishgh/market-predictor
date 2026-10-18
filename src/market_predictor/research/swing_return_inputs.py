@@ -16,11 +16,17 @@ from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside
 from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.research.issuer_reaction_verification import validate_issuer_reaction_receipt
+from market_predictor.research.news_decision_publication import ARTIFACT_TYPE as NEWS_ARTIFACT_TYPE
+from market_predictor.research.news_decision_publication import CLOSED as NEWS_CLOSED
+from market_predictor.research.news_decision_publication import PROFILE as NEWS_PROFILE
+from market_predictor.research.news_decision_verification import validate_news_decision_receipt
 from market_predictor.research.swing_training_readiness import (
     IMPLEMENTATION_PATHS,
+    NEWS_IMPLEMENTATION_PATHS,
     REACTION_IMPLEMENTATION_PATHS,
     RELATIONSHIP_IMPLEMENTATION_PATHS,
     _guard,
+    _news_contracts,
     _verify,
 )
 from market_predictor.resources import release_process_memory
@@ -60,9 +66,12 @@ def load_return_inputs(root: Path, policy: ReturnTrainingPolicy) -> ReturnInputs
         raise DataReadinessError("return request and readiness profile differ")
     relationship = policy.published_profile == RETURN_RELATIONSHIP_PROFILE
     reaction = policy.published_profile == ISSUER_REACTION_PROFILE
+    news = policy.published_profile == NEWS_PROFILE
     verified = None
-    if relationship or reaction:
-        dependencies = REACTION_IMPLEMENTATION_PATHS if reaction else RELATIONSHIP_IMPLEMENTATION_PATHS
+    news_verified = None
+    if relationship or reaction or news:
+        dependencies = (NEWS_IMPLEMENTATION_PATHS if news else
+                        REACTION_IMPLEMENTATION_PATHS if reaction else RELATIONSHIP_IMPLEMENTATION_PATHS)
         for name in (*IMPLEMENTATION_PATHS, *dependencies):
             source = Path(__file__).parents[1] / name
             if pins.get(source.relative_to(root).as_posix()) != file_sha256(source):
@@ -71,9 +80,24 @@ def load_return_inputs(root: Path, policy: ReturnTrainingPolicy) -> ReturnInputs
         if pins.get(receipt_pin.path) != receipt_pin.sha256:
             raise DataReadinessError("derivative readiness omits independent saved-row receipt")
         receipt = pinned_object(inside(root, receipt_pin.path), receipt_pin.sha256)
-        verified = (validate_issuer_reaction_receipt(root, memory_policy.publication, receipt) if reaction else
+        news_verified = validate_news_decision_receipt(root, memory_policy.publication, receipt_pin) if news else None
+        verified = (news_verified if news_verified is not None else
+                    validate_issuer_reaction_receipt(root, memory_policy.publication, receipt) if reaction else
                     validate_return_relationship_receipt(root, memory_policy.publication, receipt))
-        current_sources = verified.source_files if relationship else receipt["source_files"]
+        current_sources = dict(verified.source_files) if relationship or news else receipt["source_files"]
+        if news_verified is not None:
+            _news_contracts(memory_policy, news_verified.contract_pins)
+            if report.get("news_contract_pins") != {
+                key: pin.model_dump(mode="json") for key, pin in news_verified.contract_pins.items()
+            }:
+                raise DataReadinessError("return news contract evidence differs")
+            for name, digest in news_verified.implementation_files.items():
+                if name in current_sources and current_sources[name] != digest:
+                    raise DataReadinessError("conflicting news verification implementation pins")
+                current_sources[name] = digest
+            if any(record.get(name) is not False for record in
+                   (news_verified.manifest, news_verified.request, receipt, report) for name in NEWS_CLOSED):
+                raise DataReadinessError("news evidence must retain all false admission flags")
         if (report.get("published_profile") != policy.published_profile
                 or report.get("profile_sha256") != verified.request["profile_sha256"]
                 or report.get("model_columns") != list(verified.model_columns)
@@ -89,6 +113,14 @@ def load_return_inputs(root: Path, policy: ReturnTrainingPolicy) -> ReturnInputs
                 or report.get("qualification_publication") != verified.request["qualification_publication"]
                 or report.get("qualification_source_replayed") is not True):
             raise DataReadinessError("return reaction qualification source identity differs")
+        if news and (report.get("source_link_index") != verified.request["policy"]["source_link_index"]
+                or report.get("source_link_index") != receipt["source_link_index"]
+                or report.get("news_additions_source_replayed") is not True
+                or report.get("inherited_parent_rows_exact") is not True
+                or report.get("raw_sources_rechecked") is not False
+                or report.get("news_evidence_scope") != "pinned_full_replay_receipt_and_current_saved_publication"
+                or report.get("saved_row_verification_source_provenance") != receipt["source_replay_files"]):
+            raise DataReadinessError("return news source identity or replay evidence differs")
     if (report.get("schema") != "market_predictor.swing_training_readiness" or report.get("status") != "diagnostic_complete"
             or report.get("scope") != "initial_fit_fixed_horizon_diagnostics" or report.get("rows_removed") != 0
             or report.get("training_eligible") is not False or report.get("promotion_eligible") is not False
@@ -133,7 +165,7 @@ def load_return_inputs(root: Path, policy: ReturnTrainingPolicy) -> ReturnInputs
     for month in months:
         _guard(memory_policy)
         record = manifest["months"][month]
-        child = record["profiles"][policy.published_profile]
+        child = record if news else record["profiles"][policy.published_profile]
         if child["model_columns"] != list(names) or child["path"] != f"{month}/{policy.published_profile}.parquet":
             raise DataReadinessError("return model input order or month path differs")
         path = inside(publication_path.parent, child["path"])
@@ -143,7 +175,7 @@ def load_return_inputs(root: Path, policy: ReturnTrainingPolicy) -> ReturnInputs
         for source, digest in ((path, child["sha256"]), (manifest_path_for(path), child["manifest_sha256"])):
             if pins.get(source.relative_to(root).as_posix()) != digest or file_sha256(source) != digest:
                 raise DataReadinessError("return input child not bound by readiness receipt")
-        artifact_type = (REACTION_ARTIFACT_TYPE if reaction else
+        artifact_type = (NEWS_ARTIFACT_TYPE if news else REACTION_ARTIFACT_TYPE if reaction else
                          "swing_return_relationships" if relationship else "swing_research_join")
         frame, sidecar = load_canonical_artifact(path, expected_type=artifact_type, allow_research=True,
             columns=list(dict.fromkeys((*CONTEXT_COLUMNS, *RETURN_COLUMNS, *names, *clocks.values()))))
