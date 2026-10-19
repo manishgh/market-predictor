@@ -21,6 +21,36 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### August saved; continuation active after transient host pressure — October19
+
+Ready-run PID104640 saved August2022 at12:08:41Z:38/59months and376,002/586,305
+decisions. Host RAM rose from about73% to91.45%; pause12:12:57.594807Z,120-second
+timeout at93.42%, exit1 at12:15:40.5952156Z. Its measured resident memory was556MiB
+(private1382MiB), so the host-wide pressure must be distinguished from its own
+resident usage. Preserve news-monthly-full-sentiment-ready.* receipts/logs.
+
+Actual idle RAM then recovered to72%. Fresh unchanged canonical continuation
+native61858/PID113380 started12:17:36Z (14:17Berlin), using saved checkpoint
+3354fcd8e63f80020c79f597c4caf0c68e26f763ebfbd071e6ea7d353a2b0356.
+It verifies/reuses38months and builds only missing21. Current workspace operator
+work/continue_news_monthly_sentiment.py SHAba72d58ca5ce527b868ccbfad511fb1d6d9d61dfa28442a671696e3c488127c7;
+only two fresh receipt-path strings differ from the reviewed resumer. AST/Ruff
+passed. State/log/exit: news-monthly-full-sentiment-continue.*. Source/config/
+columns/targets/four baseline fits and91% ceiling remain unchanged.
+
+Monitor67350/PID53520 still provides current owner/RAM and sleep hold; its old
+monthly-phase field refers to the preserved failed ready-run. Read the continue
+state for actual feature progress. Finish via fresh news-ready-finished.json and
+verify monitor release at actual work end; old finished receipts remain intact.
+
+Prepared workspace work/freeze_news_prefit_features.py SHA
+8faa1777ce88c86fb0278d938c954ef706dee0a743dc77a4ec10886ae8397d44 passed AST/Ruff
+and one bounded code review, no open findings. It awaits actual final publication,
+replay, readiness, fit-scope and training-config pins; records ordered209-column
+missingness/clock/source/sentiment diagnostics and appends the actual prefit audit
+freeze. No data job or fit has been run by this helper. Continue through all
+prepared steps and both learners; do not stop at feature publication.
+
 ### User resumed with recovered RAM — October19
 
 User instructed start now. Actual prelaunch RAM69.04% used/4.86GiB available;

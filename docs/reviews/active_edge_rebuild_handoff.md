@@ -21,6 +21,36 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### August saved; continuation active after transient host pressure — October19
+
+Ready-run PID104640 saved August2022 at12:08:41Z:38/59months and376,002/586,305
+decisions. Host RAM rose from about73% to91.45%; pause12:12:57.594807Z,120-second
+timeout at93.42%, exit1 at12:15:40.5952156Z. Its measured resident memory was556MiB
+(private1382MiB), so the host-wide pressure must be distinguished from its own
+resident usage. Preserve news-monthly-full-sentiment-ready.* receipts/logs.
+
+Actual idle RAM then recovered to72%. Fresh unchanged canonical continuation
+native61858/PID113380 started12:17:36Z (14:17Berlin), using saved checkpoint
+3354fcd8e63f80020c79f597c4caf0c68e26f763ebfbd071e6ea7d353a2b0356.
+It verifies/reuses38months and builds only missing21. Current workspace operator
+work/continue_news_monthly_sentiment.py SHAba72d58ca5ce527b868ccbfad511fb1d6d9d61dfa28442a671696e3c488127c7;
+only two fresh receipt-path strings differ from the reviewed resumer. AST/Ruff
+passed. State/log/exit: news-monthly-full-sentiment-continue.*. Source/config/
+columns/targets/four baseline fits and91% ceiling remain unchanged.
+
+Monitor67350/PID53520 still provides current owner/RAM and sleep hold; its old
+monthly-phase field refers to the preserved failed ready-run. Read the continue
+state for actual feature progress. Finish via fresh news-ready-finished.json and
+verify monitor release at actual work end; old finished receipts remain intact.
+
+Prepared workspace work/freeze_news_prefit_features.py SHA
+8faa1777ce88c86fb0278d938c954ef706dee0a743dc77a4ec10886ae8397d44 passed AST/Ruff
+and one bounded code review, no open findings. It awaits actual final publication,
+replay, readiness, fit-scope and training-config pins; records ordered209-column
+missingness/clock/source/sentiment diagnostics and appends the actual prefit audit
+freeze. No data job or fit has been run by this helper. Continue through all
+prepared steps and both learners; do not stop at feature publication.
+
 ### User resumed with recovered RAM — October19
 
 User instructed start now. Actual prelaunch RAM69.04% used/4.86GiB available;
@@ -4677,16 +4707,17 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: active real continuation native84873/PID104640,
-review-results/news-monthly-full-sentiment-ready-state.json/.log/.exit.json.
-It began11:57:29Z from verified37months/365,008decisions and externalff60ce16...de0ef
-checkpoint, after RAM recovered to69%. Keep frozen source/config/operator bytes
-unchanged and91% ceiling. After59months run prepared final replay, readiness,
-fit-scope proof, actual feature-audit freeze, remaining two learners and comparisons.
-Fresh monitor67350/PID53520 holds idle sleep using news-ready-finished.json;
-write explicit final work status there and verify release at actual work end.
-Previous failed attempts/finished receipts remain preserved. Training pending;
-user authorization is active. Do not stop at feature publication or code checks.
+Exact next checkpoint: active canonical continuation native61858/PID113380,
+review-results/news-monthly-full-sentiment-continue-state.json/.log/.exit.json.
+It began12:17:36Z from38months/376,002decisions and checkpoint3354fcd8...b0356
+after RAM recovered to72%; configdea87d23...1eec and Julyparity53377f59...22dde
+unchanged. Keep src/config/operator bytes frozen. Finish59months and prepared
+final replay/readiness/fit-scope, then freeze_news_prefit_features.py with actual
+five input pins+auditSHA, both learners and evaluations. No new training yet.
+Monitor67350/PID53520 has current owner/RAM but historical failed monthly phase;
+use continue-state for progress, news-ready-finished.json for eventual release.
+All prior attempts remain preserved. User memory question pending; continue while
+actual headroom permits, retaining91% limit and TradingFlow boundary.
 Reviewed/pushed components: kernel1449a97,parentloader1dbd5f6,bridge71c9f32,
 publisherf8ea4e6. Fullcorpus/index andactualparentpilot are complete; sourcebridge
 and monthly209 publication still require actual run evidence. On sourcebridge exit,
