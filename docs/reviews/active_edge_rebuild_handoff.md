@@ -21,6 +21,35 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Real sentiment identity evidence complete; fresh July/full controller running — October19
+
+Evidence session6216/PID83144 exited0 at2026-10-19T03:51:23.3316781Z.
+data/research/swing_news_sentiment_copy_evidence/_manifest.json SHA256
+264ef868f531ac4a9de5f69338d84ac35046f952f5c1b86cf71e7ec436fadd72.
+It checked all516,679corpus versions and retained61,255query copies across12,972
+exact-version groups:58,183verified scoring identities,3,072missing saved scores.
+These are source-copy units, not unique articles or eligible decision counts.
+No new sentiment inference/provider collection/source-index rebuild occurred.
+
+Current publication config SHA256
+dea87d23abb7e45f912e1da23db0779c62a4b8561f88f1b6712516102de71eec
+pins actual evidence plus completed source e9f2f209...5da8. Prior source-only
+config retained in Git d16950b and workspace news-prior-source-only-publication-config.json.
+Implementation46e25d4/config6d425c2 pushed on codex/v1-canonical-cleanup.
+
+Fresh controller native22111/PID99620 started2026-10-19T03:51:44Z. Current
+child July pilot launcher48412 uses work/run_news_monthly_pilot_sentiment.py.
+State/logs/exit receipts: review-results/news-step4-sentiment and distinct
+news-monthly-*-sentiment-* paths. Controller freezes all src/operator bytes;
+sequence is actual July→sampled batch/single parity→all59months. Do not edit
+source dependencies during this sequence. Existing monitor1086 still holds
+automatic idle sleep; its owner/RAM fields are current but old controller fields
+refer to the preserved failed attempt. Read news-step4-sentiment/state.json.
+
+After full publication: final59-month replay, readiness, exact baseline fit-scope
+proof, actual feature-audit freeze, remaining Ridge/XGBoost fits and comparisons.
+No new fit, SPY result, serving acceptance or main merge is claimed yet.
+
 ### Saved-score copy remedy implemented; real metadata join running — October19
 
 The bounded remedy is implemented without changing the source index, original
@@ -4542,13 +4571,12 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: real saved-score metadata join session6216/PID83144.
-Watch news-sentiment-copy-evidence-state.json/.log/exit.json. On successful
-completion pin its actual manifest plus retained source e9f2f209...5da8 in the
-publication config, execute fresh *_sentiment.py pilot/parity/full operators,
-then final verification/readiness/fit-scope/feature freeze/two fits/comparisons.
-The failed empty July private stage is preserved; do not rebuild completed source
-or rerun baseline fits. Keep 91% memory guard and TradingFlow boundary unchanged.
+Exact next checkpoint: fresh monthly controller native22111/PID99620,
+review-results/news-step4-sentiment/state.json. Actual metadata evidence completed
+264ef868...add72; currentconfig dea87d23...1eec. Follow real July/parity/full with
+new *_sentiment operators. Do not edit frozen src/operator bytes. Then complete
+prepared replay/readiness/fit-scope/featurefreeze/two learners/comparisons. Keep
+91% RAM guard, four baseline fits and TradingFlow unchanged. User sleep authorization active.
 Reviewed/pushed components: kernel1449a97,parentloader1dbd5f6,bridge71c9f32,
 publisherf8ea4e6. Fullcorpus/index andactualparentpilot are complete; sourcebridge
 and monthly209 publication still require actual run evidence. On sourcebridge exit,
