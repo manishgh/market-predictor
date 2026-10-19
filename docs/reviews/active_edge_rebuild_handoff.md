@@ -21,7 +21,23 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current source attempt failed during final file checks; fresh launch waiting — October19
+### Current fresh source/controller launched — October19
+
+RAM recovered below85% for120seconds. Source session62808/PID82988 began
+2026-10-19T00:21:30.570654Z, using the unchanged source implementation/config and
+new swing_news_source_links_overnight_retry destination. Controller session96104/
+PID47448 began2026-10-19T00:22:28.095692Z, bound to this source PID/start and
+news-source-links-overnight-retry.exit.json. It waits under news-step4-overnight-retry
+and will perform the same real July pilot/parity/full publication sequence.
+The copied controller passed Ruff after a line-wrap-only repair before dependency
+freeze. No source/runtime/data/learner settings changed;91%/120seconds remain.
+Monitor work/news_overnight_status.ps1 now follows this fresh attempt and refreshes
+the idle-sleep heartbeat. The prior private stages and failed receipts remain.
+Implementation/documentation64c4e78 is pushed; code tests were already completed.
+Actual publication/verification, feature freeze, two learners and comparison remain
+the work to finish. User authorization to continue while asleep remains active.
+
+### Previous attempt failed during final file checks — October19 (historical)
 
 Source PID108064/session1767 exited1 at2026-10-19T00:14:11.8023442Z.
 RAM remained at/above91% for120.024569seconds, ending92.2766%; this was
@@ -4421,16 +4437,16 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: ordered step4, fresh launch session62808 waiting for
-sustained RAM headroom. Watch news-source-links-overnight-retry-launch-state.json;
-after actual source start bind a new controller to its exact PID/start/new manifest.
-Old source1767/PID108064 failed during final file checks; controller81838/PID78828
-exited without monthly children. Preserve both attempts and all raw evidence.
-Keep source/config dependencies fixed during a running job. Complete actual209
-publication, prepared final verification, readiness, exact baseline fit-scope proof,
-feature-audit freeze and the remaining two learners, followed by saved comparisons.
-User authorization to continue while asleep remains active; do not stop at code
-completion or bypass the91% runtime ceiling. No duplicate heavy jobs/TradingFlow edits.
+Exact next checkpoint: ordered step4, fresh source session62808/PID82988 and
+controller96104/PID47448. Watch news-source-links-overnight-retry.* and
+news-step4-overnight-retry/state.json. Controller is bound to this exact source;
+it handles actual July pilot/parity/full publication after source success. Keep
+source/config dependencies fixed; controller freezes all src/operator bytes before
+its children. Source1767/PID108064 and controller81838/PID78828 failed; preserve them.
+After full209 output run prepared final verification, readiness, exact baseline
+fit-scope proof, feature-audit freeze and remaining two learners, then comparisons.
+User authorization to continue while asleep remains active. No duplicate heavy
+jobs, runtime ceiling changes, synthetic operational evidence or TradingFlow edits.
 Reviewed/pushed components: kernel1449a97,parentloader1dbd5f6,bridge71c9f32,
 publisherf8ea4e6. Fullcorpus/index andactualparentpilot are complete; sourcebridge
 and monthly209 publication still require actual run evidence. On sourcebridge exit,

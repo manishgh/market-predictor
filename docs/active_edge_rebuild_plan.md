@@ -21,7 +21,23 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current source attempt failed during final file checks; fresh launch waiting — October19
+### Current fresh source/controller launched — October19
+
+RAM recovered below85% for120seconds. Source session62808/PID82988 began
+2026-10-19T00:21:30.570654Z, using the unchanged source implementation/config and
+new swing_news_source_links_overnight_retry destination. Controller session96104/
+PID47448 began2026-10-19T00:22:28.095692Z, bound to this source PID/start and
+news-source-links-overnight-retry.exit.json. It waits under news-step4-overnight-retry
+and will perform the same real July pilot/parity/full publication sequence.
+The copied controller passed Ruff after a line-wrap-only repair before dependency
+freeze. No source/runtime/data/learner settings changed;91%/120seconds remain.
+Monitor work/news_overnight_status.ps1 now follows this fresh attempt and refreshes
+the idle-sleep heartbeat. The prior private stages and failed receipts remain.
+Implementation/documentation64c4e78 is pushed; code tests were already completed.
+Actual publication/verification, feature freeze, two learners and comparison remain
+the work to finish. User authorization to continue while asleep remains active.
+
+### Previous attempt failed during final file checks — October19 (historical)
 
 Source PID108064/session1767 exited1 at2026-10-19T00:14:11.8023442Z.
 RAM remained at/above91% for120.024569seconds, ending92.2766%; this was
