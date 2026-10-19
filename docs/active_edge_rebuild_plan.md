@@ -21,7 +21,25 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current unattended continuation — October19, 16:08Z
+### Current unattended continuation — October19, 18:49Z
+
+User asked for actual status. The assistant-added below80% restart gate had kept
+the53-month checkpoint idle despite host RAM below the user's91% ceiling. Remove
+that extra restriction; do not restore it. Only the identity-verified idle waiter
+PID112932/native85877 was stopped; its original files remain preserved, cancellation
+receipt news-final-six-memory-gate-cancelled.json. No data worker was stopped.
+
+Actual canonical continuation native13622/Python PID9916 started18:49:07.516804Z
+after real preflight84.58% RAM. It accepted53saved months/527,146decisions and the
+same checkpoint/source/config pins below, verifies saved files, then computes only
+the six missing months. Runtime limit remains91%; no source/operator/code changes.
+Read news-monthly-full-sentiment-final-six-state.json and its log/progress/exit.
+The heartbeat instructions now follow this worker, prohibit reinstating the80%
+startup gate and preserve natural-exit/checkpoint evidence before any retry.
+Training remains pending. Next final replay/prefit freeze/two fits/comparisons
+remain as documented. Monitor53520/native67350 retains the temporary sleep hold.
+
+### Historical memory stop and superseded waiting gate — October19, 16:08Z
 
 Publisher PID113380/native61858 exited1 naturally at15:55:34Z after host RAM stayed
 above91% for120seconds, ending at91.54%. Saved progress is53/59months through2023-11:
@@ -32,7 +50,7 @@ No heavy owner remains; host RAM86.55% at16:08Z is insufficient restart headroom
 Native85877/PowerShell PID112932 is waiting via workspace
 work/queue_news_final_six.ps1 (SHA256
 560100e4624eb09acfb4b2c3d9b9b613913f5d247ead971db5a2710cfaaf6290).
-It launches the unchanged canonical resumer only after two distinct fresh monitor
+That historical waiter would launch the unchanged canonical resumer only after two distinct fresh monitor
 readings below80% RAM with no heavy owner. This is a launch-headroom condition;
 the running ceiling remains91%. Do not start another waiter/worker. Queue state:
 review-results/news-final-six-memory-gate-state.json. Fresh resumer:

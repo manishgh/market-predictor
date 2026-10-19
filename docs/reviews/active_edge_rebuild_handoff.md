@@ -21,7 +21,32 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current unattended continuation — October19, 16:08Z
+### Current unattended continuation — October19, 18:49Z
+
+User asked what was happening. The assistant-added below80% startup gate caused
+prolonged idle waiting despite RAM below the user's91% limit; it was removed.
+Identity-verified idle PowerShell PID112932/native85877 was stopped only after
+confirming no heavy owner/worker. Native85877 exited-1; retain its original gate
+state/script and news-final-six-memory-gate-cancelled.json. Do not relaunch that
+waiter or restore an arbitrary lower startup threshold.
+
+Actual continuation native13622/Python PID9916 started18:49:07.516804Z. Preflight
+RAM84.5830%, all actual operator/config/checkpoint/parity/original-failure pins
+matched. Unchanged work/continue_news_final_six_months.py SHA256
+2378b82a33e4f13bb357d6c2987d3e081087df11c1da1d2094ca08a4225e1bfd accepted53retained
+months/527,146decisions. It verifies saved53months then computes only six missing.
+State/log/progress/exit: review-results/news-monthly-full-sentiment-final-six.*.
+Starting checkpoint bec9cdff03ad6ee18a6e21f5819813e2b004ab41547497a092e08c548a135571;
+request973f339a7091c3536de51690d79a613df106a2e3cd62ed1abb201d4aac2b836d unchanged.
+The original91% runtime guard remains. No code/config/source/baseline changes.
+Do not duplicate this worker or edit frozen dependencies. Heartbeat follows this
+actual worker. Monitor53520/native67350 remains; owner/RAM current, phase fields
+stale. On another memory failure preserve receipts/natural exit/latest checkpoint;
+resume the canonical job under91% without reinstating the assistant's80% gate.
+At final59-month exit0 continue prepared final replay, readiness, exact fit-scope,
+prefit freeze/commit, two actual fits and12-policy campaign. Training remains pending.
+
+### Historical memory stop and superseded waiting gate — October19, 16:08Z
 
 Branch codex/v1-canonical-cleanup was clean at6067371 before this update. Publisher
 PID113380/native61858 exited1 naturally at15:55:34.1337043Z: host RAM stayed above91%
