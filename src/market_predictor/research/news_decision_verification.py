@@ -18,7 +18,9 @@ from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.research import news_decision_publication as publication_owner
 from market_predictor.research import news_parent_inputs as parent_owner
 from market_predictor.research import news_runtime_memory as runtime
+from market_predictor.research import news_sentiment_copy_evidence as copy_owner
 from market_predictor.research.news_decision_features import NEWS_COLUMNS
+from market_predictor.research.news_sentiment_copy_evidence import open_news_sentiment_copy_evidence
 from market_predictor.research.news_source_index_inputs import open_news_source_link_index
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.return_training import ReturnTrainingPolicy
@@ -34,6 +36,7 @@ PROFILE = publication_owner.PROFILE
 ARTIFACT_TYPE = publication_owner.ARTIFACT_TYPE
 IMPLEMENTATION_PATHS = (
     "research/news_decision_verification.py", "research/news_runtime_memory.py", "research/news_source_index_inputs.py",
+    "research/news_decision_projection.py", "research/news_sentiment_copy_evidence.py",
     "swing/datasets/return_relationship_integrity.py", "swing/contracts/holding_materialization.py",
     "swing/contracts/saved_evaluation_configuration.py", "swing/contracts/return_training.py",
     "swing/contracts/training_readiness.py", "swing/datasets/saved_evaluation_configuration.py",
@@ -163,7 +166,8 @@ def _metadata(root: Path, publication: SourcePin) -> VerifiedNewsDecisionPublica
              and checkpoint.get("request_sha256") == manifest["request_sha256"], "news publication checkpoint inventory differs")
     for key in ("rows", "profile", "profile_sha256", "model_columns", "availability_columns", "decision_ids_sha256",
                 "source_files", "implementation_files", "source_index_producer_provenance",
-                "source_index_consumption_scope", "source_index_raw_sources_rechecked"):
+                "source_index_consumption_scope", "source_index_raw_sources_rechecked",
+                "sentiment_copy_producer_provenance", "sentiment_copy_policy"):
         _require(_equal(manifest.get(key), request.get(key)), f"news publication request field differs: {key}")
     _require(request["rows"] == parent_owner.EXPECTED_ROWS and type(request["rows"]) is int
              and request["decision_ids_sha256"] == parent_owner.EXPECTED_IDS
@@ -184,9 +188,21 @@ def _metadata(root: Path, publication: SourcePin) -> VerifiedNewsDecisionPublica
              "news publication model or clock contract differs")
     config = SourcePin.model_validate(request["config"])
     policy = read_object(inside(root, config.path), config.sha256)
-    _require(set(policy) == {"schema", "source_link_index"} and policy["schema"] == publication_owner.CONFIG_SCHEMA
+    _require(set(policy) == {"schema", "source_link_index", "sentiment_copy_evidence"}
+             and policy["schema"] == publication_owner.CONFIG_SCHEMA
              and _equal(policy, request["policy"]), "news publication configuration differs")
     link = SourcePin.model_validate(policy["source_link_index"])
+    copy_pin = SourcePin.model_validate(policy["sentiment_copy_evidence"])
+    copy_manifest = read_object(inside(root, copy_pin.path), copy_pin.sha256)
+    copy_provenance = {"build_inputs": copy_manifest["source_files"], "upstream": copy_manifest["producer_source_provenance"]}
+    _require(copy_manifest.get("schema") == copy_owner.SCHEMA
+             and copy_manifest.get("status") == "complete_copy_identity_evidence_only"
+             and copy_manifest.get("source_index") == link.model_dump(mode="json")
+             and all(copy_manifest.get(key) is value for key, value in copy_owner.CLOSED.items())
+             and request.get("sentiment_copy_producer_provenance") == {
+                 "evidence": copy_pin.model_dump(mode="json"), "provenance_sha256": json_sha256(copy_provenance)}
+             and request.get("sentiment_copy_policy") == publication_owner.SENTIMENT_COPY_POLICY,
+             "news publication saved-score evidence or projection policy differs")
     producer = read_object(inside(root, link.path), link.sha256)
     _require(producer.get("schema") == "market_predictor.news_source_links"
              and producer.get("status") == "complete_source_links_only"
@@ -198,16 +214,18 @@ def _metadata(root: Path, publication: SourcePin) -> VerifiedNewsDecisionPublica
              "news source-index producer provenance or consumed-input scope differs")
     provenance = pins(root, request["source_files"])
     implementations = pins(root, request["implementation_files"])
-    _require(provenance.get(config.path) == config.sha256 and provenance.get(link.path) == link.sha256,
-             "news publication omits config or source-index pin")
+    _require(provenance.get(config.path) == config.sha256 and provenance.get(link.path) == link.sha256
+             and provenance.get(copy_pin.path) == copy_pin.sha256, "news publication omits config or source evidence pin")
     _require(request["profile_sha256"] == json_sha256({
         "profile": PROFILE, "columns": columns,
         "kernel": implementations["src/market_predictor/research/news_decision_features.py"],
         "parent_profile": request["parent_profile_sha256"], "source_index": link.model_dump(mode="json"),
+        "sentiment_copy_evidence": copy_pin.model_dump(mode="json"), "sentiment_copy_policy": request["sentiment_copy_policy"],
+        "projection": implementations["src/market_predictor/research/news_decision_projection.py"],
         "uncertainty_policy": request["uncertainty_policy"]}), "news publication profile hash differs")
     # Consumers read saved rows and this immutable evidence, not original news
     # payloads. Preserve those original hashes separately as replay provenance.
-    files = pins(root, {config.path: config.sha256, link.path: link.sha256}, {
+    files = pins(root, {config.path: config.sha256, link.path: link.sha256, copy_pin.path: copy_pin.sha256}, {
         path.relative_to(root).as_posix(): publication.sha256,
         (path.parent / "_request.json").relative_to(root).as_posix(): manifest["request_sha256"],
         (path.parent / "_checkpoint.json").relative_to(root).as_posix(): manifest["checkpoint_sha256"],
@@ -245,6 +263,9 @@ def _identity(publication: SourcePin, verified: VerifiedNewsDecisionPublication)
         "source_index_producer_provenance": verified.request["source_index_producer_provenance"],
         "source_index_consumption_scope": "saved_source_link_index",
         "source_index_raw_sources_rechecked": False,
+        "sentiment_copy_evidence": verified.request["policy"]["sentiment_copy_evidence"],
+        "sentiment_copy_policy": verified.request["sentiment_copy_policy"],
+        "sentiment_copy_producer_provenance": verified.request["sentiment_copy_producer_provenance"],
         "parent_publication": verified.request["parent_publication"],
         "parent_saved_row_verification": verified.request["parent_saved_row_verification"],
         "original_snapshot_replay": verified.request["original_snapshot_replay"],
@@ -304,24 +325,30 @@ def verify_news_decision_rows(*, root: Path, publication: SourcePin, output: Pat
         correspondence = _configuration_correspondence(root, configuration_evidence, contracts, verified.source_files)
         replay_files = pins(root, verified.source_replay_files, verified.source_files)
         link = NewsSourcePin.model_validate(verified.request["policy"]["source_link_index"])
+        copy_pin = NewsSourcePin.model_validate(verified.request["policy"]["sentiment_copy_evidence"])
         monthly: dict[str, dict[str, int]] = {}
         totals = _totals()
         with (parent_owner.verified_news_parent_inputs(root=root) as parent,
-              open_news_source_link_index(root=root, index=link) as reader):
-            fresh = pins(root, parent.source_files, reader.source_files,
+              open_news_source_link_index(root=root, index=link) as reader,
+              open_news_sentiment_copy_evidence(root=root, evidence=copy_pin, source_index=link) as scores):
+            fresh = pins(root, parent.source_files, reader.source_files, scores.source_files,
                          {verified.request["config"]["path"]: verified.request["config"]["sha256"]})
             implementations = pins(root, publication_owner._implementation(root), parent.implementation_files,
-                                   reader.implementation_files)
+                                   reader.implementation_files, scores.implementation_files)
             _require(fresh == verified.request["source_files"] and implementations == verified.request["implementation_files"],
                      "news replay current source or implementation inventory differs")
             _require(dict(reader.producer_source_provenance) == verified.request["source_index_producer_provenance"]
                      and reader.consumption_scope == "saved_source_link_index" and reader.raw_sources_rechecked is False,
                      "news replay producer provenance or consumed-input scope differs")
+            _require(verified.request["sentiment_copy_producer_provenance"] == {
+                "evidence": copy_pin.model_dump(mode="json"),
+                "provenance_sha256": json_sha256(dict(scores.producer_source_provenance))},
+                "news replay saved-score producer provenance differs")
             # These contexts bookend their own immutable source/code files. Only
             # the complementary new artifacts/proof/verifier files need another
             # pass here; never hash the full retained corpus again per month.
-            owned = pins(root, parent.source_files, reader.source_files,
-                         parent.implementation_files, reader.implementation_files)
+            owned = pins(root, parent.source_files, reader.source_files, scores.source_files,
+                         parent.implementation_files, reader.implementation_files, scores.implementation_files)
             outer = {key: digest for key, digest in replay_files.items() if key not in owned}
             runtime.recheck_files(root, outer)
             _require(verified.model_columns == (*parent.model_columns, *NEWS_COLUMNS)
@@ -343,8 +370,11 @@ def verify_news_decision_rows(*, root: Path, publication: SourcePin, output: Pat
                 saved, _ = load_canonical_artifact(inside(verified.path.parent, record["path"]),
                                                    expected_type=ARTIFACT_TYPE, allow_research=True)
                 expected = publication_owner.build_news_month(
-                    parent=ResearchFeaturePartition(baseline, parent.model_columns, parent.availability_columns, {}), reader=reader)
+                    parent=ResearchFeaturePartition(baseline, parent.model_columns, parent.availability_columns, {}),
+                    reader=reader, identity_lookup=scores.identity)
                 _compare_rows(saved, expected.rows)
+                _require(_equal(record.get("sentiment_resolution"), expected.audit["sentiment_resolution"]),
+                         "news saved sentiment resolution evidence differs")
                 _require(pd.api.types.is_bool_dtype(saved.feature_eligible.dtype), "news eligibility is not boolean")
                 summary = dict(rows=len(saved), feature_eligible=int(saved.feature_eligible.sum()),
                                complete_model_rows=int(saved[list(verified.model_columns)].notna().all(axis=1).sum()),

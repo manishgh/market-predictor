@@ -28,6 +28,7 @@ def case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     source = _fixture(tmp_path, monkeypatch)
     monkeypatch.setattr(owner.parent_owner, "_guard", lambda: None)
     monkeypatch.setattr(owner, "open_news_source_link_index", publisher.open_news_source_link_index)
+    monkeypatch.setattr(owner, "open_news_sentiment_copy_evidence", publisher.open_news_sentiment_copy_evidence)
     # Actual retained parent carries additional physical clocks outside its 124
     # model columns. Keep the full publication mapping; expose only model clocks.
     for part in source.parts.values():
@@ -133,6 +134,22 @@ def test_rehashed_child_changes_fail_full_parity(case: dict[str, Any], column: s
     with pytest.raises((DataReadinessError, AssertionError)):
         owner.verify_news_decision_rows(**case["args"])
     assert not (case["root"] / case["args"]["output"]).exists()
+
+
+def test_resealed_sentiment_resolution_metadata_fails_replay(case: dict[str, Any]) -> None:
+    root, args = case["root"], case["args"]
+    manifest_path = root / args["publication"].path
+    manifest = _json(manifest_path)
+    manifest["months"]["2024-01"]["sentiment_resolution"]["all_resolutions_sha256"] = "0" * 64
+    checkpoint_path = manifest_path.parent / "_checkpoint.json"
+    checkpoint = _json(checkpoint_path)
+    checkpoint["months"] = manifest["months"]
+    pin = _write(root, checkpoint_path.relative_to(root).as_posix(), checkpoint)
+    manifest["checkpoint_sha256"] = pin.sha256
+    args["publication"] = _write(root, manifest_path.relative_to(root).as_posix(), manifest)
+    with pytest.raises(DataReadinessError, match="sentiment"):
+        owner.verify_news_decision_rows(**args)
+    assert not (root / args["output"]).exists()
 
 
 @pytest.mark.parametrize("fault", ["scope", "bool_count", "source_pin", "missing_month", "future_claim"])

@@ -21,6 +21,37 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Saved-score copy remedy implemented; real metadata join running — October19
+
+The bounded remedy is implemented without changing the source index, original
+feature kernel, corpus, 209 model columns or four baseline models. Original
+decision/company/score/copy-proof clocks select eligible copies first. Unequal
+scores require the same retained input/model/revision/mode/length/policy/label,
+unchanged polarity and absolute spread at most 1e-5 (relative tolerance zero).
+The earliest eligible original score is retained; unproven disagreement removes
+only document sentiment and preserves lexical features. Month diagnostics retain
+counts, a complete-resolution digest and bounded original-score examples.
+
+Verification: 15 publisher +64 verifier/projection/evidence UNIT cases passed,
+then two new integration/tamper UNIT cases passed individually. Ruff affected
+files and strict mypy four source modules passed. The consolidated code/ML review
+reported no supported open findings. These are synthetic UNIT checks only.
+
+Real metadata evidence job session6216/PID83144 started2026-10-19T03:39:49Z,
+using source manifest e9f2f209...5da8 and the completed corpus. It joins saved
+scoring metadata once; no provider archive replay or new inference. State/log:
+workspace review-results/news-sentiment-copy-evidence-state.json and .log.
+The failed July stage had zero completed months and was preserved as
+data/features/.swing_news_decision_features.sentiment_conflict_failed;
+its exact checkpoint pin/path is in news-failed-july-stage-preserved.json.
+
+Fresh pilot/parity/full operators are work/*monthly*sentiment.py with separate
+*-sentiment receipts. Pin the actual evidence manifest into current publication
+config after successful completion; preserve the prior source-only config in Git.
+Then execute July, sampled parity, all59 months, complete replay, readiness,
+fit-population proof, feature-audit freeze, both learners and comparisons. No
+new fit or performance result exists yet. User authorization while asleep remains.
+
 ### Source completed; repair demonstrated duplicate-score failure — October19
 
 Source82988/session62808 exited0 at2026-10-19T03:14:01.8044681Z.

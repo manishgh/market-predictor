@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections import Counter
 from collections.abc import Callable, Mapping
 from datetime import datetime
 from pathlib import Path
@@ -29,6 +30,8 @@ from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.research import news_decision_features as features
 from market_predictor.research import news_parent_inputs as parent_inputs
+from market_predictor.research.news_decision_projection import ABSOLUTE_SCORE_SPREAD, POLICY, IdentityLookup, project_news_decisions
+from market_predictor.research.news_sentiment_copy_evidence import open_news_sentiment_copy_evidence
 from market_predictor.research.news_source_index_inputs import open_news_source_link_index
 from market_predictor.research.news_source_links import SourceLinkedNewsSlice
 from market_predictor.swing.datasets.return_relationship_integrity import check_files, pins, read_object
@@ -40,13 +43,14 @@ PROFILE = "technical_relationships_news"
 ARTIFACT_TYPE = "swing_news_decision_features"
 CLOSED = {"training_eligible": False, "promotion_eligible": False, "serving_eligible": False,
           "source_coverage_admitted": False, "world_actor_verified": False}
+SENTIMENT_COPY_POLICY = {"policy": POLICY, "absolute_spread_limit": ABSOLUTE_SCORE_SPREAD, "relative_tolerance": 0.0}
 NEWS_CLOCKS = {name: f"available_at_{name}" for name in features.NEWS_COLUMNS}
 NEWS_REASONS = {name: f"missing_reason_{name}" for name in features.NEWS_COLUMNS}
 DIAGNOSTICS = ("news_projection_status", "news_suppressed_story_count", "news_selected_version_ids_json", "news_uncertainty_count")
 ADDITIONS = (*features.NEWS_COLUMNS, *NEWS_CLOCKS.values(), *NEWS_REASONS.values(), *DIAGNOSTICS)
 IMPLEMENTATION_PATHS = (
     "research/news_decision_publication.py", "research/news_decision_features.py", "research/news_source_links.py",
-    "research/news_source_index_inputs.py",
+    "research/news_source_index_inputs.py", "research/news_decision_projection.py", "research/news_sentiment_copy_evidence.py",
     "canonical/store.py", "canonical/contracts.py", "canonical/audits.py", "evidence/hashing.py", "evidence/io.py",
     "heavy_jobs.py", "locking.py", "swing/features/research_partition.py", "catalysts/issuer_events/news_query_scope.py",
 )
@@ -109,7 +113,8 @@ def _parity(baseline: pd.DataFrame, result: pd.DataFrame) -> None:
     _require(result.feature_profile.eq(PROFILE).all(), "news publication profile field differs")
 
 
-def build_news_month(*, parent: ResearchFeaturePartition, reader: NewsSliceReader) -> ResearchFeaturePartition:
+def build_news_month(*, parent: ResearchFeaturePartition, reader: NewsSliceReader,
+                     identity_lookup: IdentityLookup | None = None) -> ResearchFeaturePartition:
     """Append the shared kernel's columns without changing any inherited economics."""
     parent_inputs._guard()
     baseline = parent.rows
@@ -119,6 +124,7 @@ def build_news_month(*, parent: ResearchFeaturePartition, reader: NewsSliceReade
     _require(set(features.TECHNICAL_COLUMNS).issubset(parent.model_columns) and
              set(parent.model_columns).issubset(parent.availability_columns), "parent technical contract is incomplete")
     computed: dict[str, dict[str, Any]] = {}
+    sentiment_resolutions: list[dict[str, Any]] = []
     for security, group in baseline.groupby("security_id", sort=True):
         parent_inputs._guard()
         _require(isinstance(security, str) and bool(security), "parent stock identity is invalid")
@@ -141,10 +147,12 @@ def build_news_month(*, parent: ResearchFeaturePartition, reader: NewsSliceReade
                 usable_decisions.append(decision)
         if not usable_decisions:
             continue
-        results = features.aggregate_news_decisions(decisions=usable_decisions, versions=sliced.versions, links=sliced.links,
-                                                     coverage=sliced.coverage, purpose="research_proxy")
+        results = project_news_decisions(decisions=usable_decisions, versions=sliced.versions, links=sliced.links,
+                                         coverage=sliced.coverage, purpose="research_proxy", identity_lookup=identity_lookup)
         _require(len(results) == len(usable_decisions), "news kernel lost decisions")
-        for decision, result in zip(usable_decisions, results, strict=True):
+        for decision, projection in zip(usable_decisions, results, strict=True):
+            result = projection.features
+            sentiment_resolutions.extend(projection.sentiment_resolutions)
             _require((result.decision_id, result.security_id, result.decision_time_utc) ==
                      (decision.decision_id, decision.security_id, decision.decision_time_utc) and
                      result.columns == features.NEWS_COLUMNS and not any((result.source_admission, result.training_eligible,
@@ -181,7 +189,21 @@ def build_news_month(*, parent: ResearchFeaturePartition, reader: NewsSliceReade
     _parity(baseline, output)
     return ResearchFeaturePartition(output, (*parent.model_columns, *features.NEWS_COLUMNS),
                                     {**parent.availability_columns, **NEWS_CLOCKS},
-                                    {"profile": PROFILE, "parent_exact_except_feature_profile": True, "rows": len(output), **CLOSED})
+                                    {"profile": PROFILE, "parent_exact_except_feature_profile": True, "rows": len(output),
+                                     "sentiment_resolution": _sentiment_resolution_audit(sentiment_resolutions), **CLOSED})
+
+
+def _sentiment_resolution_audit(resolutions: list[dict[str, Any]]) -> dict[str, Any]:
+    """Bound human diagnostics; retain a digest of every as-of original-score choice."""
+    ordered = sorted(resolutions, key=lambda item: (item["decision_id"], item["source_family"],
+                                                    item["source_document_id"], item["source_version_sha256"]))
+    examples = [{**item, "eligible_original_outputs": item["eligible_original_outputs"][:3],
+                 "eligible_original_output_count": len(item["eligible_original_outputs"]),
+                 "example_outputs_truncated": len(item["eligible_original_outputs"]) > 3} for item in ordered[:10]]
+    return {**SENTIMENT_COPY_POLICY,
+            "story_decisions": len(ordered), "decision_rows": len({item["decision_id"] for item in ordered}),
+            "reason_counts": dict(sorted(Counter(item["reason"] for item in ordered).items())),
+            "all_resolutions_sha256": json_sha256(ordered), "examples": examples}
 
 
 def _checkpoint(path: Path, state: dict[str, Any]) -> str:
@@ -210,7 +232,8 @@ def _publish_month(stage: Path, month: str, part: ResearchFeaturePartition, requ
     path.with_name(path.name + ".lock").unlink()
     return {"path": relative, "sha256": file_sha256(path), "manifest_sha256": file_sha256(sidecar),
             "rows": len(part.rows), "decision_ids_sha256": json_sha256(sorted(part.rows.decision_id)),
-            "model_columns": list(part.model_columns), "availability_columns": dict(part.availability_columns)}
+            "model_columns": list(part.model_columns), "availability_columns": dict(part.availability_columns),
+            "sentiment_resolution": part.audit["sentiment_resolution"]}
 
 
 def _child(stage: Path, record: dict[str, Any], request_sha: str, parent: pd.DataFrame,
@@ -255,13 +278,16 @@ def materialize_news_decisions(*, root: Path, config: SourcePin, output: Path,
     with heavy_job_lease("publish-news-decisions", runtime_dir=runtime if runtime.is_absolute() else root / runtime):
         parent_inputs._guard()
         policy = read_object(inside(root, config.path), config.sha256)
-        _require(set(policy) == {"schema", "source_link_index"} and policy["schema"] == CONFIG_SCHEMA, "news publication config differs")
+        _require(set(policy) == {"schema", "source_link_index", "sentiment_copy_evidence"}
+                 and policy["schema"] == CONFIG_SCHEMA, "news publication config differs")
         link_pin = SourcePin.model_validate(policy["source_link_index"])
+        evidence_pin = SourcePin.model_validate(policy["sentiment_copy_evidence"])
         local = _implementation(root)
         with (parent_inputs.verified_news_parent_inputs(root=root) as parent,
-              open_news_source_link_index(root=root, index=link_pin) as reader):
-            files = pins(root, parent.source_files, reader.source_files, {config.path: config.sha256})
-            implementations = pins(root, local, parent.implementation_files, reader.implementation_files)
+              open_news_source_link_index(root=root, index=link_pin) as reader,
+              open_news_sentiment_copy_evidence(root=root, evidence=evidence_pin, source_index=link_pin) as scores):
+            files = pins(root, parent.source_files, reader.source_files, scores.source_files, {config.path: config.sha256})
+            implementations = pins(root, local, parent.implementation_files, reader.implementation_files, scores.implementation_files)
             columns = (*parent.model_columns, *features.NEWS_COLUMNS)
             clocks = {**parent.availability_columns, **NEWS_CLOCKS}
             request = {"schema": SCHEMA + "_request", "config": config.model_dump(mode="json"), "policy": policy,
@@ -276,6 +302,9 @@ def materialize_news_decisions(*, root: Path, config: SourcePin, output: Path,
                        "source_index_producer_provenance": dict(reader.producer_source_provenance),
                        "source_index_consumption_scope": reader.consumption_scope,
                        "source_index_raw_sources_rechecked": reader.raw_sources_rechecked,
+                       "sentiment_copy_producer_provenance": {"evidence": evidence_pin.model_dump(mode="json"),
+                           "provenance_sha256": json_sha256(dict(scores.producer_source_provenance))},
+                       "sentiment_copy_policy": dict(SENTIMENT_COPY_POLICY),
                        "historical_implementation_files": parent.historical_implementation_files,
                        "allowed_parent_column_changes": ["feature_profile"],
                        "uncertainty_policy": "all_news_columns_null_for_applicable_unrepresentable_source_history", **CLOSED}
@@ -283,6 +312,10 @@ def materialize_news_decisions(*, root: Path, config: SourcePin, output: Path,
                                                      "kernel": implementations["src/market_predictor/research/news_decision_features.py"],
                                                      "parent_profile": request["parent_profile_sha256"],
                                                      "source_index": link_pin.model_dump(mode="json"),
+                                                     "sentiment_copy_evidence": evidence_pin.model_dump(mode="json"),
+                                                     "sentiment_copy_policy": request["sentiment_copy_policy"],
+                                                     "projection": implementations[
+                                                         "src/market_predictor/research/news_decision_projection.py"],
                                                      "uncertainty_policy": request["uncertainty_policy"]})
             if stage.exists():
                 _require(expected_checkpoint_sha256 is not None, "news resume requires external checkpoint SHA")
@@ -313,7 +346,8 @@ def materialize_news_decisions(*, root: Path, config: SourcePin, output: Path,
                 expected = parent_manifest["months"][month]
                 if month not in records:
                     part = build_news_month(
-                        parent=ResearchFeaturePartition(baseline, parent.model_columns, parent.availability_columns, {}), reader=reader)
+                        parent=ResearchFeaturePartition(baseline, parent.model_columns, parent.availability_columns, {}),
+                        reader=reader, identity_lookup=scores.identity)
                     records[month] = _publish_month(stage, month, part, request_sha)
                     del part
                     written += 1
@@ -348,7 +382,9 @@ def materialize_news_decisions(*, root: Path, config: SourcePin, output: Path,
                     "source_files": files, "implementation_files": implementations, "exclusions_added": [], **CLOSED}
         manifest.update(source_index_producer_provenance=request["source_index_producer_provenance"],
                         source_index_consumption_scope=request["source_index_consumption_scope"],
-                        source_index_raw_sources_rechecked=request["source_index_raw_sources_rechecked"])
+                        source_index_raw_sources_rechecked=request["source_index_raw_sources_rechecked"],
+                        sentiment_copy_producer_provenance=request["sentiment_copy_producer_provenance"],
+                        sentiment_copy_policy=request["sentiment_copy_policy"])
         parent_inputs._guard()
         write_json_object(stage / "_manifest.json", manifest)
         stage.rename(output)

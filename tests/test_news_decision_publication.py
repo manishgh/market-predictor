@@ -18,6 +18,7 @@ from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import write_json_object
 from market_predictor.research import news_decision_features as f
 from market_predictor.research import news_decision_publication as n
+from market_predictor.research.news_sentiment_copy_evidence import SentimentCopyIdentity
 from market_predictor.research.news_source_links import SourceLinkedNewsSlice, SourceLinkUncertainty
 from market_predictor.swing.features.research_partition import ResearchFeaturePartition
 
@@ -96,6 +97,35 @@ def test_missing_sources_remain_null_with_explicit_reason_and_known_zero_indicat
     assert frame.news_direct_source_coverage_known_alpaca_3d.eq(0).all()
 
 
+def test_repeated_score_resolution_preserves_parent_and_model_columns() -> None:
+    parent = _parent()
+    source = _source()
+    first = replace(source.versions[0], copy_proof_sha256="1" * 64,
+                    copy_proof_available_at_utc=CUT - timedelta(hours=2))
+    second = replace(first, version_id="second", sentiment_score=0.800001, copy_proof_sha256="2" * 64)
+    reader = Reader(replace(source, versions=(first, second),
+                            links=(*source.links, replace(source.links[0], version_id="second"))))
+
+    def identity(version: f.NewsVersion) -> SentimentCopyIdentity:
+        assert version.sentiment_score is not None and version.sentiment_available_at_utc is not None
+        return SentimentCopyIdentity(version.version_id, version.source_family, version.source_document_id,
+                                     version.sentiment_score, version.sentiment_available_at_utc,
+                                     version.source_version_sha256, "d" * 64, "ProsusAI/finbert", "e" * 40,
+                                     "title_summary", 128, "UNIT policy", "positive", "f" * 64, "UNIT evidence")
+
+    result = n.build_news_month(parent=parent, reader=reader, identity_lookup=identity)
+    n._parity(parent.rows, result.rows)
+    assert result.model_columns == (*MODEL, *f.NEWS_COLUMNS)
+    assert len(result.rows.columns) == len(parent.rows.columns) + len(n.ADDITIONS)
+    audit = result.audit["sentiment_resolution"]
+    assert audit["story_decisions"] == audit["decision_rows"] == 2
+    assert audit["reason_counts"] == {"numerically_equivalent_original_score_selected": 2}
+    assert len(audit["all_resolutions_sha256"]) == 64
+    singles = [n.build_news_month(parent=replace(parent, rows=parent.rows.iloc[[i]]), reader=reader,
+                                  identity_lookup=identity).rows for i in range(2)]
+    pd.testing.assert_frame_equal(result.rows, pd.concat(singles), check_exact=True)
+
+
 @pytest.mark.parametrize("known", [None, CUT + timedelta(hours=1)])
 def test_uncertainty_applies_only_after_causal_association_and_known_time(known: datetime | None) -> None:
     source = _source()
@@ -135,11 +165,21 @@ def _fixture(root: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     kernel = root / "src/market_predictor/research/news_decision_features.py"
     kernel.parent.mkdir(parents=True)
     kernel.write_text("# UNIT implementation pin", encoding="utf-8")
-    implementations = {kernel.relative_to(root).as_posix(): file_sha256(kernel)}
+    projection = kernel.with_name("news_decision_projection.py")
+    projection.write_text("# UNIT projection implementation pin", encoding="utf-8")
+    implementations = {p.relative_to(root).as_posix(): file_sha256(p) for p in (kernel, projection)}
     files = {source.name: file_sha256(source)}
     pin = n.SourcePin(path=source.name, sha256=file_sha256(source))
+    evidence = root / "copy_evidence.json"
+    from market_predictor.research import news_sentiment_copy_evidence as copy_owner
+    copy_document = {"schema": copy_owner.SCHEMA, "status": "complete_copy_identity_evidence_only",
+                     "source_index": pin.model_dump(mode="json"), "source_files": files,
+                     "producer_source_provenance": producer_sources, **copy_owner.CLOSED}
+    write_json_object(evidence, copy_document)
+    evidence_pin = n.SourcePin(path=evidence.name, sha256=file_sha256(evidence))
     config = root / "config.json"
-    write_json_object(config, {"schema": n.CONFIG_SCHEMA, "source_link_index": pin.model_dump(mode="json")})
+    write_json_object(config, {"schema": n.CONFIG_SCHEMA, "source_link_index": pin.model_dump(mode="json"),
+                               "sentiment_copy_evidence": evidence_pin.model_dump(mode="json")})
     config_pin = n.SourcePin(path=config.name, sha256=file_sha256(config))
     reads: list[str] = []
 
@@ -173,8 +213,18 @@ def _fixture(root: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         yield reader
         n.check_files(root, files)
 
+    @contextmanager
+    def evidence_context(**kwargs: Any):
+        evidence_files = {evidence_pin.path: evidence_pin.sha256}
+        n.check_files(root, evidence_files)
+        yield SimpleNamespace(source_files=evidence_files, implementation_files=implementations,
+                              producer_source_provenance={"build_inputs": files, "upstream": producer_sources},
+                              identity=lambda version: None)
+        n.check_files(root, evidence_files)
+
     monkeypatch.setattr(n.parent_inputs, "verified_news_parent_inputs", parent_context)
     monkeypatch.setattr(n, "open_news_source_link_index", reader_context)
+    monkeypatch.setattr(n, "open_news_sentiment_copy_evidence", evidence_context)
     monkeypatch.setattr(n, "heavy_job_lease", lambda *args, **kwargs: nullcontext())
     monkeypatch.setattr(n, "_implementation", lambda root: implementations)
     monkeypatch.setattr(n.parent_inputs, "MONTHS", months)
