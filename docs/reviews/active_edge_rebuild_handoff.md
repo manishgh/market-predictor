@@ -21,6 +21,61 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Source completed; repair demonstrated duplicate-score failure — October19
+
+Source82988/session62808 exited0 at2026-10-19T03:14:01.8044681Z.
+Actual source manifest data/research/swing_news_source_links_overnight_retry/_manifest.json
+SHA256 e9f2f209e30c7dd07afad4036de681ce132636e4a9d98ace0e7d62f96eac5da8.
+All516,679retained query-copy records accounted for:516,668representable versions,
+11unrepresentable versions,76,787records without verified company association,
+439,881verified company-link rows. These units are not unique articles/events.
+Coverage remains unknown and all source/training/serving/promotion admissions false.
+Source-only publication config SHA d6f7037e69f55236013e622f4e65b124af8dd53d4311a03602c27cba44626d45
+was consumed by the real pilot. The completed source index is now retained; do NOT
+repeat source creation/original archives to repair the following consumer failure.
+
+July pilot (real retained data) exited1 at03:16:17Z before a durable month:
+news_decision_features._prepare rejects distinct saved sentiment floats across
+all copies of one exact source document/version, BEFORE decision/company/proof
+clock filtering. Controller47448/session96104 exited without parity/full children.
+Preserve its logs, failed private publication stage and exact old request/config.
+
+Real audit scanned the516,679copy records and found12,972exact source-version
+groups with distinct scores; these are all-history groups, not affected decisions.
+Maximum absolute spread6.4373016357421875e-6. Two largest inspected examples bind
+the same input hash, ProsusAI/finbert revision4556d13015211d73dccd3fdd39d39232506f3e43,
+title_summary, length128 and label, but separate inference chunks/times. This is
+compatible with floating-point inference variation; its numerical cause is NOT
+proved and two examples do not establish every group's input/model equivalence.
+Workspace evidence: review-results/news-sentiment-conflict-audit.json.
+
+Bounded remedy inside current step4, frozen BEFORE the remaining fits:
+1. Build compact per-copy score-identity evidence from the completed corpus's
+   authentic sentiment bindings and this exact completed source index. Stream
+   existing corpus shards once; do not repeat provider archives or inference.
+2. Add a separately pinned current projection helper composing the unchanged
+   producer-pinned kernel. Apply existing version/company/score/copy-proof clocks
+   PER DECISION, so future copies cannot alter earlier values or diagnostics.
+3. For eligible unequal scores, require identical scored input/model revision/mode/
+   max_length/method/label and unchanged polarity; freeze absolute spread<=1e-5,
+   relative tolerance0. This is an engineering policy, not a proved error bound,
+   and is chosen from source-only evidence before model outcomes. Select earliest
+   eligible ORIGINAL score, tie by stable copy ID. No average/round/neutral fill.
+4. Substantive/unproven disagreement makes only that document's sentiment absent;
+   preserve lexical news/cues/company links and all original score evidence.
+   Publish reason/count/digest/bounded examples in existing month diagnostics.
+   Keep209 model inputs and existing physical columns/targets/splits/weights/costs.
+5. Test future-score/proof/company poisons, identity mismatch, polarity/tolerance
+   boundaries, batch/single parity and artifact tamper. Run one consolidated
+   code/ML review, then a fresh actual July pilot/parity/full publication attempt.
+
+Consumer reviewer owns the new evidence component/tests; design reviewer owns
+the new projection helper/tests; root owns publisher/verifier/operator integration.
+Both existing kernel and source/corpus/sentiment producer bytes stay unchanged.
+Step4 stays in progress. Freeze actual completed features, then run readiness,
+baseline fit-scope proof and both remaining learners, followed by comparisons.
+No model fit, SPY win, API acceptance or main merge is claimed. Continue autonomously.
+
 ### Current monitor and temporary sleep hold — October19
 
 Native session1086/PID97696 now runs workspace work/monitor_news_pipeline.py.
@@ -4456,16 +4511,17 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: ordered step4, fresh source session62808/PID82988 and
-controller96104/PID47448. Watch news-source-links-overnight-retry.* and
-news-step4-overnight-retry/state.json. Controller is bound to this exact source;
-it handles actual July pilot/parity/full publication after source success. Keep
-source/config dependencies fixed; controller freezes all src/operator bytes before
-its children. Source1767/PID108064 and controller81838/PID78828 failed; preserve them.
-After full209 output run prepared final verification, readiness, exact baseline
-fit-scope proof, feature-audit freeze and remaining two learners, then comparisons.
+Exact next checkpoint: complete the bounded duplicate-sentiment repair above.
+Source82988 completed successfully (manifest e9f2f209...5da8); DO NOT rebuild it.
+Real July pilot failed exact-float copy equality, controller47448 stopped; no month
+or new fit completed. Preserve failed stage/receipts. New evidence/helper work is
+assigned to consumer_review/design_review; root integrates publisher/verifier and
+fresh attempt operators, keeping producer-pinned kernel/runtime/corpus bytes fixed.
+Monitor native1086/PID97696 owns idle sleep hold; write finished receipt at task end.
+After repaired actual209 publication, run final verification, readiness, exact
+baseline fit-scope proof, feature-audit freeze, two learners and saved comparisons.
 User authorization to continue while asleep remains active. No duplicate heavy
-jobs, runtime ceiling changes, synthetic operational evidence or TradingFlow edits.
+jobs, synthetic operational evidence, TradingFlow edits or unsupported main merge.
 Reviewed/pushed components: kernel1449a97,parentloader1dbd5f6,bridge71c9f32,
 publisherf8ea4e6. Fullcorpus/index andactualparentpilot are complete; sourcebridge
 and monthly209 publication still require actual run evidence. On sourcebridge exit,

@@ -1,0 +1,7 @@
+{
+  "schema": "market_predictor.news_decision_publication_config",
+  "source_link_index": {
+    "path": "data/research/swing_news_source_links_overnight_retry/_manifest.json",
+    "sha256": "e9f2f209e30c7dd07afad4036de681ce132636e4a9d98ace0e7d62f96eac5da8"
+  }
+}

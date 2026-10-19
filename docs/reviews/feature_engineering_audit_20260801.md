@@ -20,8 +20,8 @@ return improvement is claimed by these software changes.
 | Layer | Actual status and evidence before fitting |
 | --- | --- |
 | Existing parent/targets | Retain original124 publication e9ec4b...ef04c, saved-row receipt e10679...1086 and original replay aa8000...cec9; no numerical reconstruction. |
-| Source/cue inputs | Completed516,679-version corpus retained; prior source-link run failed during its final file checks; fresh PID82988 now runs under the unchanged91% guard. Original clocks remain historical_proxy; provider-wide coverage/world actors remain unknown. |
-| Historical209 rows | Publisher/kernel reviewed and unit-tested; final59-month/586,305-row output and full new-addition replay receipt still absent. Actual completion is required before fitting. |
+| Source/cue inputs | Completed516,679-version corpus retained; source link index e9f2f209...5da8 completed516,679query copies/439,881company-link rows;11unrepresentable and76,787unassociated copies remain explicit. Original clocks remain historical_proxy; provider-wide coverage/world actors remain unknown. |
+| Historical209 rows | Real July pilot found exact-copy saved-score float inequality before any durable month. Apply the bounded per-decision identity/tolerance remedy in the current plan; final59-month/586,305-row output and replay receipt remain absent. Actual completion is required before fitting. |
 | Model order/clocks | Exact kernel85 suffix and parent124 prefix;209 model clock keys,249 physical mappings preserved. Full replay checks values/nulls/reasons/clocks and parent parity; code verified, actual report pending. |
 | Training consumption | Flat monthly reader and explicit offline scope implemented; requires real receipt, contract correspondence, readiness masks/missingness and unchanged actual fit-ID/weight proof before fits. |
 | Batch/single construction | Same pure kernel; existing future/revision/copy/missingness UNIT evidence retained. Real July sampled parity and complete monthly replay still pending this run. |
