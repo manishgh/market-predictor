@@ -21,6 +21,27 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Current unattended continuation — October19, 14:49Z
+
+User freed memory and instructed keep running. Actual publisher PID113380/native61858
+has saved49/59months through2023-07:485,568/586,305decision rows. August2023 is
+processing; monitor measured89.07% host RAM. Several5–10second guard pauses resumed
+successfully. The91% ceiling and saved request/source/config bytes remain unchanged.
+Read workspace review-results/news-monthly-full-sentiment-continue-state.json for
+current progress; older stopped-run paragraphs below are historical.
+
+Current-chat heartbeat complete-market-predictor-training is ACTIVE every15minutes.
+It continues the authorized actual-data steps while the user sleeps and avoids
+spending tokens polling unchanged state each minute. It reports stage completions,
+meaningful failures or needed user action. Do not restart an active worker. Continue
+after actual59-month completion through final replay, readiness, exact baseline
+fit-population/weight comparison, prefit feature freeze, both learners and all
+frozen comparisons using the prepared workspace helpers. This is ongoing execution;
+no completed news fit, SPY result, accepted API or main merge is claimed. Pause the
+heartbeat after work ends; release monitor67350 via news-ready-finished.json only
+at the actual work end. Source/code implementation is unchanged from prior closure;
+this update is documentation and continuation scheduling only.
+
 ### August saved; continuation active after transient host pressure — October19
 
 Ready-run PID104640 saved August2022 at12:08:41Z:38/59months and376,002/586,305

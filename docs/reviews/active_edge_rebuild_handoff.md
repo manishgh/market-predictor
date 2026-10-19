@@ -21,6 +21,41 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Current unattended continuation — October19, 14:49Z
+
+User freed memory and instructed keep running. Branch codex/v1-canonical-cleanup
+was clean at e169b18353d4f4bfab210dae21cd342bd67b41a9 before this docs update.
+Actual publisher PID113380/native61858 has saved49/59months through2023-07:
+485,568/586,305decision rows. August2023 is processing; current owner is
+publish-news-decisions and host RAM89.07%. Several5–10second guard pauses resumed
+successfully. Do not restart this worker or change its frozen dependencies/config.
+The user91% ceiling remains; prior memory questions/stopped-run notes are historical.
+
+Current-chat heartbeat complete-market-predictor-training is ACTIVE every15minutes
+to carry the existing actual-data plan through training while the user sleeps,
+without minute-by-minute model polling. Stay quiet for unchanged/non-actionable
+state. Report actual stage completion, meaningful failure, completion or required
+user action. Last usage check:59% weekly consumed,41% remaining; update this handoff
+at1% remaining as requested. No reset redemption is authorized by this scheduling.
+
+Workspace root: C:/Users/manis/Documents/Codex/2026-09-28/c. Current progress is
+review-results/news-monthly-full-sentiment-continue-state.json; monitor owner/RAM
+are in news-ready-monitor-state.json, whose old phase fields are stale. At actual
+publisher exit0, pin final data/features/swing_news_decision_features/_manifest.json
+and execute work/run_news_final_verification.py. Then use prepared
+work/pin_news_training_configs.py, canonical audit-swing-training-readiness,
+work/verify_news_fit_scope.py, work/freeze_news_prefit_features.py and
+work/run_news_return_training.py with actual output hashes. Commit the concrete
+prefit evidence/config checkpoint before fitting. Finally use
+work/run_news_evaluation_campaign.py with actual completed news-model SHA and fresh
+campaign/state paths; preserve all12 funded trial outcomes. Exact helper commands
+and frozen settings are in work/news_training_path_notes.md and
+work/news_evaluation_path_notes.md. Four baseline models remain retained. No actual
+news fit/economic outcome/API acceptance/main merge exists yet. Keep one active
+plan step and update/push these existing documents at real boundaries. At actual
+work end write news-ready-finished.json, verify monitor67350 releases and no owned
+heavy worker remains, then pause the heartbeat. Do not fabricate future assessment.
+
 ### August saved; continuation active after transient host pressure — October19
 
 Ready-run PID104640 saved August2022 at12:08:41Z:38/59months and376,002/586,305
