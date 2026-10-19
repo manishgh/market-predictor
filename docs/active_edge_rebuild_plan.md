@@ -21,6 +21,25 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Current monitor and temporary sleep hold — October19
+
+Native session1086/PID97696 now runs workspace work/monitor_news_pipeline.py.
+It reads only small state files and the existing system_memory_snapshot API,
+refreshes news-overnight-heartbeat.txt and holds automatic idle sleep without
+requiring the display. Poll this native session instead of spawning a new shell
+for every reading. State: review-results/news-overnight-monitor-state.json.
+The previous awake helper session25022 has stopped; its hold is released.
+The new hold releases when review-results/news-overnight-finished.json exists;
+write that receipt at actual task end and verify monitor/session termination.
+
+Unused resident pages were released only from verified idle job wrappers/controller
+PIDs106112,87108,47448 and monitor wrapper19040. No application was closed, no
+active data-engine state discarded and no resource threshold changed. Source82988
+continues its final file checks; it recovered from brief pressure below91%.
+Actual RAM fell to about72% by03:00Z; no source completion/new fit is claimed.
+The same515,000-copy boundary in the older run had514,991representable versions,
+9unrepresentable versions and438,204company links, matching the fresh run exactly.
+
 ### Current fresh source/controller launched — October19
 
 RAM recovered below85% for120seconds. Source session62808/PID82988 began
