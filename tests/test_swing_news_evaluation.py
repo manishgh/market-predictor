@@ -104,13 +104,14 @@ def news_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, 
     sessions = (date(2019, 7, 9), date(2019, 7, 10))
     cutoff = swing_prediction_cutoffs(pd.Series(sessions))
     clocks = {name: f"available_at_{name}" for name in names}
+    physical_clocks = {**clocks, "retained_parent_non_model_diagnostic": "available_at_retained_parent_non_model_diagnostic"}
     # Actual retained parents also carry clocks for physical, non-model fields.
     # Preserve that metadata without admitting another predictor.
     clocks['unused_physical_measurement'] = 'available_at_unused_physical_measurement'
     frame = pd.DataFrame({"decision_id": ["a", "b"], "security_id": "unit", "ticker": "UNIT", "sector": "unit",
         "session_date_et": sessions, "decision_time_utc": cutoff, "feature_eligible": [True, False],
         "cross_section_eligible": True, "decision_group_id": ["group-a", "group-b"], "primary_benchmark": "XLF",
-        "feature_profile": oof.NEWS_PROFILE, **{clock: cutoff - pd.Timedelta(minutes=1) for clock in clocks.values()}})
+        "feature_profile": oof.NEWS_PROFILE, **{clock: cutoff - pd.Timedelta(minutes=1) for clock in physical_clocks.values()}})
     # No numerical feature or target columns: evaluation must only read metadata/clocks.
     frame[clocks[names[-1]]] = pd.NaT
     parent_request = _json(tmp_path, "data/features/unit/_request.json", {"unit_only": True})
@@ -122,7 +123,7 @@ def news_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, 
         "artifact_type": "swing_news_decision_features", "artifact_sha256": digest, "rows": 2,
         "production_ready": False, "inputs": {"request_sha256": parent_request.sha256}})
     child = {"path": f"2019-07/{oof.NEWS_PROFILE}.parquet", "sha256": digest, "manifest_sha256": sidecar.sha256,
-        "rows": 2, "decision_ids_sha256": json_sha256(["a", "b"]), "model_columns": names, "availability_columns": clocks}
+        "rows": 2, "decision_ids_sha256": json_sha256(["a", "b"]), "model_columns": names, "availability_columns": physical_clocks}
     manifest = {"request_sha256": parent_request.sha256, "months": {"2019-07": child}}
     publication = _json(tmp_path, "data/features/unit/_manifest.json", manifest)
     request = {"feature_names": names, "input_rows": 2, "input_decision_ids_sha256": json_sha256(["a", "b"]),

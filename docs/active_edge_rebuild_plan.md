@@ -21,6 +21,45 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Current source attempt failed during final file checks; fresh launch waiting — October19
+
+Source PID108064/session1767 exited1 at2026-10-19T00:14:11.8023442Z.
+RAM remained at/above91% for120.024569seconds, ending92.2766%; this was
+system pressure while the source worker used about0.198GiB. The traceback is
+news_source_links.py:788 -> runtime.recheck_files -> file_sha256 -> guard.
+Materialization and VACUUM had finished (private index2,256,134,144bytes), but
+no completed manifest was published. Last progress covered515,000query copies,
+438,204verified company links; these are not final full-corpus counts. Preserve
+the overnight.partial stage and all news-source-links-overnight.* logs/receipts.
+Controller78828/session81838 also exited1 without launching any monthly child.
+Both heavy/source workers are gone. No new209 dataset or model fit exists yet.
+
+User authorization to continue through training remains active. Fresh launch
+session62808 runs workspace work/start_news_retry.ps1, waiting for120seconds
+continuously below85% before starting one new build. This launch headroom rule
+does not alter the strictly-below91% runtime ceiling or120second pause.
+Its launch state is review-results/news-source-links-overnight-retry-launch-state.json.
+Fresh source operator run_news_source_links_overnight_retry.py uses the SAME
+canonical implementation/config f148c1f0...fece, new destination
+data/research/swing_news_source_links_overnight_retry and new log/receipt prefix
+news-source-links-overnight-retry. It does not resume or overwrite a failed stage.
+Bind a fresh step4 controller to its actual PID/start after it launches; no old
+controller may consume a new attempt. Continue existing final verification,
+readiness, exact baseline-fit scope, feature freeze and two learners after step4.
+
+Disk cleanup removed269 old unreferenced unit-test temporary directories only.
+All candidates were contained beneath .test-tmp, ignored by Git, older than
+October12, absent from tracked references and free of links/junctions; inaccessible
+directories were preserved. Root JUnit files, source/model/corpus inputs and pinned
+evidence were preserved. Workspace old-unit-temp-cleanup.jsonl records exact paths.
+
+The evaluation reviewer confirmed its final physical_clocks fixture diff was saved
+before the already-recorded48 UNIT passes. This fixture proves that extra physical
+clock metadata does not add a210th model predictor. Final Ruff passed; no new
+runtime/algorithm change and no duplicate broad review/test run were needed.
+
+Earlier active-run sections below are historical observations, superseded here.
+
 ### Completed-index consumer narrowed; creator continues unchanged — October19
 
 Implementation99a753a is pushed. The actual source creator remains PID108064;

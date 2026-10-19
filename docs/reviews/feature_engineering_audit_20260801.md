@@ -20,7 +20,7 @@ return improvement is claimed by these software changes.
 | Layer | Actual status and evidence before fitting |
 | --- | --- |
 | Existing parent/targets | Retain original124 publication e9ec4b...ef04c, saved-row receipt e10679...1086 and original replay aa8000...cec9; no numerical reconstruction. |
-| Source/cue inputs | Completed516,679-version corpus retained; fresh source-link run still active. Original clocks remain historical_proxy; provider-wide coverage/world actors remain unknown. |
+| Source/cue inputs | Completed516,679-version corpus retained; source-link run failed during its final source-file checks; a fresh attempt waits for RAM headroom. Original clocks remain historical_proxy; provider-wide coverage/world actors remain unknown. |
 | Historical209 rows | Publisher/kernel reviewed and unit-tested; final59-month/586,305-row output and full new-addition replay receipt still absent. Actual completion is required before fitting. |
 | Model order/clocks | Exact kernel85 suffix and parent124 prefix;209 model clock keys,249 physical mappings preserved. Full replay checks values/nulls/reasons/clocks and parent parity; code verified, actual report pending. |
 | Training consumption | Flat monthly reader and explicit offline scope implemented; requires real receipt, contract correspondence, readiness masks/missingness and unchanged actual fit-ID/weight proof before fits. |

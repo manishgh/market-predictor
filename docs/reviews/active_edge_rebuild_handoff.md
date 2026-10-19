@@ -21,6 +21,45 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Current source attempt failed during final file checks; fresh launch waiting — October19
+
+Source PID108064/session1767 exited1 at2026-10-19T00:14:11.8023442Z.
+RAM remained at/above91% for120.024569seconds, ending92.2766%; this was
+system pressure while the source worker used about0.198GiB. The traceback is
+news_source_links.py:788 -> runtime.recheck_files -> file_sha256 -> guard.
+Materialization and VACUUM had finished (private index2,256,134,144bytes), but
+no completed manifest was published. Last progress covered515,000query copies,
+438,204verified company links; these are not final full-corpus counts. Preserve
+the overnight.partial stage and all news-source-links-overnight.* logs/receipts.
+Controller78828/session81838 also exited1 without launching any monthly child.
+Both heavy/source workers are gone. No new209 dataset or model fit exists yet.
+
+User authorization to continue through training remains active. Fresh launch
+session62808 runs workspace work/start_news_retry.ps1, waiting for120seconds
+continuously below85% before starting one new build. This launch headroom rule
+does not alter the strictly-below91% runtime ceiling or120second pause.
+Its launch state is review-results/news-source-links-overnight-retry-launch-state.json.
+Fresh source operator run_news_source_links_overnight_retry.py uses the SAME
+canonical implementation/config f148c1f0...fece, new destination
+data/research/swing_news_source_links_overnight_retry and new log/receipt prefix
+news-source-links-overnight-retry. It does not resume or overwrite a failed stage.
+Bind a fresh step4 controller to its actual PID/start after it launches; no old
+controller may consume a new attempt. Continue existing final verification,
+readiness, exact baseline-fit scope, feature freeze and two learners after step4.
+
+Disk cleanup removed269 old unreferenced unit-test temporary directories only.
+All candidates were contained beneath .test-tmp, ignored by Git, older than
+October12, absent from tracked references and free of links/junctions; inaccessible
+directories were preserved. Root JUnit files, source/model/corpus inputs and pinned
+evidence were preserved. Workspace old-unit-temp-cleanup.jsonl records exact paths.
+
+The evaluation reviewer confirmed its final physical_clocks fixture diff was saved
+before the already-recorded48 UNIT passes. This fixture proves that extra physical
+clock metadata does not add a210th model predictor. Final Ruff passed; no new
+runtime/algorithm change and no duplicate broad review/test run were needed.
+
+Earlier active-run sections below are historical observations, superseded here.
+
 ### Completed-index consumer narrowed; creator continues unchanged — October19
 
 Temporary idle-sleep hold: native session25022 runs workspace
@@ -4382,16 +4421,16 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: ordered step4, source session1767/PID108064 and
-controller81838/PID78828. Preserve source/config/dependency pins and let the exact
-source attempt finish. Controller news-step4-overnight then runs actual July
-pilot/parity/full publication. Training/evaluation consumer software is now pushed
-(7843a14/769ed1c). After complete209 publication, run prepared final-verification,
-readiness pin/audit, training pin, actual baseline fit-scope proof, feature-audit
-freeze and two-model training in that order. Operators/digests are listed above;
-each consumes actual predecessor hashes. No actual final209 dataset/new fit exists
-yet. User authorized continuing through training while asleep; do not stop merely
-because a software checkpoint finished. No duplicate heavy jobs or TradingFlow edits.
+Exact next checkpoint: ordered step4, fresh launch session62808 waiting for
+sustained RAM headroom. Watch news-source-links-overnight-retry-launch-state.json;
+after actual source start bind a new controller to its exact PID/start/new manifest.
+Old source1767/PID108064 failed during final file checks; controller81838/PID78828
+exited without monthly children. Preserve both attempts and all raw evidence.
+Keep source/config dependencies fixed during a running job. Complete actual209
+publication, prepared final verification, readiness, exact baseline fit-scope proof,
+feature-audit freeze and the remaining two learners, followed by saved comparisons.
+User authorization to continue while asleep remains active; do not stop at code
+completion or bypass the91% runtime ceiling. No duplicate heavy jobs/TradingFlow edits.
 Reviewed/pushed components: kernel1449a97,parentloader1dbd5f6,bridge71c9f32,
 publisherf8ea4e6. Fullcorpus/index andactualparentpilot are complete; sourcebridge
 and monthly209 publication still require actual run evidence. On sourcebridge exit,
