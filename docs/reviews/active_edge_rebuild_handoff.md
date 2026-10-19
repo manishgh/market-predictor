@@ -21,6 +21,22 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### User resumed with recovered RAM — October19
+
+User instructed start now. Actual prelaunch RAM69.04% used/4.86GiB available;
+checkpoint/config/ready-operator hashes matched, no heavy owner or previous ready
+attempt existed. Fresh continuation native84873/PID104640 started11:57:29Z
+(13:57Berlin), retaining37months/365,008decisions. Source/config/learner bytes and
+91% ceiling remain unchanged. It verifies saved months and builds only missing22.
+Current state/log/exit: workspace review-results/news-monthly-full-sentiment-ready.*.
+Fresh monitor native67350/PID53520 uses work/monitor_news_ready_pipeline.py,
+news-ready-monitor-state.json, news-ready-heartbeat.txt and news-ready-finished.json.
+Original finished/failed receipts are preserved. Fresh finished receipt must be
+written at actual work end and monitor release verified. Keep dependencies frozen;
+continue final replay/readiness/fit-scope/feature freeze/two learners/comparisons.
+Prior memory-freeing question is satisfied by observed recovered headroom. Training
+is not yet started. This is active execution, not a completed-model/SPY/API claim.
+
 ### Guarded continuation also stopped; fresh receipt path ready — October19
 
 Continuation native43093/PID95528 started07:01:32Z after idle RAM stayed about88.6%
@@ -4661,17 +4677,16 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: free about3GiB of host RAM, then run NEW workspace
-work/resume_news_monthly_sentiment_ready.py (not yet attempted). Both prior full
-workers exited from the91% memory guard; idle88.8% caused the guarded restart to
-fail as allocations began.37months/365,008decisions and checkpointff60ce16...de0ef
-are unchanged. Use current configdea87d23...1eec, Julyparity53377f59...22dde and
-original failed full receipt8b8959ec...2d286; exact values below. Preserve second
-exit28cd82cd...4b01e/log9b756e35...6295b and all original attempts. No heavy owner
-or model worker remains. Sleep hold releases via explicitly incomplete finished
-receipt; use a fresh monitor pair for another unattended run. Finish remaining22
-months, final replay/readiness/fit-scope/featurefreeze/two learners/comparisons.
-User continuation authorization is active; only memory headroom is missing.
+Exact next checkpoint: active real continuation native84873/PID104640,
+review-results/news-monthly-full-sentiment-ready-state.json/.log/.exit.json.
+It began11:57:29Z from verified37months/365,008decisions and externalff60ce16...de0ef
+checkpoint, after RAM recovered to69%. Keep frozen source/config/operator bytes
+unchanged and91% ceiling. After59months run prepared final replay, readiness,
+fit-scope proof, actual feature-audit freeze, remaining two learners and comparisons.
+Fresh monitor67350/PID53520 holds idle sleep using news-ready-finished.json;
+write explicit final work status there and verify release at actual work end.
+Previous failed attempts/finished receipts remain preserved. Training pending;
+user authorization is active. Do not stop at feature publication or code checks.
 Reviewed/pushed components: kernel1449a97,parentloader1dbd5f6,bridge71c9f32,
 publisherf8ea4e6. Fullcorpus/index andactualparentpilot are complete; sourcebridge
 and monthly209 publication still require actual run evidence. On sourcebridge exit,

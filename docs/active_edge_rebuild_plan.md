@@ -21,6 +21,22 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### User resumed with recovered RAM — October19
+
+User instructed start now. Actual prelaunch RAM69.04% used/4.86GiB available;
+checkpoint/config/ready-operator hashes matched, no heavy owner or previous ready
+attempt existed. Fresh continuation native84873/PID104640 started11:57:29Z
+(13:57Berlin), retaining37months/365,008decisions. Source/config/learner bytes and
+91% ceiling remain unchanged. It verifies saved months and builds only missing22.
+Current state/log/exit: workspace review-results/news-monthly-full-sentiment-ready.*.
+Fresh monitor native67350/PID53520 uses work/monitor_news_ready_pipeline.py,
+news-ready-monitor-state.json, news-ready-heartbeat.txt and news-ready-finished.json.
+Original finished/failed receipts are preserved. Fresh finished receipt must be
+written at actual work end and monitor release verified. Keep dependencies frozen;
+continue final replay/readiness/fit-scope/feature freeze/two learners/comparisons.
+Prior memory-freeing question is satisfied by observed recovered headroom. Training
+is not yet started. This is active execution, not a completed-model/SPY/API claim.
+
 ### Guarded continuation also stopped; fresh receipt path ready — October19
 
 Continuation native43093/PID95528 started07:01:32Z after idle RAM stayed about88.6%
