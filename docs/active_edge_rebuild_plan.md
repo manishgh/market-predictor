@@ -21,6 +21,41 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Actual memory stop after37 durable months — October19
+
+Publisher PID103896/controller native22111 exited1 at2026-10-19T06:56:02Z.
+The first pause was06:50:01.459627Z at91.0097% RAM; first120.0635-second timeout
+06:52:01.523351Z at94.9622%. Input-context closing rechecks also exceeded91%;
+last error93.46%. This was an actual host-memory limit, not missing credentials,
+missing source data or a model-quality decision. No new training has started.
+
+All37months through2022-07 remain durable:365,008/586,305decision rows. Exactly
+37month directories match the checkpoint inventory; no completed month is removed.
+Private checkpoint SHA256
+ff60ce16591312a4cb68d1ae6a16065cc9a3d46e84359e22170777f1595de0ef;
+request973f339a7091c3536de51690d79a613df106a2e3cd62ed1abb201d4aac2b836d.
+Actual failed full-publication exit receipt workspace
+review-results/news-step4-sentiment/full_publication.exit.json SHA256
+8b8959ecb27585bf2ae96e90c0b22e9126cbc935fb9bfe40e19d7c8b1e92d286.
+Its stderr pin32b8260ddd9266532087558831e266245327659acedc2b4ff425c0dd6406c8ae
+retains the pause/timeouts and full exception chain. Controller stopped; no heavy
+owner remains. At06:56:38Z, host RAM was still91.02% with the project worker gone.
+
+NEW workspace work/resume_news_monthly_sentiment.py passed syntax/Ruff and one
+bounded code review. It requires actual failure receipt, stopped controller,
+external checkpoint/config hashes and the existing July parity receipt. It calls
+the unchanged canonical publisher resume, verifies saved months, computes only
+the remaining22months and preserves the original request/code/input pins.
+Config remains dea87d23abb7e45f912e1da23db0779c62a4b8561f88f1b6712516102de71eec;
+July parity53377f59e077ffe7d1e0996806805a73a6998ddbb0f670763975e251cbf22dde.
+No source, runtime, schema, target, baseline model or memory ceiling changed.
+
+An asynchronous request asks the user to free about3GiB and retain that headroom
+through feature generation/training. Authorization to continue remains active;
+this is not a user-requested pause. Restart after memory has recovered sufficiently
+for worker allocations, then complete final replay/readiness/fit-scope/feature
+freeze/two learners/comparisons. Never rebuild the completed source or baseline fits.
+
 ### Actual monthly progress — October19
 
 At 2026-10-19T05:48:23.223375+00:00, 30/59 months through
