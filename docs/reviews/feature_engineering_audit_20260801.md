@@ -1,5 +1,21 @@
 # Current Feature Engineering Audit
 
+### Actual monthly progress — October19
+
+At 2026-10-19T05:48:23.223375+00:00, 30/59 months through
+2021-12 and 296,113/586,305 retained decision rows are durable.
+Controller native22111/PID99620 and publisher PID103896 continue; no new fit yet.
+Workspace state: review-results/news-monthly-full-sentiment-state.json;
+controller: review-results/news-step4-sentiment/state.json. Partial checkpoint
+observation is retained in news-monthly-halfway-20261019.json. This is not a final
+59-month publication or replay receipt. Keep source/operator bytes frozen and
+continue through replay, readiness, fit-scope proof, feature freeze, both learners
+and all comparisons. RAM most recently about83%;91% limit remains unchanged.
+Evaluation operator work/run_news_evaluation_campaign.py passed syntax/Ruff and
+one bounded code review; it awaits the actual completed news model manifest.
+It will preserve all two paired comparisons/twelve funded-policy outcomes,
+including explicit unavailable valuations. No evaluation/model acceptance claimed.
+
 ### Revised news profile: software connection complete; actual feature evidence pending — October18
 
 Completed-index consumption amendment99a753a (October19): original source

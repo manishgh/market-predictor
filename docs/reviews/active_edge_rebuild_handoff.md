@@ -21,6 +21,22 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Actual monthly progress — October19
+
+At 2026-10-19T05:48:23.223375+00:00, 30/59 months through
+2021-12 and 296,113/586,305 retained decision rows are durable.
+Controller native22111/PID99620 and publisher PID103896 continue; no new fit yet.
+Workspace state: review-results/news-monthly-full-sentiment-state.json;
+controller: review-results/news-step4-sentiment/state.json. Partial checkpoint
+observation is retained in news-monthly-halfway-20261019.json. This is not a final
+59-month publication or replay receipt. Keep source/operator bytes frozen and
+continue through replay, readiness, fit-scope proof, feature freeze, both learners
+and all comparisons. RAM most recently about83%;91% limit remains unchanged.
+Evaluation operator work/run_news_evaluation_campaign.py passed syntax/Ruff and
+one bounded code review; it awaits the actual completed news model manifest.
+It will preserve all two paired comparisons/twelve funded-policy outcomes,
+including explicit unavailable valuations. No evaluation/model acceptance claimed.
+
 ### Real sentiment identity evidence complete; fresh July/full controller running — October19
 
 Evidence session6216/PID83144 exited0 at2026-10-19T03:51:23.3316781Z.
@@ -4571,12 +4587,15 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: fresh monthly controller native22111/PID99620,
-review-results/news-step4-sentiment/state.json. Actual metadata evidence completed
-264ef868...add72; currentconfig dea87d23...1eec. Follow real July/parity/full with
-new *_sentiment operators. Do not edit frozen src/operator bytes. Then complete
-prepared replay/readiness/fit-scope/featurefreeze/two learners/comparisons. Keep
-91% RAM guard, four baseline fits and TradingFlow unchanged. User sleep authorization active.
+Exact next checkpoint: actual full publisher PID103896/controller native22111,
+PID99620. Thirty of59 months/296,113decisions were durable through2021-12 at
+05:48Z; read news-monthly-full-sentiment-state.json for latest progress and
+news-step4-sentiment/state.json for actual controller status. Keep frozen source/
+operator/config bytes unchanged. Then final replay/readiness/fit-scope/feature
+freeze/two fits and prepared work/run_news_evaluation_campaign.py. Do not stop at
+publication or code checks: user explicitly requested completion including training.
+Monitor1086/PID97696 holds idle sleep; release at actual task end using its finished
+receipt. All four baseline models retained; TradingFlow untouched; RAM limit91%.
 Reviewed/pushed components: kernel1449a97,parentloader1dbd5f6,bridge71c9f32,
 publisherf8ea4e6. Fullcorpus/index andactualparentpilot are complete; sourcebridge
 and monthly209 publication still require actual run evidence. On sourcebridge exit,
