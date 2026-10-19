@@ -21,14 +21,30 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current unattended continuation — October19, 14:49Z
+### Current unattended continuation — October19, 16:08Z
 
-User freed memory and instructed keep running. Actual publisher PID113380/native61858
-has saved49/59months through2023-07:485,568/586,305decision rows. August2023 is
-processing; monitor measured89.07% host RAM. Several5–10second guard pauses resumed
-successfully. The91% ceiling and saved request/source/config bytes remain unchanged.
-Read workspace review-results/news-monthly-full-sentiment-continue-state.json for
-current progress; older stopped-run paragraphs below are historical.
+Publisher PID113380/native61858 exited1 naturally at15:55:34Z after host RAM stayed
+above91% for120seconds, ending at91.54%. Saved progress is53/59months through2023-11:
+527,146/586,305decision rows. Preserve news-monthly-full-sentiment-continue.*.
+Checkpoint SHA256 bec9cdff03ad6ee18a6e21f5819813e2b004ab41547497a092e08c548a135571.
+No heavy owner remains; host RAM86.55% at16:08Z is insufficient restart headroom.
+
+Native85877/PowerShell PID112932 is waiting via workspace
+work/queue_news_final_six.ps1 (SHA256
+560100e4624eb09acfb4b2c3d9b9b613913f5d247ead971db5a2710cfaaf6290).
+It launches the unchanged canonical resumer only after two distinct fresh monitor
+readings below80% RAM with no heavy owner. This is a launch-headroom condition;
+the running ceiling remains91%. Do not start another waiter/worker. Queue state:
+review-results/news-final-six-memory-gate-state.json. Fresh resumer:
+work/continue_news_final_six_months.py SHA256
+2378b82a33e4f13bb357d6c2987d3e081087df11c1da1d2094ca08a4225e1bfd;
+only two receipt-path strings differ from the reviewed operator, proven by AST
+comparison; AST/Ruff passed. Its state/log/exit use
+news-monthly-full-sentiment-final-six.*. It retains53months and computes only six
+missing months. Monitor53520/native67350 keeps the temporary idle-sleep hold.
+Source/config/columns/targets/four baselines remain unchanged. Older run notes
+below are historical. Automatic continuation remains active; no user action has
+been requested while the native waiter waits for host memory to recover.
 
 Current-chat heartbeat complete-market-predictor-training is ACTIVE every15minutes.
 It continues the authorized actual-data steps while the user sleeps and avoids

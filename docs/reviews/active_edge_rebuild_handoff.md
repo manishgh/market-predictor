@@ -21,15 +21,32 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current unattended continuation — October19, 14:49Z
+### Current unattended continuation — October19, 16:08Z
 
-User freed memory and instructed keep running. Branch codex/v1-canonical-cleanup
-was clean at e169b18353d4f4bfab210dae21cd342bd67b41a9 before this docs update.
-Actual publisher PID113380/native61858 has saved49/59months through2023-07:
-485,568/586,305decision rows. August2023 is processing; current owner is
-publish-news-decisions and host RAM89.07%. Several5–10second guard pauses resumed
-successfully. Do not restart this worker or change its frozen dependencies/config.
-The user91% ceiling remains; prior memory questions/stopped-run notes are historical.
+Branch codex/v1-canonical-cleanup was clean at6067371 before this update. Publisher
+PID113380/native61858 exited1 naturally at15:55:34.1337043Z: host RAM stayed above91%
+for120seconds, ending at91.54%. Preserve news-monthly-full-sentiment-continue.*;
+exit receipt SHA25642f7b0c50e1967988693d8ff66477b768493dd5a654af14a9ce7f20c05225685,
+log SHA256647dcc5322d405266d0d160a362f51237b9ca78078e24851ff2d8e87338e492d.
+The unchanged request973f339a7091c3536de51690d79a613df106a2e3cd62ed1abb201d4aac2b836d
+retains53/59months through2023-11,527,146/586,305decisions. Current checkpoint SHA256:
+bec9cdff03ad6ee18a6e21f5819813e2b004ab41547497a092e08c548a135571.
+
+Native85877/PowerShell PID112932 runs workspace work/queue_news_final_six.ps1,
+SHA256560100e4624eb09acfb4b2c3d9b9b613913f5d247ead971db5a2710cfaaf6290.
+It waits for two distinct fresh readings below80% RAM/no heavy owner, then launches
+work/continue_news_final_six_months.py SHA256
+2378b82a33e4f13bb357d6c2987d3e081087df11c1da1d2094ca08a4225e1bfd. Only two receipt
+paths differ from reviewed resumer; exact reverse AST comparison, AST and Ruff passed.
+Queue state: review-results/news-final-six-memory-gate-state.json. New worker state,
+log, progress and exit use news-monthly-full-sentiment-final-six.*. At16:08Z RAM86.55%
+and no heavy owner; do not create a competing waiter/worker or edit pinned operators.
+The91% runtime ceiling is unchanged; below80% is launch headroom, not a new ceiling.
+The initial inline waiter command exited before creating files due to PowerShell's
+automatic timestamp conversion; the saved launcher uses verified file freshness
+instead, passed the native parser and its actual freshness check, and is now running.
+All53saved months/source/config/four baselines are retained; only six months remain.
+Monitor53520/native67350 retains temporary idle-sleep hold while memory recovers.
 
 Current-chat heartbeat complete-market-predictor-training is ACTIVE every15minutes
 to carry the existing actual-data plan through training while the user sleeps,
@@ -39,7 +56,8 @@ user action. Last usage check:59% weekly consumed,41% remaining; update this han
 at1% remaining as requested. No reset redemption is authorized by this scheduling.
 
 Workspace root: C:/Users/manis/Documents/Codex/2026-09-28/c. Current progress is
-review-results/news-monthly-full-sentiment-continue-state.json; monitor owner/RAM
+review-results/news-monthly-full-sentiment-final-six-state.json once launched;
+until then read news-final-six-memory-gate-state.json. Monitor owner/RAM
 are in news-ready-monitor-state.json, whose old phase fields are stale. At actual
 publisher exit0, pin final data/features/swing_news_decision_features/_manifest.json
 and execute work/run_news_final_verification.py. Then use prepared
