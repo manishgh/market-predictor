@@ -13,7 +13,7 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 1. Streaming quality-check buckets | Done for the full retained corpus | 540 deterministic QA buckets retain 661,658 metadata bytes from 484,723 enriched versions. Samples do not filter the training-news stream. |
 | 2. Broad news feature enrichment | Cue component and real pilot done; quality/attribution pending | Implement one feature-layer recognizer for multiple swing-news categories and mixed signals. Preserve source evidence, availability and uncertain/other stories. Connect buckets to a real retained-news pilot; report actual coverage and examples. |
 | 3. Full-corpus enrichment | Done for the retained corpus and available saved sentiment | All 516,679 versions accounted for in 505 durable shards; 484,723 enriched, 31,781 unavailable clocks, 175 missing text. Actual sentiment reused for 437,599 enriched versions; missing scores remain explicit. |
-| 4. Prediction-time news features | In progress | Aggregate company/sector/market signals and recency at each existing decision cutoff. Combine with existing price/fundamentals. Later revisions/prices cannot enter earlier inputs. Preserve positive earnings and negative guidance simultaneously. |
+| 4. Prediction-time news features | Paused at user request | Aggregate company/sector/market signals and recency at each existing decision cutoff. Combine with existing price/fundamentals. Later revisions/prices cannot enter earlier inputs. Preserve positive earnings and negative guidance simultaneously. |
 | 5. Freeze the third feature profile | Pending | Record exact columns, definitions, missingness, source coverage, clocks and train-only preprocessing. Embeddings are optional feature work, not assumed implemented; any encoder must be locally available/pinned and evaluated within the amended profile. |
 | 6. Fit remaining two models | Pending | Fit existing Ridge and shallow XGBoost for the amended news profile on the same official ten-session targets, splits, weights and costs. Four fitted baselines remain unchanged. |
 | 7. Compare performance | Pending | Evaluate all six specifications and twelve frozen policies with prediction error, ranking, funded NAV, fees, turnover and drawdown against SPY. State measured losses as plainly as gains. No claim of outperformance from a feature/test pass. |
@@ -21,7 +21,35 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current unattended continuation — October19, 18:49Z
+### Current state: explicitly stopped by user — October19, 18:53Z
+
+USER STOP OVERRIDES ALL EARLIER CONTINUATION NOTES. User requested stop at92% RAM,
+then all related processes stopped; they will instruct resume after freeing RAM.
+Do not resume or re-enable heartbeat automatically. Heartbeat
+complete-market-predictor-training is PAUSED with explicit stop instructions.
+
+Identity-verified worker9916 stopped18:52:31Z; native13622 exited-1, receipt
+review-results/news-monthly-full-sentiment-final-six.exit.json. Stop record:
+review-results/news-ready-finished.json, phase stopped_at_explicit_user_request.
+Monitor53520/native67350 exited0 at18:52:32.258492Z; monitor state confirms
+monitor_and_idle_hold_released. Earlier waiter112932/native85877 was already stopped.
+Scoped Win32 process inventory18:53:38Z found zero project workers/launcher shells.
+Stopped owner9916/run6803b207da78422a8461cebc08330e15 was preserved under canonical
+lock in review-results/news-final-six-stopped-owner.json, SHA256
+f5facdc06f0996cd30cf4a52fbbc26b347e6775001d7bba0900f03075cbae717, then stale
+owner metadata removed. No heavy worker/owner or temporary sleep hold remains.
+
+Saved checkpoint unchanged at53/59months through2023-11,527,146/586,305decisions:
+bec9cdff03ad6ee18a6e21f5819813e2b004ab41547497a092e08c548a135571. Request remains
+973f339a7091c3536de51690d79a613df106a2e3cd62ed1abb201d4aac2b836d. Six months remain;
+no final59-month publication/replay or new news-model fit/evaluation exists.
+Preserve sources, saved53months and all failed/stopped receipts. Only on a new
+direct human resume: inspect current checkpoint, use fresh receipt-path resumer and
+fresh monitor/finished paths, retain original91% limit, do not restore80% startup
+gate, and follow prepared final verification/freeze/training/evaluation helpers.
+Old operators/finished receipts must never be overwritten or implicitly reused.
+
+### Historical restart — October19, 18:49Z
 
 User asked what was happening. The assistant-added below80% startup gate caused
 prolonged idle waiting despite RAM below the user's91% limit; it was removed.

@@ -13,7 +13,7 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 1. Streaming quality-check buckets | Done for the full retained corpus | 540 deterministic QA buckets retain 661,658 metadata bytes from 484,723 enriched versions. Samples do not filter the training-news stream. |
 | 2. Broad news feature enrichment | Cue component and real pilot done; quality/attribution pending | Implement one feature-layer recognizer for multiple swing-news categories and mixed signals. Preserve source evidence, availability and uncertain/other stories. Connect buckets to a real retained-news pilot; report actual coverage and examples. |
 | 3. Full-corpus enrichment | Done for the retained corpus and available saved sentiment | All 516,679 versions accounted for in 505 durable shards; 484,723 enriched, 31,781 unavailable clocks, 175 missing text. Actual sentiment reused for 437,599 enriched versions; missing scores remain explicit. |
-| 4. Prediction-time news features | In progress | Aggregate company/sector/market signals and recency at each existing decision cutoff. Combine with existing price/fundamentals. Later revisions/prices cannot enter earlier inputs. Preserve positive earnings and negative guidance simultaneously. |
+| 4. Prediction-time news features | Paused at user request | Aggregate company/sector/market signals and recency at each existing decision cutoff. Combine with existing price/fundamentals. Later revisions/prices cannot enter earlier inputs. Preserve positive earnings and negative guidance simultaneously. |
 | 5. Freeze the third feature profile | Pending | Record exact columns, definitions, missingness, source coverage, clocks and train-only preprocessing. Embeddings are optional feature work, not assumed implemented; any encoder must be locally available/pinned and evaluated within the amended profile. |
 | 6. Fit remaining two models | Pending | Fit existing Ridge and shallow XGBoost for the amended news profile on the same official ten-session targets, splits, weights and costs. Four fitted baselines remain unchanged. |
 | 7. Compare performance | Pending | Evaluate all six specifications and twelve frozen policies with prediction error, ranking, funded NAV, fees, turnover and drawdown against SPY. State measured losses as plainly as gains. No claim of outperformance from a feature/test pass. |
@@ -21,7 +21,27 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current unattended continuation — October19, 18:49Z
+### Current state: explicitly stopped by user — October19, 18:53Z
+
+User requested stop after RAM reached92%, then requested all related processes
+stopped and said they would resume once RAM is free. No automatic resumption is
+authorized. Heartbeat complete-market-predictor-training is PAUSED; instructions
+record the explicit stop. Identity-verified worker9916 was stopped at18:52:31Z;
+native13622 exited-1. Monitor53520/native67350 exited0 and released temporary idle
+sleep prevention at18:52:32Z. Earlier waiter112932 was already stopped. Scoped
+process inventory at18:53:38Z found zero related project workers/launcher shells.
+
+Checkpoint is unchanged:53/59months,527,146/586,305decision rows through2023-11,
+SHA256 bec9cdff03ad6ee18a6e21f5819813e2b004ab41547497a092e08c548a135571.
+Six months remain; new training/evaluation has not run. Preserve all stage/source/
+receipt files. Stop receipt: workspace review-results/news-ready-finished.json;
+monitor state confirms monitor_and_idle_hold_released. Stale stopped-worker owner
+was preserved in news-final-six-stopped-owner.json and removed under canonical
+lock. No heavy owner remains. Resume only after a new direct user instruction,
+using fresh operator/receipt paths and this actual checkpoint; do not relaunch old
+operators whose state or finished receipts already exist.
+
+### Historical restart — October19, 18:49Z
 
 User asked for actual status. The assistant-added below80% restart gate had kept
 the53-month checkpoint idle despite host RAM below the user's91% ceiling. Remove
