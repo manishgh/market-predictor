@@ -21,6 +21,45 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Guarded continuation also stopped; fresh receipt path ready — October19
+
+Continuation native43093/PID95528 started07:01:32Z after idle RAM stayed about88.6%
+(below the user91% ceiling). It verified all37saved months using the unchanged
+request/input/code pins, then paused07:04:28.487690Z at91.0132% during construction
+of the next month. It timed out120.0589seconds later at92.7227%; final closing
+recheck error92.66%. It exited1 at2026-10-19T07:10:28.9861997Z, without a new month.
+Actual exit receipt news-monthly-full-sentiment-resume.exit.json SHA256
+28cd82cdf738ea35463dbe18a8c8e57d2a2f23419763cec49799f7f19f84b01e;
+log news-monthly-full-sentiment-resume.log SHA256
+9b756e35650f0ffe4853216beb17025cf7e50c37377f2fb671e987615b16295b.
+Both project worker PIDs have exited and no heavy owner remains. At07:10:49Z,
+idle system RAM was still88.8%. The attempted restart demonstrated that this
+idle level does not leave enough allocation headroom under91%; do not repeat it
+without freeing memory. User request to free about3GiB remains pending.
+
+Progress is unchanged:37/59months through2022-07,365,008/586,305decisions.
+Checkpoint remains ff60ce16591312a4cb68d1ae6a16065cc9a3d46e84359e22170777f1595de0ef.
+All original source/corpus/evidence and four baseline fits remain retained.
+No final59-month publication/replay or new training/evaluation result exists.
+
+Fresh workspace operator work/resume_news_monthly_sentiment_ready.py SHA256
+2bc86849925c3fde839105616bf574a820c04f8c8d00cfa41c3c226077b014c9. Only its two receipt-path strings differ
+from the reviewed continuation; syntax/Ruff and exact two-path correspondence
+passed. It has NOT run. Its four required external pins are the same checkpoint,
+configdea87d23...1eec, Julyparity53377f59...22dde and original failed full receipt
+8b8959ec...2d286, with full values retained below. It preserves all attempts and
+uses the canonical publisher to verify saved months/build only the missing22.
+
+Authorization to continue through training remains active. Memory, not additional
+approval or credentials, is missing. After the user frees RAM, check actual
+headroom, run the fresh operator, then final replay/readiness/fit-scope/feature
+freeze/two learners and work/run_news_evaluation_campaign.py. No source rebuild,
+baseline refit, API version change or TradingFlow edit is needed.
+The temporary idle-sleep hold is released using news-overnight-finished.json with
+status awaiting_external_memory and training_completed=false; this is not a task
+completion claim. Preserve that receipt. If another unattended run needs a sleep
+hold, use a fresh monitor/finished-receipt pair rather than deleting prior evidence.
+
 ### Actual memory stop after37 durable months — October19
 
 Publisher PID103896/controller native22111 exited1 at2026-10-19T06:56:02Z.
