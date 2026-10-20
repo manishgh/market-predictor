@@ -21,7 +21,44 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current resumed execution — October20, 21:54Z
+### Current execution: publication complete; saved-row replay running — October20, 23:38Z
+
+Branch was clean at946bddb before this update. Actual publisher PID11040/native32417
+completed23:28:05.514824Z and exited0 naturally23:28:05.7180763Z. Retain workspace
+review-results/news-monthly-full-sentiment-oct20.* success receipts. Verified final
+data/features/swing_news_decision_features/_manifest.json SHA256
+4112d3255ef57e598ced47401cbedabf4d40200be46dd50d6490dc04dbd056ec: status
+complete_research_only,59months/586,305decisions/209ordered model columns; all
+training/serving/promotion/source-coverage/world-actor admission flags false.
+Request973f339a7091c3536de51690d79a613df106a2e3cd62ed1abb201d4aac2b836d unchanged.
+Do not restart/rebuild this publication. Four baseline models remain retained.
+
+CURRENT LIVE verifier native79834/Python PID20000 started23:37:48.337704Z. Operator
+workspace work/run_news_final_verification.py SHA256
+a70089406b3f2e3aa7a66ae0d208593fede2e3068feaec3b3f87bcdc63732797, actual argument
+`--expected-publication-sha256 4112d3255ef57e598ced47401cbedabf4d40200be46dd50d6490dc04dbd056ec`.
+State/progress/log/exit:
+review-results/news-final-verification-state.json,
+news-final-verification-progress.jsonl, news-final-verification.log and
+news-final-verification.exit.json. Expected report:
+data/reports/swing_news_decision_verification.json. No completed replay report yet.
+It checks all saved124 inherited values/85additions/targets/clocks/diagnostics
+against actual retained inputs. No raw-provider recollection/source review/price
+reconstruction or baseline refitting. Do not duplicate active verifier or change
+its frozen source/config dependencies. Step4 stays in progress through this replay.
+
+Monitor8980/native33710 remains; read news-oct20-monitor-state.json owner/RAM and
+verification_phase. Monthly/controller phase remains completed publication. At
+actual work end use fresh news-oct20-finished.json and verify monitor release.
+91% guard unchanged; no lower start gate. Last observed RAM71.27%, disk9.45GiB.
+Heartbeat ACTIVE every15minutes updated to current verifier. Latest usage0% weekly
+consumed/100% remaining; no reset redeemed by this agent. On actual verifier exit0
+and passed report, hash it and proceed to prepared readiness/config, exact baseline
+fit-scope, prefit feature freeze/commit, two real learners and all12comparisons.
+Workspace notes retain exact helper commands. No actual new training/economic
+result/accepted API/main merge is claimed from publication. Keep all receipts.
+
+### Historical October20 resume — October20, 21:54Z
 
 New direct user instruction "Lets go" revokes October19 pause. Branch was clean
 at2fd436a before this documentation update. Actual RAM preflight74.0495%; all

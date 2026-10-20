@@ -21,7 +21,29 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current resumed execution — October20, 21:54Z
+### Current execution: publication complete; saved-row replay running — October20, 23:38Z
+
+Actual full feature publication finished23:28:05Z; native32417/PID11040 exited0.
+All59months/586,305decision rows/209model columns saved. Final manifest:
+data/features/swing_news_decision_features/_manifest.json SHA256
+4112d3255ef57e598ced47401cbedabf4d40200be46dd50d6490dc04dbd056ec. Original request
+973f339a7091c3536de51690d79a613df106a2e3cd62ed1abb201d4aac2b836d unchanged;
+admission/serving/promotion flags remain false. No baseline fit was repeated.
+
+Step4 remains in progress until its planned final saved-row replay passes. Actual
+verifier native79834/Python PID20000 started23:37:48.337704Z using workspace
+work/run_news_final_verification.py SHA256
+a70089406b3f2e3aa7a66ae0d208593fede2e3068feaec3b3f87bcdc63732797 with actual
+publicationSHA. State/progress/log/exit use news-final-verification.*; expected
+report data/reports/swing_news_decision_verification.json. This checks saved values,
+targets and clocks against retained inputs; no new collection/source review or
+baseline refit. Do not rerun publication or duplicate/edit the active verifier.
+Monitor8980/native33710 and91% RAM limit remain. Actual next: passed replay report,
+readiness/config, exact fit-scope, prefit freeze/commit, two fits and comparisons.
+Training/performance/API/main acceptance is not claimed. Heartbeat instructions
+updated to follow this active stage. All previous evidence/receipts preserved.
+
+### Historical October20 resume — October20, 21:54Z
 
 User directly resumed: "Lets go". The October19 stop below is historical. Actual
 preflight RAM74.0495%; checkpoint remains53/59months through2023-11 and527,146rows,
