@@ -13,7 +13,7 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 1. Streaming quality-check buckets | Done for the full retained corpus | 540 deterministic QA buckets retain 661,658 metadata bytes from 484,723 enriched versions. Samples do not filter the training-news stream. |
 | 2. Broad news feature enrichment | Cue component and real pilot done; quality/attribution pending | Implement one feature-layer recognizer for multiple swing-news categories and mixed signals. Preserve source evidence, availability and uncertain/other stories. Connect buckets to a real retained-news pilot; report actual coverage and examples. |
 | 3. Full-corpus enrichment | Done for the retained corpus and available saved sentiment | All 516,679 versions accounted for in 505 durable shards; 484,723 enriched, 31,781 unavailable clocks, 175 missing text. Actual sentiment reused for 437,599 enriched versions; missing scores remain explicit. |
-| 4. Prediction-time news features | Paused at user request | Aggregate company/sector/market signals and recency at each existing decision cutoff. Combine with existing price/fundamentals. Later revisions/prices cannot enter earlier inputs. Preserve positive earnings and negative guidance simultaneously. |
+| 4. Prediction-time news features | In progress | Aggregate company/sector/market signals and recency at each existing decision cutoff. Combine with existing price/fundamentals. Later revisions/prices cannot enter earlier inputs. Preserve positive earnings and negative guidance simultaneously. |
 | 5. Freeze the third feature profile | Pending | Record exact columns, definitions, missingness, source coverage, clocks and train-only preprocessing. Embeddings are optional feature work, not assumed implemented; any encoder must be locally available/pinned and evaluated within the amended profile. |
 | 6. Fit remaining two models | Pending | Fit existing Ridge and shallow XGBoost for the amended news profile on the same official ten-session targets, splits, weights and costs. Four fitted baselines remain unchanged. |
 | 7. Compare performance | Pending | Evaluate all six specifications and twelve frozen policies with prediction error, ranking, funded NAV, fees, turnover and drawdown against SPY. State measured losses as plainly as gains. No claim of outperformance from a feature/test pass. |
@@ -21,7 +21,29 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current state: explicitly stopped by user — October19, 18:53Z
+### Current resumed execution — October20, 21:54Z
+
+User directly resumed: "Lets go". The October19 stop below is historical. Actual
+preflight RAM74.0495%; checkpoint remains53/59months through2023-11 and527,146rows,
+SHA256 bec9cdff03ad6ee18a6e21f5819813e2b004ab41547497a092e08c548a135571.
+Native32417/Python PID11040 started21:54:15.293480Z using fresh receipt-only copy
+work/continue_news_oct20.py SHA256
+81e2bd0c2bb551a9ff5c388b00e9d8c783ff50f54bc724892966d40fcd470864. It accepted all
+starting pins, reuses saved53months and computes only the six missing months.
+Source/config/request/columns/four baseline fits unchanged;91% limit remains.
+Do not restore the assistant-added80% startup gate or duplicate this live worker.
+
+Fresh monitor native33710/Python PID8980 uses work/monitor_news_oct20_pipeline.py
+SHA256 d4c1a028138a3019000bd35911e2bc93438b129cefbe95d3d41693be0afc8cad.
+Workspace worker state/progress/log/exit use news-monthly-full-sentiment-oct20.*;
+monitor state news-oct20-monitor-state.json now reads current monthly worker phase.
+Fresh finish file news-oct20-finished.json releases the temporary idle-sleep hold
+at actual work end. Preserve every older stopped/finished receipt. Heartbeat
+complete-market-predictor-training is ACTIVE every15minutes with updated actual
+worker instructions. Continue final replay/prefit freeze/two fits/comparisons;
+none of those later actual-data stages is yet claimed complete.
+
+### Historical explicit stop — October19, 18:53Z
 
 User requested stop after RAM reached92%, then requested all related processes
 stopped and said they would resume once RAM is free. No automatic resumption is
