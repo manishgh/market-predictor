@@ -21,7 +21,57 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: full saved-row replay passed; prefit freeze next — October21, 07:08Z
+### Current execution: real prefit report passed; baseline fit-scope active — October21,07:27Z
+
+Actual retry native64338/PID10172 exited0 naturally07:25:48.4940818Z. Report
+data/reports/swing_news_initial_fit_readiness.json SHA256
+177ae2477bb538909cbd770a6d0ae16cd20ce40b6180220cbd72de83642d0c98,216,453bytes,
+diagnostic_complete;586,305rows retained,0removed,1,231sessions,545securities.
+Of586,305rows:479,709feature-eligible,378,037available fixed-horizon supervision,
+4,482all209inputs complete and3,184complete with supervision. Preserve missing
+values for existing train-only preprocessing; no new outcome-based selection.
+
+Consumer repair reuses unchanged strict32MiB read_object only for news. No producer,
+feature/projection/replay/shared reader or saved artifact changed. One consolidated
+code/ML review no supported findings; Ruff5files and strictmypy3modules passed.
+Focused tests6files:137passed; only failure was new test expecting wrong exception,
+corrected to canonical ValueError and rerun passed;2continuity tests passed.
+Default Windows temp setup failed, fresh task-owned basetemp worked. Synthetic
+UNIT tests do not replace actual report evidence. Full suite deliberately unrun.
+
+Generated configs/swing_news_return_training.json SHA256
+638765ea8b7a853cbbbb471a91f2066806833a79669cab344beccd785f8c3ee6.
+CURRENT ACTIVE actual fit-scope native29702/PID24096 started07:26:48.559308Z using
+workspace work/verify_news_fit_scope.py with that exactSHA. Fresh workspace
+review-results/news-fit-scope.log/exit.json; expected output
+data/reports/swing_news_baseline_fit_scope.json. This compares calendars, row/target
+masks and weights against2retained bundles/18units each,0new fits. Do not duplicate
+or edit live dependencies. Next actual scope pass, helper metadata freeze and
+commit/push audit/config before both remaining learners. Step5 alone active;
+no fit/performance/API/main acceptance yet. Monitor8980/native33710 remains.
+
+### Demonstrated bounded consumer repair — October21
+
+Step5 alone active; no heavy worker after native46231 exited1 at07:09:55Z.
+Actual readiness report failed at swing_training_readiness.py:132: old8MiB
+symbol-correction metadata reader rejects final news manifest10,692,274bytes.
+News request8,824,506bytes and passed replay report8,913,665bytes also exceed8MiB.
+Preserve workspace review-results/news-prefit-readiness.log/exit.json; actual
+data/reports/swing_news_initial_fit_readiness.json absent. Generated uncommitted
+configs/swing_news_training_readiness.json SHA256
+6adb5ef757d396200296bf66cb29ababc15ad4117c3def06350e6b4bba797fc0.
+
+Bounded repair: news-only routing to existing strict32MiB read_object in readiness,
+return inputs and direct OOF consumers. No global limit raise, feature/source/
+projection/replay change, artifact rewrite or repeated completed job. Keep exact
+SHA/strict JSON/containment checks and baseline8MiB behavior. UNIT exits cover
+large valid metadata, hash/JSON/size refusal and affected direct consumers; Ruff,
+strict mypy and one consolidated review. Retry actual report with fresh receipts,
+then continue configuration, fit-scope and prefit freeze commit before both fits.
+Monitor8980/native33710 remains;91% limit, no lower startup gate. Training and
+economic comparisons remain pending. Preserve all completed evidence below.
+
+### Completed full saved-row replay — October21, 07:08Z
 
 Native79834/Python PID20000 completed07:06:23.882297Z and naturally exited0 at
 07:06:24.0592926Z. Actual data/reports/swing_news_decision_verification.json SHA256

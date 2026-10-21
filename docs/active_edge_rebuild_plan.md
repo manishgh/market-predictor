@@ -21,7 +21,53 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: full saved-row replay passed; prefit freeze next — October21, 07:08Z
+### Current execution: real prefit report passed; baseline fit-scope active — October21,07:27Z
+
+Actual retry native64338/PID10172 exited0 at07:25:48.4940818Z. Report
+data/reports/swing_news_initial_fit_readiness.json SHA256
+177ae2477bb538909cbd770a6d0ae16cd20ce40b6180220cbd72de83642d0c98,216,453bytes,
+status diagnostic_complete;586,305saved rows,zero removed,1,231sessions/545securities.
+Of586,305rows,479,709feature-eligible and378,037have fixed-horizon supervision;
+4,482have all209model values,3,184also have supervision. Missingness remains
+explicit for train-only imputation; these are diagnostics, not outcome filters.
+
+News-only32MiB consumer routing implemented in the3named modules below. Existing
+reader/SHA/JSON/path checks and8MiB baseline behavior unchanged. Consolidated
+code/ML review found no supported findings. Ruff passed5changed Python files;
+strict mypy passed3source modules. Focused6test files:137passed; one new test's
+exception expectation corrected to canonical ValueError then its rerun passed.
+Two continuity checks passed; default Windows temp setup failed, so tests used a
+fresh task-owned basetemp. Full suite deliberately unrun for this bounded repair.
+Actual publication/request/replay hashes remain unchanged; no numerical rebuild.
+
+Generated training config SHA256
+638765ea8b7a853cbbbb471a91f2066806833a79669cab344beccd785f8c3ee6.
+Actual fit-scope native29702/PID24096 started07:26:48.559308Z, workspace
+work/verify_news_fit_scope.py with that configSHA. Fresh news-fit-scope.log/exit.json;
+expected data/reports/swing_news_baseline_fit_scope.json. No fit runs in this step.
+Do not duplicate/edit active consumer dependencies. Step5 alone active; next
+actual scope pass, metadata feature freeze and config/audit commit before fitting.
+
+### Demonstrated bounded consumer repair — October21
+
+Step5 alone remains active. Actual prefit report attempt native46231 exited1 at
+07:09:55Z: swing_training_readiness._audit reads the news manifest with the8MiB
+symbol-correction reader. Manifest10,692,274bytes, request8,824,506bytes and passed
+replay report8,913,665bytes each exceed that bound. Preserve workspace
+news-prefit-readiness.log/exit.json. Generated readiness config SHA256
+6adb5ef757d396200296bf66cb29ababc15ad4117c3def06350e6b4bba797fc0; output absent.
+
+Smallest remedy: route only news metadata in readiness, return input loading and
+direct OOF consumers through the existing strict32MiB read_object used by the
+successful replay. Keep other profiles'8MiB reader, SHA/strict JSON/path checks,
+source/projection/replay modules, numerical owners and all saved artifacts fixed.
+Exit gates: oversized valid news metadata consumed in direct UNIT fixtures;
+tamper/over32MiB/duplicate-key refusal; baseline reader limit unchanged; direct
+consumer tests, Ruff and strict mypy; one consolidated review. Then retry the
+actual report with fresh log/exit paths, followed by fit-scope/freeze/commit.
+No completed publication/replay or baseline fit is to be repeated.
+
+### Completed full saved-row replay — October21, 07:08Z
 
 Actual final verifier native79834/PID20000 completed07:06:23.882297Z and exited0
 naturally07:06:24.0592926Z. All59months/586,305decision rows/209inputs checked.

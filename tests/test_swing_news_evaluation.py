@@ -94,8 +94,39 @@ def _json(root: Path, name: str, value: dict[str, Any]) -> SourcePin:
     return SourcePin(path=name, sha256=file_sha256(path))
 
 
+def test_news_metadata_reader_preserves_hash_json_and_size_bounds(tmp_path: Path) -> None:
+    path = tmp_path / "metadata.json"
+    payload = b'{"unit_only":true}' + b" " * (8 * 1024**2)
+    path.write_bytes(payload)
+    pin = SourcePin(path=path.name, sha256=file_sha256(path))
+    assert oof._object(tmp_path, pin, {}, news=True) == {"unit_only": True}
+    with pytest.raises(DataReadinessError, match="exceeds bound"):
+        oof._object(tmp_path, pin, {})
+    path.write_bytes(payload + b" ")
+    with pytest.raises(DataReadinessError, match="OOF input changed"):
+        oof._object(tmp_path, pin, {}, news=True)
+    for malformed in (b'{"duplicate":1,"duplicate":2}', b'{"invalid":NaN}'):
+        path.write_bytes(malformed + b" " * (8 * 1024**2))
+        with pytest.raises(ValueError, match="duplicate key|non-finite"):
+            oof._object(tmp_path, SourcePin(path=path.name, sha256=file_sha256(path)), {}, news=True)
+    with path.open("wb") as stream:
+        stream.truncate(32 * 1024**2 + 1)
+    with pytest.raises(DataReadinessError, match="exceeds bound"):
+        oof._object(tmp_path, SourcePin(path=path.name, sha256=file_sha256(path)), {}, news=True)
+
+
 @pytest.fixture
-def news_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+def news_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                  request: pytest.FixtureRequest) -> dict[str, Any]:
+    large_metadata = getattr(request, "param", False)
+
+    def metadata_json(name: str, value: dict[str, Any]) -> SourcePin:
+        pin = _json(tmp_path, name, value)
+        if large_metadata:
+            with (tmp_path / name).open("ab") as stream:
+                stream.write(b" " * (8 * 1024**2))
+        return SourcePin(path=pin.path, sha256=file_sha256(tmp_path / name))
+
     monkeypatch.setattr(oof, "_profile_guard", lambda profile: None)
     readiness = json.loads((REPO / "configs/swing_training_readiness.json").read_text())
     strategy = load_strategy_contract(REPO / readiness["strategy_contract"]["path"])
@@ -114,7 +145,7 @@ def news_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, 
         "feature_profile": oof.NEWS_PROFILE, **{clock: cutoff - pd.Timedelta(minutes=1) for clock in physical_clocks.values()}})
     # No numerical feature or target columns: evaluation must only read metadata/clocks.
     frame[clocks[names[-1]]] = pd.NaT
-    parent_request = _json(tmp_path, "data/features/unit/_request.json", {"unit_only": True})
+    parent_request = metadata_json("data/features/unit/_request.json", {"unit_only": True})
     path = tmp_path / f"data/features/unit/2019-07/{oof.NEWS_PROFILE}.parquet"
     path.parent.mkdir(parents=True)
     frame.to_parquet(path, index=False)
@@ -125,13 +156,14 @@ def news_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, 
     child = {"path": f"2019-07/{oof.NEWS_PROFILE}.parquet", "sha256": digest, "manifest_sha256": sidecar.sha256,
         "rows": 2, "decision_ids_sha256": json_sha256(["a", "b"]), "model_columns": names, "availability_columns": physical_clocks}
     manifest = {"request_sha256": parent_request.sha256, "months": {"2019-07": child}}
-    publication = _json(tmp_path, "data/features/unit/_manifest.json", manifest)
+    publication = metadata_json("data/features/unit/_manifest.json", manifest)
     request = {"feature_names": names, "input_rows": 2, "input_decision_ids_sha256": json_sha256(["a", "b"]),
         "source_files": {path.relative_to(tmp_path).as_posix(): digest, sidecar.path: sidecar.sha256}}
     return dict(root=tmp_path, publication=publication, request=request, policy=policy, strategy=strategy,
                 sessions=sessions, pins={})
 
 
+@pytest.mark.parametrize("news_metadata", [False, True], indirect=True)
 def test_flat_209_metadata_preserves_population_and_missing_clocks(news_metadata: dict[str, Any]) -> None:
     result = oof._read_parent_metadata(**news_metadata)
     assert len(news_metadata["request"]["feature_names"]) == 209

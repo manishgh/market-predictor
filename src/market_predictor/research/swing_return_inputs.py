@@ -36,6 +36,7 @@ from market_predictor.swing.contracts.research import load_swing_research_contra
 from market_predictor.swing.contracts.return_feature_profiles import RETURN_RELATIONSHIP_PROFILE
 from market_predictor.swing.contracts.return_training import ReturnTrainingPolicy
 from market_predictor.swing.contracts.training_readiness import TrainingReadinessPolicy
+from market_predictor.swing.datasets.return_relationship_integrity import read_object
 from market_predictor.swing.datasets.return_relationship_verification import validate_return_relationship_receipt
 from market_predictor.swing.datasets.symbol_corrections import pinned_object
 from market_predictor.swing.features.panel import swing_model_feature_columns
@@ -54,7 +55,9 @@ class ReturnInputs:
 
 
 def load_return_inputs(root: Path, policy: ReturnTrainingPolicy) -> ReturnInputs:
-    report = pinned_object(inside(root, policy.readiness.path), policy.readiness.sha256)
+    news = policy.published_profile == NEWS_PROFILE
+    metadata_object = read_object if news else pinned_object
+    report = metadata_object(inside(root, policy.readiness.path), policy.readiness.sha256)
     pins = dict(report["source_files"])
     if pins.get(policy.readiness_config.path) != policy.readiness_config.sha256:
         raise DataReadinessError("return request and readiness configuration differ")
@@ -66,7 +69,6 @@ def load_return_inputs(root: Path, policy: ReturnTrainingPolicy) -> ReturnInputs
         raise DataReadinessError("return request and readiness profile differ")
     relationship = policy.published_profile == RETURN_RELATIONSHIP_PROFILE
     reaction = policy.published_profile == ISSUER_REACTION_PROFILE
-    news = policy.published_profile == NEWS_PROFILE
     verified = None
     news_verified = None
     if relationship or reaction or news:
@@ -79,7 +81,7 @@ def load_return_inputs(root: Path, policy: ReturnTrainingPolicy) -> ReturnInputs
         receipt_pin = memory_policy.saved_row_verification
         if pins.get(receipt_pin.path) != receipt_pin.sha256:
             raise DataReadinessError("derivative readiness omits independent saved-row receipt")
-        receipt = pinned_object(inside(root, receipt_pin.path), receipt_pin.sha256)
+        receipt = metadata_object(inside(root, receipt_pin.path), receipt_pin.sha256)
         news_verified = validate_news_decision_receipt(root, memory_policy.publication, receipt_pin) if news else None
         verified = (news_verified if news_verified is not None else
                     validate_issuer_reaction_receipt(root, memory_policy.publication, receipt) if reaction else
@@ -145,8 +147,8 @@ def load_return_inputs(root: Path, policy: ReturnTrainingPolicy) -> ReturnInputs
     names = (verified.model_columns if verified is not None else
         tuple(swing_model_feature_columns(contract=strategy, catalyst=False)))
     publication_path = inside(root, memory_policy.publication.path)
-    manifest = pinned_object(publication_path, memory_policy.publication.sha256)
-    request = pinned_object(publication_path.parent / "_request.json", manifest["request_sha256"])
+    manifest = metadata_object(publication_path, memory_policy.publication.sha256)
+    request = metadata_object(publication_path.parent / "_request.json", manifest["request_sha256"])
     if report["cohort_sha256"] != request["cohort_sha256"]:
         raise DataReadinessError("return research population identity differs")
     rows = report["profiles"][policy.published_profile]["rows"]

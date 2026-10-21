@@ -81,10 +81,20 @@ def test_news_guard_delegates_to_bounded_news_runtime(monkeypatch: pytest.Monkey
 
 
 @pytest.fixture
-def news_unit(publication: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+def news_unit(publication: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+              request: pytest.FixtureRequest) -> dict[str, Any]:
     """Adapt tiny generic UNIT rows; mock only the independent source-replay owner."""
     state = publication
     root = state["root"]
+    large_metadata = getattr(request, "param", False)
+
+    def metadata_json(path: Path, payload: Any) -> str:
+        _json(path, payload)
+        if large_metadata:
+            with path.open("ab") as stream:
+                stream.write(b" " * (8 * 1024**2))
+        return file_sha256(path)
+
     package = root / "src/market_predictor"
     for name in readiness.NEWS_IMPLEMENTATION_PATHS:
         target = package / name
@@ -121,7 +131,7 @@ def news_unit(publication: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> d
         "source_files": {source_index["path"]: source_index["sha256"]},
         "policy": {"source_link_index": source_index}, "cohort_sha256": "c" * 64,
         "profile_sha256": "a" * 64, "model_columns": list(names), "availability_columns": clocks, **CLOSED}
-    request_hash = _json(directory / "_request.json", request)
+    request_hash = metadata_json(directory / "_request.json", request)
     path = directory / "2019-07" / f"{PROFILE}.parquet"
     audit = CanonicalAuditReport(checks=(CanonicalAuditCheck(name="synthetic_unit", status="pass", failures=0,
         rows_checked=3, detail="Synthetic UNIT rows, independent source owner mocked."),))
@@ -133,12 +143,12 @@ def news_unit(publication: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> d
     manifest = {"schema": "market_predictor.news_decision_publication", "status": "complete_research_only",
         "request_sha256": request_hash, "rows": 3, "months": {"2019-07": child}, **CLOSED}
     manifest_path = directory / "_manifest.json"
-    manifest_hash = _json(manifest_path, manifest)
+    manifest_hash = metadata_json(manifest_path, manifest)
     receipt = {"months": 1, "source_files": source_files, "source_link_index": source_index,
         "source_replay_files": {"synthetic_unopened_raw_provenance.json": "b" * 64},
         "profiles": {PROFILE: {"rows": 3, "feature_eligible": 3, "complete_model_rows": 2, "clock_violations": 0}}, **CLOSED}
     receipt_path = root / "data/reports/news-unit-receipt.json"
-    receipt_hash = _json(receipt_path, receipt)
+    receipt_hash = metadata_json(receipt_path, receipt)
     state["policy"].update(published_profile=PROFILE, maximum_system_used_percent=91,
         publication={"path": manifest_path.relative_to(root).as_posix(), "sha256": manifest_hash},
         saved_row_verification={"path": receipt_path.relative_to(root).as_posix(), "sha256": receipt_hash})
@@ -162,6 +172,7 @@ def _policy(state: dict[str, Any]) -> ReturnTrainingPolicy:
     return ReturnTrainingPolicy.model_validate(payload)
 
 
+@pytest.mark.parametrize("news_unit", [False, True], indirect=True)
 def test_flat_news_readiness_and_loader_preserve_population_targets_weights(news_unit: dict[str, Any]) -> None:
     report = _run(news_unit)
     data = loader.load_return_inputs(news_unit["root"], _policy(news_unit))

@@ -1,0 +1,26 @@
+{
+  "maximum_system_used_percent": 91.0,
+  "publication": {
+    "path": "data/features/swing_news_decision_features/_manifest.json",
+    "sha256": "4112d3255ef57e598ced47401cbedabf4d40200be46dd50d6490dc04dbd056ec"
+  },
+  "published_profile": "technical_relationships_news",
+  "research_contract": {
+    "path": "configs/swing_research.toml",
+    "sha256": "411d1d5e745a038fb1e4f16433eb7df6411f4c74c95264d9878ec64b9d0e42d9"
+  },
+  "saved_row_verification": {
+    "path": "data/reports/swing_news_decision_verification.json",
+    "sha256": "1ff71a1c6904c97eba099a45ac9f54bb25817481095971e98a220832f75c2669"
+  },
+  "schema_version": "market_predictor.swing_training_readiness",
+  "scope": "initial_fit_fixed_horizon_diagnostics",
+  "strategy_contract": {
+    "path": "configs/edge_rebuild_strategy_contract.toml",
+    "sha256": "428fa7c5580c91e3b1736c929d33a19d6baba30d376a3fca90ab21f32f52f860"
+  },
+  "temporal_contract": {
+    "path": "configs/edge_rebuild_temporal_manifest.toml",
+    "sha256": "0f25e37ad0c137ea1543d131c021b8bef72274b6c0940a7ac62997ad11be4017"
+  }
+}

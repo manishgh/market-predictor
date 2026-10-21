@@ -30,6 +30,7 @@ from market_predictor.swing.contracts.issuer_reaction_publication import ARTIFAC
 from market_predictor.swing.contracts.research import load_swing_research_contract
 from market_predictor.swing.contracts.return_feature_profiles import RETURN_RELATIONSHIP_PROFILE
 from market_predictor.swing.contracts.training_readiness import TrainingReadinessPolicy
+from market_predictor.swing.datasets.return_relationship_integrity import read_object
 from market_predictor.swing.datasets.return_relationship_verification import validate_return_relationship_receipt
 from market_predictor.swing.datasets.symbol_corrections import pinned_object
 from market_predictor.swing.features.panel import swing_model_feature_columns
@@ -128,12 +129,14 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
     reaction = policy.published_profile == ISSUER_REACTION_PROFILE
     news = policy.published_profile == NEWS_PROFILE
     derivative = relationship or reaction or news
+    # Full news metadata uses the same bounded reader as its saved-row proof.
+    metadata_object = read_object if news else pinned_object
     publication_path = inside(root, policy.publication.path)
-    manifest = pinned_object(publication_path, policy.publication.sha256)
+    manifest = metadata_object(publication_path, policy.publication.sha256)
     request_path = publication_path.parent / "_request.json"
-    request = pinned_object(request_path, manifest["request_sha256"])
+    request = metadata_object(request_path, manifest["request_sha256"])
     pins[request_path.relative_to(root).as_posix()] = manifest["request_sha256"]
-    receipt = pinned_object(inside(root, policy.saved_row_verification.path), policy.saved_row_verification.sha256)
+    receipt = metadata_object(inside(root, policy.saved_row_verification.path), policy.saved_row_verification.sha256)
     news_verified = validate_news_decision_receipt(root, policy.publication, policy.saved_row_verification) if news else None
     if news and any(record.get(name) is not False for record in (manifest, request, receipt) for name in NEWS_CLOSED):
         raise DataReadinessError("news publication and verification must retain all false admission flags")

@@ -39,6 +39,7 @@ from market_predictor.swing.datasets.funded_policy_inputs import (
     unsimulated_managed_specification,
     verified_funded_policy_inputs,
 )
+from market_predictor.swing.datasets.return_relationship_integrity import read_object
 from market_predictor.swing.datasets.saved_evaluation_configuration import verify_saved_evaluation_configuration
 from market_predictor.swing.datasets.symbol_corrections import pinned_object
 from market_predictor.swing.evaluation.accounting import evaluate_event_aware_swing_accounting
@@ -122,7 +123,7 @@ def _profile_guard(profile: str) -> None:
 def _news_receipt(root: Path, publication: SourcePin, request: dict[str, Any], readiness: dict[str, Any],
                   policy: TrainingReadinessPolicy, pins: dict[str, str]) -> dict[str, Any]:
     receipt_pin = policy.saved_row_verification
-    receipt = _object(root, receipt_pin, pins)
+    receipt = _object(root, receipt_pin, pins, news=True)
     verified = validate_news_decision_receipt(root, publication, receipt_pin)
     expected_contracts = {role: getattr(policy, role).model_dump(mode="json")
                           for role in ("strategy_contract", "research_contract", "temporal_contract")}
@@ -162,8 +163,9 @@ def _recheck(root: Path, pins: dict[str, str]) -> None:
         _pin(root, SourcePin(path=name, sha256=digest), {})
 
 
-def _object(root: Path, pin: SourcePin, pins: dict[str, str]) -> dict[str, Any]:
-    return pinned_object(_pin(root, pin, pins), pin.sha256)
+def _object(root: Path, pin: SourcePin, pins: dict[str, str], *, news: bool = False) -> dict[str, Any]:
+    metadata_object = read_object if news else pinned_object
+    return metadata_object(_pin(root, pin, pins), pin.sha256)
 
 
 def _clock(value: Any) -> pd.Timestamp:
@@ -197,9 +199,10 @@ def _read_parent_metadata(
     strategy: StrategyContract, sessions: tuple[date, ...], pins: dict[str, str],
 ) -> pd.DataFrame:
     path = _pin(root, publication, pins)
-    manifest = _object(root, publication, pins)
+    news = policy.feature_profile == NEWS_PROFILE
+    manifest = _object(root, publication, pins, news=news)
     parent_request = _object(root, SourcePin(path=(path.parent / "_request.json").relative_to(root).as_posix(),
-                                          sha256=manifest["request_sha256"]), pins)
+                                          sha256=manifest["request_sha256"]), pins, news=news)
     names = tuple(swing_model_feature_columns(contract=strategy, catalyst=False))
     if policy.feature_profile in ("technical_relationships", ISSUER_REACTION_PROFILE, NEWS_PROFILE):
         names = (*names, *RETURN_RELATIONSHIP_COLUMNS)
@@ -266,7 +269,7 @@ def _saved_scores(
     manifest, request = _run(root, run_path.parent, run_manifest.sha256, pins)
     policy = ReturnTrainingPolicy.model_validate(request["policy"])
     _require(learner in ("regularized_linear_return", "shallow_boosted_return"), "unsupported saved learner")
-    readiness = _object(root, policy.readiness, pins)
+    readiness = _object(root, policy.readiness, pins, news=policy.feature_profile == NEWS_PROFILE)
     readiness_policy = TrainingReadinessPolicy.model_validate(_object(root, policy.readiness_config, pins))
     _require(readiness_policy.publication == feature_publication
              and readiness_policy.research_contract == research_pin and readiness_policy.published_profile == policy.published_profile,
