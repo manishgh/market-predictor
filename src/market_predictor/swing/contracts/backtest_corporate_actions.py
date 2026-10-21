@@ -28,6 +28,8 @@ class BacktestCorporateActionPolicy(HoldingContract):
     unknown_actions: Literal["valuation_unavailable_without_filtering_selected_lots"]
     production_eligible: Literal[False]
     reviewed_action_dates: SourcePin | None = None
+    reviewed_cash_payouts: SourcePin | None = None
+    documented_cash_payouts: Literal["issuer_declared_usd_at_ex_date_close"] | None = None
 
     def sha256(self) -> str:
         return json_sha256(self.model_dump(mode="json", exclude_none=True))
@@ -38,7 +40,7 @@ class BacktestCorporateActionContext(HoldingContract):
     policy_reference: EvidenceReference
 
     def assumed_event_ids(self, spec: HoldingSpecification) -> set[str]:
-        """Authorize only matched ordinary-dividend entitlement/payment/cash triples."""
+        """Authorize only matched approved-dividend entitlement/payment/cash triples."""
         digest = self.policy.sha256()
         if (self.policy_reference.interpretation_policy_sha256 != digest
                 or self.policy_reference.available_at is not None):
@@ -53,7 +55,7 @@ class BacktestCorporateActionContext(HoldingContract):
             if (not event.event_id.startswith("simulated-dividend:") or event.treatment != "distribution"
                     or event.fractional_treatment != "proportional" or len(event.legs) != 1
                     or event.effective_at is None or event.effective_at <= spec.initial_entry_timestamp):
-                raise ValueError("corporate assumption is restricted to owned ordinary cash dividends")
+                raise ValueError("corporate assumption is restricted to owned approved cash dividends")
             leg = event.legs[0]
             if (leg.kind != "unpaid_proceeds" or leg.currency != "USD" or leg.face_value_per_unit != 1.0
                     or not any(type(ref) is EvidenceReference for ref in event.evidence)):

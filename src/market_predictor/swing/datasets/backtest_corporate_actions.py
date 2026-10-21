@@ -38,6 +38,7 @@ from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.action_evidence import CorporateActionEvidence
 from market_predictor.swing.datasets.action_windows import ActionWindow
 from market_predictor.swing.datasets.reviewed_action_dates import load_reviewed_action_dates
+from market_predictor.swing.datasets.reviewed_cash_payouts import load_reviewed_cash_payouts
 
 
 def load_backtest_corporate_action_context(root: Path, pin: SourcePin) -> BacktestCorporateActionContext:
@@ -207,6 +208,28 @@ class BacktestCorporateActions:
             if (key in invalid or term.action_id in conflicting_records or (term.symbol, term.session) in mixed
                     or counts[term.symbol, term.session, term.family == "cash_dividends"] != 1):
                 del self.terms[key]
+        cash_facts, cash_pins = load_reviewed_cash_payouts(root, context.policy.reviewed_cash_payouts,
+            self._records, documented_cash_approved=context.policy.documented_cash_payouts is not None,
+            memory_guard=memory_guard)
+        for name, digest in cash_pins.items():
+            if name in self.source_files and self.source_files[name] != digest:
+                raise DataReadinessError("reviewed cash cannot replace a different retained source pin")
+        self.source_files.update(cash_pins)
+        self.reviewed_cash_aliases: dict[tuple[str, str], str] = {}
+        for fact in cash_facts:
+            cash_identity = "reviewed-cash:" + json_sha256(fact.model_dump(mode="json"))
+            fact_pin = context.policy.reviewed_cash_payouts
+            if fact_pin is None:
+                raise DataReadinessError("reviewed cash facts lack their explicit policy pin")
+            reference = EvidenceReference(reference=fact_pin.path, artifact_sha256=fact_pin.sha256,
+                interpretation_policy_sha256=context.policy.sha256(),
+                record_locator=f"declared USD entitlement={fact.entitlement_id};ex_date={fact.ex_date.isoformat()}",
+                retrieved_at=context.policy_reference.retrieved_at, available_at=None)
+            for record in fact.provider_records:
+                self.terms.pop((fact.symbol, record.action_id), None)
+                self.reviewed_cash_aliases[fact.symbol, record.action_id] = cash_identity
+            self.terms[fact.symbol, cash_identity] = _Terms(cash_identity, "cash_dividends", fact.symbol, fact.ex_date,
+                fact.declared_rate_usd, reference)
 
     def irrelevance_reason(self, symbol: str, window: ActionWindow, first: date, last: date,
         *, price_history: bool = False) -> str | None:
@@ -290,7 +313,14 @@ class BacktestCorporateActions:
         return None
 
     def resolves(self, symbol: str, window: ActionWindow) -> bool:
-        term = self.terms.get((symbol, window.action_id))
+        reviewed = self.reviewed_cash_aliases.get((symbol, window.action_id))
+        term = self.terms.get((symbol, reviewed or window.action_id))
+        if reviewed is not None:
+            return (term is not None and term.family == window.family == "cash_dividends"
+                and window.unavailable_reason in {"corporate_terms_require_replay",
+                    "unbounded_entitlement_or_due_bill_dates", "reviewed_cash_distribution_resolution_unavailable"}
+                and (window.first_relevant_date is None or window.first_relevant_date <= term.session)
+                and (window.last_relevant_date is None or term.session <= window.last_relevant_date))
         return (term is not None and term.family == window.family
             and window.unavailable_reason == "corporate_terms_require_replay"
             and window.first_relevant_date is not None

@@ -15,6 +15,7 @@ from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside
 from market_predictor.swing.contracts.holding_accounting import HoldingContract, Sha256
 from market_predictor.swing.contracts.holding_materialization import SourcePin
+from market_predictor.swing.datasets.reviewed_action_sources import verify_reviewed_action_sources
 
 DateField = Literal["ex_date", "record_date", "payable_date", "effective_date"]
 
@@ -56,50 +57,8 @@ def load_reviewed_action_dates(root: Path, pin: SourcePin | None,
     artifact = ReviewedActionDateArtifact.model_validate_json(raw)
     if not artifact.records or len(artifact.records) > 256:
         raise DataReadinessError("reviewed action dates exceed their exact-action bound")
-    pins = {pin.path: pin.sha256, **artifact.source_files}
-    if artifact.source_files.get(pin.path) is not None:
-        raise DataReadinessError("reviewed action dates cannot replace their own pin")
-    for name, digest in pins.items():
-        memory_guard()
-        source = inside(root, name)
-        if source.stat().st_size > 16 * 1024**2 or file_sha256(source) != digest:
-            raise DataReadinessError("reviewed action date source changed")
-    verified_receipts: set[str] = set()
-    for fact in artifact.records:
-        for receipt_pin in fact.official_receipts:
-            receipt_path = inside(root, receipt_pin.path)
-            if (pins.get(receipt_pin.path) != receipt_pin.sha256 or receipt_path.name != "receipt.json"
-                    or receipt_path.stat().st_size > 256 * 1024):
-                raise DataReadinessError("reviewed action dates lack their exact official receipt")
-            if receipt_pin.path in verified_receipts:
-                continue
-            receipt = parse_strict_json_object(receipt_path.read_bytes(), label="reviewed official receipt")
-            request_path = receipt_path.parent / "_request.json"
-            transport_path = receipt_path.parent / "transport.json"
-            request_name = request_path.relative_to(root).as_posix()
-            transport_name = transport_path.relative_to(root).as_posix()
-            if (request_name not in pins or transport_name not in pins
-                    or request_path.stat().st_size > 256 * 1024 or transport_path.stat().st_size > 256 * 1024):
-                raise DataReadinessError("reviewed action official request or transport missing")
-            request = parse_strict_json_object(request_path.read_bytes(), label="reviewed official request")
-            transport = parse_strict_json_object(transport_path.read_bytes(), label="reviewed official transport")
-            body_leaf = receipt.get("body_path")
-            if not isinstance(body_leaf, str):
-                raise DataReadinessError("reviewed official receipt body path is missing")
-            body_path = inside(receipt_path.parent, body_leaf)
-            body_name = body_path.relative_to(root).as_posix()
-            if (receipt.get("state") != "archived_unreviewed" or receipt.get("status_code") != 200
-                    or transport.get("status_code") != 200 or transport.get("redirect_chain")
-                    or receipt.get("request_sha256") != json_sha256(request)
-                    or request.get("url") != receipt.get("url")
-                    or transport.get("requested_url") != request.get("url")
-                    or transport.get("final_url") != request.get("url")
-                    or pins.get(body_name) != receipt.get("body_sha256")
-                    or transport.get("sha256") != receipt.get("body_sha256")
-                    or pins.get(transport_name) != receipt.get("transport_sha256")
-                    or transport.get("body_length") != body_path.stat().st_size):
-                raise DataReadinessError("reviewed action official source is not the exact successful response")
-            verified_receipts.add(receipt_pin.path)
+    pins = verify_reviewed_action_sources(root, pin, artifact.source_files,
+        (receipt for fact in artifact.records for receipt in fact.official_receipts), memory_guard=memory_guard)
     result: dict[str, ReviewedActionDate] = {}
     for fact in artifact.records:
         matched = records.get(fact.action_id)
