@@ -21,7 +21,23 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: run stock backtests with dividend/split accounting — October21,14:11Z
+### Current execution: first corrected stock backtest complete; second active — October21,16:45Z
+
+Price indicators / Ridge / profit target, stop-loss, ten-session limit completed
+16:45:20.240523Z with valuation_unavailable (expectedCLIexit2, not a crash). Actual
+manifestSHA335e8e41077698746feef38665eba48209d3048105ece63c7db295ee735eb19a,
+reportSHAa6bcee01579e42e7d0125582b4b7c5c17ee9a2344153831ea2b1ab5a885606f2;
+all5artifact hashes verified and frozen inputs rechecked. Same17,700selections and
+identical saved selected/decision hashes;0filtered entries. Missing stock entries
+fell5,632to1,935 (1,795ATR/140holding); benchmark gaps10to1:QQQ. SPY now has no gap.
+Remaining cause counts overlap:1,056unbounded entitlement/due-bill dates,702missing
+economic dates,187terms needing replay,1QQQreviewed special-distribution resolution.
+QQQ raw records include two same-date/rate ordinary IDs with different payable dates
+and a special=True distribution; do not double-count or apply ordinary assumptions
+to it. Actual diagnostic workspace dividend-split-first-result-diagnosis.json.
+No complete portfolio return/SPY comparison. Second policy, Price indicators / Ridge /
+stop-loss and ten-session limit, began16:45:20.725898Z, actual child36376/controller30960.
+Campaign remains live; no code/config edits or retries while it runs. Step7 alone.
 
 Actual accounting proof is complete (closure pushed9d7cfee). The fresh twelve-policy
 campaign news_dividend_split_20261021 is LIVE: native99381/Python30960/launcher5720

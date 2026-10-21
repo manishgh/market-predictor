@@ -21,7 +21,29 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: run stock backtests with dividend/split accounting — October21,14:11Z
+### Current execution: first corrected stock backtest complete; second active — October21,16:45Z
+
+FIRST completed result: Price indicators / Ridge / profit target, stop-loss,
+ten-session limit,16:45:20.240523Z, valuation_unavailable/expectedexit2. Actual
+data/research/news_dividend_split_20261021_technical_regularized_linear_return_target_stop_ten_session_timeout/_manifest.json
+SHA335e8e41077698746feef38665eba48209d3048105ece63c7db295ee735eb19a;
+reportSHAa6bcee01579e42e7d0125582b4b7c5c17ee9a2344153831ea2b1ab5a885606f2.
+All5artifact hashes verified; frozen inputs rechecked. Selection17700andselected/
+decisions SHA identical to old report;0lots removed. Stockgaps5632->1935,ATR1795/
+holding140; benchmarks10->1(QQQ), SPY accounting now available. Overlapping causes:
+1056unbounded entitlement/due-bill dates,702missing economic dates,187terms needing
+replay,1reviewedQQQspecialresolution. Exact retained QQQ records: ordinary same-day
+0.51856/ex2022-09-19 IDs d0409c14-2b32-4cdb-9d5d-57a8a9a0818f and
+1966d92d-c3ae-4da1-8daa-483789298533 have different payable dates; bridge refuses
+duplicate entitlement. Special=True ex2023-12-27/rate0.21584 ID
+6e3ba6ba-8d29-42fd-8023-8928105fcd9b remains outside ordinary-only assumption and
+its existing reviewed resolution unavailable. No external-data absence inferred.
+Workspace dividend-split-first-result-diagnosis.json preserves exact diagnosis.
+No portfolio performance result; do not drop lots/infer terms/retry this completed
+result. Second policy Price indicators / Ridge / stop-loss and ten-session limit
+IS LIVE from16:45:20.725898Z, actual child36376/launcher30588/controller30960.
+Do not edit frozen source/config/operator/runtime or duplicate/restart campaign;
+remaining eleven results continue. Guard paused/resumed once for5.339387s at15:32Z.
 
 CURRENT LIVE campaign news_dividend_split_20261021: native99381/Python30960/
 launcher5720 started14:11:11Z. Reviewed workspace work/run_dividend_split_backtests.py
