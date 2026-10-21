@@ -51,7 +51,8 @@ cash-timing rule, not demonstrated external SPY data absence.
 Independent ATR fix implemented and reviewed with no findings:52funded-provider/
 frozen-exit UNITs passed6.37s, Ruff2files and strictmypy1passed. Ordinary dividend
 windows no longer prevent raw-price ATR reads; holding/benchmark cash and uncertain
-action gates unchanged. Full accounting repair remains in progress under step7.
+action gates unchanged at that bounded checkpoint. The full approved bridge below
+is now implemented and verified; step7 portfolio comparisons remain in progress.
 
 The independent ATR fix is pushed as c55846f. The full approved corporate-action
 bridge is now implemented: source-pinned ordinary dividends create separately
@@ -74,8 +75,8 @@ exactly once:17.613976cash per original share, no reinvestment; independent raw
 price+cash equity matches the kernel. An actual selected TSLA split holding replayed
 through its sale. This is accounting proof, not model performance. Workspace
 dividend-split-real.log/.exit.json retained. Code checkpoint b984a76 pushed.
-Proceed to the same twelve stock backtests using the fresh reviewed operator and
-actual proof pin. No source admission; the prior unavailable report is immutable.
+The same twelve stock backtests are now running as recorded above, with the actual
+proof pin. No source admission; the prior unavailable report is immutable.
 
 ### Historical accounting repair design — October21,13:14Z
 
