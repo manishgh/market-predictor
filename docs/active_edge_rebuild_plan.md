@@ -21,7 +21,19 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: two news learners complete; frozen comparison next — October21,07:49Z
+### Current execution: frozen comparison campaign running — October21,07:50Z
+
+Training closure e48bc02 pushed before campaign. Actual campaign native18539,
+Python6548/venv-launcher28056 started07:49:47Z with71.726%RAM. Operator
+work/run_news_evaluation_campaign.py SHA351b0bb486ab47ac0d357f9bd2f7d719c79817ac0272ba626c295e567adec974,
+campaign news_initial_fit_20261021; workspace state directory
+review-results/news-evaluation-20261021, outer log/exit ofsameprefix. First canonical
+child compare-saved-swing-returns PID25664 started07:49:56.693776Z. Do not duplicate
+or edit frozen source/config/operator/runtime. Exactly2paired and12funded trials;
+actual results pending. Step7 alone active; preserve unavailable/failure receipts.
+Monitor8980/native33710 and91%limit remain. No SPY/API/main acceptance claimed.
+
+### Completed training and comparison launch boundary — October21,07:49Z
 
 Actual native45512/PID27452 completed07:38:09.950585Z and naturally exited0 at
 07:38:10.4807125Z. data/research/swing_news_return_models_initial_fit/_manifest.json
