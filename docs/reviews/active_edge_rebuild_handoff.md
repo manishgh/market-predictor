@@ -21,7 +21,29 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: reader repair verified in UNITs; real metadata pass running — October21,09:04Z
+### Current execution: real selection-metadata proof passed; funded-only retry next — October21,09:23Z
+
+Reader repair6fadc6e pushed. Actual verifier native31810/PID27004 naturally exited0
+09:12:28.6994039Z; owner released. Actual report
+data/reports/swing_saved_selection_metadata_verification.json SHA256
+a27f13eadccaa6daec56bf3c3c4ab5aa8d25e27403a7dce593f7284a3f2938af,
+passed_real_saved_selection_metadata. EACH technical120/relationship124/news209
+checked586,305rows/1,231sessions,479,709featureeligible,328,115causalpeereligible,
+0missingselectionfields. No numericalfeatures/outcomes rebuilt,rawcollection orfits.
+Retain workspace selection-metadata-real.log/exit.json. Completed source/models fixed.
+
+Reader remedy closes; step7aloneactive. READY execute reviewed workspace
+work/run_news_funded_retry.py SHAb41f38befd5d3c7d24924afc921c9b9e48c6302f527bd2dbfc5998e346f9eb85
+with exact newsmanifestSHA48f3ff9aff50e4eb6be6704808d8a0db5e1b42cbcb21f0cc79f0f4555ccb479b,
+priorcomplete workspace/review-results/news-evaluation-20261021/complete.json
+SHAa0942413b543ad6cbad9412d5219abc204099e6e0d641815c52f718b6dddbcf5,
+fresh campaign news_funded_retry_20261021,state workspace/review-results/news-funded-retry-20261021.
+Operator/pastreceipt hashes verified and repositorycandidateoutputs absent09:23Z.
+Same12fundedpolicies only;2passedpairs reused/pinned. Freshouterlog/exit needed.
+Preserve originalall14receipts. Monitor8980/native33710,91%ceiling unchanged.
+No newmodel fits or SPY/API/main acceptance claimed.
+
+### Historical real metadata proof launch — October21,09:04Z
 
 Source repair only research/swing_oof_policy_evaluation.py; canonical completecohort
 group/peer composition below and duplicate security/session guard implemented.

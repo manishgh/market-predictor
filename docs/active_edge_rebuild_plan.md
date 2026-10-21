@@ -21,7 +21,25 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: reader repair verified in UNITs; real metadata pass running — October21,09:04Z
+### Current execution: real selection-metadata proof passed; funded-only retry next — October21,09:23Z
+
+Repair6fadc6e pushed. Actual real verifier native31810/PID27004 naturally exited0
+at09:12:28.6994039Z. data/reports/swing_saved_selection_metadata_verification.json
+SHAa27f13eadccaa6daec56bf3c3c4ab5aa8d25e27403a7dce593f7284a3f2938af,
+status passed_real_saved_selection_metadata. EACH120/124/209publication checked
+586,305rows/1,231sessions;479,709featureeligible;328,115causal cross-section eligible;
+0missinggroup/flag. All3 exact masks use same complete retained population.
+No outcomes/numericfeatures recalculated, rawcollection orfits. Original model and
+feature artifacts unchanged. Preserve selection-metadata-real.log/exit.json.
+
+Bounded reader remedy closes; step7 stays active. Next reviewed funded-only operator
+work/run_news_funded_retry.py SHAb41f38befd5d3c7d24924afc921c9b9e48c6302f527bd2dbfc5998e346f9eb85,
+same12failedfundedtrials, fresh news_funded_retry_20261021 campaign/output/state;
+reuse2passedpairreports and externally pin originalcompleteSHA below. Original
+all14failure/success receipts retained. No extra experiment, model fit orreplay.
+Monitor8980/native33710 and91%RAMlimit unchanged; no fundedeconomicclaim yet.
+
+### Historical real metadata proof launch — October21,09:04Z
 
 Bounded downstream remedy implemented only in swing_oof_policy_evaluation.py.
 Complete-cohort selection context now follows exact causal grouping/sector-peer
