@@ -21,7 +21,25 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: real selection-metadata proof passed; funded-only retry next — October21,09:23Z
+### Current execution: funded-only twelve-policy retry running — October21,09:24Z
+
+Metadata proof closure fbcd805 pushed beforelaunch. CURRENT LIVE native75310,
+PythonPID6512/venv-launcher27928 started09:23:38Z at73.438%RAM using reviewed
+workspace work/run_news_funded_retry.py
+SHAb41f38befd5d3c7d24924afc921c9b9e48c6302f527bd2dbfc5998e346f9eb85.
+--campaign news_funded_retry_20261021 --state-dir workspace/review-results/news-funded-retry-20261021.
+Fresh outer workspace review-results/news-funded-retry-20261021.log/.exit.json.
+Actual request.json now exists with12fundedtrials and2retainedpairproofs; no pairrerun.
+PriorcompleteSHAa0942413b543ad6cbad9412d5219abc204099e6e0d641815c52f718b6dddbcf5
+and newsmanifestSHA48f3ff9aff50e4eb6be6704808d8a0db5e1b42cbcb21f0cc79f0f4555ccb479b accepted.
+First canonicalchild4268/project-swing-corporate-action-evidence started09:23:47Z;
+inspectactual currentowner rather than assuming thisPID persists. Do not duplicate
+or edit frozen source/config/operator/runtime. Require actualnaturalexit/complete.json,
+12fundedresultreceipts and reused2passedpairs before completionclaim. Preserve all
+original14attempts and every unavailable/failure outcome. Step7aloneactive;
+monitor8980/native33710/91%ceiling unchanged. No SPY/API/mainacceptance yet.
+
+### Completed real selection-metadata proof — October21,09:23Z
 
 Reader repair6fadc6e pushed. Actual verifier native31810/PID27004 naturally exited0
 09:12:28.6994039Z; owner released. Actual report

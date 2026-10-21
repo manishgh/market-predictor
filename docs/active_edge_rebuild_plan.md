@@ -21,7 +21,19 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: real selection-metadata proof passed; funded-only retry next — October21,09:23Z
+### Current execution: funded-only twelve-policy retry running — October21,09:24Z
+
+Actual metadata proof closure fbcd805 pushed. Fresh retry native75310/Python6512
+(venv-launcher27928) started09:23:38Z at73.438%RAM. Reviewed workspace
+work/run_news_funded_retry.py SHAb41f38befd5d3c7d24924afc921c9b9e48c6302f527bd2dbfc5998e346f9eb85;
+campaign news_funded_retry_20261021,state workspace/review-results/news-funded-retry-20261021,
+outer .log/.exit.json ofsameprefix. It accepted pinned priorcomplete/retainedpairs,
+newsmanifest and exact12failedpolicy IDs. First canonical child4268 started09:23:47Z.
+No pairedcomparison rerun or model fit. Do not duplicate/edit frozen dependencies.
+Step7aloneactive; read actual per-trial receipts and retain unavailable outcomes.
+Monitor8980/native33710 and91%limit remain; no SPY/API/main acceptance claimed.
+
+### Completed real selection-metadata proof — October21,09:23Z
 
 Repair6fadc6e pushed. Actual real verifier native31810/PID27004 naturally exited0
 at09:12:28.6994039Z. data/reports/swing_saved_selection_metadata_verification.json
