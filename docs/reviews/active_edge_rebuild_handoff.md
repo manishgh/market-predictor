@@ -21,7 +21,36 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: frozen comparison campaign running — October21,07:50Z
+### Current execution: campaign running; actual funded-reader conflict — October21,08:05Z
+
+Actual paired reports both passed exit0 at07:50:18Z/07:50:43Z:
+data/reports/news_initial_fit_20261021_technical_news_paired.json SHA256
+cba97083cb8639df48b9d3981bf269304588261367016d10270aebe0a09bc883;
+data/reports/news_initial_fit_20261021_relationships_news_paired.json SHA256
+156fba7ff7d2080a1969689d813b42894db5910cea1b43bfe5a37c972d493cdc.
+Actual funded03/04result receipts statusfailed/exit2,no outputmanifest. Both stderr
+logs say "parent selection metadata missing". Exact refusal
+research/swing_oof_policy_evaluation.py:238 (_REQUIRED_PARENT). Actual schema-only
+inspection of all59months in EACH120/124/209publication: cross_section_eligible and
+decision_group_id absent59/59; daily_bar_count/feature_eligible/sector/session_date_et/
+decision_time_utc present59/59. No numerical rows were changed/recomputed. Existing
+research_partition's projection omits these selection fields; no model refit needed.
+
+CURRENT campaign native18539/Python6548 still active; all12attempts retained and
+remaining children continue. No source/config/operator/runtime edits until it ends.
+At08:03Z currentchild owner20932,initial-fit-raw-share-plan; this is existing retained
+evidence validation inside canonical provider, not new network collection. Inspect
+actual owner/per-trial files rather than assuming that child PID persists.
+After actual natural campaign end, preserve all14results/complete.json/outerexit;
+resolve only downstream selection-metadata contract from pinned complete retained
+population and canonical causal grouping/peer rules. No invented true flags,
+outcome-derived selection, publisher/source rebuild, feature edit or baseline/news
+refit. Bounded gates: warm-up/insufficient sector peers, grouped-clock/identity
+tamper,target-poison independence,selected-ID/zero-day parity. Review smallest
+supported repair once, then use fresh failed-funded-trial receipt/output scope;
+reuse passedpairedreports. Step7 alone active; no actualfundedperformance claim.
+
+### Historical campaign launch — October21,07:50Z
 
 Training closure e48bc02 pushed. CURRENT ACTIVE campaign native18539/Python6548
 (venv-launcher28056) started07:49:47Z at71.726%RAM. Reviewed workspace operator

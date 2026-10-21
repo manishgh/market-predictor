@@ -21,7 +21,32 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: frozen comparison campaign running — October21,07:50Z
+### Current execution: campaign running; actual funded-reader conflict — October21,08:05Z
+
+Both paired comparisons completed with historical_diagnostics_complete/exit0:
+technical-news reportSHA cba97083cb8639df48b9d3981bf269304588261367016d10270aebe0a09bc883;
+relationships-news reportSHA156fba7ff7d2080a1969689d813b42894db5910cea1b43bfe5a37c972d493cdc.
+Funded trials03/04 failed exit2 before a result manifest; stderr exactly
+"parent selection metadata missing". Actual schema-only inspection across ALL59
+months of EACH120/124/209input publication found cross_section_eligible and
+decision_group_id absent in every month; daily_bar_count,feature_eligible,sector,
+session_date_et,decision_time_utc present in every month. The evaluation reader
+requires the2absent fields at swing_oof_policy_evaluation.py:238. No missing lot or
+SPY-return result is inferred from this software refusal; model fits stay complete.
+
+Frozen campaign native18539/Python6548 remains active and retains all12actual
+trial attempts; do not edit source/config/runtime or duplicate it. Preserve every
+started/result/log/exit and eventual complete.json. After natural campaign end,
+bounded next repair is the downstream selection-metadata contract only: prove
+canonical daily grouping/cross-section semantics from pinned complete retained
+decision inputs, no blankettrue flag, outcome filtering, feature reconstruction or
+refit. Exit tests must cover insufficient/warm-up sector peers, changed clocks/
+grouping/identity, target-poison independence, missing values and selected-ID parity.
+Record/review smallest exact remedy before any new fresh failed-trial retry; reuse
+successful paired reports. No old source/design review is reopened speculatively.
+Step7 alone active; economic comparison unavailable until actual funded reports.
+
+### Historical campaign launch — October21,07:50Z
 
 Training closure e48bc02 pushed before campaign. Actual campaign native18539,
 Python6548/venv-launcher28056 started07:49:47Z with71.726%RAM. Operator
