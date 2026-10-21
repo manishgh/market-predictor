@@ -21,7 +21,72 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: documented cash repair verified and pushed — October21,22:03Z
+### Current execution: parent spin units verified — October21
+
+Implementationabc9970 is pushed. New optional source-bound parent-unit facts cover
+four exact retained GE/GEHC,GE/GEV,MMM/SOLV,ZBH/ZIMV spin records. Parent shares
+remain one-for-one; raw price jumps remain in the unchanged14-range ATR. The regular-way
+parent sale before the ex-session transfers the distribution right; a new purchase
+on/after the ex-session does not inherit an earlier owner's daughter entitlement.
+Holdings spanning the distribution, daughter-share valuation/exit/fractions and the
+conflicting RJF record remain unavailable. Invalid/conflicting/official/global gates
+are preserved. This implements no stock-distribution cash or share event.
+
+New configs/swing_backtest_parent_units.toml SHA
+53c8f7377a2f41282b04555625eb7489924fec41fa48051b7fc4c0e7d3c6e7be
+retains the verified cash/date pins and adds
+data/research/swing_backtest_reviewed_parent_spin_units.json SHA
+bd264459407a4f4345961cb07ed0a3de648b6948fc41a6f323433d3bd9b3a046.
+Original policies and all old reports remain unchanged.91focused UNITs passed23.78s;
+4 funded publication/inside-provider mutation checks passed117.12s. Ruff5source/test
+files and strict mypy3modules passed. One author design/consolidated code/ML review;
+finite-window inconsistency finding closed. No independent review claimed; full
+suite deliberately unrun for component scope.
+
+ACTUAL parent-unit proof review-results/accounting-parent-spin-units-real.json SHA
+6a00a8bfb0b8362a5f7f5394485fcd9b1df19b6ba4a4f0310bcc607da146fb92
+checks all17700 saved selections and restores
+32of43previously action-gated selections;
+11remain. Allselected17700 retained with unchanged parquetSHA
+6d691a7e0b0d722c3adb47327d5ea77f98d9e270ade88a23638c84481a5b6dc5.
+3distinct newly restored actual raw holdings replayed; raw ATR values equal
+pre-remedy diagnostic values exactly. Preserve parent-spin-units-real-2.log/.exit.json.
+First attempt parent-spin-units-real.log/.exit.json refused the helper's incorrect
+LF-versus-Windows-file policy hash before admission; actual file hash was pinned in
+the fresh attempt. Original helper preserved as verify_parent_spin_units_attempt1.py.
+No code policy weakened or raw/source/model/feature artifact rewritten.
+
+Cash checkpoint748c53c/closure d8dc2d6 remains closed: actual all17700selectionproof
+b4dfb98434191a534bb7be75e56ce5e8bac9f98df6794fa423c3623f54278738 restored155of198,
+QQQ12cashentitlements/6.14966peroriginalshare/no reinvestment, canonical equals
+independent raw price plus issuer cash. Human documented-cash approval persists.
+
+NEXT: resolve the single retained RJF stock-dividend conflict using audited issuer
+share reconciliation and narrow official corroboration. A new exact-URL2document
+fact plan review-results/accounting-facts-plan-008.json is prepared but not yet run.
+The issuer's official history corroborates a2021 three-for-two split, while the
+retained provider record claims1.3 on2023-04-13. No invented event or lot deletion.
+
+PENDING HUMAN CHOICE: review-results/documented-spin-off-policy-choice.json SHA
+728f0c0d20578489664b3444a70cabf0ea1a4e66476919c7d369d53b32c5c959
+asks permission for exact missing ZIMV raw SIP daily prices2022-03-01..2022-03-11,
+proportional normalized daughter shares and liquidation alongside parent using raw
+open/close at the existing exit clock, unchanged costs. Cash approval alone does
+not authorize this new stock treatment/price collection. Do not perform dependent
+work without the answer. No ZIMV segment exists in retained selected successor
+coverage; GEHC/GEV/SOLV segments do exist. Exact actual path diagnosisSHA
+294e472742041d79e2bba2961900c141ec0eff2637ca4bebf688d422b968c259
+is read-only, not an admitted holding or portfolio return.
+
+Monitor33536/native77733 remains active; no finish marker yet. No backtest live.
+Inspect actual owner/RAM before heavywork; sole91% RAM limit unchanged. Preserve all
+old failed/stopped/completed receipts. At actual workend write fresh finish marker,
+verify monitor natural exit/idle-hold release and no owned heavy worker, then pause
+heartbeat if complete or human action is unavoidable. Only step7 in progress.
+Six specs/twelve policies/all fits/features/settings/costs/API V1 and TradingFlow
+remain fixed. No funded SPY performance, serving/promotion/admission remain false.
+
+### Historical cash checkpoint — October21,22:03Z
 
 Code748c53c is pushed. Human's approved ex-date-close cash treatment now covers
 exact documented USD ordinary, special and supplemental payouts, with cash reusable
