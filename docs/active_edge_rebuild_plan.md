@@ -21,7 +21,22 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: funded-only twelve-policy retry running — October21,09:24Z
+### Current execution: retry active; observed inherited RAM refusals — October21,10:08Z
+
+Retry native75310/Python6512 still active. Funded trial01 exited2 at10:01:06Z,
+stderr90.1%used/1.56GiBfree rejected by inherited90%/.75GiB check. Trials02–04
+exited2 at10:01:26Z/10:01:43Z/10:02:00Z:85.5%,87.1%,86.6%used rejected by85%/2GiB
+check, before result manifests. Preserve all receipts; these are software/resource
+failures, not computed/valuation_unavailable SPYresults. Actual identified guards:
+OOF baseline _guard uses90%/.75GiB; action_evidence.py:88 calls shared default85%/2GiB.
+This conflicts with the current91%runtime policy; no new lower startupgate added.
+Do not edit frozen source/config/runtime during active campaign. Remaining8trials
+continue; at10:07Z child28436active,RAM67.59%. No duplicatejobs/refits/datarebuilds.
+After actualcampaignend inspect all12outcomes and apply the smallest supported
+resource-policy/retry remedy to failedtrials only, preserving successful outputs.
+Step7aloneactive; no fundedeconomicresult yet. Monitor8980 remains.
+
+### Historical funded-only retry launch — October21,09:24Z
 
 Actual metadata proof closure fbcd805 pushed. Fresh retry native75310/Python6512
 (venv-launcher27928) started09:23:38Z at73.438%RAM. Reviewed workspace

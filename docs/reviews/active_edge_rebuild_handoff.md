@@ -21,7 +21,24 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: funded-only twelve-policy retry running — October21,09:24Z
+### Current execution: retry active; observed inherited RAM refusals — October21,10:08Z
+
+CURRENT retry native75310/Python6512 remains active. Results01–04 failed/exit2
+before manifests:01stderr90.1%used,1.56GiBavailable,requires<90%/.75GiB;02–04stderr
+85.5%,87.1%,86.6%used,requires<85%/2GiB. Actual finishedUTC10:01:06Z,10:01:26Z,
+10:01:43Z,10:02:00Z. Preserve numberedresults/stdout/stderr; no computed or unavailable
+fundedreportclaimed. Exact olderguards located OOF _guard90%/.75GiB and
+swing/datasets/action_evidence.py:88 -> core/system_memory default85%/2GiB.
+No guard changed or lower launchgate introduced. Current requestedceiling is91%.
+Do not edit runningfrozen dependencies, especially saved-replay-boundshared/source
+owners, or rewrite historicalpins. Remaining8trials continue underoriginalattempt;
+currentchild28436 at10:07Z,RAM67.59%. Inspect actualowner/currentresults later.
+After naturalcampaignexit collectall12outcomes and apply smallestactualresource/
+retry remedy to failedtrials only; retain successful/unavailable outputs andpassed
+pairs. No refits, sourcecollection orfeature/replay rebuild. Step7aloneactive.
+Monitor8980/native33710 remains; no SPY/economicacceptance existsyet.
+
+### Historical funded-only retry launch — October21,09:24Z
 
 Metadata proof closure fbcd805 pushed beforelaunch. CURRENT LIVE native75310,
 PythonPID6512/venv-launcher27928 started09:23:38Z at73.438%RAM using reviewed
