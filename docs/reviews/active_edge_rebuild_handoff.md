@@ -21,7 +21,66 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: campaign running; actual funded-reader conflict — October21,08:05Z
+### Current execution: reader repair verified in UNITs; real metadata pass running — October21,09:04Z
+
+Source repair only research/swing_oof_policy_evaluation.py; canonical completecohort
+group/peer composition below and duplicate security/session guard implemented.
+No producer/feature/model/replay dependency changed. Designreview pass withduplicate
+guard; one consolidatedcode/MLreview nofindings.51metadata/news/command UNITs plus
+28OOFconsumer cases passed after testfixture-only corrections. Ruff4changedPython
+files and strictmypy1sourcefile pass; fullsuite deliberately unrun. Operational
+tests use onlyrealretained data; synthetic/mock fixtures confined toUNITtests.
+
+CURRENT ACTIVE real metadata reader proof native31810/PID27004,started
+08:58:40.262585Z. Workspace work/verify_saved_selection_metadata.py; owner
+verify-saved-selection-metadata. Fresh workspace review-results/selection-metadata-real.log
+and .exit.json. Expected data/reports/swing_saved_selection_metadata_verification.json.
+Actual technical120metadata completed586,305rows/1,231sessions,328,115causalpeer
+eligible rows,0missinggroup/flag; relationship124 andnews209stillrunning. Full
+monthly metadata/clocks only,no numericfeature calculation,rawrecollection orfits.
+Do not duplicate/edit frozenconsumer module until actualjob naturalexit/report.
+
+READY NEXT after actualpass and checkpointpush: workspace work/run_news_funded_retry.py
+SHAb41f38befd5d3c7d24924afc921c9b9e48c6302f527bd2dbfc5998e346f9eb85. Original
+reviewed operator unchanged; newcopy executes onlysame12failedfundedtrials, externally
+pins priorcompleteSHA below, validatesbothpassedpair artifacts+exactrunbindings,
+retains pairproofs/newrequestandcomplete; freshoutputs/state only. No newpolicies
+or refits. Ruff and one separateoperator-deltareview passed. Args additionally
+--prior-complete WORKSPACE/review-results/news-evaluation-20261021/complete.json
+--prior-complete-sha256 a0942413b543ad6cbad9412d5219abc204099e6e0d641815c52f718b6dddbcf5.
+Choose fresh news_funded_retry_20261021 campaign/state, after absencechecks.
+Keepstep7aloneactive and monitor8980/native33710/91%RAM unchanged.
+
+### Frozen bounded selection-metadata remedy — October21,08:49Z
+
+Original native18539/PID6548 naturally exited2 at08:42:50.4142703Z; no heavyowner.
+Workspace review-results/news-evaluation-20261021/complete.json SHA256
+a0942413b543ad6cbad9412d5219abc204099e6e0d641815c52f718b6dddbcf5. All14results:
+2pairedpassed;12fundedfailed with identical "parent selection metadata missing"
+beforeperformance. Original request/results/stdout/stderr/complete/outerexit retained.
+Never relabel failed trials valuation_unavailable/computed. Fitted models stay fixed.
+
+Frozen remedy scope: research/swing_oof_policy_evaluation.py and direct UNIT fixtures.
+Whole pinned monthly identity/sector/session/cutoff/feature_eligible/daily_bar_count
+projection before OOF/scope filtering. Derive canonical decision group from validated
+UTC cutoff.isoformat; causal sector peer gate from feature_eligible plus strategy
+warm-up threshold, full session/sector peer counts assigned only to eligible rows,
+then unchanged minimum_cross_section_for_ranking threshold. This mirrors canonical
+joins.py and SectorRelativeScalingStep/CrossSectionalRankStep, no outcome fields or
+feature recalculation. Bind semantics owner hashes/explicit composition in current
+evaluation evidence; no producer/model/replay hash changes. Refuse existing supplied
+selection fields if inconsistent with exact composition, invalid counts/identities/
+clocks. No blankettrue flags, label filtering, altered costs/sectors/selection.
+
+Before real retry: design review; focused UNIT reference to current canonical peer
+rules, same missing-column schema as actual59months, full-cohort-before-scope,
+insufficient/warm-up peer cases, clock/identity/metadata poison,target-independent
+selection/zero days; Ruff/strictmypy and one consolidated review. Then fresh12funded
+attempts only with external pins to originalcomplete/passedpairs; keep original
+all14receipts, reuse2passedpair outputs and6spec/twelvepolicy roster. No model fit,
+source rebuild or repeated closed review. Step7 alone active; monitor8980 remains.
+
+### Historical running campaign failure observation — October21,08:05Z
 
 Actual paired reports both passed exit0 at07:50:18Z/07:50:43Z:
 data/reports/news_initial_fit_20261021_technical_news_paired.json SHA256

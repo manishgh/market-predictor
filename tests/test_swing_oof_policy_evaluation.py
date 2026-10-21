@@ -68,6 +68,16 @@ def saved(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.Fixtu
         template[role] = pin.model_dump(mode="json")
         pins[pin.path] = pin.sha256
     strategy = load_strategy_contract(tmp_path / contracts["strategy_contract"].path)
+    # Tiny saved-score wiring UNIT fixture; canonical peer thresholds are tested
+    # against the real pipeline separately in test_swing_selection_metadata.
+    metadata_owner = owner._selection_metadata
+
+    def unit_selection_metadata(rows: pd.DataFrame, contract: Any) -> pd.DataFrame:
+        tiny = contract.model_copy(update={"labels": contract.labels.model_copy(
+            update={"swing_minimum_cross_section_for_ranking": 1})})
+        return metadata_owner(rows, tiny)
+
+    monkeypatch.setattr(owner, "_selection_metadata", unit_selection_metadata)
     temporal = load_temporal_manifest_config(tmp_path / contracts["temporal_contract"].path)
     sessions = build_temporal_schedule(temporal).folds[0].train_sessions
     names = list(owner.swing_model_feature_columns(contract=strategy, catalyst=False))
@@ -85,11 +95,10 @@ def saved(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.Fixtu
     rows["sector"] = rows.ordinal.map(lambda number: f"sector-{number}")
     rows["primary_benchmark"] = "XLF"
     rows["decision_time_utc"] = swing_prediction_cutoffs(rows.session_date_et)
-    rows["decision_group_id"] = rows.session_date_et.map(date.isoformat)
     rows["feature_eligible"] = True
-    rows["cross_section_eligible"] = True
+    rows["daily_bar_count"] = strategy.swing.minimum_warmup_sessions
     if isinstance(profile, str):
-        rows["cross_section_eligible"] = rows.session_date_et.eq(date.fromisoformat(profile))
+        rows.loc[~rows.session_date_et.eq(date.fromisoformat(profile)), "daily_bar_count"] -= 1
     rows["feature_profile"] = published_profile
     rows = rows.drop(columns="ordinal")
     publication = tmp_path / "data/research/features"
@@ -321,7 +330,7 @@ def test_touched_artifact_mutation_is_rejected_before_publication(saved: dict[st
 def _publisher_fixture(saved: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, Any], dict[str, Any]]:
     root = saved["root"]
     package = REPO / "src/market_predictor"
-    for name in owner.IMPLEMENTATION_PATHS:
+    for name in (*owner.IMPLEMENTATION_PATHS, *owner.SELECTION_METADATA_SEMANTICS):
         target = root / "src/market_predictor" / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(package / name, target)

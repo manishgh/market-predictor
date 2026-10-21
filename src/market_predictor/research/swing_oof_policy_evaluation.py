@@ -67,7 +67,8 @@ _OPTIONAL_SHARED = (
     "training_eligible", "production_eligible", "stock_source_admitted", "fixed_comparisons_complete",
     "cross_section_eligible", "decision_group_id", "primary_benchmark", "feature_profile",
 )
-_REQUIRED_PARENT = (*_IDENTITIES, "feature_eligible", "cross_section_eligible", "decision_group_id", "primary_benchmark", "feature_profile")
+_REQUIRED_PARENT = (*_IDENTITIES, "feature_eligible", "daily_bar_count", "primary_benchmark", "feature_profile")
+SELECTION_METADATA_SEMANTICS = ("canonical/joins.py", "swing/features/pipeline.py", "swing/features/research_join.py")
 _SCORE_COLUMNS = (*_IDENTITIES, "feature_eligible", "scope_eligible", "security_holdout", "predicted_excess_return", "prediction_status")
 IMPLEMENTATION_PATHS = (
     "research/swing_oof_policy_evaluation.py", "swing/training/return_artifacts.py", "swing/training/return_comparison.py",
@@ -238,7 +239,7 @@ def _read_parent_metadata(
         _require(set(_REQUIRED_PARENT).union(clocks.values()).issubset(available), "parent selection metadata missing")
         columns = list(dict.fromkeys((*_REQUIRED_PARENT, *(name for name in _OPTIONAL_SHARED if name in available), *clocks.values())))
         frame = _metadata(pd.read_parquet(source, columns=columns))
-        _booleans(frame, ("feature_eligible", "cross_section_eligible"))
+        frame = _selection_metadata(frame, strategy)
         _require(len(frame) == record["rows"] == sidecar["rows"]
                  and json_sha256(sorted(frame.decision_id)) == record["decision_ids_sha256"]
                  and frame.session_date_et.map(lambda day: day.isoformat()[:7]).eq(month).all()
@@ -257,6 +258,34 @@ def _read_parent_metadata(
              and len(rows) == request["input_rows"]
              and json_sha256(sorted(rows.decision_id)) == request["input_decision_ids_sha256"], "parent full decision population differs")
     return rows
+
+
+def _selection_metadata(rows: pd.DataFrame, strategy: StrategyContract) -> pd.DataFrame:
+    """Compose omitted selection context, never predictors, from the full saved cohort.
+
+    This is the causal peer mask in SectorRelativeScalingStep/CrossSectionalRankStep,
+    before the separate outcome-dependent rank labels. Its owners are hash-bound as
+    semantic provenance; the feature pipeline is not rerun during evaluation.
+    """
+    _booleans(rows, ("feature_eligible",))
+    _require(not rows.duplicated(["security_id", "session_date_et"]).any(),
+             "selection metadata duplicates a security/session")
+    counts = pd.to_numeric(rows.daily_bar_count, errors="coerce")
+    _require(rows.daily_bar_count.map(lambda value: isinstance(value, (int, float, np.integer, np.floating))
+                                    and not isinstance(value, (bool, np.bool_))).all()
+             and counts.notna().all() and np.isfinite(counts).all()
+             and counts.ge(0).all() and counts.mod(1).eq(0).all(), "selection warm-up counts are invalid")
+    eligible = rows.feature_eligible & counts.ge(strategy.swing.minimum_warmup_sessions)
+    peers = pd.Series(0, index=rows.index, dtype="int64")
+    peers.loc[eligible] = rows.loc[eligible].groupby(["session_date_et", "sector"], sort=False)["security_id"].transform("size")
+    cross_section = peers.ge(strategy.labels.minimum_cross_section_for_ranking)
+    groups = rows.decision_time_utc.map(lambda value: value.isoformat())
+    if "cross_section_eligible" in rows:
+        _booleans(rows, ("cross_section_eligible",))
+        _require(rows.cross_section_eligible.eq(cross_section).all(), "saved cross-section metadata differs from causal peers")
+    if "decision_group_id" in rows:
+        _require(rows.decision_group_id.eq(groups).all(), "saved decision group differs from canonical cutoff")
+    return rows.assign(cross_section_eligible=cross_section, decision_group_id=groups)
 
 
 def _saved_scores(
@@ -444,6 +473,8 @@ def publish_saved_oof_policy_evaluation(
     _require(fit_policy.feature_profile in CAMPAIGN_PROFILES, "saved model profile is outside the current six-specification campaign")
     package = Path(__file__).resolve().parents[1]
     implementations = {f"src/market_predictor/{name}": file_sha256(package / name) for name in IMPLEMENTATION_PATHS}
+    selection_semantics = {f"src/market_predictor/{name}": file_sha256(package / name)
+                           for name in SELECTION_METADATA_SEMANTICS}
     if fit_policy.feature_profile == NEWS_PROFILE:
         for name in (*NEWS_RUNTIME_PATHS, "research/news_decision_features.py", "research/news_decision_verification.py"):
             implementations[f"src/market_predictor/{name}"] = file_sha256(package / name)
@@ -456,12 +487,18 @@ def publish_saved_oof_policy_evaluation(
                "learner": learner, "exit_policy": exit_policy, "action_projection_sha256": evidence.projection_sha256,
                "action_audit_sha256": evidence.audit_sha256, "implementation_files": implementations,
                "campaign_roster": CAMPAIGN_ROSTER, "feature_profile": fit_policy.feature_profile,
+               "selection_metadata": {"scope": "full_saved_monthly_cohort_before_oof_or_scope_filtering",
+                   "decision_group": "validated_utc_cutoff_isoformat",
+                   "peer_population": "feature_eligible_and_strategy_minimum_warmup_by_session_and_sector",
+                   "cross_section": "eligible_peer_count_at_least_strategy_minimum_cross_section_for_ranking",
+                   "semantic_provenance_files": selection_semantics, "feature_pipeline_rerun": False,
+                   "outcomes_used": False},
                "selection": "feature_and_cross_section_and_temporal_scope_rank_without_target_or_score_threshold",
                "serving_eligible": False, "promotion_eligible": False}
     output.mkdir()
     write_json_object(output / "_request.json", request)
     request_sha256 = file_sha256(output / "_request.json")
-    pins = {**implementations, **preflight_pins}
+    pins = {**implementations, **selection_semantics, **preflight_pins}
     strategy = load_strategy_contract(_pin(root, strategy_contract, pins))
     research = load_swing_research_contract(_pin(root, research_contract, pins))
     research.assert_strategy_matches(strategy)

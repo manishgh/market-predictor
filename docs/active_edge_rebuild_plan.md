@@ -21,7 +21,65 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: campaign running; actual funded-reader conflict — October21,08:05Z
+### Current execution: reader repair verified in UNITs; real metadata pass running — October21,09:04Z
+
+Bounded downstream remedy implemented only in swing_oof_policy_evaluation.py.
+Complete-cohort selection context now follows exact causal grouping/sector-peer
+rules below; duplicate security/session, invalid counts and inconsistent supplied
+fields refuse. No producer/feature/model/source artifact changed. Design review
+confirmed equivalence and required duplicate guard; one consolidated code/ML review
+found no supported findings.51metadata/news/command UNIT checks and28OOFconsumer
+cases passed across final affected runs after fixing synthetic fixture setup;
+Ruff4Pythonfiles/strictmypy1sourcefile passed. Full suite deliberately unrun.
+
+CURRENT real read-only metadata pass native31810/PID27004 started08:58:40.262585Z
+using workspace work/verify_saved_selection_metadata.py. Canonical owner
+verify-saved-selection-metadata. Fresh workspace selection-metadata-real.log/exit.json;
+expected data/reports/swing_saved_selection_metadata_verification.json. It reads
+actual pinned complete120/124/209saved metadata/clocks, no numericfeature rebuild,
+raw recollection, outcomes or model fit. Technical120 finished586,305rows/1,231sessions,
+328,115cross-section eligible of586,305rows,0missing selectionfields; remaining2
+profiles still running. Do not duplicate/edit liveconsumer dependencies.
+
+Prepared fresh funded-only retry workspace work/run_news_funded_retry.py SHA256
+b41f38befd5d3c7d24924afc921c9b9e48c6302f527bd2dbfc5998e346f9eb85; Ruff and separate
+bounded wrapper-delta review no findings. Requires actual originalcompleteSHA below,
+checks retainedpair hashes/exactbaseline+newsrunbindings and same12failedfunded IDs;
+all child/frozen-source/runtime/valuation_unavailable mechanics unchanged. Do not
+launch until actualmetadata pass exits0/reportpasses and repaircheckpoint pushed.
+Then fresh campaign/output/state/outerreceipts; preserve original14 and reusepairs.
+
+### Frozen bounded selection-metadata remedy — October21,08:49Z
+
+Original campaign native18539/PID6548 naturally exited2 at08:42:50.4142703Z;
+complete.json SHAa0942413b543ad6cbad9412d5219abc204099e6e0d641815c52f718b6dddbcf5.
+All14attempt receipts retained:2pairedpassed,12fundedfailed before performance,
+each stderr "parent selection metadata missing". No heavy owner/process remains.
+Source/config/runtime frozen inventory checks passed; no real fundedeconomics yet.
+
+Frozen bounded design for step7: only OOF reader and direct UNIT fixtures change.
+Read exact saved identity/sector/session/cutoff/feature_eligible/daily_bar_count
+columns for the entire pinned monthly population before any OOF/scope/score filter.
+Compose decision_group_id from validated UTC cutoff.isoformat(), matching canonical
+joins. Compose causal sector peer count from feature_eligible AND warm-up count
+at least strategy.swing.minimum_warmup_sessions, grouped by session/sector; only
+eligible rows receive peer count. cross_section_eligible is count at least the
+unchanged strategy.labels.minimum_cross_section_for_ranking, matching current
+SectorRelativeScalingStep/CrossSectionalRankStep. No labels/ranks/predictions enter
+this metadata composition. Bind canonical semantics source files/current consumer
+and explicit policy in evaluation evidence; preserve producer/feature/model pins.
+If existing supplied group/eligibility fields conflict with derived facts, refuse.
+Never assume missing flags true. No change to actual peer features or learned inputs.
+
+Design review, focused UNIT gates against canonical peer semantics and real schema
+shape, clock/identity/warm-up/insufficient-peer poison, full-cohort-before-scope,
+target independence/selected-ID/zero-day parity; Ruff/strictmypy and one bounded
+consolidated review before real retry. Keep failedoriginal outputs immutable;
+fresh funded-only12trial operator must externally pin prior complete/paired reports,
+reuse passed pairs and preserve same sixspec/twelvepolicy economics. No refits or
+publication/replay/source work. Step7 alone active. Rollback is refusal/no result.
+
+### Historical running campaign failure observation — October21,08:05Z
 
 Both paired comparisons completed with historical_diagnostics_complete/exit0:
 technical-news reportSHA cba97083cb8639df48b9d3981bf269304588261367016d10270aebe0a09bc883;

@@ -141,7 +141,7 @@ def news_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     clocks['unused_physical_measurement'] = 'available_at_unused_physical_measurement'
     frame = pd.DataFrame({"decision_id": ["a", "b"], "security_id": "unit", "ticker": "UNIT", "sector": "unit",
         "session_date_et": sessions, "decision_time_utc": cutoff, "feature_eligible": [True, False],
-        "cross_section_eligible": True, "decision_group_id": ["group-a", "group-b"], "primary_benchmark": "XLF",
+        "daily_bar_count": 250, "primary_benchmark": "XLF",
         "feature_profile": oof.NEWS_PROFILE, **{clock: cutoff - pd.Timedelta(minutes=1) for clock in physical_clocks.values()}})
     # No numerical feature or target columns: evaluation must only read metadata/clocks.
     frame[clocks[names[-1]]] = pd.NaT
