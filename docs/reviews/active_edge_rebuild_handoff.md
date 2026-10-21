@@ -21,7 +21,77 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: parent spin units verified — October21
+### Current execution: approved accounting repairs closed; stock-treatment choice pending
+
+Implementation13d9d44 is pushed. The single retained RJF2023-04-13 rate1.3stock-dividend
+record is explicitly refuted by the audited issuer common-share reconciliation:
+FY2023 215.1-8.4+2.1=208.8 million shares, with no2023split issuance. The issuer's
+separate SEC declaration is a0.42USD quarterly cash dividend, not a stock dividend.
+Original provider bytes remain; no invented shares or filtered selected lot.
+Only this exact ID/family/hash/symbol/covered fiscal date may use the reviewed
+refutation. Invalid/conflicting/official/global gates remain unchanged.
+
+New configs/swing_backtest_reviewed_stock.toml SHA
+2dc307c7562955b19a8de9cc51018013e838fccd322408c078b4719ce8b1abed
+retains approved cash/date/parent-unit pins and adds
+data/research/swing_backtest_reviewed_action_record_dispositions.json SHA
+097e6b7088affc4676e530d16bb83b61ba45ed98a6b7f90b023b743076d0d3a9.
+Official fact review review-results/rjf-record-disposition-review.json SHA
+f41ad2092601c387cd4fe1d5d23de9e2cf9f8f921fcbe046c8b6e5f92682a5ce.
+Factplan008 completed naturally0: exact SEC cash declaration200 archived; issuer
+split-history endpoint403 preserved and never used as accounting admission.
+Its collection reportSHA5182e913c7bfc56c785078274ac5f71cb8630fa2a02f046c5cc591c11864c990.
+
+62affected existing UNITs passed;7new cases initially failed solely because the
+synthetic fixture created its directory twice. Corrected fixture7passed3.31s;
+one dependency-drift publication test passed5.96s. Ruff5source/testfiles and strict
+mypy3source modules passed. One author design/consolidated code/ML review with no
+production findings. No independent review claimed; full suite deliberately unrun.
+
+ACTUAL native3253 naturally exited0 at2026-10-21T22:27:52.7464372Z.
+review-results/accounting-rjf-record-disposition-real.json SHA
+e548829e66a39aed1258574d17932f7d20bdb643759c34378b9ab9f48de8dba4
+rechecks the17700saved selections of Price indicators / Ridge / profit target,
+stop-loss, ten-session limit. Restores1of11previously gated selections;
+10remain. All17700retained, unchanged selected parquetSHA
+6d691a7e0b0d722c3adb47327d5ea77f98d9e270ade88a23638c84481a5b6dc5.
+The repaired actual RJFholding replayed with unchanged raw ATR; no portfolio return
+computed. Preserve rjf-record-disposition-real.log/.exit.json and prior proofs.
+This scoped check does not certify other models' different selected identities or
+all12policies; those require their actual frozen evaluations after gaps are repaired.
+
+Previous closed repairs remain closed: cash748c53c/d8dc2d6 actual155restored198->43,
+QQQ12payments/6.14966peroriginalshare/no reinvestment/exact independent reconciliation;
+parent unitsabc9970/86e32f8 actual32restored43->11 and raw ATR unchanged. Date9a93bd9,
+relevance0409da3/93b4203, RAM53e06a0, originaldividend-splitb984a76, independentATRc55846f,
+source/features/models/replay/fits remain unchanged. No completed proof reruns.
+
+REQUIRED HUMAN CHOICE: nine retained ZBHholdings span the documented ZimVie spin-off;
+oneMMMholding spans Solventum. Pending async proposal
+review-results/documented-spin-off-policy-choice.json SHA
+728f0c0d20578489664b3444a70cabf0ea1a4e66476919c7d369d53b32c5c959
+asks to fetch only missing ZIMV raw unadjusted SIP daily prices2022-03-01..2022-03-11,
+use proportional normalized daughter shares, and sell them alongside parent using
+matching raw open/close at the existing research exit clock, unchanged20/40bpscosts.
+No ZIMV segment exists in retained selected sources; retained SOLVprices exist.
+Cash approval does not decide stock fractions/exit or authorize this new price
+collection. Do not perform dependent work until the human answers. Exact path
+read-only diagnosisSHA294e472742041d79e2bba2961900c141ec0eff2637ca4bebf688d422b968c259.
+No new broad source/model review, collection, fit, feature rebuild or experiment.
+
+At this actual workend fresh review-results/news-oct20-finished.json records
+checkpoint complete/task_completefalse/awaiting this stock choice. Monitor33536/
+native77733 naturally exits and state monitor_and_idle_hold_released is verified;
+no owned heavy worker remains. Heartbeat PAUSED pending the human decision, to avoid
+redundant runs. Preserve earlier finished/stopped/failed receipts. On approval,
+preserve the finish marker then restart the reviewed idle-hold monitor and resume
+this bounded stock treatment; never restart old interrupted campaigns. After real
+stock proof passes, run a fresh frozen campaign with all12results+2retainedpairs+
+actual exit/artifact hashes. No funded SPY comparison result exists yet; all serving/
+promotion/admission remain false. Only step7in progress; all six fits/settings,
+API V1 and TradingFlow remain fixed. Prospective252future observations cannot be fabricated.
+
+### Historical parent-unit checkpoint — October21
 
 Implementationabc9970 is pushed. New optional source-bound parent-unit facts cover
 four exact retained GE/GEHC,GE/GEV,MMM/SOLV,ZBH/ZIMV spin records. Parent shares
