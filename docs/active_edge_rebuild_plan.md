@@ -21,7 +21,29 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: 91% funded evaluation running — October21,10:31Z
+### Current execution: first funded outcome retained; trial02 running — October21,12:50Z
+
+Trial01 technical/Ridge/target-stop completed12:37:54.972492Z as
+valuation_unavailable (CLIexit2 is expected for this completed unavailable result).
+Actual data/research/news_funded_91_20261021_technical_regularized_linear_return_target_stop_ten_session_timeout/
+_manifest.json SHA01bdd5aa60631f66a233b2b3d70d85c474acf83653b1f60e581053bf406a14b5;
+report.json SHA3c88e8d1133e2fdf3d259cf8305ba3ab8c599178847c1afc64a32d05c57ae00a.
+All5artifact hashes verified; frozen inputs rechecked.17,700selected stock entries
+across708entry sessions,718score sessions.5,632selected entries lack admitted
+valuation inputs:4,134ATR-window gaps and1,498holding-window gaps. All10required
+benchmarks (includingSPY/QQQ) have unresolved action economics. Reasons include
+corporate terms requiring replay, entitlement dates/payment/residual marks not
+admitted, missing action economic dates and one reviewed cash-distribution resolution.
+These are retained evidence/admission gaps, not a computed loss/gain or RAM crash;
+no missing lot was removed. Comparisons=null, all economic/admission flags false.
+
+Trial02 technical/Ridge/stop-timeout started12:37:55.223787Z, actual child11416;
+controller5132/native18158 remains live. Do not rerun trial01 or alter frozen code/
+inputs. Remaining11policies continue.91% guard actually paused/resumed three times
+in trial01, including86.69seconds pressure recovery. Monitor8980 remains active.
+Keep all original/interrupted/final receipts and both passed pair comparisons.
+
+### Historical fresh 91% funded launch — October21,10:31Z
 
 Reviewed RAM fix53e06a0 pushed before launch. Fresh native18158/Python5132
 (launcher22404) started10:29:45Z. Campaign news_funded_91_20261021, workspace state

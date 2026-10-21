@@ -21,7 +21,29 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: 91% funded evaluation running — October21,10:31Z
+### Current execution: first funded outcome retained; trial02 running — October21,12:50Z
+
+CURRENT native18158/controllerPython5132 live. Trial01 technical/Ridge/target-stop
+completed12:37:54.972492Z, statusvaluation_unavailable, expectedCLIexit2, frozen
+inputs rechecked. Actual directory
+data/research/news_funded_91_20261021_technical_regularized_linear_return_target_stop_ten_session_timeout;
+manifestSHA01bdd5aa60631f66a233b2b3d70d85c474acf83653b1f60e581053bf406a14b5,
+reportSHA3c88e8d1133e2fdf3d259cf8305ba3ab8c599178847c1afc64a32d05c57ae00a.
+All5artifact hashes verified.17,700selected stock entries over708entry sessions/
+718score sessions;5,632unavailable (4,134ATR-window,1,498holding-window).10benchmark
+gaps:QQQ,SPY,XLF,XLI,XLK,XLP,XLRE,XLU,XLV,XLY. Retained report names unresolved
+corporate-action replay/entitlement/payment/residual-value/economic-date evidence;
+this does not establish external data absence or permission to relax admission.
+No lot filtered; comparisons=null,economicconditionsfalse. Completed unavailable
+result is retained, not a failed software attempt and must NOT rerun.
+
+Trial02 technical/Ridge/stop-timeout started12:37:55.223787Z, currentchild11416.
+Remaining11policies continue unchanged. Monitor8980 alive; actual91% pause/resume
+worked three times in firsttrial, maximum86.69seconds. No source/config/operator/
+runtime edits while frozen job runs, no duplicate. Preserve both pairs and all
+original/interrupted receipts. Step7 alone active; no SPY improvement/API acceptance.
+
+### Historical fresh 91% funded launch — October21,10:31Z
 
 RAM fix53e06a0 pushed BEFORE launch. CURRENT LIVE native18158/actualPython5132,
 venv-launcher22404 started10:29:45Z. Reviewed operator unchanged SHA below.
