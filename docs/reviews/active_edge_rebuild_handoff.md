@@ -21,7 +21,63 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: documented cash payouts explicitly approved — October21,21:35Z
+### Current execution: documented cash repair verified and pushed — October21,22:03Z
+
+Code748c53c is pushed. Human's approved ex-date-close cash treatment now covers
+exact documented USD ordinary, special and supplemental payouts, with cash reusable
+only in later sessions. No tax/withholding or broker cash receipt is invented.
+Original ordinary-only/date-only policies and historical reports remain unchanged.
+
+New configs/swing_backtest_documented_cash.toml SHA
+8d5e44848bf3bb9b4a9a540a550b633d27de7acba0cfdf4df3d7896a11bee905
+pins data/research/swing_backtest_reviewed_cash_payouts.json SHA
+72806718ac1f67f2c53975c1268e18b6f6431f43de18bd0d7552e465f6601342:
+46 exact legal entitlement groups /49 original provider records /120 official source
+files. Ford's distinct legs sum; combined Rollins/Berkley/Kimco totals count once;
+two September2022 QQQ provider records resolve to one issuer entitlement. Foreign
+flags do not replace issuer-declared USD gross rates with unobserved account taxes.
+One shared exact request/receipt/transport/body verifier serves date and cash facts.
+Unknown, invalid, conflicting and disjoint finite-window gates remain unavailable.
+
+106 focused cash/action UNITs passed26.23s,44 direct OOF consumer UNITs passed475.77s.
+Ruff7 source/test files and strict mypy5 source modules passed; workspace proof helper
+Ruff passed. One author design and consolidated code/ML review; no independent
+review claimed. Supported finite-window finding fixed and unit verified. Full suite
+was deliberately unrun at this component scope.
+
+ACTUAL native50445/Python4160 naturally exited0 at2026-10-21T22:02:35.5481052Z.
+Workspace review-results/accounting-reviewed-cash-real.json SHA
+b4dfb98434191a534bb7be75e56ce5e8bac9f98df6794fa423c3623f54278738
+checks all17700 saved selections, restores155 of198 remaining action-gated stock
+selections:198->43; cumulative1892oforiginal1935 restored. All original selected
+lots retained; selected parquetSHA6d691a7e0b0d722c3adb47327d5ea77f98d9e270ade88a23638c84481a5b6dc5
+unchanged.17 distinct newly restored actual raw holdings replayed. Actual QQQ replay
+has12 cash entitlements,6.14966 cash per original share; terminal equity exactly
+matches independent raw-price-plus-issuer-cash computation, without reinvestment.
+This is accounting verification, not portfolio/model performance. Preserve
+reviewed-cash-real.log/.exit.json, both official-date proofs, all original campaigns.
+Review/source excerpts:review-results/reviewed-cash-terms-20261021.json SHA
+84494f43b3b322ae2e6f425eea782531babb46a757d2f55a2bcbdd805ac12bac.
+Pfizer exact dividend history and JCI2022 issuer release were successfully acquired
+under the same narrow approved source scope; earlier refusals remain preserved.
+
+REMAINING43stock selections:GE4,MMM5,ZBH33,RJF1. Next inspect actual crossing windows,
+retained successor prices and source-bound distribution terms before implementing
+the smallest stock-action remedy. RJF provider stock-dividend record conflicts with
+issuer share reconciliation. No automatic deletion or invented stock payout. No long
+comparison run while known unresolved cases guarantee unavailable results. Six
+specifications/twelve policies, all fits/features/targets/settings/costs/API V1 and
+TradingFlow remain fixed. No new price/news collection or model/feature rebuild.
+
+Monitor33536/native77733 remains active,logaccounting-cash-monitor.log. No backtest or
+real-proof worker remains live after native50445 exit; inspect current owner before
+any heavy work. Sole91% RAM ceiling unchanged. No finish marker yet because stock
+action repair remains authorized. At actual workend write fresh finish marker,
+verify natural monitor exit/idle-hold release/no owned worker, and pause heartbeat
+when complete or unavoidable external condition requires human input. Only step7
+is active; no funded SPY result, serving/promotion/admission remain false.
+
+### Historical approval: documented cash payouts — October21,21:35Z
 
 Human answered "Yes, extend it to those documented cash payouts" to the saved
 concrete11-provider-ID proposal review-results/documented-cash-policy-choice.json
