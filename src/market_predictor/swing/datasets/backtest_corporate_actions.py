@@ -39,6 +39,7 @@ from market_predictor.swing.datasets.action_evidence import CorporateActionEvide
 from market_predictor.swing.datasets.action_windows import ActionWindow
 from market_predictor.swing.datasets.reviewed_action_dates import load_reviewed_action_dates
 from market_predictor.swing.datasets.reviewed_cash_payouts import load_reviewed_cash_payouts
+from market_predictor.swing.datasets.reviewed_parent_units import load_reviewed_parent_spin_units
 
 
 def load_backtest_corporate_action_context(root: Path, pin: SourcePin) -> BacktestCorporateActionContext:
@@ -215,6 +216,12 @@ class BacktestCorporateActions:
             if name in self.source_files and self.source_files[name] != digest:
                 raise DataReadinessError("reviewed cash cannot replace a different retained source pin")
         self.source_files.update(cash_pins)
+        self.reviewed_parent_units, parent_pins = load_reviewed_parent_spin_units(root, context.policy.reviewed_parent_units,
+            self._records, self.reviewed_dates, memory_guard=memory_guard)
+        for name, digest in parent_pins.items():
+            if name in self.source_files and self.source_files[name] != digest:
+                raise DataReadinessError("reviewed parent units cannot replace a different retained source pin")
+        self.source_files.update(parent_pins)
         self.reviewed_cash_aliases: dict[tuple[str, str], str] = {}
         for fact in cash_facts:
             cash_identity = "reviewed-cash:" + json_sha256(fact.model_dump(mode="json"))
@@ -249,6 +256,17 @@ class BacktestCorporateActions:
             return None
         family, record = matched
         reviewed = self.reviewed_dates.get(window.action_id)
+        parent_units = self.reviewed_parent_units.get(window.action_id)
+        if parent_units is not None and family == "spin_offs" and symbol == parent_units.source_symbol:
+            if (window.first_relevant_date is not None and window.first_relevant_date > parent_units.ex_date
+                    or window.last_relevant_date is not None and window.last_relevant_date < parent_units.ex_date):
+                return None
+            if price_history:
+                return "reviewed_spin_off_preserves_parent_raw_share_units"
+            if first >= parent_units.ex_date:
+                return "new_regular_way_parent_purchase_on_or_after_ex_date"
+            if last < parent_units.ex_date:
+                return "regular_way_parent_sold_before_distribution_entitlement"
         if family == "name_changes":
             if (reviewed is not None and symbol in (record.get("old_symbol"), record.get("new_symbol"))
                     and last < reviewed.economic_dates["effective_date"]):

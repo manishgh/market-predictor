@@ -29,6 +29,7 @@ class BacktestCorporateActionPolicy(HoldingContract):
     production_eligible: Literal[False]
     reviewed_action_dates: SourcePin | None = None
     reviewed_cash_payouts: SourcePin | None = None
+    reviewed_parent_units: SourcePin | None = None
     documented_cash_payouts: Literal["issuer_declared_usd_at_ex_date_close"] | None = None
 
     def sha256(self) -> str:

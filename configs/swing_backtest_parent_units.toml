@@ -1,0 +1,22 @@
+schema_version = "market_predictor.backtest_corporate_actions"
+scope = "retrospective_research_only"
+ordinary_dividend_cash = "declared_rate_at_ex_date_close"
+dividend_reuse = "subsequent_sessions_only"
+split_units = "recorded_ratio_proportional_normalized_shares"
+benchmark_distributions = "retain_cash_without_reinvestment"
+unknown_actions = "valuation_unavailable_without_filtering_selected_lots"
+production_eligible = false
+
+documented_cash_payouts = "issuer_declared_usd_at_ex_date_close"
+
+[reviewed_action_dates]
+path = "data/research/swing_backtest_reviewed_action_dates.json"
+sha256 = "3827c5c82ebb76f6b2e7d865fd50496e15d00617b09da5f2925f49a2b34e62da"
+
+[reviewed_cash_payouts]
+path = "data/research/swing_backtest_reviewed_cash_payouts.json"
+sha256 = "72806718ac1f67f2c53975c1268e18b6f6431f43de18bd0d7552e465f6601342"
+
+[reviewed_parent_units]
+path = "data/research/swing_backtest_reviewed_parent_spin_units.json"
+sha256 = "bd264459407a4f4345961cb07ed0a3de648b6948fc41a6f323433d3bd9b3a046"
