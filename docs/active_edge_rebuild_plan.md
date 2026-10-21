@@ -21,7 +21,61 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: official accounting facts acquired; bounded repair remains active — October21,21:24Z
+### Current execution: documented cash payouts explicitly approved — October21,21:35Z
+
+Human answered "Yes, extend it to those documented cash payouts" to the saved
+concrete11-provider-ID proposal review-results/documented-cash-policy-choice.json
+SHA4ee2f371bd3f592c6c3cc8075c40a31f6563887c46e223b15b9219b447a70fef.
+Approval receipt review-results/documented-cash-policy-approval.json SHA
+37d9ec7e3c9ed8d6b691c712dc63886bf005382ea869dc8e1b6ee0e512d7e775.
+Extend ex-date-close cash to those exact documented Ford, Rollins, W.R.Berkley,
+TransDigm, Kimco and QQQ special/supplemental payouts, issuer-declared USD totals
+exactly once. Cash reusable subsequent sessions only. No invented account tax or
+withholding receipt, reinvestment, unknown payout or stock-distribution admission.
+Do not ask again. This supersedes the pending-choice language in history below.
+
+OFFICIAL-DATE REPAIR COMPLETE AND PUSHED9a93bd9. Optional reviewed-date source pin
+preserves original policy bytes/SHA and old semantic hash; explicit new policy
+configs/swing_backtest_official_action_dates.toml SHA
+1437692d62998ad6e2ac17e437d4a16fe74200ee4a4a08330b9aab5a4f847f5d
+pins data/research/swing_backtest_reviewed_action_dates.json SHA
+3827c5c82ebb76f6b2e7d865fd50496e15d00617b09da5f2925f49a2b34e62da:
+9exact retained records/56official source files. No raw record rewrite, cash or
+daughter-share event, identity mapping or weakening invalid/local/official gaps.
+
+91focused synthetic UNITs passed21.01s; Ruff5source/test files, strict mypy3source
+modules. One author design/code/ML review; no independent review claimed. Source
+receipt repeat-pin finding closed. Strict JSON contract loading fixed. First pytest
+setup was refused by Windows shared temp permissions; fresh workspace basetemp run
+passed. Full suite deliberately unrun at component scope.
+
+ACTUAL date check native43668/Python33736 naturally exited0 at21:33:15.998662Z.
+Workspace review-results/accounting-official-dates-real.json SHA
+6125a2134100db4312505763484487f760a19c3f7131c22f527b6840f017fec9 checks all17700
+saved selections, restores335more previously action-gated stock selections:
+533->198remaining, cumulative1737oforiginal1935restored. Selected parquetSHA
+6d691a7e0b0d722c3adb47327d5ea77f98d9e270ade88a23638c84481a5b6dc5 unchanged.
+Three newly restored actual raw holdings replayed:APTV stop,LH stop,GE timeout.
+No portfolio return computed. Preserve official-dates-real.log/.exit.json and proof.
+
+Remaining198stock selections involve cash handling, crossing spin-off windows and
+one conflicting RJF stock-dividend record. Next: source-bound gross USD ordinary
+and approved documented special/supplemental cash handling; reconcile real combined
+versus separate entitlements and exact QQQ issuer rows. Implement real daughter-share
+replay only from retained source/official terms; retain unresolved cases. Do not run
+another long knowingly unavailable campaign. Six specifications/twelve policies,
+models/features/targets/settings/costs/API V1/TradingFlow remain frozen.
+
+Prior monitor22004/native92644 naturally exited0; state monitor_and_idle_hold_released
+at21:34:19.115310Z. Its completed finished receipt SHA
+b691881ec89e0a942d20c2331db5d8e762759d6796a8d1b98ee248365737de74 is preserved as
+review-results/news-oct20-finished-official-dates-20261021T213419.json. New monitor
+native77733, logaccounting-cash-monitor.log; inspect actual current PID/state. Heartbeat
+ACTIVE; no current finish marker. At actual workend write fresh marker and verify
+monitor release/no owned worker before pausing. Earlier finished/failed/stopped
+receipts and all closed work remain preserved. Only step7 in progress.
+
+### Collection boundary before cash approval — October21,21:24Z
 
 Human "Yes fetch it" authorized exactly56stock action records plus3QQQrecords.
 Five immutable exact-URL plans completed naturally with exit0. Fresh archive:
