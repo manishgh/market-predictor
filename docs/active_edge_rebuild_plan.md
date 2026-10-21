@@ -51,12 +51,17 @@ sale UNITs passed7.51s after those fixes.297affected UNITs passed435.45s, plus b
 original/amended publication-policy cases passed53.99s (one repeated baseline).
 Ruff13source/testfiles and strictmypy10affected source modules passed; both workspace
 helpers passed Ruff. Full suite deliberately unrun for this component checkpoint.
-Actual retained-data SPY-dividend/selected-TSLA-split verification started14:05:53Z,
-native22756/Python13476; fresh workspace dividend-split-real.log/.exit.json. Reviewed
-verifierSHA c1ae285b6bfd53549d891721002237be321712d3cc87284d64606fbb510e7e43.
-No completed real report claimed yet. After actual pass, pin that report and run the
-same twelve stock backtests using the fresh reviewed operator. No performance claim
-or new source admission; the prior unavailable report remains immutable.
+Actual retained-data SPY-dividend/selected-TSLA-split verification naturally exited0
+at14:09:33.9395133Z (native22756/Python13476). Actual
+data/reports/swing_backtest_corporate_accounting_verification.json SHA
+cf115906e4b3b6645efa7294c7870bea9611015cc5e383646a9d818fafc1c4b1,
+status passed_real_backtest_corporate_accounting. All11SPY dividends reconciled
+exactly once:17.613976cash per original share, no reinvestment; independent raw
+price+cash equity matches the kernel. An actual selected TSLA split holding replayed
+through its sale. This is accounting proof, not model performance. Workspace
+dividend-split-real.log/.exit.json retained. Code checkpoint b984a76 pushed.
+Proceed to the same twelve stock backtests using the fresh reviewed operator and
+actual proof pin. No source admission; the prior unavailable report is immutable.
 
 ### Historical accounting repair design — October21,13:14Z
 

@@ -59,12 +59,16 @@ work/run_dividend_split_backtests.py retains exact twelve frozen IDs/two passed 
 adds new policySHA64ac6ab2c9b22223a455503c8968f700adf5b6a1534fcc0acde205c00f85c704
 and requires a passed actual verifier report/pathSHA before launch. Both helpers
 reviewed without remaining findings; original retry operator unchanged.
-Fresh real verifier IS NOW LIVE: native22756/Python13476/launcher30640 started
+Fresh real verifier COMPLETED: native22756/Python13476/launcher30640 started
 2026-10-21T14:05:53Z; scriptSHAc1ae285b6bfd53549d891721002237be321712d3cc87284d64606fbb510e7e43,
 workspace review-results/dividend-split-real.log/.exit.json; expected fresh actual
-data/reports/swing_backtest_corporate_accounting_verification.json. No pass/report
-claimed yet; do not duplicate/edit its dependencies. On actual exit0 and passed
-report hash, execute reviewed fresh operator work/run_dividend_split_backtests.py
+data/reports/swing_backtest_corporate_accounting_verification.json is actual passed
+report SHAcf115906e4b3b6645efa7294c7870bea9611015cc5e383646a9d818fafc1c4b1,
+status passed_real_backtest_corporate_accounting; naturalexit0 at14:09:33.9395133Z.
+11SPY dividends/17.613976cash per original share reconciled exactly without
+reinvestment; actual selected TSLA split holding replayed through exit. Scope is
+accounting proof, not full model performance. Do not repeat completed verification.
+Code pushedb984a76. Execute reviewed fresh operator work/run_dividend_split_backtests.py
 SHAddd4908c000d7ce2c068893121342817deb2fe2322af309d5dfd22039997c92a
 with actual proof path/hash, original completeSHAa0942413b543ad6cbad9412d5219abc204099e6e0d641815c52f718b6dddbcf5,
 actual newsmanifestSHA48f3ff9aff50e4eb6be6704808d8a0db5e1b42cbcb21f0cc79f0f4555ccb479b
