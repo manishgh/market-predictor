@@ -168,6 +168,22 @@ class FundedPolicyInputProvider:
         _require(len(matches) == 1, "corporate action symbol must use the exact selected raw source segment")
         return str(matches[0]["artifact"]["provider_symbol"])
 
+    def action_gaps(self, identity: str, symbol: str, days: tuple[date, ...], *, price_history: bool = False) -> tuple[str, ...]:
+        """Use the same action gate for raw reads and bounded admission diagnostics."""
+        actions, global_gaps = self.sources["action_index"]
+        if price_history or self.corporate_actions is not None:
+            # Cash-only raw price movement remains in ATR, without valuing cash.
+            actions = {symbol: tuple(window for window in actions.get(symbol, ())
+                if not (price_history and window.family == "cash_dividends" and window.requires_ownership_before_first_date
+                    and window.first_relevant_date is not None and window.last_relevant_date == window.first_relevant_date
+                    and window.unavailable_reason == "corporate_terms_require_replay"
+                    or self.corporate_actions is not None and (
+                        self.corporate_actions.resolves(symbol, window)
+                        or self.corporate_actions.irrelevance_reason(symbol, window, days[0], days[-1],
+                            price_history=price_history) is not None)))}
+        return window_gaps(identity=identity, symbol=symbol, first=days[0], last=days[-1],
+            actions=actions, official=self.policy.official_windows, global_gaps=global_gaps)
+
     def _read(self, identity: str, ticker: str, days: tuple[date, ...], *, benchmark: bool, price_history: bool = False
               ) -> tuple[pd.DataFrame, dict[date, EvidenceReference], tuple[str, ...]]:
         if days[0] < START or days[-1] > END:
@@ -183,17 +199,7 @@ class FundedPolicyInputProvider:
         _require(artifact["role"] == ("benchmark" if benchmark else "stock"), "funded source role differs")
         if any(corrected_ticker(identity, artifact["ticker"], day, self.policy.decision_corrections) != ticker for day in days):
             return pd.DataFrame(), {}, ("raw_logical_ticker_not_bound_to_corrected_interval",)
-        actions, global_gaps = self.sources["action_index"]
-        if price_history or self.corporate_actions is not None:
-            # Ordinary cash distributions do not change share units. Their raw
-            # price movement remains in ATR; no dividend cash is valued here.
-            actions = {artifact["provider_symbol"]: tuple(window for window in actions.get(artifact["provider_symbol"], ())
-                if not (price_history and window.family == "cash_dividends" and window.requires_ownership_before_first_date
-                    and window.first_relevant_date is not None and window.last_relevant_date == window.first_relevant_date
-                    and window.unavailable_reason == "corporate_terms_require_replay"
-                    or self.corporate_actions is not None and self.corporate_actions.resolves(artifact["provider_symbol"], window)))}
-        gaps = window_gaps(identity=identity, symbol=artifact["provider_symbol"], first=days[0], last=days[-1],
-            actions=actions, official=self.policy.official_windows, global_gaps=global_gaps)
+        gaps = self.action_gaps(identity, artifact["provider_symbol"], days, price_history=price_history)
         if gaps:
             return pd.DataFrame(), {}, tuple([*gaps, "action_entitlement_payment_and_residual_marks_not_admitted"])
         if not benchmark:

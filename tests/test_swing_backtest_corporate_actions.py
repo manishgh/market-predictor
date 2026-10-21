@@ -15,8 +15,8 @@ from market_predictor.evidence.hashing import json_sha256
 from market_predictor.swing.contracts.holding_accounting import ExecutionEvent
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.action_evidence import CorporateActionEvidence
-from market_predictor.swing.datasets.action_windows import action_window
 from market_predictor.swing.datasets.backtest_corporate_actions import BacktestCorporateActions, load_backtest_corporate_action_context
+from market_predictor.swing.datasets.corrected_outcome_admission import reconcile_actions
 from market_predictor.swing.evaluation.holding_accounting import replay_holding
 from tests.test_swing_funded_policy_inputs import provider as provider
 
@@ -30,7 +30,8 @@ def _bridge(provider: Any, records: dict[str, list[dict[str, Any]]]) -> Backtest
     by_symbol: dict[str, dict[str, list[dict[str, Any]]]] = {}
     for family, values in records.items():
         for record in values:
-            by_symbol.setdefault(record["symbol"], {}).setdefault(family, []).append(record)
+            symbol = next(record[key] for key in ("symbol", "source_symbol", "old_symbol", "acquirer_symbol") if record.get(key))
+            by_symbol.setdefault(symbol, {}).setdefault(family, []).append(record)
     files: dict[str, str] = {}
     for symbol, families in by_symbol.items():
         path = provider.root / f"actions/tickers/{symbol}/selected/000.bin"
@@ -52,12 +53,7 @@ def _bridge(provider: Any, records: dict[str, list[dict[str, Any]]]) -> Backtest
     result = BacktestCorporateActions(provider.root, evidence, context, memory_guard=lambda: None)
     provider.corporate_actions = result
     provider.source_files.update(result.source_files)
-    index: dict[str, tuple[Any, ...]] = {}
-    for family, values in records.items():
-        for record in values:
-            symbol = record["symbol"]
-            index[symbol] = (*index.get(symbol, ()), action_window(family, record))
-    provider.sources["action_index"] = index, ()
+    provider.sources["action_index"] = reconcile_actions(evidence, set(by_symbol))
     return result
 
 

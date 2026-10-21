@@ -109,6 +109,8 @@ class BacktestCorporateActions:
         *, memory_guard: Callable[[], None]) -> None:
         self.context = context
         self.terms: dict[tuple[str, str], _Terms] = {}
+        self._records: dict[str, tuple[str, dict[str, Any]]] = {}
+        conflicting_records: set[str] = set()
         invalid: set[tuple[str, str]] = set()
         self.source_files: dict[str, str] = {}
         accepted = {(symbol, family, json_sha256(record)) for symbol, families in evidence.records_by_symbol.items()
@@ -155,6 +157,12 @@ class BacktestCorporateActions:
                     if identity not in accepted:
                         raise DataReadinessError("backtest action page record is absent from successful projection")
                     observed.add(identity)
+                    record_id = record.get("id")
+                    if isinstance(record_id, str) and record_id:
+                        prior_record = self._records.get(record_id)
+                        if prior_record is not None and prior_record != (family, record):
+                            conflicting_records.add(record_id)
+                        self._records[record_id] = family, record
                     if family not in ("cash_dividends", "forward_splits", "reverse_splits"):
                         continue
                     try:
@@ -187,12 +195,88 @@ class BacktestCorporateActions:
                             invalid.add((record["symbol"], record["id"]))
         if observed != accepted:
             raise DataReadinessError("backtest action projection lacks matching successful source records")
+        for conflicting_id in conflicting_records:
+            del self._records[conflicting_id]
         counts = Counter((term.symbol, term.session, term.family == "cash_dividends") for term in self.terms.values())
         mixed = {(symbol, session) for symbol, session, cash in counts if (symbol, session, not cash) in counts}
         for key, term in list(self.terms.items()):
-            if (key in invalid or (term.symbol, term.session) in mixed
+            if (key in invalid or term.action_id in conflicting_records or (term.symbol, term.session) in mixed
                     or counts[term.symbol, term.session, term.family == "cash_dividends"] != 1):
                 del self.terms[key]
+
+    def irrelevance_reason(self, symbol: str, window: ActionWindow, first: date, last: date,
+        *, price_history: bool = False) -> str | None:
+        """Explain why an exact action cannot affect this newly opened position.
+
+        This supplies neither action economics nor an identity mapping. The caller
+        still verifies its raw source segment, membership, official and global gaps.
+        Local reconciliation errors must never be removed by a valid sibling record.
+        """
+        if first > last:
+            raise DataReadinessError("backtest action relevance interval is reversed")
+        if window.unavailable_reason not in {"corporate_terms_require_replay",
+                "unbounded_entitlement_or_due_bill_dates", "missing_action_economic_date"}:
+            return None
+        matched = self._records.get(window.action_id)
+        if matched is None or matched[0] != window.family:
+            return None
+        family, record = matched
+        if family == "name_changes":
+            old_cusip, new_cusip = record.get("old_cusip"), record.get("new_cusip")
+            if (isinstance(old_cusip, str) and len(old_cusip) == 9 and old_cusip.isalnum()
+                    and old_cusip == new_cusip and symbol in (record.get("old_symbol"), record.get("new_symbol"))):
+                return "same_cusip_name_change_preserves_owned_units"
+            return None
+        if family in {"cash_mergers", "stock_mergers", "stock_and_cash_mergers"}:
+            acquiree, acquirer = record.get("acquiree_symbol"), record.get("acquirer_symbol")
+            old_cusip, new_cusip = record.get("acquiree_cusip"), record.get("acquirer_cusip")
+            symbol_fields = {key for key, value in record.items() if "symbol" in key.lower() and value not in (None, "")}
+            if (symbol == acquirer and isinstance(acquiree, str) and acquiree and acquiree != acquirer
+                    and isinstance(old_cusip, str) and isinstance(new_cusip, str)
+                    and len(old_cusip) == len(new_cusip) == 9 and old_cusip.isalnum() and new_cusip.isalnum()
+                    and old_cusip != new_cusip and symbol_fields == {"acquiree_symbol", "acquirer_symbol"}):
+                return "merger_acquirer_existing_shares_are_not_acquiree_consideration"
+            return None
+        if family not in {"cash_dividends", "spin_offs", "stock_dividends", "rights_distributions",
+                "capital_gains_distributions"}:
+            return None
+        source = (record.get("symbol") if family in {"cash_dividends", "stock_dividends", "capital_gains_distributions"}
+                  else record.get("source_symbol"))
+        if source != symbol:
+            return None
+        if price_history and family == "cash_dividends":
+            # A cash-only payout changes neither the units nor the identity of
+            # shares in raw bars. Its price movement stays in the frozen raw ATR.
+            # This does not admit a holding, value a claim or pay any cash.
+            if type(record.get("special")) is bool and record.get("foreign") is False:
+                try:
+                    _positive(record["rate"])
+                except (KeyError, TypeError, ValueError):
+                    return None
+                return "cash_distribution_does_not_change_raw_price_share_units"
+        dates: dict[str, date] = {}
+        try:
+            for field in ("ex_date", "record_date", "payable_date", "due_bill_redemption_date", "effective_date"):
+                value = record.get(field)
+                if value in (None, ""):
+                    continue
+                if not isinstance(value, str):
+                    return None
+                parsed = date.fromisoformat(value)
+                if value != parsed.isoformat():
+                    return None
+                dates[field] = parsed
+        except (TypeError, ValueError):
+            return None
+        if "ex_date" not in dates:
+            return None
+        # The position starts with a new purchase, not an earlier owner's claims.
+        # Keep the boundary day itself gated and retain every known later date.
+        if first > max(dates.values()):
+            return "new_purchase_after_distribution_economic_dates"
+        if {"ex_date", "record_date", "payable_date"}.issubset(dates) and last < min(dates.values()):
+            return "holding_ends_before_distribution_economic_dates"
+        return None
 
     def resolves(self, symbol: str, window: ActionWindow) -> bool:
         term = self.terms.get((symbol, window.action_id))
