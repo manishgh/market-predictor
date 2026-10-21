@@ -13,6 +13,7 @@ import pandas as pd
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.modeling import resampling
 from market_predictor.modeling.strategy_contract import StrategyContract
+from market_predictor.swing.contracts.backtest_corporate_actions import BacktestCorporateActionContext
 from market_predictor.swing.contracts.holding_accounting import ExecutionEvent, HoldingSpecification
 from market_predictor.swing.contracts.research import SwingResearchContract
 from market_predictor.swing.contracts.trade_simulation import TradeSimulationContext
@@ -206,6 +207,7 @@ def evaluate_event_aware_swing_accounting(
     strategy_contract: StrategyContract, research_contract: SwingResearchContract,
     session_calendar: tuple[str, ...],
     simulation: TradeSimulationContext | None = None,
+    corporate_simulation: BacktestCorporateActionContext | None = None,
 ) -> dict[str, Any]:
     """Compare event-aware NAV without treating claims as cash or admitting raw sources."""
     research_contract.assert_strategy_matches(strategy_contract)
@@ -232,8 +234,8 @@ def evaluate_event_aware_swing_accounting(
                 or spec.initial_entry_timestamp != first_open or spec.session_end_timestamps != closes
                 or any(isinstance(event, ExecutionEvent) for event in spec.events)):
             raise DataReadinessError("benchmark must be a same-calendar, contract-bound buy-and-hold lot")
-        simulated = simulate_ordinary_sales(spec, simulation) if simulation else None
-        outcome = simulated.outcome if simulated else replay_holding(spec)
+        simulated = simulate_ordinary_sales(spec, simulation, corporate_simulation=corporate_simulation) if simulation else None
+        outcome = simulated.outcome if simulated else replay_holding(spec, corporate_simulation=corporate_simulation)
         values = [snapshot.total_value for snapshot in outcome.snapshots]
         if any(value is None for value in values) or any(snapshot.gaps for snapshot in outcome.snapshots):
             missing.append(ticker)
@@ -260,12 +262,12 @@ def evaluate_event_aware_swing_accounting(
     base = funded_ledger.build_event_aware_funded_swing_ledger(
         selected, holdings, config, session_calendar=session_calendar,
         research_contract_sha256=research_contract.sha256(), execution_policy="managed",
-        simulation=simulation,
+        simulation=simulation, corporate_simulation=corporate_simulation,
     )
     stress = funded_ledger.build_event_aware_funded_swing_ledger(
         selected, holdings, config, session_calendar=session_calendar,
         research_contract_sha256=research_contract.sha256(), execution_policy="managed",
-        simulation=simulation,
+        simulation=simulation, corporate_simulation=corporate_simulation,
         additional_round_trip_cost=(research_contract.stress_cost_multiplier - 1)
         * research_contract.base_round_trip_cost_bps / 10_000,
     )
@@ -282,6 +284,7 @@ def evaluate_event_aware_swing_accounting(
         basis_status="event_source_admission_pending",
     )
     result["trade_simulation"] = simulation_metadata(simulation) if simulation else None
+    result["corporate_action_simulation"] = corporate_simulation.policy.model_dump(mode="json") if corporate_simulation else None
     return result
 
 

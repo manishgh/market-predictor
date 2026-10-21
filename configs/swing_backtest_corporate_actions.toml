@@ -1,0 +1,8 @@
+schema_version = "market_predictor.backtest_corporate_actions"
+scope = "retrospective_research_only"
+ordinary_dividend_cash = "declared_rate_at_ex_date_close"
+dividend_reuse = "subsequent_sessions_only"
+split_units = "recorded_ratio_proportional_normalized_shares"
+benchmark_distributions = "retain_cash_without_reinvestment"
+unknown_actions = "valuation_unavailable_without_filtering_selected_lots"
+production_eligible = false

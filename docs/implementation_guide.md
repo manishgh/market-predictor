@@ -163,6 +163,18 @@ the next XNYS session open, preserving prepaid costs. This is a research funding
 assumption, not historical broker settlement evidence. No CLI implicitly enables it.
 Corporate claims do not inherit ordinary-sale payments or valuations.
 
+Stock backtests can additionally opt into the separately pinned
+`configs/swing_backtest_corporate_actions.toml` using
+`evaluate-saved-swing-policy --backtest-corporate-actions <path>
+--backtest-corporate-actions-sha256 <sha>`. This human-approved retrospective
+assumption adds ordinary cash dividends at ex-date close, reusable in subsequent
+sessions, and uses recorded split ratios with proportional shares. The bridge
+reads only successful, independently replayed action records and retains separate
+source and assumption references. Split-adjusted share units also apply to raw-price
+volatility, exit thresholds and the eventual sale. Benchmarks retain dividend cash
+without reinvestment. Special/uncertain actions remain unavailable; selected lots
+are never dropped. This does not change saved model targets or authorize live use.
+
 Consumer reports retain per-lot input/policy hashes, generated event/mark identities
 and next-open settlement snapshots. Settlement amounts are normalized to unit entry
 notional, not funded account cash. A tenth-close sale remains unpaid at that close;

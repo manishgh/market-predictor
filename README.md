@@ -490,6 +490,14 @@ and no missing observation becomes a neutral sentiment or zero return.
   observed availability, and reports retrospective label maturity separately. A final
   sale's next-open cash settlement does not extend the ten-session return. No corporate
   payment/mark or fill is inferred; source admission and live promotion stay separate.
+- Stock-trading backtests have a separate, explicit dividend/split accounting option:
+  `--backtest-corporate-actions configs/swing_backtest_corporate_actions.toml`
+  plus its actual SHA256. Under the approved research assumption, an ordinary
+  dividend earned during ownership becomes simulated cash at ex-date close and
+  can fund later sessions. Recorded splits change shares, price units and exit
+  thresholds consistently. Source facts and simulated cash timing remain separate;
+  uncertain company events still prevent a complete return calculation. Saved
+  features, models and targets are unchanged, and no live admission is granted.
 - The first retained-data accounting control is **blocked**: 70 of 30,525 selected
   stock-days lack complete fixed-horizon outcomes. No stock was dropped to produce
   a performance score, and no real-data ledger or SPY result was emitted.

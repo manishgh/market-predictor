@@ -36,6 +36,8 @@ def register_saved_oof_policy_command(app: typer.Typer) -> None:
         learner: str = typer.Option(...), exit_policy: str = typer.Option(...),
         historical_configuration_evidence: Path | None = typer.Option(None),
         historical_configuration_evidence_sha256: str | None = typer.Option(None),
+        backtest_corporate_actions: Path | None = typer.Option(None),
+        backtest_corporate_actions_sha256: str | None = typer.Option(None),
     ) -> None:
         """Load action evidence first, then evaluate through the single source lease."""
         try:
@@ -45,6 +47,10 @@ def register_saved_oof_policy_command(app: typer.Typer) -> None:
                 raise DataReadinessError("saved policy evaluation requires one frozen exit policy")
             if (historical_configuration_evidence is None) != (historical_configuration_evidence_sha256 is None):
                 raise DataReadinessError("historical configuration evidence requires both path and SHA256")
+            if (backtest_corporate_actions is None) != (backtest_corporate_actions_sha256 is None):
+                raise DataReadinessError("backtest corporate-action assumptions require both path and SHA256")
+            corporate = (SourcePin(path=backtest_corporate_actions.as_posix(), sha256=backtest_corporate_actions_sha256)
+                         if backtest_corporate_actions is not None and backtest_corporate_actions_sha256 is not None else None)
             historical = (SourcePin(path=historical_configuration_evidence.as_posix(),
                                     sha256=historical_configuration_evidence_sha256)
                           if historical_configuration_evidence is not None
@@ -68,6 +74,7 @@ def register_saved_oof_policy_command(app: typer.Typer) -> None:
                 strategy_contract=strategy, research_contract=research,
                 learner=cast(Learner, learner), exit_policy=cast(ExitPolicy, exit_policy), evidence=evidence, output=output,
                 historical_configuration_evidence=historical,
+                backtest_corporate_actions=corporate,
             )
         except HeavyJobBusyError as error:
             typer.echo(str(error), err=True)

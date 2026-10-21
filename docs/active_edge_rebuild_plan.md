@@ -39,6 +39,25 @@ frozen-exit UNITs passed6.37s, Ruff2files and strictmypy1passed. Ordinary divide
 windows no longer prevent raw-price ATR reads; holding/benchmark cash and uncertain
 action gates unchanged. Full accounting repair remains in progress under step7.
 
+The independent ATR fix is pushed as c55846f. The full approved corporate-action
+bridge is now implemented: source-pinned ordinary dividends create separately
+labelled simulated ex-date-close cash; recorded splits update share units, ATR,
+exit thresholds and sale ownership. Same-day split/dividend rate ambiguity and
+uncertain actions remain unavailable. Original target/model/feature bytes remain.
+One consolidated review found and closed two issues: only acquired receipts for
+the independently replayed request and exact projected records may create events;
+the dividend policy cannot authorize ordinary-sale receivable marks.59corporate/
+sale UNITs passed7.51s after those fixes.297affected UNITs passed435.45s, plus both
+original/amended publication-policy cases passed53.99s (one repeated baseline).
+Ruff13source/testfiles and strictmypy10affected source modules passed; both workspace
+helpers passed Ruff. Full suite deliberately unrun for this component checkpoint.
+Actual retained-data SPY-dividend/selected-TSLA-split verification started14:05:53Z,
+native22756/Python13476; fresh workspace dividend-split-real.log/.exit.json. Reviewed
+verifierSHA c1ae285b6bfd53549d891721002237be321712d3cc87284d64606fbb510e7e43.
+No completed real report claimed yet. After actual pass, pin that report and run the
+same twelve stock backtests using the fresh reviewed operator. No performance claim
+or new source admission; the prior unavailable report remains immutable.
+
 ### Historical accounting repair design — October21,13:14Z
 
 Human asked to fix the unfinished portfolio-return calculation, not optimize models.

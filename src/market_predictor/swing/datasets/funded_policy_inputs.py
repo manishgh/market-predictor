@@ -8,6 +8,7 @@ have no generated simulation payments.
 """
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -30,6 +31,7 @@ from market_predictor.swing.contracts.holding_materialization import PositionSou
 from market_predictor.swing.contracts.research import SwingResearchContract, load_swing_research_contract
 from market_predictor.swing.contracts.trade_simulation import TradeSimulationContext
 from market_predictor.swing.datasets.action_evidence import CorporateActionEvidence
+from market_predictor.swing.datasets.backtest_corporate_actions import BacktestCorporateActions
 from market_predictor.swing.datasets.corrected_outcome_admission import corrected_ticker, window_gaps
 from market_predictor.swing.datasets.corrected_outcomes import (
     load_corrected_outcome_policy,
@@ -76,7 +78,7 @@ def unsimulated_managed_specification(result: FrozenExitResult) -> HoldingSpecif
 
 
 def raw_decision_atr(*, decision: dict[str, Any], observations: pd.DataFrame,
-                     evidence: dict[date, EvidenceReference]) -> DecisionAtr | None:
+                     evidence: dict[date, EvidenceReference], split_ratios: tuple[tuple[date, float], ...] = ()) -> DecisionAtr | None:
     """Mean of fourteen raw true ranges over fifteen exact completed sessions."""
     calendar = xcals.get_calendar("XNYS")
     day = decision["session_date_et"]
@@ -93,8 +95,15 @@ def raw_decision_atr(*, decision: dict[str, Any], observations: pd.DataFrame,
         return None
     _require(all(pd.Timestamp(frame.loc[session, "bar_end_utc"]) == calendar.session_close(session.isoformat())
                  for session in days), "ATR observation clocks differ from completed sessions")
-    previous = frame.close.shift(1)
-    ranges = pd.concat([frame.high - frame.low, (frame.high - previous).abs(), (frame.low - previous).abs()], axis=1).max(axis=1)
+    _require(len({day for day, _ in split_ratios}) == len(split_ratios)
+        and all(type(at) is date and days[0] < at <= day and type(ratio) is float
+                and math.isfinite(ratio) and ratio > 0 for at, ratio in split_ratios), "ATR split ratios or dates differ")
+    factors = pd.Series(1.0, index=frame.index)
+    for at, ratio in split_ratios:
+        factors.loc[factors.index < at] /= ratio
+    high, low, close_prices = frame.high * factors, frame.low * factors, frame.close * factors
+    previous = close_prices.shift(1)
+    ranges = pd.concat([high - low, (high - previous).abs(), (low - previous).abs()], axis=1).max(axis=1)
     value = float(ranges.iloc[1:].mean())
     if not 0 < value < float("inf"):
         return None
@@ -109,7 +118,9 @@ def raw_decision_atr(*, decision: dict[str, Any], observations: pd.DataFrame,
     _require(decision["decision_time_utc"] == swing_prediction_cutoffs(pd.Series([day])).iloc[0], "ATR cutoff differs")
     reference = evidence[day].model_copy(update={"record_locator":
         f"raw ATR14 mean true range;security_id={decision['security_id']};sessions={days[0]}..{day};"
-        f"observation_evidence_sha256={json_sha256([evidence[value].model_dump(mode='json') for value in days])}"})
+        f"observation_evidence_sha256={json_sha256([evidence[value].model_dump(mode='json') for value in days])}"
+        + (f";decision_share_unit_split_ratios_sha256={json_sha256([(at.isoformat(), ratio) for at, ratio in split_ratios])}"
+           if split_ratios else "")})
     return DecisionAtr(decision_id=decision["decision_id"], security_id=decision["security_id"], value=value,
         observation_end_at=close, available_at=decision["decision_time_utc"], evidence=reference)
 
@@ -120,10 +131,14 @@ class FundedPolicyInputProvider:
     def __init__(self, *, root: Path, policy: CorrectedOutcomePolicy, config: SourcePin,
                  evidence: CorporateActionEvidence, sources: dict[str, Any], strategy: StrategyContract,
                  research: SwingResearchContract, simulation: TradeSimulationContext, selected: pd.DataFrame,
-                 session_calendar: tuple[str, ...], exit_policy: ExitPolicy) -> None:
+                 session_calendar: tuple[str, ...], exit_policy: ExitPolicy,
+                 corporate_actions: BacktestCorporateActions | None = None) -> None:
         self.root, self.policy, self.config, self.evidence, self.sources = root, policy, config, evidence, sources
         self.strategy, self.research, self.simulation, self.exit_policy = strategy, research, simulation, exit_policy
         self.source_files = dict(sources["source_files"])
+        self.corporate_actions = corporate_actions
+        if corporate_actions is not None:
+            self.source_files.update(corporate_actions.source_files)
         self.valuation_sessions = swing_valuation_sessions(session_calendar, 10)
         _require(START <= date.fromisoformat(session_calendar[0]) <= date.fromisoformat(session_calendar[-1]) <= LAST_ENTRY
                  and date.fromisoformat(self.valuation_sessions[-1]) <= END, "funded calendar escapes initial fit")
@@ -147,6 +162,12 @@ class FundedPolicyInputProvider:
         for name, digest in self.source_files.items():
             _require(file_sha256(inside(self.root, name)) == digest, f"funded source changed: {name}")
 
+    def _source_symbol(self, identity: str, days: tuple[date, ...]) -> str:
+        matches = [item for item in self.sources["selection"]["segments"] if item["artifact"]["security_id"] == identity
+            and date.fromisoformat(item["first_session"]) <= days[0] and date.fromisoformat(item["last_session"]) >= days[-1]]
+        _require(len(matches) == 1, "corporate action symbol must use the exact selected raw source segment")
+        return str(matches[0]["artifact"]["provider_symbol"])
+
     def _read(self, identity: str, ticker: str, days: tuple[date, ...], *, benchmark: bool, price_history: bool = False
               ) -> tuple[pd.DataFrame, dict[date, EvidenceReference], tuple[str, ...]]:
         if days[0] < START or days[-1] > END:
@@ -163,13 +184,14 @@ class FundedPolicyInputProvider:
         if any(corrected_ticker(identity, artifact["ticker"], day, self.policy.decision_corrections) != ticker for day in days):
             return pd.DataFrame(), {}, ("raw_logical_ticker_not_bound_to_corrected_interval",)
         actions, global_gaps = self.sources["action_index"]
-        if price_history:
+        if price_history or self.corporate_actions is not None:
             # Ordinary cash distributions do not change share units. Their raw
             # price movement remains in ATR; no dividend cash is valued here.
             actions = {artifact["provider_symbol"]: tuple(window for window in actions.get(artifact["provider_symbol"], ())
-                if not (window.family == "cash_dividends" and window.requires_ownership_before_first_date
+                if not (price_history and window.family == "cash_dividends" and window.requires_ownership_before_first_date
                     and window.first_relevant_date is not None and window.last_relevant_date == window.first_relevant_date
-                    and window.unavailable_reason == "corporate_terms_require_replay"))}
+                    and window.unavailable_reason == "corporate_terms_require_replay"
+                    or self.corporate_actions is not None and self.corporate_actions.resolves(artifact["provider_symbol"], window)))}
         gaps = window_gaps(identity=identity, symbol=artifact["provider_symbol"], first=days[0], last=days[-1],
             actions=actions, official=self.policy.official_windows, global_gaps=global_gaps)
         if gaps:
@@ -197,7 +219,7 @@ class FundedPolicyInputProvider:
         calendar = xcals.get_calendar("XNYS")
         ends = tuple(calendar.session_close(day.isoformat()).to_pydatetime() for day in days)
         position = f"{decision['decision_id']}:ordinary-shares"
-        return HoldingSpecification(research_contract_sha256=self.research.sha256(), decision_id=decision["decision_id"],
+        spec = HoldingSpecification(research_contract_sha256=self.research.sha256(), decision_id=decision["decision_id"],
             security_id=decision["ticker"] if benchmark else decision["security_id"], sector=decision["sector"],
             initial_position_id=position, initial_entry_price=float(frame.loc[days[0], "open"]),
             initial_entry_timestamp=calendar.session_open(days[0].isoformat()).to_pydatetime(),
@@ -206,6 +228,9 @@ class FundedPolicyInputProvider:
             policy="fixed_horizon", marks=tuple(KnownMark(position_id=position, mark_at=end,
                 value_per_unit=float(frame.loc[day, "close"]), currency="USD", evidence=(refs[day],))
                 for day, end in zip(days, ends, strict=True)))
+        symbol = self._source_symbol(decision["security_id"], days) if self.corporate_actions is not None else ""
+        return (self.corporate_actions.specification(spec, symbol, frame, refs)
+                if self.corporate_actions is not None else spec)
 
     def lot(self, decision_id: str) -> FundedLotInput:
         _require(decision_id in self._decisions, "funded lot was not selected")
@@ -216,7 +241,9 @@ class FundedPolicyInputProvider:
         frame, refs, gaps = self._read(identity, ticker, warmup, benchmark=False, price_history=True)
         if gaps:
             return FundedLotInput(decision_id, identity, missing_reasons=tuple(f"atr:{gap}" for gap in gaps))
-        atr = raw_decision_atr(decision=row, observations=frame, evidence=refs)
+        symbol = self._source_symbol(identity, warmup) if self.corporate_actions is not None else ticker
+        ratios = self.corporate_actions.split_ratios(symbol, warmup[0], day) if self.corporate_actions is not None else ()
+        atr = raw_decision_atr(decision=row, observations=frame, evidence=refs, split_ratios=ratios)
         if atr is None:
             return FundedLotInput(decision_id, identity, missing_reasons=("raw_decision_atr_unavailable",))
         days = tuple(value.date() for value in calendar.sessions_window(pd.Timestamp(day), 11)[1:])
@@ -224,11 +251,14 @@ class FundedPolicyInputProvider:
         if gaps:
             return FundedLotInput(decision_id, identity, decision_atr=atr, missing_reasons=gaps)
         spec = self._specification(row, days, frame, refs, benchmark=False)
-        if spec.initial_entry_price <= 1.5 * atr.value:
+        entry_ratio = (float(math.prod(ratio for _, ratio in self.corporate_actions.split_ratios(symbol, day, days[0])))
+                       if self.corporate_actions else 1.0)
+        if spec.initial_entry_price <= 1.5 * atr.value / entry_ratio:
             return FundedLotInput(decision_id, identity, decision_atr=atr, missing_reasons=("nonpositive_raw_atr_stop",))
         result = compile_frozen_exit(specification=spec, decision_session=day, decision_time=row["decision_time_utc"],
             decision_atr=atr, observations=frame, evidence=refs, strategy=self.strategy, research=self.research,
-            exit_policy=self.exit_policy, simulation=self.simulation)
+            exit_policy=self.exit_policy, simulation=self.simulation, entry_split_ratio=entry_ratio,
+            corporate_simulation=self.corporate_actions.context if self.corporate_actions else None)
         if result.simulation is None or result.missing_reasons:
             return FundedLotInput(decision_id, identity, decision_atr=atr, exit_result=result,
                 missing_reasons=tuple(f"{gap.code}:{gap.reference_id}" for gap in result.missing_reasons)
@@ -239,7 +269,8 @@ class FundedPolicyInputProvider:
         ends = tuple(calendar.session_close(value).to_pydatetime() for value in self.valuation_sessions
                      if value >= days[0].isoformat())
         managed = HoldingSpecification.model_validate({**managed.model_dump(), "session_end_timestamps": ends})
-        replay = simulate_ordinary_sales(managed, self.simulation)
+        replay = simulate_ordinary_sales(managed, self.simulation,
+            corporate_simulation=self.corporate_actions.context if self.corporate_actions else None)
         gaps = tuple(sorted({f"{gap.code}:{gap.reference_id}" for snapshot in replay.outcome.snapshots for gap in snapshot.gaps}))
         return FundedLotInput(decision_id, identity, managed if not gaps else None, atr, result, gaps)
 
@@ -252,7 +283,7 @@ class FundedPolicyInputProvider:
             return FundedLotInput(key, identity, missing_reasons=gaps)
         spec = self._specification({"decision_id": key, "security_id": identity, "ticker": ticker, "sector": "benchmark"},
             days, frame, refs, benchmark=True)
-        outcome = replay_holding(spec)
+        outcome = replay_holding(spec, corporate_simulation=self.corporate_actions.context if self.corporate_actions else None)
         gaps = tuple(sorted({f"{gap.code}:{gap.reference_id}" for snapshot in outcome.snapshots for gap in snapshot.gaps}))
         return FundedLotInput(key, identity, spec if not gaps else None, missing_reasons=gaps)
 
@@ -261,6 +292,7 @@ class FundedPolicyInputProvider:
 def verified_funded_policy_inputs(*, root: Path, target_config: SourcePin, evidence: CorporateActionEvidence,
     strategy: StrategyContract, selection_loader: Callable[[], tuple[pd.DataFrame, tuple[str, ...]]], exit_policy: ExitPolicy,
     memory_guard: Callable[[], None] | None = None,
+    corporate_actions: BacktestCorporateActions | None = None,
 ) -> Iterator[FundedPolicyInputProvider]:
     """Load selection only while the existing corrected-source lease is held.
 
@@ -281,7 +313,7 @@ def verified_funded_policy_inputs(*, root: Path, target_config: SourcePin, evide
         selected, session_calendar = selection_loader()
         provider = FundedPolicyInputProvider(root=root, policy=policy, config=target_config, evidence=evidence,
             sources=sources, strategy=strategy, research=research, simulation=simulation, selected=selected,
-            session_calendar=session_calendar, exit_policy=exit_policy)
+            session_calendar=session_calendar, exit_policy=exit_policy, corporate_actions=corporate_actions)
         provider.recheck()
         try:
             yield provider

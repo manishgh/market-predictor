@@ -383,10 +383,17 @@ def _publisher_fixture(saved: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -
     return arguments, state
 
 
+@pytest.mark.parametrize("with_corporate_policy", [False, True])
 def test_publication_uses_one_provider_lease_and_preserves_every_selected_gap(
-    saved: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+    saved: dict[str, Any], monkeypatch: pytest.MonkeyPatch, with_corporate_policy: bool,
 ) -> None:
     arguments, state = _publisher_fixture(saved, monkeypatch)
+    amendment = None
+    if with_corporate_policy:
+        path = saved["root"] / "configs/swing_backtest_corporate_actions.toml"
+        shutil.copyfile(REPO / "configs/swing_backtest_corporate_actions.toml", path)
+        amendment = SourcePin(path=path.relative_to(saved["root"]).as_posix(), sha256=file_sha256(path))
+        arguments["backtest_corporate_actions"] = amendment
     report = owner.publish_saved_oof_policy_evaluation(**arguments)
     assert state["after_yield"] and not state["lease"]
     assert report["status"] == "valuation_unavailable" and report["accounting"]["comparisons"] is None
@@ -397,6 +404,14 @@ def test_publication_uses_one_provider_lease_and_preserves_every_selected_gap(
     assert len(report["accounting"]["missing_inputs"]) == 708 * 3 + 3
     assert all(report[name] is False for name in ("training_eligible", "serving_eligible", "promotion_eligible", "economic_eligible"))
     request = json.loads((arguments["output"] / "_request.json").read_bytes())
+    assert request["backtest_corporate_actions"] == report["backtest_corporate_actions"] == (
+        amendment.model_dump(mode="json") if amendment else None)
+    if amendment:
+        assert report["source_files"][amendment.path] == amendment.sha256
+        assert report["corporate_action_assumptions"]["ordinary_dividend_cash"] == "declared_rate_at_ex_date_close"
+        assert report["corporate_action_assumptions"]["production_eligible"] is False
+    else:
+        assert report["corporate_action_assumptions"] is None
     assert request["memory_policy"] == {"maximum_system_used_percent": 91.0,
         "maximum_system_pause_seconds": 120.0, "system_memory_poll_seconds": 5.0,
         "minimum_system_free_gib": None, "maximum_process_memory_gib": 5.0,

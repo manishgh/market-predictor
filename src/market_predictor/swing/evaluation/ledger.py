@@ -12,6 +12,7 @@ import pandas as pd
 
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.resources import assert_memory_budget
+from market_predictor.swing.contracts.backtest_corporate_actions import BacktestCorporateActionContext
 from market_predictor.swing.contracts.holding_accounting import ExecutionEvent, HoldingSpecification, PaymentEvent
 from market_predictor.swing.contracts.trade_simulation import TradeSimulationContext
 from market_predictor.swing.evaluation.holding_accounting import replay_holding
@@ -184,6 +185,7 @@ def build_event_aware_funded_swing_ledger(
     session_calendar: tuple[str, ...], research_contract_sha256: str,
     execution_policy: Literal["fixed_horizon", "managed"], additional_round_trip_cost: float = 0.0,
     simulation: TradeSimulationContext | None = None,
+    corporate_simulation: BacktestCorporateActionContext | None = None,
 ) -> dict[str, Any]:
     """Replay exact selected lots through the shared holding kernel and funding loop.
 
@@ -238,12 +240,12 @@ def build_event_aware_funded_swing_ledger(
             raise DataReadinessError("event ledger snapshots differ from exact portfolio sessions")
         generated_ids: set[str] = set()
         if simulation is not None:
-            simulated = simulate_ordinary_sales(spec, simulation)
+            simulated = simulate_ordinary_sales(spec, simulation, corporate_simulation=corporate_simulation)
             spec, outcome = simulated.specification, simulated.outcome
             simulation_replays[spec.decision_id] = simulation_replay_metadata(simulated)
             generated_ids = set(simulated.generated_event_ids)
         else:
-            outcome = replay_holding(spec)
+            outcome = replay_holding(spec, corporate_simulation=corporate_simulation)
         sale_by_claim = {event.proceeds_id: event.event_id for event in spec.events if isinstance(event, ExecutionEvent)}
         sale_by_payment = {event.event_id: sale_by_claim.get(event.claim_id)
             for event in spec.events if isinstance(event, PaymentEvent)}
@@ -296,9 +298,11 @@ def build_event_aware_funded_swing_ledger(
     result = _replay_funded_entries(
         entries, session_dates=dates, selected_trades=len(selected),
         units="raw_share_entitlements_per_entry_notional",
-        distribution_policy="cash_only_on_evidenced_availability_residual_claims_retained",
+        distribution_policy=("ordinary_dividend_cash_at_approved_ex_date_close_unknown_claims_retained"
+            if corporate_simulation is not None else "cash_only_on_evidenced_availability_residual_claims_retained"),
     )
     result["trade_simulation"] = simulation_metadata(simulation) if simulation else None
+    result["corporate_action_simulation"] = corporate_simulation.policy.model_dump(mode="json") if corporate_simulation else None
     result["simulation_replays"] = simulation_replays
     return result
 

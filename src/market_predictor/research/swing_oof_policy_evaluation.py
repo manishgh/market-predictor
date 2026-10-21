@@ -33,6 +33,7 @@ from market_predictor.swing.contracts.return_training import ReturnTrainingPolic
 from market_predictor.swing.contracts.saved_evaluation_configuration import SavedEvaluationConfigurationEvidence
 from market_predictor.swing.contracts.training_readiness import TrainingReadinessPolicy
 from market_predictor.swing.datasets.action_evidence import CorporateActionEvidence
+from market_predictor.swing.datasets.backtest_corporate_actions import BacktestCorporateActions, load_backtest_corporate_action_context
 from market_predictor.swing.datasets.funded_policy_inputs import (
     FundedLotInput,
     unsimulated_managed_specification,
@@ -83,6 +84,7 @@ IMPLEMENTATION_PATHS = (
     "swing/contracts/saved_evaluation_configuration.py", "swing/datasets/saved_evaluation_configuration.py",
     *NEWS_RUNTIME_PATHS, "commands/swing_oof_policy_evaluation.py",
     "swing/datasets/action_evidence.py", "swing/datasets/corrected_outcomes.py", "swing/datasets/action_scope.py",
+    "swing/contracts/backtest_corporate_actions.py", "swing/datasets/backtest_corporate_actions.py",
 )
 
 
@@ -454,6 +456,7 @@ def publish_saved_oof_policy_evaluation(
     strategy_contract: SourcePin, research_contract: SourcePin, learner: Learner, exit_policy: ExitPolicy,
     evidence: CorporateActionEvidence, output: Path,
     historical_configuration_evidence: SourcePin | None = None,
+    backtest_corporate_actions: SourcePin | None = None,
 ) -> dict[str, Any]:
     """One immutable learner/policy result inside the provider's sole source lease.
 
@@ -464,6 +467,12 @@ def publish_saved_oof_policy_evaluation(
     root, output = root.resolve(), inside(root.resolve(), output)
     _require(output.parent == root / "data/research" and not output.exists(), "OOF output must be a new research directory")
     preflight_pins: dict[str, str] = {}
+    corporate_context = (load_backtest_corporate_action_context(root, backtest_corporate_actions)
+                         if backtest_corporate_actions is not None else None)
+    if backtest_corporate_actions is not None:
+        _pin(root, backtest_corporate_actions, preflight_pins)
+    corporate_actions = (BacktestCorporateActions(root, evidence, corporate_context, memory_guard=_guard)
+                         if corporate_context is not None else None)
     _, fit_request = _run(root, inside(root, run_manifest.path).parent, run_manifest.sha256, preflight_pins)
     fit_policy = ReturnTrainingPolicy.model_validate(fit_request["policy"])
     _require(fit_policy.feature_profile in CAMPAIGN_PROFILES, "saved model profile is outside the current six-specification campaign")
@@ -483,6 +492,11 @@ def publish_saved_oof_policy_evaluation(
                "learner": learner, "exit_policy": exit_policy, "action_projection_sha256": evidence.projection_sha256,
                "action_audit_sha256": evidence.audit_sha256, "implementation_files": implementations,
                "campaign_roster": CAMPAIGN_ROSTER, "feature_profile": fit_policy.feature_profile,
+               "backtest_corporate_actions": (backtest_corporate_actions.model_dump(mode="json")
+                                               if backtest_corporate_actions is not None else None),
+               "corporate_action_assumptions": (corporate_context.policy.model_dump(mode="json")
+                                                 if corporate_context is not None else None),
+               "historical_target_and_model_artifacts_unchanged": True,
                "memory_policy": {"maximum_system_used_percent": news_runtime_memory.MAXIMUM_SYSTEM_USED_PERCENT,
                    "maximum_system_pause_seconds": news_runtime_memory.MAXIMUM_SYSTEM_PAUSE_SECONDS,
                    "system_memory_poll_seconds": news_runtime_memory.SYSTEM_MEMORY_POLL_SECONDS,
@@ -527,7 +541,7 @@ def publish_saved_oof_policy_evaluation(
         return selected, saved.entry_sessions
 
     with verified_funded_policy_inputs(root=root, target_config=target_config, evidence=evidence, strategy=strategy,
-        selection_loader=selection_loader, exit_policy=exit_policy, memory_guard=_guard) as provider:
+        selection_loader=selection_loader, exit_policy=exit_policy, memory_guard=_guard, corporate_actions=corporate_actions) as provider:
         _require(bool(state), "funded provider did not load the bound OOF selection")
         saved, decisions, selected, counts = state["saved"], state["decisions"], state["selected"], state["counts"]
         _require(provider.config == target_config and provider.policy.research_contract == research_contract
@@ -567,7 +581,7 @@ def publish_saved_oof_policy_evaluation(
                 config=_LedgerConfig(research.horizon_sessions, research.base_round_trip_cost_bps,
                                      strategy.swing.maximum_trades_per_decision),
                 strategy_contract=strategy, research_contract=research, session_calendar=saved.entry_sessions,
-                simulation=provider.simulation)
+                simulation=provider.simulation, corporate_simulation=corporate_context)
         for name, digest in provider.source_files.items():
             _pin(root, SourcePin(path=name, sha256=digest), pins)
         decisions.to_parquet(output / "decisions.parquet", index=False)
@@ -582,6 +596,8 @@ def publish_saved_oof_policy_evaluation(
                   "historical_training_source_provenance": saved.historical_source_files,
                   "historical_configuration_verification": saved.configuration_provenance,
                   "news_saved_verification": saved.news_verification,
+                  "backtest_corporate_actions": request["backtest_corporate_actions"],
+                  "corporate_action_assumptions": request["corporate_action_assumptions"],
                   "campaign_roster": CAMPAIGN_ROSTER,
                   "source_files": dict(sorted(pins.items())), "serving_eligible": False, "promotion_eligible": False,
                   "training_eligible": False, "economic_eligible": False, "source_admitted": False}

@@ -14,6 +14,7 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.execution_policy import executable_fill_price
 from market_predictor.modeling.strategy_contract import StrategyContract
+from market_predictor.swing.contracts.backtest_corporate_actions import BacktestCorporateActionContext
 from market_predictor.swing.contracts.holding_accounting import (
     AccountingGap,
     CorporateActionEvent,
@@ -111,6 +112,7 @@ def compile_frozen_exit(
     decision_atr: DecisionAtr, observations: pd.DataFrame, evidence: Mapping[date, EvidenceReference],
     strategy: StrategyContract, research: SwingResearchContract, exit_policy: ExitPolicy,
     simulation: TradeSimulationContext,
+    corporate_simulation: BacktestCorporateActionContext | None = None, entry_split_ratio: float = 1.0,
 ) -> FrozenExitResult:
     """Add a supported ordinary-share exit and replay existing sale settlement.
 
@@ -157,8 +159,10 @@ def compile_frozen_exit(
         and (decision_atr.evidence.available_at is None
             or decision_atr.evidence.available_at <= decision_atr.available_at),
         "exit ATR cannot claim unsupported source availability")
-    stop = specification.initial_entry_price - policy.stop_atr_multiple * decision_atr.value
-    target = specification.initial_entry_price + policy.target_atr_multiple * decision_atr.value
+    _require(type(entry_split_ratio) is float and 0 < entry_split_ratio < float("inf")
+        and (entry_split_ratio == 1.0 or corporate_simulation is not None), "entry split requires explicit backtest context")
+    stop = specification.initial_entry_price - policy.stop_atr_multiple * decision_atr.value / entry_split_ratio
+    target = specification.initial_entry_price + policy.target_atr_multiple * decision_atr.value / entry_split_ratio
     _require(stop > 0, "exit stop must be positive in the raw price basis")
     identity: dict[str, Any] = dict(exit_policy=exit_policy,
         policy_sha256=json_sha256({"research": research.sha256(), "strategy": strategy.sha256(), "exit": exit_policy}),
@@ -167,6 +171,9 @@ def compile_frozen_exit(
         target_price=target if exit_policy == "target_stop_ten_session_timeout" else None, stop_price=stop)
     bars, admitted, references = _observations(observations, evidence, specification, sessions)
     marks = {(mark.position_id, mark.mark_at): mark for mark in specification.marks}
+    position = specification.initial_position_id
+    share_factor = 1.0
+    supported_splits: set[str] = set()
     for index, day in enumerate(sessions):
         gap = None
         if day not in bars.index:
@@ -182,42 +189,56 @@ def compile_frozen_exit(
         if index == 0:
             _require(float(row["open"]) == specification.initial_entry_price
                 and references[day] in specification.entry_evidence, "exit entry differs from bound raw open/evidence")
+        if corporate_simulation is not None:
+            opening = calendar.session_open(day.isoformat()).to_pydatetime()
+            for event in sorted((item for item in specification.events if isinstance(item, CorporateActionEvent)
+                    and item.treatment == "replace" and item.effective_at == opening), key=lambda item: item.order or 0):
+                if (event.event_id.startswith("backtest-split:") and event.owned_position_id == position
+                        and event.owned_security_id == specification.security_id and event.fractional_treatment == "proportional"
+                        and len(event.legs) == 1 and event.legs[0].kind == "tradable_shares"
+                        and event.legs[0].security_id == specification.security_id and event.legs[0].currency == "USD"
+                        and all(type(ref) is EvidenceReference for ref in event.evidence)):
+                    share_factor *= event.legs[0].units_per_owned_unit
+                    position = event.legs[0].position_id
+                    supported_splits.add(event.event_id)
+        current_stop, current_target = stop / share_factor, target / share_factor
         reason: Literal["stop", "target", "timeout"] | None = None
-        if float(row["low"]) <= stop:
+        if float(row["low"]) <= current_stop:
             reason = "stop"
-        elif exit_policy == "target_stop_ten_session_timeout" and float(row["high"]) >= target:
+        elif exit_policy == "target_stop_ten_session_timeout" and float(row["high"]) >= current_target:
             reason = "target"
         elif index == 9:
             reason = "timeout"
         at = closes[index]
         clock: Literal["session_open_gap", "session_close_research_convention", "tenth_session_close"] = (
             "tenth_session_close" if reason == "timeout" else "session_close_research_convention")
-        if (reason == "stop" and float(row["open"]) <= stop
-                or reason == "target" and float(row["open"]) >= target):
+        if (reason == "stop" and float(row["open"]) <= current_stop
+                or reason == "target" and float(row["open"]) >= current_target):
             at = calendar.session_open(day.isoformat()).to_pydatetime()
             clock = "session_open_gap"
         unsupported = [event for event in specification.events if isinstance(event, CorporateActionEvent)
+            and event.event_id not in supported_splits
             and (event.effective_at is None or event.treatment == "replace" and event.effective_at <= at)]
         if unsupported:
             return FrozenExitResult(**identity, missing_reasons=tuple(AccountingGap(
                 code="exit_ownership_transition_unsupported", reference_id=event.event_id) for event in unsupported))
         if reason is None:
-            mark = marks.get((specification.initial_position_id, closes[index]))
+            mark = marks.get((position, closes[index]))
             _require(isinstance(mark, KnownMark) and mark.currency == "USD"
                 and mark.value_per_unit == float(row["close"]) and references[day] in mark.evidence,
                 "exit pre-sale mark differs from bound raw close/evidence")
             continue
         fill = executable_fill_price(outcome={"stop": "stop_first", "target": "target_first", "timeout": "timeout"}[reason],
-            target_price=target, stop_price=stop, trigger_open=float(row["open"]), final_price=float(row["close"]))
+            target_price=current_target, stop_price=current_stop, trigger_open=float(row["open"]), final_price=float(row["close"]))
         sale = ExecutionEvent(event_id=f"{specification.decision_id}:{exit_policy}:exit", effective_at=at,
             order=max((event.order for event in specification.events if event.effective_at == at and event.order is not None),
                 default=-1) + 1, evidence=(references[day], decision_atr.evidence),
-            position_id=specification.initial_position_id, security_id=specification.security_id,
+            position_id=position, security_id=specification.security_id,
             fraction_of_owned=1.0, price_per_unit=fill, currency="USD",
             proceeds_id=f"{specification.decision_id}:{exit_policy}:proceeds", reason="managed_exit")
         compiled = HoldingSpecification.model_validate({**specification.model_dump(), "policy": "managed",
             "events": (*specification.events, sale)})
-        replay = simulate_ordinary_sales(compiled, simulation)
+        replay = simulate_ordinary_sales(compiled, simulation, corporate_simulation=corporate_simulation)
         gaps = tuple(AccountingGap(code=code, reference_id=reference) for code, reference in sorted({
             (gap.code, gap.reference_id) for snapshot in replay.outcome.snapshots for gap in snapshot.gaps}))
         return FrozenExitResult(**identity, exit_reason=reason, exit_timestamp=at, exit_clock_basis=clock,

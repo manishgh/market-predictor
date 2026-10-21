@@ -10,6 +10,7 @@ import exchange_calendars as xcals
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
+from market_predictor.swing.contracts.backtest_corporate_actions import BacktestCorporateActionContext
 from market_predictor.swing.contracts.holding_accounting import (
     CashAvailabilityEvent,
     Event,
@@ -60,7 +61,8 @@ def simulation_replay_metadata(result: SimulatedHolding) -> dict[str, object]:
         "production_eligible": False}
 
 
-def simulate_ordinary_sales(spec: HoldingSpecification, context: TradeSimulationContext) -> SimulatedHolding:
+def simulate_ordinary_sales(spec: HoldingSpecification, context: TradeSimulationContext,
+    *, corporate_simulation: BacktestCorporateActionContext | None = None) -> SimulatedHolding:
     """Generate only sale-claim mechanics, then invoke the one canonical lot replay.
 
     Existing executions must already come from the canonical fill evaluator. This
@@ -73,7 +75,7 @@ def simulate_ordinary_sales(spec: HoldingSpecification, context: TradeSimulation
             or context.policy_reference.available_at is not None):
         raise DataReadinessError("simulation reference must bind policy without claimed historical availability")
     # Validate exact session closes and input execution ownership through canonical replay.
-    replay_holding(spec)
+    replay_holding(spec, corporate_simulation=corporate_simulation)
     calendar = xcals.get_calendar("XNYS")
     sales = [event for event in spec.events if isinstance(event, ExecutionEvent)]
     claims = {sale.proceeds_id for sale in sales}
@@ -114,7 +116,7 @@ def simulate_ordinary_sales(spec: HoldingSpecification, context: TradeSimulation
                     value_per_unit=1.0, currency="USD", evidence=evidence))
                 generated_marks.append((sale.proceeds_id, close))
     derived = HoldingSpecification.model_validate({**spec.model_dump(), "events": tuple(events), "marks": tuple(marks)})
-    outcome = replay_holding(derived, simulation_policy_sha256=context.policy.sha256())
+    outcome = replay_holding(derived, simulation_policy_sha256=context.policy.sha256(), corporate_simulation=corporate_simulation)
     first_ten = outcome.snapshots[:10]
     # This proxy is separate from label_available_at and never certifies an as-of retraining history.
     maturity = None
@@ -126,4 +128,5 @@ def simulate_ordinary_sales(spec: HoldingSpecification, context: TradeSimulation
         simulation_policy_sha256=context.policy.sha256(), policy_reference=context.policy_reference,
         generated_event_ids=tuple(generated_events), generated_mark_keys=tuple(generated_marks),
         specification=derived, outcome=outcome, research_label_mature_at=maturity,
-        next_open_settlement=replay_next_open_settlement(derived, simulation_policy_sha256=context.policy.sha256()))
+        next_open_settlement=replay_next_open_settlement(derived, simulation_policy_sha256=context.policy.sha256(),
+            corporate_simulation=corporate_simulation))

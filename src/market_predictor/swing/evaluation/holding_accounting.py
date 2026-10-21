@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 
 import exchange_calendars as xcals
 
+from market_predictor.swing.contracts.backtest_corporate_actions import BacktestCorporateActionContext
 from market_predictor.swing.contracts.holding_accounting import (
     AccountingGap,
     BenchmarkTarget,
@@ -322,7 +323,10 @@ def _snapshot(spec: HoldingSpecification, cutoff: datetime, state: _State) -> Se
     )
 
 
-def _validate_simulation_context(spec: HoldingSpecification, policy_sha256: str | None) -> None:
+def _validate_simulation_context(spec: HoldingSpecification, policy_sha256: str | None,
+    corporate_simulation: BacktestCorporateActionContext | None = None) -> None:
+    corporate_ids = corporate_simulation.assumed_event_ids(spec) if corporate_simulation else set()
+    corporate_sha = corporate_simulation.policy.sha256() if corporate_simulation else None
     references = [*spec.entry_evidence]
     if any(isinstance(ref, SimulationReference) for ref in spec.entry_evidence):
         raise ValueError("ordinary-sale simulation cannot manufacture entry evidence")
@@ -336,23 +340,32 @@ def _validate_simulation_context(spec: HoldingSpecification, policy_sha256: str 
         if assumed and not (
             isinstance(event, PaymentEvent) and event.claim_id in claims
             or isinstance(event, CashAvailabilityEvent) and event.payment_event_id in payments
+            or event.event_id in corporate_ids
         ):
             raise ValueError("ordinary-sale assumptions cannot support corporate events or execution prices")
+        if assumed:
+            expected = corporate_sha if event.event_id in corporate_ids else policy_sha256
+            if any(isinstance(ref, SimulationReference) and ref.interpretation_policy_sha256 != expected
+                   for ref in event.evidence):
+                raise ValueError("event research assumption policy differs from its authorized context")
     for mark in spec.marks:
         if isinstance(mark, KnownMark):
             references.extend(mark.evidence)
             if any(isinstance(ref, SimulationReference) for ref in mark.evidence) and (
-                mark.position_id not in claims or mark.value_per_unit != 1.0 or mark.currency != "USD"
+                policy_sha256 is None or mark.position_id not in claims or mark.value_per_unit != 1.0 or mark.currency != "USD"
+                or any(isinstance(ref, SimulationReference) and ref.interpretation_policy_sha256 != policy_sha256
+                       for ref in mark.evidence)
             ):
                 raise ValueError("simulated marks apply only to executed dollar proceeds")
     for reference in references:
         if isinstance(reference, SimulationReference) and (
-            policy_sha256 is None or reference.interpretation_policy_sha256 != policy_sha256
+            reference.interpretation_policy_sha256 not in {value for value in (policy_sha256, corporate_sha) if value}
         ):
             raise ValueError("research assumption policy differs or context is absent")
 
 
-def replay_holding(spec: HoldingSpecification, *, simulation_policy_sha256: str | None = None) -> LotOutcome:
+def replay_holding(spec: HoldingSpecification, *, simulation_policy_sha256: str | None = None,
+    corporate_simulation: BacktestCorporateActionContext | None = None) -> LotOutcome:
     """Replay supplied closes, including residuals beyond the fixed day-ten target.
 
     Each close uses economic timestamps, never later marks or payments. Delayed
@@ -363,7 +376,7 @@ def replay_holding(spec: HoldingSpecification, *, simulation_policy_sha256: str 
     if not isinstance(spec, HoldingSpecification):
         raise TypeError("replay_holding requires a HoldingSpecification")
     spec = HoldingSpecification.model_validate(spec.model_dump())
-    _validate_simulation_context(spec, simulation_policy_sha256)
+    _validate_simulation_context(spec, simulation_policy_sha256, corporate_simulation)
     _validate_calendar(spec)
     snapshots: list[SessionSnapshot] = []
     for cutoff in spec.session_end_timestamps:
@@ -382,11 +395,12 @@ def replay_holding(spec: HoldingSpecification, *, simulation_policy_sha256: str 
     )
 
 
-def replay_next_open_settlement(spec: HoldingSpecification, *, simulation_policy_sha256: str) -> SettlementSnapshot:
+def replay_next_open_settlement(spec: HoldingSpecification, *, simulation_policy_sha256: str,
+    corporate_simulation: BacktestCorporateActionContext | None = None) -> SettlementSnapshot:
     """Use the same transitions at next open, without inventing tail prices or returns."""
     spec = HoldingSpecification.model_validate_json(spec.model_dump_json())
     _validate_calendar(spec)
-    _validate_simulation_context(spec, simulation_policy_sha256)
+    _validate_simulation_context(spec, simulation_policy_sha256, corporate_simulation)
     calendar = xcals.get_calendar("XNYS")
     session = spec.session_end_timestamps[9].astimezone(UTC).date().isoformat()
     cutoff = calendar.session_open(calendar.next_session(session)).to_pydatetime()

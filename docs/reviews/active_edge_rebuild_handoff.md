@@ -44,6 +44,33 @@ actual replay/training requests). New typed assumption context can reuse existin
 SimulationReference; extend canonical replay narrowly without fake EvidenceReference.
 No live backtest remains; monitor8980 still active while repair continues. Onlystep7.
 
+Full approved dividend/split implementation is implemented for this checkpoint.
+Consolidated review closed two concrete findings: selected current-request acquired
+receipt pages must exactly match projected record identities/hashes; simulated sale
+claim marks require the ordinary-sale context, never dividend-only authorization.
+59corporate/sale UNITs passed7.51s;297affected UNITs passed435.45s, then2original/
+amended publication-policy cases passed53.99s (one repeated baseline). Ruff13source/
+testfiles and strictmypy10source modules passed. Both workspace helpers Ruff passed;
+full suite deliberately unrun for component checkpoint. Reviewed real-data verifier
+work/verify_backtest_corporate_accounting.py binds actual SPY/TSLA raw bars and all
+consumed dependencies, proves SPY cash/price reconciliation and a selected TSLA split,
+and explicitly does not replace the full portfolio run. Fresh wrapper
+work/run_dividend_split_backtests.py retains exact twelve frozen IDs/two passed pairs,
+adds new policySHA64ac6ab2c9b22223a455503c8968f700adf5b6a1534fcc0acde205c00f85c704
+and requires a passed actual verifier report/pathSHA before launch. Both helpers
+reviewed without remaining findings; original retry operator unchanged.
+Fresh real verifier IS NOW LIVE: native22756/Python13476/launcher30640 started
+2026-10-21T14:05:53Z; scriptSHAc1ae285b6bfd53549d891721002237be321712d3cc87284d64606fbb510e7e43,
+workspace review-results/dividend-split-real.log/.exit.json; expected fresh actual
+data/reports/swing_backtest_corporate_accounting_verification.json. No pass/report
+claimed yet; do not duplicate/edit its dependencies. On actual exit0 and passed
+report hash, execute reviewed fresh operator work/run_dividend_split_backtests.py
+SHAddd4908c000d7ce2c068893121342817deb2fe2322af309d5dfd22039997c92a
+with actual proof path/hash, original completeSHAa0942413b543ad6cbad9412d5219abc204099e6e0d641815c52f718b6dddbcf5,
+actual newsmanifestSHA48f3ff9aff50e4eb6be6704808d8a0db5e1b42cbcb21f0cc79f0f4555ccb479b
+and fresh campaign/state/log/exit. Proposed news_dividend_split_20261021 only if
+all paths absent. No fresh backtest yet. Monitor8980 alive; onlystep7 active.
+
 ### Historical accounting repair design — October21,13:14Z
 
 Latest human asks actual accounting fix and plain functional names, not optimization.
