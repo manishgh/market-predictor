@@ -21,7 +21,61 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: first funded outcome retained; trial02 running — October21,12:50Z
+### Current execution: implement approved dividend/split backtest accounting — October21,13:20Z
+
+Human explicitly approved ordinary-dividend cash on ex-date as a historical backtest
+assumption, recorded separately from provider facts. Use ex-date close cash, reusable
+subsequently, recorded split ratios and proportional normalized shares; keep uncertain
+mergers/special distributions unavailable. No further confirmation of this choice.
+Correction to earlier diagnosis: relevant retained SPY records DO have payable dates.
+There are11unique dividends in the valuation period, not22independent observations:
+canonical/original archives contain identical copies. Corrected real-data diagnosis
+workspace/review-results/backtest-dividend-accounting-diagnosis-corrected.json preserves
+the superseded draft hash. The actual issue is missing event processing and a stricter
+cash-timing rule, not demonstrated external SPY data absence.
+
+Independent ATR fix implemented and reviewed with no findings:52funded-provider/
+frozen-exit UNITs passed6.37s, Ruff2files and strictmypy1passed. Ordinary dividend
+windows no longer prevent raw-price ATR reads; holding/benchmark cash and uncertain
+action gates unchanged. Full accounting repair remains in progress under step7.
+
+### Historical accounting repair design — October21,13:14Z
+
+Human asked to fix the unfinished portfolio-return calculation, not optimize models.
+Identity-verified controller5132 and children24688/13656/11416 stopped for this
+repair; native18158 actualexit-1 at13:09:49.131917Z. Preserve workspace
+news-funded-accounting-fix-interruption.json, completed first unavailable report and
+second partial logs. Monitor8980 remains alive. No new run or source edit was live.
+
+Observed code: funded_policy_inputs._read rejects all action windows before reading
+prices; frozen_exit rejects replacement share classes; canonical holding accounting
+already supports corporate events. Actual pinned SPY transport has dividend rate
+and ex_date but no payment/cash-availability dates. Current simulation policy forbids
+inferred corporate payment/valuation; do not disguise an assumption as source evidence.
+
+Bounded first repair, independent of the pending cash-timing choice: ordinary cash
+dividend payment dates do not determine whether raw candles can calculate ATR.
+For ATR lookback reads only, ignore windows proved ordinary cash dividends by the
+canonical ActionWindow shape (cash_dividends, dated entitlement, ownership-before
+ex-date, corporate_terms_require_replay). Preserve all split/unknown/participant/
+official/source/clock/ownership checks and all holding/benchmark action gates.
+No source, feature, target, model, exit geometry or economic policy is changed.
+Exit tests: ordinary-dividend ATR equals the same raw-candle calculation, genuine
+holding/benchmark dividend gaps remain, special/unknown/split gaps remain, source
+mutation refuses; focused UNITs/Ruff/strictmypy and one bounded review.
+
+Full ordinary-dividend/split bridge design reviewed: explicit events through the
+existing ledger; split-aware ATR/share units/barriers/exit ownership; entry on
+ex-date earns no prior dividend, sale on ex-date retains earned cash. Human choice
+pending on a separately pinned research assumption: ordinary-dividend cash at
+ex-date close, spendable subsequently, versus retaining evidenced cash timing.
+Existing model/target/config bytes and six-specification/twelve-policy scope fixed.
+No inferred special-action values or dropped selected lots. Tests must preserve
+action-free outcomes, cash conservation, split/dividend boundary ownership and
+unknown-action refusal. Implementing assumed corporate cash requires a narrow typed
+canonical replay extension; its current simulation guard permits ordinary sales only.
+
+### Historical first funded outcome — October21,12:50Z
 
 Trial01 technical/Ridge/target-stop completed12:37:54.972492Z as
 valuation_unavailable (CLIexit2 is expected for this completed unavailable result).

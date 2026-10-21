@@ -172,6 +172,42 @@ def test_action_scope_requires_payment_and_residual_evidence_never_filters_selec
     assert len(provider.selected_ids) == 1
 
 
+def test_ordinary_dividend_cash_timing_does_not_block_raw_atr(provider: Any) -> None:
+    original = provider.lot(provider.selected_ids[0])
+    provider.sources["action_index"] = ({"AAA": (ActionWindow("ordinary-dividend", "cash_dividends",
+        date(2023, 12, 20), date(2023, 12, 20), "corporate_terms_require_replay", True),)}, ())
+    result = provider.lot(provider.selected_ids[0])
+    assert result == original and result.decision_atr is not None
+    assert provider.selected_ids == (result.decision_id,)
+
+
+@pytest.mark.parametrize("benchmark", [False, True])
+def test_ordinary_dividend_still_requires_holding_cash_accounting(provider: Any, benchmark: bool) -> None:
+    ticker = "SPY" if benchmark else "AAA"
+    provider.sources["action_index"] = ({ticker: (ActionWindow("ordinary-dividend", "cash_dividends",
+        date(2024, 1, 5), date(2024, 1, 5), "corporate_terms_require_replay", True),)}, ())
+    result = provider.benchmark(ticker) if benchmark else provider.lot(provider.selected_ids[0])
+    assert result.specification is None
+    assert any("ordinary-dividend" in reason for reason in result.missing_reasons)
+
+
+@pytest.mark.parametrize("family,reason,dated", [
+    ("forward_splits", "corporate_terms_require_replay", True),
+    ("reverse_splits", "corporate_terms_require_replay", True),
+    ("cash_dividends", "conflicting_action_record_identity", True),
+    ("cash_dividends", "reviewed_cash_distribution_resolution_unavailable", True),
+    ("cash_dividends", "corporate_terms_require_replay", False),
+])
+def test_atr_retains_share_transformations_and_uncertain_cash_windows(
+    provider: Any, family: str, reason: str, dated: bool,
+) -> None:
+    day = date(2023, 12, 20) if dated else None
+    provider.sources["action_index"] = ({"AAA": (ActionWindow("unresolved-action", family, day, day, reason, True),)}, ())
+    result = provider.lot(provider.selected_ids[0])
+    assert result.specification is None
+    assert any("atr:action:" in gap and "unresolved-action" in gap for gap in result.missing_reasons)
+
+
 def test_original_raw_byte_mutation_cannot_yield_lot_or_pass_final_recheck(provider: Any) -> None:
     path = provider.root / "raw/AAA.parquet"
     path.write_bytes(path.read_bytes() + b"tamper")

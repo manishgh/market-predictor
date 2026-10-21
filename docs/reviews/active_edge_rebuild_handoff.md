@@ -21,7 +21,60 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: first funded outcome retained; trial02 running — October21,12:50Z
+### Current execution: implement approved dividend/split backtest accounting — October21,13:20Z
+
+Human ANSWERED the cash-timing question: use explicit regular-dividend ex-date cash
+backtest assumption. Do not ask again. Apply ex-date CLOSE, spendable subsequent
+sessions, observed split ratios/proportional normalized shares, uncertain special
+events unavailable. Separate assumption policy/source records; preserve old targets,
+model artifacts and configs. New evaluation requests must identify the amendment.
+
+CORRECTION: unique in-period SPY dividends11, all11have rates AND payable dates.
+The first examples inspected were older2018records. Canonical/original copies are
+duplicates, not22independent dividends. Saved corrected real-data diagnosis
+workspace/review-results/backtest-dividend-accounting-diagnosis-corrected.json binds
+both actual source hashes and superseded draft hash. No external SPY data absence.
+
+Independent raw-ATR dividend fix implemented; one bounded code review no findings,
+52provider/frozen-exit UNITspass6.37s,Ruff2files/strictmypy1pass. Commit this bounded
+component, then complete approved event bridge. Holding contracts file is CURRENT
+news replay/training proof-bound: leave it unchanged. Actual evaluation kernel,
+trade-simulation modules and frozen_exit are NOT current news proof pins (checked
+actual replay/training requests). New typed assumption context can reuse existing
+SimulationReference; extend canonical replay narrowly without fake EvidenceReference.
+No live backtest remains; monitor8980 still active while repair continues. Onlystep7.
+
+### Historical accounting repair design — October21,13:14Z
+
+Latest human asks actual accounting fix and plain functional names, not optimization.
+Controller5132/verifiedchildren24688,13656,11416 controlled-stopped; native18158 exit-1
+13:09:49.131917Z. Workspace news-funded-accounting-fix-interruption.json and outer
+news-funded-91-20261021.exit.json preserved. First unavailable report immutable;
+second partial is not completed. Monitor8980 alive; no owned backtest remains.
+
+Actual missing capability: funded reader blanket-rejects company events; exit compiler
+cannot replace owned share classes. Ledger supports events but simulation contract
+forbids corporate assumptions. Pinned SPY raw records have ex_date/rate and no cash
+payment dates. Do not equate missing processing with external data absence.
+
+Independent first bounded fix: ATR price-history reads may use raw candles across
+canonical ordinary cash-dividend windows; payment evidence is irrelevant to raw ATR.
+Only skip cash_dividends with requires_ownership_before_first_date=True and reason
+corporate_terms_require_replay on ATR reads. Keep other windows/global/official/source/
+identity/clock checks; holding and benchmark cash gates unchanged. Tests/Ruff/mypy/
+one bounded review before commit. No model/feature/label/target changes or new data.
+
+Pending human async choice: ordinary-dividend cash at ex-date close as explicit
+funded-research assumption, available subsequent sessions, or existing evidenced
+cash timing. Do not implement assumption-dependent behavior until answered. Full
+design review requires separate pinned assumption amendment, source-vs-simulation
+references, split-normalized ATR/entry/ownership/barriers/marks/exits, benchmark cash
+without automatic reinvestment, and unknown-special-action refusals. Extend existing
+canonical replay narrowly (current _validate_simulation_context forbids corporate
+SimulationReference). Frozen six specs/twelve policies/costs/targets/models unchanged.
+Only step7 active. Preserve every old/interrupted report; no current economic result.
+
+### Historical first funded outcome — October21,12:50Z
 
 CURRENT native18158/controllerPython5132 live. Trial01 technical/Ridge/target-stop
 completed12:37:54.972492Z, statusvaluation_unavailable, expectedCLIexit2, frozen

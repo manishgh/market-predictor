@@ -147,7 +147,7 @@ class FundedPolicyInputProvider:
         for name, digest in self.source_files.items():
             _require(file_sha256(inside(self.root, name)) == digest, f"funded source changed: {name}")
 
-    def _read(self, identity: str, ticker: str, days: tuple[date, ...], *, benchmark: bool
+    def _read(self, identity: str, ticker: str, days: tuple[date, ...], *, benchmark: bool, price_history: bool = False
               ) -> tuple[pd.DataFrame, dict[date, EvidenceReference], tuple[str, ...]]:
         if days[0] < START or days[-1] > END:
             return pd.DataFrame(), {}, ("raw_window_outside_initial_fit",)
@@ -163,6 +163,13 @@ class FundedPolicyInputProvider:
         if any(corrected_ticker(identity, artifact["ticker"], day, self.policy.decision_corrections) != ticker for day in days):
             return pd.DataFrame(), {}, ("raw_logical_ticker_not_bound_to_corrected_interval",)
         actions, global_gaps = self.sources["action_index"]
+        if price_history:
+            # Ordinary cash distributions do not change share units. Their raw
+            # price movement remains in ATR; no dividend cash is valued here.
+            actions = {artifact["provider_symbol"]: tuple(window for window in actions.get(artifact["provider_symbol"], ())
+                if not (window.family == "cash_dividends" and window.requires_ownership_before_first_date
+                    and window.first_relevant_date is not None and window.last_relevant_date == window.first_relevant_date
+                    and window.unavailable_reason == "corporate_terms_require_replay"))}
         gaps = window_gaps(identity=identity, symbol=artifact["provider_symbol"], first=days[0], last=days[-1],
             actions=actions, official=self.policy.official_windows, global_gaps=global_gaps)
         if gaps:
@@ -206,7 +213,7 @@ class FundedPolicyInputProvider:
         identity, ticker, day = row["security_id"], row["ticker"], row["session_date_et"]
         calendar = xcals.get_calendar("XNYS")
         warmup = tuple(value.date() for value in calendar.sessions_window(pd.Timestamp(day), -15))
-        frame, refs, gaps = self._read(identity, ticker, warmup, benchmark=False)
+        frame, refs, gaps = self._read(identity, ticker, warmup, benchmark=False, price_history=True)
         if gaps:
             return FundedLotInput(decision_id, identity, missing_reasons=tuple(f"atr:{gap}" for gap in gaps))
         atr = raw_decision_atr(decision=row, observations=frame, evidence=refs)
