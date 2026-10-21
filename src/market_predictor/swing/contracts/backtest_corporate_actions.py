@@ -15,6 +15,7 @@ from market_predictor.swing.contracts.holding_accounting import (
     PaymentEvent,
     SimulationReference,
 )
+from market_predictor.swing.contracts.holding_materialization import SourcePin
 
 
 class BacktestCorporateActionPolicy(HoldingContract):
@@ -26,9 +27,10 @@ class BacktestCorporateActionPolicy(HoldingContract):
     benchmark_distributions: Literal["retain_cash_without_reinvestment"]
     unknown_actions: Literal["valuation_unavailable_without_filtering_selected_lots"]
     production_eligible: Literal[False]
+    reviewed_action_dates: SourcePin | None = None
 
     def sha256(self) -> str:
-        return json_sha256(self.model_dump(mode="json"))
+        return json_sha256(self.model_dump(mode="json", exclude_none=True))
 
 
 class BacktestCorporateActionContext(HoldingContract):

@@ -1,0 +1,12 @@
+schema_version = "market_predictor.backtest_corporate_actions"
+scope = "retrospective_research_only"
+ordinary_dividend_cash = "declared_rate_at_ex_date_close"
+dividend_reuse = "subsequent_sessions_only"
+split_units = "recorded_ratio_proportional_normalized_shares"
+benchmark_distributions = "retain_cash_without_reinvestment"
+unknown_actions = "valuation_unavailable_without_filtering_selected_lots"
+production_eligible = false
+
+[reviewed_action_dates]
+path = "data/research/swing_backtest_reviewed_action_dates.json"
+sha256 = "3827c5c82ebb76f6b2e7d865fd50496e15d00617b09da5f2925f49a2b34e62da"

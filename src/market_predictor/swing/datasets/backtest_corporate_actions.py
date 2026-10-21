@@ -37,6 +37,7 @@ from market_predictor.swing.contracts.holding_accounting import (
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.action_evidence import CorporateActionEvidence
 from market_predictor.swing.datasets.action_windows import ActionWindow
+from market_predictor.swing.datasets.reviewed_action_dates import load_reviewed_action_dates
 
 
 def load_backtest_corporate_action_context(root: Path, pin: SourcePin) -> BacktestCorporateActionContext:
@@ -197,6 +198,9 @@ class BacktestCorporateActions:
             raise DataReadinessError("backtest action projection lacks matching successful source records")
         for conflicting_id in conflicting_records:
             del self._records[conflicting_id]
+        self.reviewed_dates, reviewed_pins = load_reviewed_action_dates(root, context.policy.reviewed_action_dates,
+            self._records, memory_guard=memory_guard)
+        self.source_files.update(reviewed_pins)
         counts = Counter((term.symbol, term.session, term.family == "cash_dividends") for term in self.terms.values())
         mixed = {(symbol, session) for symbol, session, cash in counts if (symbol, session, not cash) in counts}
         for key, term in list(self.terms.items()):
@@ -221,7 +225,11 @@ class BacktestCorporateActions:
         if matched is None or matched[0] != window.family:
             return None
         family, record = matched
+        reviewed = self.reviewed_dates.get(window.action_id)
         if family == "name_changes":
+            if (reviewed is not None and symbol in (record.get("old_symbol"), record.get("new_symbol"))
+                    and last < reviewed.economic_dates["effective_date"]):
+                return "holding_ends_before_official_identity_change"
             old_cusip, new_cusip = record.get("old_cusip"), record.get("new_cusip")
             if (isinstance(old_cusip, str) and len(old_cusip) == 9 and old_cusip.isalnum()
                     and old_cusip == new_cusip and symbol in (record.get("old_symbol"), record.get("new_symbol"))):
@@ -269,6 +277,8 @@ class BacktestCorporateActions:
                 dates[field] = parsed
         except (TypeError, ValueError):
             return None
+        if reviewed is not None:
+            dates.update((field, value) for field, value in reviewed.economic_dates.items())
         if "ex_date" not in dates:
             return None
         # The position starts with a new purchase, not an earlier owner's claims.
