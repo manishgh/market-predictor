@@ -14,14 +14,36 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 2. Broad news feature enrichment | Cue component and real pilot done; quality/attribution pending | Implement one feature-layer recognizer for multiple swing-news categories and mixed signals. Preserve source evidence, availability and uncertain/other stories. Connect buckets to a real retained-news pilot; report actual coverage and examples. |
 | 3. Full-corpus enrichment | Done for the retained corpus and available saved sentiment | All 516,679 versions accounted for in 505 durable shards; 484,723 enriched, 31,781 unavailable clocks, 175 missing text. Actual sentiment reused for 437,599 enriched versions; missing scores remain explicit. |
 | 4. Prediction-time news features | Done for retained research inputs | All59months/586,305rows/209columns published and independently replayed against retained inputs. Inherited values and outcomes exact; no outcome-based row exclusion. Source/serving admission remains false. |
-| 5. Freeze the third feature profile | In progress | Record exact columns, definitions, missingness, source coverage, clocks and train-only preprocessing. Embeddings are optional feature work, not assumed implemented; any encoder must be locally available/pinned and evaluated within the amended profile. |
-| 6. Fit remaining two models | Pending | Fit existing Ridge and shallow XGBoost for the amended news profile on the same official ten-session targets, splits, weights and costs. Four fitted baselines remain unchanged. |
+| 5. Freeze the third feature profile | Done for initial-fit research | Actual209-column order, missingness, clocks/source uncertainty and train-only preprocessing frozen with passed full replay/readiness and exact baseline fit-scope proof. |
+| 6. Fit remaining two models | In progress | Fit existing Ridge and shallow XGBoost for the amended news profile on the same official ten-session targets, splits, weights and costs. Four fitted baselines remain unchanged. |
 | 7. Compare performance | Pending | Evaluate all six specifications and twelve frozen policies with prediction error, ranking, funded NAV, fees, turnover and drawdown against SPY. State measured losses as plainly as gains. No claim of outperformance from a feature/test pass. |
 | 8. Independent final assessment | Pending | Preserve genuinely unseen assessment data. Previously repeatedly inspected historical test remains development evidence. Follow the existing prospective assessment requirement without fabricating future observations. |
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: real prefit report passed; baseline fit-scope active — October21,07:27Z
+### Current execution: prefit freeze saved; two real learners next — October21,07:29Z
+
+Consumer metadata repair/config checkpoint34bc9be pushed. Actual fit-scope native29702/
+PID24096 naturally exited0 at07:28:23.255292Z. Report
+data/reports/swing_news_baseline_fit_scope.json SHA256
+8fa9bafa314d46ef6ac6cca5f4aa5ea4d9df9172ddb81ec4af8f3a3d4dc82626: exact populations,
+calendars,target masks,weights across18units in EACH of2baseline bundles;0new fits.
+Actual metadata-only freeze passed: data/reports/swing_news_feature_acceptance_freeze.json
+SHA256659584f71ccc0a395be71ca46fb00f5f3885bddd23ce012aa2ed639e304c60e6.
+Existing audit appended and nowSHA256
+23a240d43f802ca618375a3a32ed186b9079a557c69e4be8d6262bad4f524c38.
+Training configSHA638765ea8b7a853cbbbb471a91f2066806833a79669cab344beccd785f8c3ee6.
+Publication/replay/readiness hashes remain as below. No numerical replay/fit in freeze.
+
+Step5 closes for the authorized initial-fit research route; step6 alone active.
+Commit/push actual freeze and audit before prepared work/run_news_return_training.py
+with these actual config/fit-scope/audit hashes. Exactly2specifications,16fold-scope
+fits+2finalrefits, existing209inputs/train-only418encodedcolumns and frozen economics;
+four baseline models retained. Missing input values remain explicit.91%RAM ceiling,
+no lower start gate. Monitor8980/native33710 remains until actual work end. No model
+completion, SPY improvement, serving/API/main acceptance or future assessment claimed.
+
+### Completed real prefit report and scope launch — October21,07:27Z
 
 Actual retry native64338/PID10172 exited0 at07:25:48.4940818Z. Report
 data/reports/swing_news_initial_fit_readiness.json SHA256

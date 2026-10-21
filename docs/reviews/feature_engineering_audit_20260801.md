@@ -1655,3 +1655,14 @@ identity-bound observations and 12 qualifying analyst episodes. The first SIP so
 authority covers August 20 and is session 1/20; 22 of 503 stocks are incomplete
 (4.374%, below the frozen 5% ceiling), all benchmarks are complete, and no bars were
 imputed. Training rows, a candidate model, and serving eligibility remain absent.
+
+
+## News prefit feature freeze — 2026-10-21T07:29:15.068215+00:00
+
+Pinned fact report: `data/reports/swing_news_feature_acceptance_freeze.json`. Publication SHA256: `4112d3255ef57e598ced47401cbedabf4d40200be46dd50d6490dc04dbd056ec`.
+
+The exact 209-column order (124 inherited plus 85 news columns), availability mapping, and every column's missing count are retained in that JSON for all 586,305 decisions across 59 months. Feature-eligible rows: 479,709; complete model rows: 4,482; fixed-horizon supervision available: 378,037; complete-case supervision: 3,184. Full saved-row replay reports zero clock violations.
+
+Coverage remains explicitly unknown/unavailable where reported; it is not inferred from empty news. Monthly source-history suppression and retained-document diagnostics, original sentiment-choice policy and story-decision resolution counts/digests remain in the report. Counts describe this saved decision population, not unique articles or provider completeness. Availability remains a historical research proxy.
+
+The pinned proof compares all 18 units in each retained baseline bundle with unchanged populations, calendars, target masks and date-balanced weights. Ridge and shallow XGBoost settings remain unchanged; medians, all-empty zero fallback and missing indicators are fitted separately on each training partition. This records the prefit evidence for the existing initial-fit research route, without selecting features or dropping rows from missingness/outcomes. No fit or economic evaluation was run by this freeze operator. Source/model admission, serving, promotion, prospective assessment and API acceptance remain unclaimed.
