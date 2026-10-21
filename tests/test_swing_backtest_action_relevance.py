@@ -56,8 +56,10 @@ def test_special_cash_is_raw_price_history_but_not_holding_cash(provider: Any) -
 
 
 @pytest.mark.parametrize("day", ["2020-01-06", "2025-01-06"])
-def test_distribution_outside_new_holding_is_not_a_claim_of_that_holding(provider: Any, day: str) -> None:
-    record = {"id": "spin", "source_symbol": "AAA", "new_symbol": "CHILD", "ex_date": day,
+@pytest.mark.parametrize("role", ["source", "distributed"])
+def test_distribution_outside_new_holding_is_not_a_claim_of_that_holding(provider: Any, day: str, role: str) -> None:
+    record = {"id": "spin", "source_symbol": "AAA" if role == "source" else "PARENT",
+        "new_symbol": "CHILD" if role == "source" else "AAA", "ex_date": day,
         "record_date": day, "payable_date": day, "source_rate": 1, "new_rate": 0.5}
     bridge = _bridge(provider, {"spin_offs": [record]})
     assert not bridge.terms

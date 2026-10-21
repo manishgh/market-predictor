@@ -35,7 +35,7 @@ def test_funded_scope_uses_injected_guard_and_preserves_source_pins(
 ) -> None:
     from market_predictor.core.errors import MemoryBudgetError
     from market_predictor.swing.datasets import action_scope
-    expected = verify_action_scope_documents(tmp_path, (scope,))
+    expected = verify_action_scope_documents(tmp_path, (scope,), memory_guard=lambda: None)
     monkeypatch.setattr(action_scope, "assert_system_memory_available",
         lambda **kwargs: pytest.fail("funded scope called inherited85% guard"))
     calls: list[str] = []
@@ -94,7 +94,7 @@ def evidence(records: list[dict[str, Any]]) -> CorporateActionEvidence:
 
 
 def test_replayed_scope_does_not_assign_future_rights_or_overwrite_payment(scope: ReviewedCashDistributionScope, tmp_path: Path) -> None:
-    pins = verify_action_scope_documents(tmp_path, (scope,))
+    pins = verify_action_scope_documents(tmp_path, (scope,), memory_guard=lambda: None)
     assert scope.document.path in pins
     original = evidence([dict(RECORD)])
     projected, gaps = reconcile_actions(original, {"QQQ"}, (scope,))
@@ -159,18 +159,18 @@ def test_reviewed_ex_distribution_separates_entry_from_payment(scope: ReviewedCa
 def test_document_body_tamper_rejected(scope: ReviewedCashDistributionScope, tmp_path: Path) -> None:
     (tmp_path / scope.document.path).write_bytes(b"tampered test-only body")
     with pytest.raises(DataReadinessError):
-        verify_action_scope_documents(tmp_path, (scope,))
+        verify_action_scope_documents(tmp_path, (scope,), memory_guard=lambda: None)
 
 
 def test_document_report_external_pin_rejected(scope: ReviewedCashDistributionScope, tmp_path: Path) -> None:
     with pytest.raises(DataReadinessError, match="external pin"):
-        verify_action_scope_documents(tmp_path, (scope.model_copy(update={"report_sha256": "0" * 64}),))
+        verify_action_scope_documents(tmp_path, (scope.model_copy(update={"report_sha256": "0" * 64}),), memory_guard=lambda: None)
 
 
 def test_document_path_outside_root_rejected(scope: ReviewedCashDistributionScope, tmp_path: Path) -> None:
     document = scope.document.model_copy(update={"path": "../outside.bin"})
     with pytest.raises(DataReadinessError):
-        verify_action_scope_documents(tmp_path, (scope.model_copy(update={"document": document}),))
+        verify_action_scope_documents(tmp_path, (scope.model_copy(update={"document": document}),), memory_guard=lambda: None)
 
 
 def test_miax_source_allowance_is_limited_to_official_alert_pdfs() -> None:

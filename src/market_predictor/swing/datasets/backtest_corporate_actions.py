@@ -242,7 +242,8 @@ class BacktestCorporateActions:
             return None
         source = (record.get("symbol") if family in {"cash_dividends", "stock_dividends", "capital_gains_distributions"}
                   else record.get("source_symbol"))
-        if source != symbol:
+        participants = (source, record.get("new_symbol")) if family == "spin_offs" else (source,)
+        if symbol not in participants:
             return None
         if price_history and family == "cash_dividends":
             # A cash-only payout changes neither the units nor the identity of
