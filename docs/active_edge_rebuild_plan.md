@@ -21,7 +21,21 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: implement approved dividend/split backtest accounting — October21,13:20Z
+### Current execution: run stock backtests with dividend/split accounting — October21,14:11Z
+
+Actual accounting proof is complete (closure pushed9d7cfee). The fresh twelve-policy
+campaign news_dividend_split_20261021 is LIVE: native99381/Python30960/launcher5720
+started14:11:11Z. Workspace review-results/news-dividend-split-20261021 contains
+the actual requestSHA75d5b8e4ad13ee91415ad955764146d75bc0def30123b3a941b8735cf3b584d0,
+exactly12frozen stock policies and2retained paired comparisons. First backtest:
+Price indicators / Ridge / profit target, stop-loss, ten-session limit; actual
+canonical child29600 started14:11:26Z. Read current owner rather than this firstPID
+on later checks. Actual proofSHA cf115906e4b3b6645efa7294c7870bea9611015cc5e383646a9d818fafc1c4b1
+and amendmentSHA64ac6ab2c9b22223a455503c8968f700adf5b6a1534fcc0acde205c00f85c704
+accepted. Do not edit frozen dependencies or duplicate/restart the live campaign.
+Outer log/exit news-dividend-split-20261021.log/.exit.json; require actual exit,
+all12result receipts, retained pairs and artifact hashes before completion claims.
+Onlystep7 active. Monitor8980 alive. No stock-portfolio SPY result claimed yet.
 
 Human explicitly approved ordinary-dividend cash on ex-date as a historical backtest
 assumption, recorded separately from provider facts. Use ex-date close cash, reusable

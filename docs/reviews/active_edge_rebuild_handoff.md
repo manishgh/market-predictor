@@ -21,7 +21,23 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: implement approved dividend/split backtest accounting — October21,13:20Z
+### Current execution: run stock backtests with dividend/split accounting — October21,14:11Z
+
+CURRENT LIVE campaign news_dividend_split_20261021: native99381/Python30960/
+launcher5720 started14:11:11Z. Reviewed workspace work/run_dividend_split_backtests.py
+SHAddd4908c000d7ce2c068893121342817deb2fe2322af309d5dfd22039997c92a.
+State review-results/news-dividend-split-20261021; fresh outer .log/.exit.json.
+Actual requestSHA75d5b8e4ad13ee91415ad955764146d75bc0def30123b3a941b8735cf3b584d0
+contains12frozen policies/2retained paired results and accepted actual proofSHA
+cf115906e4b3b6645efa7294c7870bea9611015cc5e383646a9d818fafc1c4b1.
+First child29600 (launcher28200) began14:11:26Z, Price indicators / Ridge /
+profit target, stop-loss, ten-session limit. Inspect actual current owner on future
+checks, not this historical firstPID. Do not duplicate/restart or edit frozen
+source/config/operator/runtime. Read numbered started/result/stdout/stderr and eventual
+complete.json; require actual exit/all12results/2retained pairs and artifact hashes.
+Unknown-action/missing-lot outcomes remain explicit; no final-refit scores or new
+experiments. No portfolio SPY result yet. Codeb984a76/proof closure9d7cfee pushed.
+Monitor8980 alive, no finish marker yet. Onlystep7 active; same91% guard.
 
 Human ANSWERED the cash-timing question: use explicit regular-dividend ex-date cash
 backtest assumption. Do not ask again. Apply ex-date CLOSE, spendable subsequent
