@@ -21,7 +21,64 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: both price-indicator Ridge backtests complete; XGBoost active — October21,19:16Z
+### Current execution: accounting consumer repaired; targeted facts need authorization — October21,20:56Z
+
+Only step7 remains in progress. Human asked why accounting gaps were not being
+fixed. The stopped news_dividend_split_20261021 campaign must not restart: native
+99381 actually exited-1 at20:29:19.2465447Z; controller30960/launcher5720 and current
+child36744/27120/19812 were identity-verified and stopped. Preserve workspace
+news-special-accounting-repair-interruption.json, both completed Ridge reports,
+partial third logs, original receipts and all earlier closed artifacts.
+
+Actual consumer repairs are pushed0409da3 and93b4203. They use exact successful
+request/page/projection evidence to distinguish cash-only raw ATR reads from owned
+claims, same-CUSIP names from share exchanges, acquirers from acquired shares, and
+new purchases from another owner's distribution rights. Validated economic dates
+scope both parent and distributed security; process_date never supplies an effective
+date. Unknown/invalid/contradictory records, changed CUSIPs, official/global/local
+gaps and intersecting unsupported payouts remain unavailable. No new payout policy,
+cash assumption, model, feature, target, selection, cost or source artifact changed.
+
+Final component verification:141affected UNITs passed34.79s. Ruff5source/test files,
+strict mypy2source modules and workspace verifier Ruff passed. Synthetic scope
+fixtures now inject a UNIT callback instead of depending on host85% memory; actual
+operational runtime stays91%/120s bounded pause/5s polls/5GiB/.75headroom. One
+consolidated author code/ML review closed the actual distributed-participant finding;
+no independent review is claimed. Full suite deliberately unrun at component scope.
+
+REAL SAVED-SELECTION CHECK COMPLETE: native51619/Python1080 naturally exited0.
+Workspace review-results/accounting-relevance-real-final.json SHA
+bc8621ec44793fe0914a795617922321f30edde44d37cb15ea308aa31ae5b6ec checks all17700
+saved selections through the actual shared funded-consumer action gate.1402of1935
+previously missing stock selections now pass that gate;533remain. Five reason
+checks replayed four distinct actual raw holdings (TDG,ROL,HWM,ADI). This is bounded
+accounting proof, not a full portfolio result. Source/implementation pins rechecked;
+selected parquet remains6d691a7e0b0d722c3adb47327d5ea77f98d9e270ade88a23638c84481a5b6dc5.
+Earlier successful proof da5b16a0dc013515b52d8dbbaaf4e4e4d91c3a744959a4a7162e0d730d75fee7
+and initial diagnostic failure/logs are preserved, not overwritten.
+
+Next action requires lifting the earlier no-new-collection restriction for a bounded
+official-evidence pass. The concrete proposed-only request is workspace
+review-results/accounting-gap-evidence-request.json SHA
+2b9d0b35643c1fb66aec246480cef27daec41a2367dfda28271dfdbac1cf0afa:56exact remaining
+stock actions (46cash/3changed-CUSIP names/6spin-offs/1stock dividend), plus QQQ's
+two conflicting ordinary records and special distribution. Requested facts are
+effective identity dates, payout currency/rate basis and entitlement/delivery terms.
+They are absent or unresolved in the current admitted records; this does not prove
+the external information is absent. Do not invent values, double-count entitlements,
+silently extend ordinary-only cash policy, use prospective outcomes or collect new
+price/news data. Preserve all six models/four baselines/twelve policies and closed
+source/feature/model/replay bytes. No new long campaign until these facts and any
+necessary explicit assumption are resolved and bounded accounting verification passes.
+
+No backtest or verification worker remains active. Fresh news-oct20-finished.json
+records task_complete=false/awaiting targeted evidence authorization. Monitor8980
+released the idle hold at20:58:45.720934Z; state monitor_and_idle_hold_released and
+native33710 actual exit0 verified. Heartbeat complete-market-predictor-training is
+PAUSED awaiting that scope decision. Resume only on the human decision. All serving/promotion/
+admission flags remain false; no portfolio gain/SPY outperformance/API/main acceptance.
+
+### Retained historical campaign receipts — superseded, no live campaign
 
 Second policy Price indicators / Ridge / stop-loss, ten-session limit completed
 19:16:40.731210Z with valuation_unavailable/expectedexit2. Actual manifestSHA
