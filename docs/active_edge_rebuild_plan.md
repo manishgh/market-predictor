@@ -15,13 +15,33 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 3. Full-corpus enrichment | Done for the retained corpus and available saved sentiment | All 516,679 versions accounted for in 505 durable shards; 484,723 enriched, 31,781 unavailable clocks, 175 missing text. Actual sentiment reused for 437,599 enriched versions; missing scores remain explicit. |
 | 4. Prediction-time news features | Done for retained research inputs | All59months/586,305rows/209columns published and independently replayed against retained inputs. Inherited values and outcomes exact; no outcome-based row exclusion. Source/serving admission remains false. |
 | 5. Freeze the third feature profile | Done for initial-fit research | Actual209-column order, missingness, clocks/source uncertainty and train-only preprocessing frozen with passed full replay/readiness and exact baseline fit-scope proof. |
-| 6. Fit remaining two models | In progress | Fit existing Ridge and shallow XGBoost for the amended news profile on the same official ten-session targets, splits, weights and costs. Four fitted baselines remain unchanged. |
-| 7. Compare performance | Pending | Evaluate all six specifications and twelve frozen policies with prediction error, ranking, funded NAV, fees, turnover and drawdown against SPY. State measured losses as plainly as gains. No claim of outperformance from a feature/test pass. |
+| 6. Fit remaining two models | Done for initial-fit research | Actual Ridge and shallow XGBoost completed16validation units and2finalrefits on frozen209inputs;18saved units. Four fitted baselines retained. |
+| 7. Compare performance | In progress | Evaluate all six specifications and twelve frozen policies with prediction error, ranking, funded NAV, fees, turnover and drawdown against SPY. State measured losses as plainly as gains. No claim of outperformance from a feature/test pass. |
 | 8. Independent final assessment | Pending | Preserve genuinely unseen assessment data. Previously repeatedly inspected historical test remains development evidence. Follow the existing prospective assessment requirement without fabricating future observations. |
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: two real learners running — October21,07:31Z
+### Current execution: two news learners complete; frozen comparison next — October21,07:49Z
+
+Actual native45512/PID27452 completed07:38:09.950585Z and naturally exited0 at
+07:38:10.4807125Z. data/research/swing_news_return_models_initial_fit/_manifest.json
+SHA25648f3ff9aff50e4eb6be6704808d8a0db5e1b42cbcb21f0cc79f0f4555ccb479b;
+requestSHA747454cfa4729264d77c506b3ead9b449f357850e9493a7c90725286e56f3dc5.
+Status complete_research_only,2specifications/16fold-scopefits/2finalmodels/18units,
+586,305inputrows. Numerical package versions equal retained baseline versions.
+Observed peak process memory3.85413GiB. All serving/promotion/outer-test/historical-test/
+portfolio flagsfalse; fourbaseline models untouched. Preserve training receipts.
+
+Step6 closes; step7 alone active. Next execute prepared frozen campaign
+work/run_news_evaluation_campaign.py with actual newsmanifest/SHA above and fresh
+campaign news_initial_fit_20261021/state-directory. It runs both paired comparisons
+and all12fundedtrials sequentially; retain valuation_unavailable and actualfailure
+receipts. No refitting, final-refit-as-OOF substitution or missing-lot filtering.
+91%RAM ceiling remains; no extra lower gate. Monitor8980/native33710 remains until
+actualworkend. Economic improvement, prospective252sessions, serving/API/main
+acceptance remain unclaimed until genuine evidence exists.
+
+### Historical training launch — October21,07:31Z
 
 Actual prefit freeze/audit committed and pushed7c55063 before launch. New training
 native45512/Python PID27452 started07:30:37.648534Z at75.5831%RAM using prepared
