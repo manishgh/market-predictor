@@ -21,7 +21,25 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: first corrected stock backtest complete; second active — October21,16:45Z
+### Current execution: both price-indicator Ridge backtests complete; XGBoost active — October21,19:16Z
+
+LATEST completed second policy Price indicators / Ridge / stop-loss, ten-session
+limit finished19:16:40.731210Z, valuation_unavailable/expectedexit2 (not crash).
+Actual data/research/news_dividend_split_20261021_technical_regularized_linear_return_stop_ten_session_timeout/_manifest.json
+SHA33f9d39e12624acd22d428d1bc828cc077c298684397a5d4a37632044830befe;
+reportSHA9dddd2cb98def3420135c33d2d4d0b29515916bddbfa4c9e6f5162c8de34af87;
+requestSHA63fafc10644f449f7d5407f9bcc5c9069caa1261883c77611dcbeaf6182d6248.
+All5published artifact hashes verified/frozen inputs rechecked.17700selections,
+selectedSHA6d691a7e0b0d722c3adb47327d5ea77f98d9e270ade88a23638c84481a5b6dc5
+and decisionsSHA1500f5df2418ba69a513759e70c98c5488d84486d73a012792427dc9b1878930
+identical to first policy. Same1935stockgaps(1795ATR/140holding),onlyQQQ benchmark
+gap, noSPYgap, comparisons=null.2of12complete; both preserved as unavailable,
+not retries or computed performance. Source diagnosis below unchanged.
+CURRENT THIRD policy Price indicators / XGBoost / profit target, stop-loss,
+ten-session limit live from19:16:41.268189Z, actual child36744/launcher27120,
+controller30960/native99381. Inspect actual current owner rather than stale prior
+PIDs. Do not modify frozen code/config/operator/runtime or restart/duplicate campaign.
+Remaining ten policies continue. Monitor8980 alive; no finish marker; onlystep7.
 
 FIRST completed result: Price indicators / Ridge / profit target, stop-loss,
 ten-session limit,16:45:20.240523Z, valuation_unavailable/expectedexit2. Actual

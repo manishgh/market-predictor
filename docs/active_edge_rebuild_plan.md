@@ -21,7 +21,20 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: first corrected stock backtest complete; second active — October21,16:45Z
+### Current execution: both price-indicator Ridge backtests complete; XGBoost active — October21,19:16Z
+
+Second policy Price indicators / Ridge / stop-loss, ten-session limit completed
+19:16:40.731210Z with valuation_unavailable/expectedexit2. Actual manifestSHA
+33f9d39e12624acd22d428d1bc828cc077c298684397a5d4a37632044830befe and
+reportSHA9dddd2cb98def3420135c33d2d4d0b29515916bddbfa4c9e6f5162c8de34af87;
+all5published artifact hashes verified, frozen inputs rechecked. Same17700selected
+entries and same selected/decision bytes;1935stockgaps(1795ATR/140holding),onlyQQQ
+benchmark gap, no SPY gap and comparisons=null.2of12results now retained; no
+software failure or portfolio performance claimed. Third policy Price indicators /
+XGBoost / profit target, stop-loss, ten-session limit started19:16:41.268189Z,
+actual child36744/launcher27120/controller30960/native99381. Inspect current owner
+on later checks. Do not edit frozen dependencies or duplicate/restart live campaign.
+Step7 alone active; monitor8980 alive.
 
 Price indicators / Ridge / profit target, stop-loss, ten-session limit completed
 16:45:20.240523Z with valuation_unavailable (expectedCLIexit2, not a crash). Actual
