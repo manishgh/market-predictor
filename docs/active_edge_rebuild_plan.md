@@ -21,7 +21,73 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: accounting consumer repaired; targeted facts need authorization — October21,20:56Z
+### Current execution: official accounting facts acquired; bounded repair remains active — October21,21:24Z
+
+Human "Yes fetch it" authorized exactly56stock action records plus3QQQrecords.
+Five immutable exact-URL plans completed naturally with exit0. Fresh archive:
+data/raw/swing_accounting_gap_facts_20261021.66attempts:52successful responses,
+13retained refused/redirect/not-found responses,1deferred after host403. Exact-ID
+provider response returned all59IDs; all56stock records are unchanged from the
+retained records. This is new official fact evidence, never a source/features/model
+rebuild or accounting admission. No operational mocks, prices/news, fits or lot filters.
+
+Workspace review-results/accounting-official-facts-20261021.json SHA
+fd0f62bbb3cddf5c7387efb24525b3aecc046fb1976d557cc0f8eb5feeb4aeda
+binds all56stock IDs, all source/transport/query/receipt hashes,29reviewed source
+claims and exact issuer QQQrows.50successful text/PDF/JSONbodies plus2issuerxlsx
+responses retained. All5collection reports preserved. This report is retrospective
+accounting evidence only; no prediction input, outcome selection or performance claim.
+
+Actual SEC identity dates:APTV December17,2024 andTEL September30,2024 are after
+the frozen evaluation end; LH one-for-one reorganization took effect May17,2024,
+not provider processingMay20. All6spin-off issuer terms acquired, including legal
+distribution versus street-name credit dates and Fortrea regular-way sale rights.
+These still need the bounded consumer implementation and real replay.
+
+Issuer QQQ2022 ICIPrimary row1786 is one.51856distribution exSep19/payOct31;
+QQQ2023row1779 is.21584 exDec27/payJan15,2024. Do not double-count the two provider
+Sep2022records or turn an issuer payment date into an observed broker cash clock.
+ROL.18=regular.10+special.08; WRB1.13=1.00+.13 and.60=.50+.10;
+KIM.33=regular.24+special.09. Ford regular/supplemental .15+.65(2023),.15+.18(2024)
+are separate entitlements despite false provider special flags. ACN issuer1.12/1.29
+differs from provider.84/.9675; JCI issuer.37 differs from provider.2775. Preserve
+gross declarations and broker-net uncertainty separately; do not invent account taxes.
+
+Exact PFE release returned403 twice; its quarterlySECbody alone does not corroborate
+the requested payout date. PNR November2022 exact-date release refused; issuer
+annualrate/freshproviderrecord retained, exact date corroboration incomplete. RJF
+provider April2023 stock dividend1.3 conflicts with issuer exhaustive annual share
+reconciliation (no2023split issuance); retain the conflict, never invent an event or
+remove the selected lot. No complete funded portfolio performance result exists.
+
+Pending human question asks ONLY whether to extend existing ex-date-close cash timing
+to these now documented special/supplemental payouts, or use declared payable dates.
+Current policy explicitly covers ordinary dividends only; no silent extension.
+Continue independent source-bound identity/ordinary-cash repair while waiting; do not
+restart a knowingly unavailable twelve-policy campaign. All prior closed artifacts,
+old stopped campaign receipts, six specifications, twelve policies and numerical
+settings remain frozen. Serving/promotion/admission remain false.
+
+Monitor lifecycle resumed: prior finished receipt preserved as workspace
+review-results/news-oct20-finished-accounting-repair-20261021T205845.json.
+Current monitor Python22004/native92644, logaccounting-facts-monitor.log, heartbeat
+ACTIVE. No backtest or collection worker remains live at collection boundary. Do not
+reuse stale monitor8980 or old campaign childPIDs. At actual workend write a fresh
+news-oct20-finished.json, verify release/natural exit/no owned worker, then pause the
+heartbeat if complete or awaiting required human action. No finish marker yet.
+
+### Authorization retained — October21,21:02Z
+
+Human explicitly answered "Yes fetch it" to the concrete bounded request below.
+The earlier no-new-collection restriction is lifted ONLY for those56stock action
+facts and the three QQQ records. Collect exact official provider/issuer/SEC/exchange
+responses in a fresh archive, with query/URL, capture clocks, original body hashes
+and receipts. Preserve original sources and all completed artifacts. No new price/
+news collection, feature/target reconstruction, fit, lot filtering or new cash policy.
+Review the fetched facts against exact retained record IDs; missing/conflicting
+facts remain explicit. Resume the heartbeat for this authorized work and preserve
+the prior finished receipt before a fresh monitor lifecycle. Supersedes the paused
+authorization instructions below; step7 alone remains active.
 
 Only step7 remains in progress. Human asked why accounting gaps were not being
 fixed. The stopped news_dividend_split_20261021 campaign must not restart: native
