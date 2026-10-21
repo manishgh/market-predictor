@@ -87,6 +87,7 @@ IMPLEMENTATION_PATHS = (
     "swing/contracts/backtest_corporate_actions.py", "swing/datasets/backtest_corporate_actions.py",
     "swing/datasets/reviewed_action_dates.py", "swing/datasets/reviewed_action_sources.py",
     "swing/datasets/reviewed_cash_payouts.py", "swing/datasets/reviewed_parent_units.py",
+    "swing/datasets/reviewed_action_dispositions.py",
 )
 
 

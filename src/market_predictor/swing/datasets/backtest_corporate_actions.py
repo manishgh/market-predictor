@@ -38,6 +38,7 @@ from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.action_evidence import CorporateActionEvidence
 from market_predictor.swing.datasets.action_windows import ActionWindow
 from market_predictor.swing.datasets.reviewed_action_dates import load_reviewed_action_dates
+from market_predictor.swing.datasets.reviewed_action_dispositions import load_reviewed_record_dispositions
 from market_predictor.swing.datasets.reviewed_cash_payouts import load_reviewed_cash_payouts
 from market_predictor.swing.datasets.reviewed_parent_units import load_reviewed_parent_spin_units
 
@@ -222,6 +223,12 @@ class BacktestCorporateActions:
             if name in self.source_files and self.source_files[name] != digest:
                 raise DataReadinessError("reviewed parent units cannot replace a different retained source pin")
         self.source_files.update(parent_pins)
+        self.reviewed_record_dispositions, disposition_pins = load_reviewed_record_dispositions(root,
+            context.policy.reviewed_record_dispositions, self._records, memory_guard=memory_guard)
+        for name, digest in disposition_pins.items():
+            if name in self.source_files and self.source_files[name] != digest:
+                raise DataReadinessError("reviewed disposition cannot replace a different retained source pin")
+        self.source_files.update(disposition_pins)
         self.reviewed_cash_aliases: dict[tuple[str, str], str] = {}
         for fact in cash_facts:
             cash_identity = "reviewed-cash:" + json_sha256(fact.model_dump(mode="json"))
@@ -255,6 +262,9 @@ class BacktestCorporateActions:
         if matched is None or matched[0] != window.family:
             return None
         family, record = matched
+        disposition = self.reviewed_record_dispositions.get(window.action_id)
+        if disposition is not None and family == disposition.family and symbol == disposition.symbol:
+            return "audited_issuer_share_reconciliation_refutes_exact_retained_record"
         reviewed = self.reviewed_dates.get(window.action_id)
         parent_units = self.reviewed_parent_units.get(window.action_id)
         if parent_units is not None and family == "spin_offs" and symbol == parent_units.source_symbol:
