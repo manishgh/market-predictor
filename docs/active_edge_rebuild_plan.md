@@ -21,7 +21,20 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: prefit freeze saved; two real learners next — October21,07:29Z
+### Current execution: two real learners running — October21,07:31Z
+
+Actual prefit freeze/audit committed and pushed7c55063 before launch. New training
+native45512/Python PID27452 started07:30:37.648534Z at75.5831%RAM using prepared
+work/run_news_return_training.py SHAc418514d6e662656c35f34789bacf432c351df138c705bcd887e910bd3e0a8f6
+with exact config/fit-scope/audit hashes below. Canonical owner train-swing-returns.
+Fresh workspace review-results/news-return-training-state.json/log/exit.json;
+expected data/research/swing_news_return_models_initial_fit. Do not duplicate or
+edit live dependencies/audit/config. Step6 alone active; naturalexit0 and actual
+complete18-unit manifest required before both paired comparisons/all12fundedtrials.
+No completed news fit, SPY improvement or acceptance claimed. Monitor8980/native33710
+remains;91%guard unchanged. Completed publication/replay/prefit jobs stay closed.
+
+### Completed prefit freeze — October21,07:29Z
 
 Consumer metadata repair/config checkpoint34bc9be pushed. Actual fit-scope native29702/
 PID24096 naturally exited0 at07:28:23.255292Z. Report

@@ -21,7 +21,26 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: prefit freeze saved; two real learners next — October21,07:29Z
+### Current execution: two real learners running — October21,07:31Z
+
+Prefit freeze/audit checkpoint7c55063 committed/pushed BEFORE actual fit launch.
+CURRENT LIVE native45512/Python PID27452 started07:30:37.648534Z at75.5831%RAM;
+canonical owner train-swing-returns. Workspace work/run_news_return_training.py
+SHAc418514d6e662656c35f34789bacf432c351df138c705bcd887e910bd3e0a8f6 accepted exact
+config638765ea8b7a853cbbbb471a91f2066806833a79669cab344beccd785f8c3ee6,
+fit-scope8fa9bafa314d46ef6ac6cca5f4aa5ea4d9df9172ddb81ec4af8f3a3d4dc82626 and
+audit23a240d43f802ca618375a3a32ed186b9079a557c69e4be8d6262bad4f524c38.
+Fresh workspace review-results/news-return-training-state.json,news-return-training.log,
+news-return-training.exit.json. Expected data/research/swing_news_return_models_initial_fit.
+Do not duplicate/edit live frozen dependencies/config/audit. Step6 alone active.
+Require actualnaturalexit0,complete_research_only,2specifications/16validationfits/
+2finalmodels/18units and actualmanifestSHA. Then work/run_news_evaluation_campaign.py
+with actualmanifestpath/SHA and fresh campaign/state-directory; retain both paired
+comparisons/all12fundedtrials including valuation_unavailable. Fourbaselines remain.
+Monitor8980/native33710/91%limit unchanged; fresh finish marker only at actualworkend.
+No completed news model/economic/API/main/futureprospective result claimed yet.
+
+### Completed prefit freeze — October21,07:29Z
 
 Consumer repair/config checkpoint34bc9be pushed. Actual scope native29702/PID24096
 naturally exited0 at07:28:23.255292Z; report
