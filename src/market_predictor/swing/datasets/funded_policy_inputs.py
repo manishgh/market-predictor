@@ -253,6 +253,7 @@ class FundedPolicyInputProvider:
 @contextmanager
 def verified_funded_policy_inputs(*, root: Path, target_config: SourcePin, evidence: CorporateActionEvidence,
     strategy: StrategyContract, selection_loader: Callable[[], tuple[pd.DataFrame, tuple[str, ...]]], exit_policy: ExitPolicy,
+    memory_guard: Callable[[], None] | None = None,
 ) -> Iterator[FundedPolicyInputProvider]:
     """Load selection only while the existing corrected-source lease is held.
 
@@ -268,7 +269,8 @@ def verified_funded_policy_inputs(*, root: Path, target_config: SourcePin, evide
     _require(exit_policy in research.exit_policies, "funded exit is outside frozen research")
     simulation = load_trade_simulation_context(inside(root, policy.simulation_policy.path),
         expected_sha256=policy.simulation_policy.sha256)
-    with verified_corrected_research_sources(root, Path(target_config.path), target_config.sha256, policy, evidence) as sources:
+    with verified_corrected_research_sources(root, Path(target_config.path), target_config.sha256, policy, evidence,
+        memory_guard=memory_guard) as sources:
         selected, session_calendar = selection_loader()
         provider = FundedPolicyInputProvider(root=root, policy=policy, config=target_config, evidence=evidence,
             sources=sources, strategy=strategy, research=research, simulation=simulation, selected=selected,

@@ -359,6 +359,7 @@ def _publisher_fixture(saved: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -
     @contextmanager
     def provider(**kwargs: Any) -> Any:
         assert not state["lease"]
+        assert kwargs["memory_guard"] is owner._guard
         state["lease"] = True
         try:
             selected, calendar = kwargs["selection_loader"]()
@@ -395,6 +396,15 @@ def test_publication_uses_one_provider_lease_and_preserves_every_selected_gap(
     assert set(state["benchmarks"]) == {"SPY", "QQQ", "XLF"}
     assert len(report["accounting"]["missing_inputs"]) == 708 * 3 + 3
     assert all(report[name] is False for name in ("training_eligible", "serving_eligible", "promotion_eligible", "economic_eligible"))
+    request = json.loads((arguments["output"] / "_request.json").read_bytes())
+    assert request["memory_policy"] == {"maximum_system_used_percent": 91.0,
+        "maximum_system_pause_seconds": 120.0, "system_memory_poll_seconds": 5.0,
+        "minimum_system_free_gib": None, "maximum_process_memory_gib": 5.0,
+        "process_headroom_gib": 0.75, "historical_training_policy_unchanged": True}
+    for name in ("research/news_runtime_memory.py", "commands/swing_oof_policy_evaluation.py",
+            "swing/datasets/action_evidence.py", "swing/datasets/corrected_outcomes.py", "swing/datasets/action_scope.py"):
+        key = f"src/market_predictor/{name}"
+        assert request["implementation_files"][key] == report["source_files"][key]
 
 
 @pytest.mark.parametrize("mutation", ["evidence", "resampling_implementation"])

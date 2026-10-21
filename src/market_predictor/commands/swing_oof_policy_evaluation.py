@@ -12,11 +12,16 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.io import inside
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError
+from market_predictor.research import news_runtime_memory
 from market_predictor.research.swing_oof_policy_evaluation import Learner, publish_saved_oof_policy_evaluation
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.action_evidence import load_corporate_action_evidence
 from market_predictor.swing.datasets.corrected_outcomes import load_corrected_outcome_policy
 from market_predictor.swing.labels.frozen_exit import ExitPolicy
+
+
+def _action_memory_guard() -> None:
+    news_runtime_memory.guard(stage="funded corporate-action record projection")
 
 
 def register_saved_oof_policy_command(app: typer.Typer) -> None:
@@ -55,6 +60,7 @@ def register_saved_oof_policy_command(app: typer.Typer) -> None:
             evidence = load_corporate_action_evidence(
                 root=root, config=Path(policy.action_config.path), archive=Path(policy.action_archive),
                 expected_audit_sha256=policy.action_audit_sha256,
+                memory_guard=_action_memory_guard,
             )
             report = publish_saved_oof_policy_evaluation(
                 root=root, run_manifest=run, feature_publication=features,

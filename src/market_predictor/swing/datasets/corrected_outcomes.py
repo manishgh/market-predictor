@@ -11,7 +11,7 @@ import json
 import time
 import tomllib
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
@@ -119,7 +119,7 @@ def _projection(path: Path, columns: tuple[str, ...]) -> pd.DataFrame:
 
 @contextmanager
 def verified_corrected_price_sources(root: Path, config: Path, config_sha256: str,
-    policy: CorrectedOutcomePolicy) -> Iterator[dict[str, Any]]:
+    policy: CorrectedOutcomePolicy, *, memory_guard: Callable[[], None] | None = None) -> Iterator[dict[str, Any]]:
     """Verify corrected raw prices and identities under the shared publication lease.
 
     No action archive, holding specification or target is opened. The outcome
@@ -136,7 +136,7 @@ def verified_corrected_price_sources(root: Path, config: Path, config_sha256: st
     parent_pin = correction["policy"]["parent_plan_sha256"]
     with verified_initial_fit_raw_share_plan(root, inside(root, policy.parent_config.path), parent,
         expected_plan_sha256=parent_pin) as plan:
-        _guard()
+        (memory_guard or _guard)()
         pins = {inside(root, config).relative_to(root).as_posix(): config_sha256}
         for pin in (policy.source_selection, policy.parent_config, policy.symbol_corrections):
             pins[inside(root, pin.path).relative_to(root).as_posix()] = pin.sha256
@@ -225,10 +225,10 @@ def verified_corrected_price_sources(root: Path, config: Path, config_sha256: st
 
 @contextmanager
 def verified_corrected_research_sources(root: Path, config: Path, config_sha256: str, policy: CorrectedOutcomePolicy,
-    evidence: CorporateActionEvidence) -> Iterator[dict[str, Any]]:
+    evidence: CorporateActionEvidence, *, memory_guard: Callable[[], None] | None = None) -> Iterator[dict[str, Any]]:
     """Add every target-admission authority while retaining the price-source lease."""
     root = root.resolve()
-    with verified_corrected_price_sources(root, config, config_sha256, policy) as sources:
+    with verified_corrected_price_sources(root, config, config_sha256, policy, memory_guard=memory_guard) as sources:
         pins = dict(sources["source_files"])
         for pin in (policy.action_config, policy.research_contract, policy.simulation_policy,
                 *(w.document for w in policy.official_windows)):
@@ -249,7 +249,7 @@ def verified_corrected_research_sources(root: Path, config: Path, config_sha256:
             raise DataReadinessError("action evidence request does not bind the corrected full selection")
         evidence.recheck(root)
         pins.update(evidence.source_files)
-        pins.update(verify_action_scope_documents(root, policy.reviewed_cash_distribution_scopes))
+        pins.update(verify_action_scope_documents(root, policy.reviewed_cash_distribution_scopes, memory_guard=memory_guard))
         yield {**sources, "source_files": dict(pins),
             "action_index": reconcile_actions(evidence, expected, policy.reviewed_cash_distribution_scopes)}
         _check(root, pins)

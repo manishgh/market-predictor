@@ -1,6 +1,7 @@
 """Independently replayed, exact-record temporal bounds for reviewed cash actions."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -16,12 +17,16 @@ from market_predictor.swing.datasets.action_windows import ActionWindow
 from market_predictor.swing.datasets.symbol_corrections import pinned_object
 
 
-def verify_action_scope_documents(root: Path, scopes: tuple[ReviewedCashDistributionScope, ...]) -> dict[str, str]:
+def verify_action_scope_documents(root: Path, scopes: tuple[ReviewedCashDistributionScope, ...],
+    *, memory_guard: Callable[[], None] | None = None) -> dict[str, str]:
     """Return immutable source pins; the caller's publication lease must be held."""
     pins: dict[str, str] = {}
     reports: dict[tuple[str, str, str], dict[str, Any]] = {}
     for scope in scopes:
-        assert_system_memory_available(minimum_available_gib=2.0)
+        if memory_guard is None:
+            assert_system_memory_available(minimum_available_gib=2.0)
+        else:
+            memory_guard()
         inventory_path = inside(root, scope.inventory.path)
         archive = inside(root, scope.archive)
         key = (scope.archive, scope.inventory.sha256, scope.report_sha256)

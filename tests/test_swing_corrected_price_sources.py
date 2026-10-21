@@ -136,6 +136,31 @@ def _arguments(prices: dict[str, Any]) -> dict[str, Any]:
     return {key: prices[key] for key in ("root", "config", "config_sha256", "policy")}
 
 
+def test_funded_price_callback_replaces_legacy_guard_and_keeps_pins(
+    prices: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with module.verified_corrected_price_sources(**_arguments(prices)) as source:
+        expected = dict(source["source_files"])
+    monkeypatch.setattr(module, "_guard", lambda: pytest.fail("funded price read called inherited85% guard"))
+    calls: list[str] = []
+    with module.verified_corrected_price_sources(**_arguments(prices), memory_guard=lambda: calls.append("guard")) as source:
+        assert source["source_files"] == expected
+    assert calls == ["guard"]
+    assert prices["calls"][-1] == "lease_exit"
+
+
+def test_research_source_context_forwards_pressure_guard_before_reading_payload(
+    prices: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from market_predictor.core.errors import MemoryBudgetError
+    def refuse() -> None:
+        raise MemoryBudgetError("UNIT bounded pressure timeout")
+    with pytest.raises(MemoryBudgetError, match="UNIT bounded pressure timeout"):
+        with module.verified_corrected_research_sources(**_arguments(prices), evidence=None, memory_guard=refuse):
+            pytest.fail("pressure guard must prevent funded source work")
+    assert prices["calls"] == ["lease_enter", "lease_exit"]
+
+
 def test_price_context_binds_sources_and_holds_lease_without_target_dependencies(
     prices: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -218,7 +243,8 @@ def _target_arguments(prices: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -
     source = {"source_files": {}, "selection": {"segments": [{"artifact": {"provider_symbol": s}} for s in symbols]}}
 
     @contextmanager
-    def price_source(*args: Any) -> Iterator[dict[str, Any]]:
+    def price_source(*args: Any, **kwargs: Any) -> Iterator[dict[str, Any]]:
+        assert kwargs["memory_guard"] is prices.get("expected_memory_guard")
         yield source
 
     monkeypatch.setattr(module, "verified_corrected_price_sources", price_source)
@@ -258,16 +284,23 @@ def test_outcome_wrapper_keeps_target_dependency_gates(
             pytest.fail("invalid target authority yielded")
 
 
+@pytest.mark.parametrize("injected", [False, True])
 def test_outcome_wrapper_admits_actions_only_after_all_target_checks(
-    prices: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+    prices: dict[str, Any], monkeypatch: pytest.MonkeyPatch, injected: bool,
 ) -> None:
     args = _target_arguments(prices, monkeypatch)
     args.pop("scope")
     calls: list[str] = []
+    if injected:
+        def guard() -> None:
+            pass
+        prices["expected_memory_guard"] = guard
+        args["memory_guard"] = guard
     args["evidence"].recheck = lambda root: calls.append("evidence")
     document = _write(prices["root"], "target/entitlement.txt", "reviewed scope")
 
-    def scopes(root: Path, scopes: Any) -> dict[str, str]:
+    def scopes(root: Path, scopes: Any, **kwargs: Any) -> dict[str, str]:
+        assert kwargs["memory_guard"] is prices.get("expected_memory_guard")
         calls.append("scopes")
         return {document.relative_to(root).as_posix(): file_sha256(document)}
 

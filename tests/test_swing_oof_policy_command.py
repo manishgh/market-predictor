@@ -71,6 +71,7 @@ def test_saved_policy_command_preserves_inputs_and_reports_unavailable(
     load.assert_called_once_with(Path("example-root"), Path("targets.toml"), "a" * 64)
     actions.assert_called_once_with(
         root=Path("example-root"), config=Path("actions.toml"), archive=Path("data/raw/actions"), expected_audit_sha256="c" * 64,
+        memory_guard=commands._action_memory_guard,
     )
     evaluate.assert_called_once_with(
         root=Path("example-root"), run_manifest=SourcePin(path="run.json", sha256="a" * 64),

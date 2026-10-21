@@ -21,7 +21,60 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: retry active; observed inherited RAM refusals — October21,10:08Z
+### Current execution: RAM repair verified; fresh funded run next — October21,10:29Z
+
+Actual fix implemented in six source files: command and OOF evaluation own the
+unchanged news_runtime_memory.guard91%/120s; callback passes action_evidence and
+funded_policy_inputs->corrected_outcomes price/research contexts->action_scope.
+No old85/90system check on funded route; unrelated producers retain defaults,
+4GiB process-only guards unchanged. Fresh OOF request binds all current consumers/
+runtime dependencies and explicit91%/120s/5spoll/5GiB/.75GiB/noabsolute floor.
+Historical relationship producer hashes remain separate historical provenance;
+news replay/core/resources/models/configs/feature artifacts unchanged.
+
+Design review passed; one consolidated code/ML review no supported findings.
+Final173focused UNITs pass26.93s,3OOF publication/gaps/drift UNITs pass84.16s,
+Ruff14files and strictmypy6sourcefiles pass. Six initial UNIT fixture keyword failures
+fixed. Broad package-boundary check reports PREEXISTING return_comparison.py:71
+research import; file exactly equals HEAD, SHA2e3bf3420a948d0e3fab959deda1df13053264a82a7dfaa26decf73a57acdd7a.
+Scoped import test for changed4production consumers passes. Full suite unrun.
+
+NEXT after actualcommit/push: unchanged reviewed work/run_news_funded_retry.py
+SHAb41f38befd5d3c7d24924afc921c9b9e48c6302f527bd2dbfc5998e346f9eb85,
+fresh --campaign news_funded_91_20261021 --state-dir workspace/review-results/news-funded-91-20261021,
+freshouter .log/.exit.json, same newsmanifestSHA48f3ff9aff50e4eb6be6704808d8a0db5e1b42cbcb21f0cc79f0f4555ccb479b
+and priorcompleteSHAa0942413b543ad6cbad9412d5219abc204099e6e0d641815c52f718b6dddbcf5.
+Preserve interrupted retryallreceipts; none of its12policies has a funded manifest.
+Fresh same12unresolved trials only,2passedpairs retained. Monitor8980 remains;
+oldowner28436 dead, OSlease released. No economic/serving/API/main acceptance.
+
+### Historical requested RAM guard repair design — October21,10:15Z
+
+Human requested immediate code fix. Retry6512 and identity-verified descendants
+26092/22520/28436 stopped10:14:09Z; native75310 actualexit-1 at10:14:10Z. Preserve
+workspace/review-results/news-funded-retry-memory-fix-interruption.json and outer
+exit receipt, results01–04 and interrupted trial05 logs. No funded manifest exists;
+06–12 unstarted. Monitor8980 remains alive. Owner28436 in runtime owner file is stale.
+Do not restart the immutable old operator or wait for its natural completion.
+
+Frozen bounded repair design: funded OOF guard and actual retained-source consumer
+guards action_evidence/corrected_outcomes/action_scope reuse existing unchanged
+news_runtime_memory.guard (91% system ceiling,120second pause,5GiB process budget,
+.75GiB headroom, no free-RAM floor). Invalid measurement/process budget still fail
+immediately. Pin current guard/consumer code in fresh evaluation requests; preserve
+historical training90% provenance and proof-bound core/system_memory.py/resources.py.
+No source acquisition/reconstruction, model refit, feature/outcome/replay rebuild,
+selection/cost change or old receipt mutation. Review design, implement, focused
+UNIT/direct-consumer tests+Ruff+strictmypy, one consolidated bounded review then
+commit/push actual fix/current docs. Fresh unresolved funded policies reuse passed
+pairs and frozen models. Actual real run is required; no fixture economic claim.
+Design review: production datasets must not import research. Use explicit guard
+callback through command/action projection and OOF/funded-provider/corrected-source/
+action-scope contexts. Preserve unrelated producer defaults. Test callback propagation
+at each boundary and package import rules. No duplicate pause implementation.
+Only step7 active; no serving/promotion/admission acceptance.
+
+### Historical inherited RAM refusals — October21,10:08Z
 
 CURRENT retry native75310/Python6512 remains active. Results01–04 failed/exit2
 before manifests:01stderr90.1%used,1.56GiBavailable,requires<90%/.75GiB;02–04stderr

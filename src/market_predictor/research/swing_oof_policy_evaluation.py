@@ -16,14 +16,13 @@ from pandas.testing import assert_frame_equal
 from market_predictor.canonical.cutoffs import swing_prediction_cutoffs
 from market_predictor.canonical.store import file_sha256, manifest_path_for
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.core.system_memory import assert_system_memory_available
 from market_predictor.edge_rebuild.temporal_manifest import build_temporal_schedule, load_temporal_manifest_config
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.modeling.strategy_contract import StrategyContract, load_strategy_contract
+from market_predictor.research import news_runtime_memory
 from market_predictor.research.news_decision_features import NEWS_COLUMNS
 from market_predictor.research.news_decision_verification import validate_news_decision_receipt
-from market_predictor.resources import assert_memory_budget
 from market_predictor.swing.contracts.holding_accounting import HoldingSpecification
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.issuer_reaction import REACTION_COLUMNS
@@ -82,6 +81,8 @@ IMPLEMENTATION_PATHS = (
     "modeling/strategy_contract.py", "modeling/resampling.py", "canonical/cutoffs.py", "canonical/store.py",
     "heavy_jobs.py", "resources.py", "evidence/hashing.py", "evidence/io.py",
     "swing/contracts/saved_evaluation_configuration.py", "swing/datasets/saved_evaluation_configuration.py",
+    *NEWS_RUNTIME_PATHS, "commands/swing_oof_policy_evaluation.py",
+    "swing/datasets/action_evidence.py", "swing/datasets/corrected_outcomes.py", "swing/datasets/action_scope.py",
 )
 
 
@@ -109,16 +110,11 @@ def _require(condition: bool, message: str) -> None:
 
 
 def _guard() -> None:
-    assert_memory_budget(stage="saved OOF policy evaluation", hard_budget_gib=5.0, headroom_gib=0.75)
-    assert_system_memory_available(minimum_available_gib=0.75, maximum_used_percent=90.0)
+    news_runtime_memory.guard(stage="saved OOF policy evaluation")
 
 
 def _profile_guard(profile: str) -> None:
-    if profile == NEWS_PROFILE:
-        from market_predictor.research.news_runtime_memory import guard
-        guard(stage="saved news OOF policy evaluation")
-    else:
-        _guard()
+    _guard()
 
 
 def _news_receipt(root: Path, publication: SourcePin, request: dict[str, Any], readiness: dict[str, Any],
@@ -487,6 +483,11 @@ def publish_saved_oof_policy_evaluation(
                "learner": learner, "exit_policy": exit_policy, "action_projection_sha256": evidence.projection_sha256,
                "action_audit_sha256": evidence.audit_sha256, "implementation_files": implementations,
                "campaign_roster": CAMPAIGN_ROSTER, "feature_profile": fit_policy.feature_profile,
+               "memory_policy": {"maximum_system_used_percent": news_runtime_memory.MAXIMUM_SYSTEM_USED_PERCENT,
+                   "maximum_system_pause_seconds": news_runtime_memory.MAXIMUM_SYSTEM_PAUSE_SECONDS,
+                   "system_memory_poll_seconds": news_runtime_memory.SYSTEM_MEMORY_POLL_SECONDS,
+                   "minimum_system_free_gib": None, "maximum_process_memory_gib": 5.0,
+                   "process_headroom_gib": 0.75, "historical_training_policy_unchanged": True},
                "selection_metadata": {"scope": "full_saved_monthly_cohort_before_oof_or_scope_filtering",
                    "decision_group": "validated_utc_cutoff_isoformat",
                    "peer_population": "feature_eligible_and_strategy_minimum_warmup_by_session_and_sector",
@@ -526,7 +527,7 @@ def publish_saved_oof_policy_evaluation(
         return selected, saved.entry_sessions
 
     with verified_funded_policy_inputs(root=root, target_config=target_config, evidence=evidence, strategy=strategy,
-        selection_loader=selection_loader, exit_policy=exit_policy) as provider:
+        selection_loader=selection_loader, exit_policy=exit_policy, memory_guard=_guard) as provider:
         _require(bool(state), "funded provider did not load the bound OOF selection")
         saved, decisions, selected, counts = state["saved"], state["decisions"], state["selected"], state["counts"]
         _require(provider.config == target_config and provider.policy.research_contract == research_contract

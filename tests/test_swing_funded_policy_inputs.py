@@ -37,8 +37,9 @@ def test_lazy_selection_and_publication_remain_inside_the_single_source_lease(
     monkeypatch.setattr(owner, "load_trade_simulation_context", lambda *args, **kwargs: None)
 
     @contextmanager
-    def leased_sources(*args: Any) -> Any:
+    def leased_sources(*args: Any, **kwargs: Any) -> Any:
         nonlocal active
+        assert kwargs["memory_guard"] is guard
         assert not active
         active = True
         order.append("source_lease_enter")
@@ -68,9 +69,11 @@ def test_lazy_selection_and_publication_remain_inside_the_single_source_lease(
 
     monkeypatch.setattr(owner, "verified_corrected_research_sources", leased_sources)
     monkeypatch.setattr(owner, "FundedPolicyInputProvider", provider_factory)
+    def guard() -> None:
+        pass
     context = owner.verified_funded_policy_inputs(root=tmp_path, target_config=pin,
         evidence=SimpleNamespace(audit_sha256="b" * 64), strategy=SimpleNamespace(),
-        selection_loader=selection_loader, exit_policy="target_stop_ten_session_timeout")
+        selection_loader=selection_loader, exit_policy="target_stop_ten_session_timeout", memory_guard=guard)
     if selection_fails:
         with pytest.raises(DataReadinessError, match="synthetic selection failure"), context:
             pytest.fail("selection failure must not yield a provider")

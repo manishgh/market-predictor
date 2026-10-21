@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -38,7 +39,7 @@ class CorporateActionEvidence:
 
 
 def load_corporate_action_evidence(*, root: Path, config: Path, archive: Path,
-    expected_audit_sha256: str) -> CorporateActionEvidence:
+    expected_audit_sha256: str, memory_guard: Callable[[], None] | None = None) -> CorporateActionEvidence:
     """Verify pagination/transport/source pins, then retain only bounded action records.
 
     Call before acquiring a downstream heavy-job lease: archive replay owns its own
@@ -54,10 +55,11 @@ def load_corporate_action_evidence(*, root: Path, config: Path, archive: Path,
     if not runtime.is_relative_to(root):
         raise DataReadinessError("corporate-action projection runtime escapes workspace")
     with heavy_job_lease("project-swing-corporate-action-evidence", runtime_dir=runtime):
-        return _project(root, directory, report, replay)
+        return _project(root, directory, report, replay, memory_guard=memory_guard)
 
 
-def _project(root: Path, directory: Path, report: dict[str, Any], replay: dict[str, Any]) -> CorporateActionEvidence:
+def _project(root: Path, directory: Path, report: dict[str, Any], replay: dict[str, Any],
+    *, memory_guard: Callable[[], None] | None = None) -> CorporateActionEvidence:
     request_path = directory / "_request.json"
     if request_path.stat().st_size > 8 * 1024**2:
         raise DataReadinessError("corporate-action request exceeds metadata bound")
@@ -85,7 +87,10 @@ def _project(root: Path, directory: Path, report: dict[str, Any], replay: dict[s
     missing = []
     for ticker in report["tickers"]:
         assert_memory_budget(stage="corporate-action record projection", hard_budget_gib=5.0, headroom_gib=0.75)
-        assert_system_memory_available()
+        if memory_guard is None:
+            assert_system_memory_available()
+        else:
+            memory_guard()
         symbol = ticker["ticker"]
         successes = [attempt for attempt in ticker["attempts"] if attempt["state"] == "acquired"]
         if not successes:

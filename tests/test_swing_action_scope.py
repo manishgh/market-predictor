@@ -30,6 +30,25 @@ RECORD = {"id": "qqq-fixture", "symbol": "QQQ", "ex_date": "2023-12-27", "record
     "payable_date": "2024-01-16", "special": True, "rate": 0.21584}
 
 
+def test_funded_scope_uses_injected_guard_and_preserves_source_pins(
+    scope: ReviewedCashDistributionScope, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from market_predictor.core.errors import MemoryBudgetError
+    from market_predictor.swing.datasets import action_scope
+    expected = verify_action_scope_documents(tmp_path, (scope,))
+    monkeypatch.setattr(action_scope, "assert_system_memory_available",
+        lambda **kwargs: pytest.fail("funded scope called inherited85% guard"))
+    calls: list[str] = []
+    assert verify_action_scope_documents(tmp_path, (scope,), memory_guard=lambda: calls.append("guard")) == expected
+    assert calls == ["guard"]
+
+    def refuse() -> None:
+        raise MemoryBudgetError("UNIT guard refusal")
+
+    with pytest.raises(MemoryBudgetError, match="UNIT guard refusal"):
+        verify_action_scope_documents(tmp_path, (scope,), memory_guard=refuse)
+
+
 @pytest.fixture
 def scope(tmp_path: Path) -> ReviewedCashDistributionScope:
     inventory_path = tmp_path / "inventory.toml"

@@ -73,7 +73,7 @@ def test_news_exception_cannot_waive_other_difference(change: str) -> None:
         comparison._paired_requests(requests)
 
 
-def test_memory_guard_news_delegation_does_not_raise_baseline_ceiling(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_funded_guards_share_requested_ceiling_without_changing_paired_comparison(monkeypatch: pytest.MonkeyPatch) -> None:
     from market_predictor.research import news_runtime_memory
     calls: list[str] = []
     monkeypatch.setattr(news_runtime_memory, "guard", lambda **kwargs: calls.append("news"))
@@ -84,7 +84,7 @@ def test_memory_guard_news_delegation_does_not_raise_baseline_ceiling(monkeypatc
     comparison._comparison_guard(True)
     oof._profile_guard("existing_technical")
     oof._profile_guard(oof.NEWS_PROFILE)
-    assert calls == ["comparison-baseline", "news", "oof-baseline", "news"]
+    assert calls == ["comparison-baseline", "news", "oof-baseline", "oof-baseline"]
 
 
 def _json(root: Path, name: str, value: dict[str, Any]) -> SourcePin:

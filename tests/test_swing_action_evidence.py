@@ -63,3 +63,20 @@ def test_accidental_cached_record_mutation_rejected(inventory: dict[str, Any]) -
     evidence.records_by_symbol.pop("AAA")
     with pytest.raises(DataReadinessError, match="in memory"):
         evidence.recheck(inventory["root"])
+
+
+def test_funded_guard_replaces_old_system_floor_without_changing_evidence(
+    inventory: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from market_predictor.core.system_memory import SystemMemory
+    from market_predictor.research import news_runtime_memory as runtime
+    report = _run(inventory, _empty)
+    original = _load(inventory, report["audit_sha256"])
+    monkeypatch.setattr(action_evidence, "assert_system_memory_available",
+        lambda: pytest.fail("funded projection called inherited85% guard"))
+    monkeypatch.setattr(runtime, "assert_memory_budget", lambda **kwargs: None)
+    monkeypatch.setattr(runtime, "system_memory_snapshot", lambda: SystemMemory(10000, 950))
+    result = load_corporate_action_evidence(root=inventory["root"], config=inventory["config"],
+        archive=inventory["output"], expected_audit_sha256=report["audit_sha256"], memory_guard=runtime.guard)
+    assert result == original
+    result.recheck(inventory["root"])

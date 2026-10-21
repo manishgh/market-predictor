@@ -21,7 +21,64 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: retry active; observed inherited RAM refusals — October21,10:08Z
+### Current execution: RAM repair verified; fresh funded run next — October21,10:29Z
+
+Implemented the human-requested fix. Funded command/action projection and OOF/
+funded provider/corrected-source/action-scope callbacks now share the unchanged
+91%/120second bounded guard. No85%/90% system gate remains on this funded route.
+Unrelated producer defaults and stricter4GiB process-only guards remain unchanged.
+Every new funded request pins the command, consumers and guard dependencies, and
+records91%,120seconds,5second polling,5GiB/.75GiB and no free-RAM floor. Stored
+training/source provenance remains separate; no historical pins or artifacts changed.
+
+Design review passed after preserving production/research layering via callbacks;
+one consolidated code/ML review found no supported findings. Final173focused UNITs
+passed26.93s,3OOF publication/missing-lot/source-drift UNITs passed84.16s; Ruff14files
+and strictmypy6sourcefiles passed. Initial six fixture callback-keyword failures were
+corrected. Broad package-boundary check found an existing return_comparison.py:71
+research import; its bytes equal HEAD (SHA2e3bf3420a948d0e3fab959deda1df13053264a82a7dfaa26decf73a57acdd7a).
+Changed four production consumers pass the scoped import check; unrelated closed
+comparison code is unchanged. Full suite deliberately unrun for this bounded repair.
+
+After commit/push, fresh campaign news_funded_91_20261021, workspace state
+review-results/news-funded-91-20261021, reuses unchanged reviewed funded retry
+operator and originalcompleteSHAa0942413b543ad6cbad9412d5219abc204099e6e0d641815c52f718b6dddbcf5.
+All12policies remain unresolved: previous four RAM failures, one interrupted trial,
+seven unstarted. Preserve every attempt and reuse both passed pairs; no model fit.
+Require actual results before any economic claim. Monitor8980 remains active.
+
+### Historical requested RAM guard repair design — October21,10:15Z
+
+The human requested fixing the code immediately. Identity-verified retry6512 and
+its evaluation descendants were stopped at10:14:09Z; native75310 exited-1 at
+10:14:10Z. Preserve news-funded-retry-memory-fix-interruption.json, all four failed
+result receipts and trial05 partial logs. Trials06–12 were not started. No funded
+result was published. Monitor8980 stays alive; stale heavy-job owner28436 is dead.
+
+Bounded design: replace inherited85%/90% system checks in funded OOF evaluation,
+action record projection, corrected retained-source reads and reviewed action scope
+with the existing news_runtime_memory.guard: strictly below91%, bounded120second
+pressure pause, no absolute free-RAM floor, unchanged5GiB process budget/.75GiB
+headroom and immediate invalid-measurement/process refusal. Record current guard
+and consumer code hashes in each new evaluation request. Preserve historical90%
+training provenance and frozen core/system_memory.py/resources.py bytes. Do not
+change acquisition, reconstruction, numerical features, targets, selection, costs,
+models or published replay artifacts. Stop on source drift; never rewrite old pins.
+
+Design review found a package-boundary constraint: production datasets cannot
+import research modules. Pass an explicit zero-argument guard callback from the
+funded command/evaluator through action projection and corrected-source/scope
+contexts instead. Unrelated producer defaults and historical proof bytes stay
+unchanged. Command and funded-provider wiring are necessarily in scope. There is
+one91% implementation, not a second pause algorithm or configurable numerical policy.
+
+Exit gates: focused UNIT boundary/pause/error and direct-consumer tests, source-pin
+checks, Ruff/strictmypy and one bounded consolidated review. Push the actual fix and
+current docs before a fresh attempt of unresolved policies only. Reuse both passed
+pairs. Operational evidence is the actual funded run, never fixture output. Step7
+alone remains active; no SPY/API/main acceptance claimed.
+
+### Historical inherited RAM refusals — October21,10:08Z
 
 Retry native75310/Python6512 still active. Funded trial01 exited2 at10:01:06Z,
 stderr90.1%used/1.56GiBfree rejected by inherited90%/.75GiB check. Trials02–04
