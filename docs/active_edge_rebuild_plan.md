@@ -21,7 +21,18 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: RAM repair verified; fresh funded run next — October21,10:29Z
+### Current execution: 91% funded evaluation running — October21,10:31Z
+
+Reviewed RAM fix53e06a0 pushed before launch. Fresh native18158/Python5132
+(launcher22404) started10:29:45Z. Campaign news_funded_91_20261021, workspace state
+review-results/news-funded-91-20261021; fresh outer .log/.exit.json. Actual request
+created10:29:46.541196Z, SHAc3c42858087356d0bcc713961d04e60e3c5baae12acfc4912a2d79bbbc1e9c84,
+binds exactly12fundedpolicies and2retainedpairs. First child27012 started10:29:46Z;
+read current canonical owner rather than assuming that PID persists. No results
+claimed yet. Preserve interrupted attempt and all failure receipts. Do not edit
+frozen source/config/runtime or start a duplicate. Monitor8980 stays alive.
+
+### Completed RAM repair verification — October21,10:29Z
 
 Implemented the human-requested fix. Funded command/action projection and OOF/
 funded provider/corrected-source/action-scope callbacks now share the unchanged

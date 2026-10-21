@@ -21,7 +21,21 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: RAM repair verified; fresh funded run next — October21,10:29Z
+### Current execution: 91% funded evaluation running — October21,10:31Z
+
+RAM fix53e06a0 pushed BEFORE launch. CURRENT LIVE native18158/actualPython5132,
+venv-launcher22404 started10:29:45Z. Reviewed operator unchanged SHA below.
+Campaign news_funded_91_20261021; workspace review-results/news-funded-91-20261021,
+outer review-results/news-funded-91-20261021.log/.exit.json. Actual request created
+10:29:46.541196Z SHAc3c42858087356d0bcc713961d04e60e3c5baae12acfc4912a2d79bbbc1e9c84,
+exact12fundedtrials+2retainedpairs. First canonical child27012 started10:29:46Z.
+Do not duplicate/restart or edit source/config/operator/runtime while live. Read
+actual owner and numberedresult/stdout/stderr plus eventualcomplete.json; require
+all12results, retained2pairs, actual hashes and outerexit before completion claim.
+Per-trial failure preserves receipts and continues; source/runtime drift stops.
+Monitor8980/native33710 remains. Onlystep7active; no funded performance claimed.
+
+### Completed RAM repair verification — October21,10:29Z
 
 Actual fix implemented in six source files: command and OOF evaluation own the
 unchanged news_runtime_memory.guard91%/120s; callback passes action_evidence and
