@@ -54,7 +54,36 @@ Primary active policy campaign and91%RAM ceiling unchanged; only step7active.
 
 ### Current execution: approved stock accounting verified — October22
 
-OBSERVED CAPACITY ACTION — October22 14:00Z. C:free space fell from6.89GiB
+CURRENT PUBLISHED BOUNDARY — October22 16:27Z. Price indicators / XGBoost /
+profit target, stop-loss, ten-session limit naturally returned2 and published
+valuation_unavailable at16:26:59.481949Z. All five artifact hashes and both log
+hashes independently rechecked; frozen_inputs_rechecked=true. ResultSHA
+fedeb166856e0f2d51c3d4dfa2bc4776d6c696fdbbc0b52f32ef09f6038de7d0;
+manifestSHAa58f205ac57a171aa9f68eac19f0b447ec150d3286e3b8324c9bad1ada77aa70;
+reportSHA2cf9dae4282767bce058b3e63b2eacf934c8b15775160174d90dee878485f9e3.
+Of17,700 selected decision rows,48 across16 securities remain unavailable for25
+distinct corporate actions:42 cash-dividend decision rows and6 spin-off rows.
+41 rows require corporate-term replay;7 lack bounded entitlement/due-bill dates.
+This report does not identify all exact issuer remedies or authorize guessed terms.
+Do not discard affected lots or zero their returns. Comparisons=null, no funded
+SPY performance; all admission/promotion/serving false. Exact workspace receipt
+review-results/news-stock-accounting-third-valuation-unavailable.json SHA
+2184073dea89b3691c9c497ac797af4e5bbf5f2c6a2a4917999f29d09f61322f.
+First-selection Ridge stock proof stays closed; this is a different model selection.
+
+CURRENT FOURTH POLICY: Price indicators / XGBoost / stop-loss, ten-session limit
+started2026-10-22T16:27:00.007653Z; observed actualworker40004/controller18380.
+Remaining9 executions include this fourth policy. Monitor20744 remains active;
+no finishmarker/outerexit. Inspect actualowner on futurechecks. Do not edit frozen
+source/config/operator/runtime or retry failed policies while currentcampaignlive.
+After natural campaign end, revisit both RAM-failed Ridge policies and diagnose
+exact unavailable-action evidence without weakening gates or repeating closed work.
+C:free recovered to4,954,648,576bytes at16:36Z; cause not established and no agent
+cleanup performed. Previous low-disk warning remains historical, not current capacity.
+Onlystep7active; futureGPUimplementation remains isolated until comparisons/retries
+and required evidence close. No new fit, experiment or completed campaign claimed.
+
+HISTORICAL OBSERVED CAPACITY ACTION — October22 14:00Z. C:free space fell from6.89GiB
 at13:50:33Z to0.68GiB at13:58:54Z; directdrive query627314688bytesfree. Sourceof
 increase not established; currentpagefile allocated11478MiB/used1860MiB is only a
 current measurement, not proof of growth. Only2.3MB of exactownedtesttemporary
@@ -85,7 +114,7 @@ review-results/news-stock-accounting-first-memory-failure.json SHA
 review-results/news-stock-accounting-second-memory-failure.json SHA
 4321af9724d6166e73179d43b5d5185db1530f7f73cd5f8d433b3643737a88f1.
 
-CURRENT THIRD POLICY: Price indicators / XGBoost / profit target, stop-loss,
+HISTORICAL THIRD START: Price indicators / XGBoost / profit target, stop-loss,
 ten-session limit started2026-10-22T13:38:26.549962Z; actualchild40096/parent39472,
 controller18380/native64826 live. Remaining10policiescontinue sequentially. Inspect
 actualcurrentowner, not staleRidgePIDs. Do not retryeitherfailedpolicy or stop/restart/
