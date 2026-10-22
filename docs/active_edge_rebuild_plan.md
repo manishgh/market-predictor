@@ -21,39 +21,64 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: documented daughter-share treatment approved — October22
+### Current execution: approved stock accounting verified — October22
 
-Human answered "Yes, fetch and apply that stock treatment". Exact proposalSHA
-728f0c0d20578489664b3444a70cabf0ea1a4e66476919c7d369d53b32c5c959;
-approval receipt review-results/documented-spin-off-policy-approval.json SHA
+Implementation **bb917b2** is pushed. Human approval remains exact proposalSHA
+728f0c0d20578489664b3444a70cabf0ea1a4e66476919c7d369d53b32c5c959 and receiptSHA
 9825d6ad73a51dc9718558c797df1527e732fe31928a7f89018ac3112c46afb9.
-Fetch only missing ZIMV raw unadjusted SIP1Dayprices2022-03-01..2022-03-11.
-For documented ZBH/ZIMV and MMM/SOLV retain parent units, credit exact issuer
-daughter ratio using proportional normalized fractions, sell daughter shares with
-parent using matching raw open/close at existing research exit clock. Existing
-20/40bpslotcosts and12policies unchanged. No tax/unknown action/feature/model/target/
-selection changes. Do not ask again.
+The approved ZBH/ZIMV and MMM/SOLV daughter shares now enter canonical accounting
+at issuer ratios0.1/0.25 and sell with the parent at corresponding raw open/close.
+Parent raw ATR, barrier, trigger, fill and20/40bpslotcosts remain unchanged.
+Only exact source-pinned documented events are admitted; unknown actions remain
+valuation_unavailable and no selected lot is removed. No model/feature/target refit.
 
-Prior finish marker preserved as news-oct20-finished-accounting-wait-20261021T222855.json
-SHA8997e14c35df0489c866aa1818617f9dabbd2bdffa96b730c0e714524a67714c.
-Reviewed monitor restarted native3851/accounting-spin-monitor.log; inspect actualPID.
-Heartbeat ACTIVE, no current finish marker/backtest. Sole RAM ceiling91% unchanged.
-Next exact-request acquisition, canonical stock-event/exit implementation, focused
-checks/consolidated review/actual holding proof, then fresh frozen comparisons.
-All earlier completed proofs remain closed. Only step7active; no portfolio result.
+ACTUAL REAL-DATA STOCK PROOF CLOSED. Native96027/Python18188 naturally exited0 at
+2026-10-22T09:58:46.7462080Z. Workspace
+review-results/accounting-documented-spin-off-real.json SHA
+ db349ec271768fc4d8a8a67435c793ff73fb85bfa5151badc542a15ed55c61dc,
+status passed_real_documented_spin_off_accounting. All17700 first price-indicator/
+Ridge selections retain selectedSHA6d691a7e0b0d722c3adb47327d5ea77f98d9e270ade88a23638c84481a5b6dc5;
+1935 earlier action-gated selections now0. Final10 restored=9ZBH+1MMM holdings.
+All10actual holdings x both frozen exits=20canonical replays reconcile independent
+raw parent fill + issuer daughter ratio x independently read raw daughter price;
+20bpscost exactly once, two complete sale settlements, no remaining owned shares.
+Parent rawATR and pre-remedy raw-path exitday/reason remain exact. This proves
+accounting for this saved selection, not all twelve portfolios or performance.
+Preserve documented-spin-off-real-binding-corrected.log/.exit.json and failed first
+attempt documented-spin-off-real.log/.exit.json. First attempt refused an absolute
+SOLV registry key; only derived key representation corrected, original prices unchanged.
+Exact remedy receipt review-results/documented-spin-registry-binding-correction.json.
 
-ACTUAL NARROW PRICE ACQUISITION COMPLETE. review-results/zimv-price-acquisition-real.json
-SHA8a64d273d7fbbc99fc058681a2ede6045b95a74386020c480fb509a2f4398c9a:
-9actual raw SIP1Daybars March1-11,2022, canonical transport/query/OHLCV checks,
-separate pinned projection/selection; original source selection unchanged. Archive
- data/raw/swing_documented_spin_prices_20261022/ff6b285510263ebe0a1d2e51d0cbb654969153e96181c4f8b63aa9e55c3d5b9f.
-Original provider bytes and exact request/transport/receipt retained; no mocks.
-Necessary daughter-action coverage queried only ZIMV/SOLV across the frozen process-
-date span2019-07-09..2024-05-28 (process dates alone cannot limit economic dates).
-Each actual response has one known parent spin-off and one same-CUSIP when-issued
-to regular-way name change, no other records or page. Exact receipt/report:
-review-results/documented-daughter-action-coverage.json. These are facts, not yet
-accounting admission. No wider price collection, source rebuild, features or fits.
+Current approved policy configs/swing_backtest_documented_spin_offs.toml SHA
+1f05c75549423322f52086e6789b7d549c90907e3881dfe1cfcb7361ac3e59ca;
+reviewed facts data/research/swing_backtest_reviewed_documented_spin_offs.json SHA
+0f16c7ca3dd8f5690336799a3677b90be2711d6f55e7cca12ed236a185bf8c22.
+Exact9ZIMV raw SIP daily bars March1-11 retained in separate archive;
+price-acquisition real reportSHA8a64d273d7fbbc99fc058681a2ede6045b95a74386020c480fb509a2f4398c9a.
+Retained SOLV source unchanged. Necessary ZIMV/SOLV action queries return only known
+parent spin and same-CUSIP when-issued-to-regular-way name change. Original sources
+and selections unchanged. No repeated acquisition or completed proof rerun.
+
+Component checks:279affected UNIT cases (214holding/exit/cash/source25.14s,
+61fundedledger13.35s,4OOFpublication/mutation110.14s); final derived-registry recheck
+14stockUNITs passed6.72s with fresh workspace basetemp (system pytest temp inaccessible).
+Ruff7source/testfiles and strictmypy5source modules pass; workspace operators pass
+repository-configured Ruff. One consolidated author code/ML review, supported
+settlement-provenance and duplicate-entitlement findings closed; no independent
+review claimed. Full suite deliberately unrun for component scope. CRLF-aware Git
+whitespace check passed; hash-bound config bytes retained under -text attributes.
+Holding-accounting core/wire unchanged. All admission/serving/promotion remainfalse.
+
+NEXT: fresh immutable12-policy comparison using approved current policy and actual
+stock proof, reuse two completed paired reports, no refit/paired rerun. Reviewed
+workspace operator work/run_documented_accounting_backtests.py SHA
+389ee56ef90638d12b14aebad67b52bd6708cbded401101dccc59f00a6d77645.
+Prior interrupted campaign outputs remain historical; never restart or overwrite.
+Require actual all12result receipts +2retainedpairs +complete.json +naturalexit and
+artifact hashes before closure. No SPY outperformance or full portfolio return yet.
+Monitor native3851/Python20744 remains active, no current finish marker.
+Sole RAM91% ceiling/120s bounded pause/5s poll unchanged; no lower startup gate.
+Only step7 active. Close this documentation checkpoint before launching comparisons.
 
 ### Historical accounting closure before stock approval
 
