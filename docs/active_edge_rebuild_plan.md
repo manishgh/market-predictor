@@ -78,7 +78,37 @@ Require actual all12result receipts +2retainedpairs +complete.json +naturalexit 
 artifact hashes before closure. No SPY outperformance or full portfolio return yet.
 Monitor native3851/Python20744 remains active, no current finish marker.
 Sole RAM91% ceiling/120s bounded pause/5s poll unchanged; no lower startup gate.
-Only step7 active. Close this documentation checkpoint before launching comparisons.
+Only step7 active. Documentation closure ea1f55c was pushed before launching comparisons.
+
+
+LIVE FRESH FROZEN COMPARISONS — October22 10:02Z. Native64826; actual controller
+Python18380/launcher32304. Campaign news_stock_accounting_20261022, workspace
+review-results/news-stock-accounting-20261022; outer .log/.exit.json at workspace
+review-results/news-stock-accounting-20261022.log/.exit.json. Actual accepted
+requestSHA95860a88995992c80b1aef70669f5e457fc24ce221a162ccf2b3766f25630304.
+Reviewed operator work/run_stock_accounting_backtests.py SHA
+356a05f89b95c94890dc8ea359adb03d4d4c360410eee2183ebc01ad6f985441;
+Ruff passes. Preserves exact12policies plus2original paired results, current stock
+proof/policy and earlier closed accounting proof hashes. No fit or paired rerun.
+First child actualPython26664/CLIlauncher35112/Pythonlauncher36104 started
+2026-10-22T10:02:47.263129Z: Price indicators / Ridge / profit target, stop-loss,
+ten-session limit. Future checks must inspect current owner, not stale first PID.
+Do not duplicate/restart campaign or edit frozen src/config/operator/runtime live.
+All12numberedresultreceipts +2retainedpairs +complete.json +naturalexit +artifact
+hashes required for closure. Unknown gaps and every selected lot/zero day retained.
+No full portfolio performance or SPY outperformance claimed. Only step7active.
+
+First fresh-operator preflight news-documented-stock-20261022.log/.exit.json refused
+its workspace proof through repo-only path handling; no state directory, child or
+backtest output created. Original operator/log/exit retained. The new reviewed
+operator allows only the exact saved workspace proof path with unchanged SHA and
+source/implementation checks. No source/config change or old campaign restart.
+
+Monitor native3851/Python20744 active; read actual current owner/RAM in
+review-results/news-oct20-monitor-state.json. Heartbeat ACTIVE with this live state.
+No current finish marker. At actual workend write fresh news-oct20-finished.json,
+verify monitor naturalexit/monitor_and_idle_hold_released/no ownedheavyjob then
+pause heartbeat. All earlier closed proofs and older finish/stop receipts preserved.
 
 ### Historical accounting closure before stock approval
 
