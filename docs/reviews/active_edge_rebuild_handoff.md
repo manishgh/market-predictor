@@ -54,28 +54,35 @@ Primary active policy campaign and91%RAM ceiling unchanged; only step7active.
 
 ### Current execution: approved stock accounting verified — October22
 
-CURRENT MEANINGFUL FAILURE — October22 11:14Z. Price indicators / Ridge / profit
-target, stop-loss, ten-session limit exited2 before publication. Actual sole91% RAM
-guard paused/resumed88.84s,5.60s,49.81s, then remained above91% for120.605628s and
-stopped at2026-10-22T11:14:24.601795Z (91.5772556707186%used). Canonical child
-26664 naturally returned2; controller result finished11:14:47.662026Z, statusfailed,
-frozen_inputs_rechecked=true. No funded manifest/performance result published.
-The operator's FileNotFoundError for _manifest.json is secondary to this guard exit;
-not evidence of accounting failure, a model loss, or changed inputs. Preserve exact
-01.started/result/stdout/stderr. First resultSHA
-06a0bb8a1710b89aa6cbde248b8747159a0e976c51a86101a9df64cb312f9581;
-exactstderrSHAba2f7cc7a94e5504b64e2cebc9896c248c2a863f39c72228cf9fde26eaf84287.
-Read-only diagnosis review-results/news-stock-accounting-first-memory-failure.json
-SHA76a76bf7783cd9a6a6085d9e53033a146bb45968fe8a840a4e4807fe4e645d27.
+CURRENT MEANINGFUL FAILURES — October22. Both Price indicators / Ridge exit
+policies FAILED BEFORE publication under unchanged91%RAM/120second boundedpause.
+Profit target, stop-loss, ten-session limit: firstchild26664 naturalreturn2,
+timeout2026-10-22T11:14:24.601795Z at91.5772556707186% after120.605628s;
+resultfinished11:14:47.662026Z, frozen_inputs_rechecked=true,
+resultSHA06a0bb8a1710b89aa6cbde248b8747159a0e976c51a86101a9df64cb312f9581;
+stderrSHAba2f7cc7a94e5504b64e2cebc9896c248c2a863f39c72228cf9fde26eaf84287.
+Stop-loss, ten-session limit: secondchild40088 naturalreturn2,
+timeout2026-10-22T13:37:30.919569Z at92.35071669792892% after120.456898s;
+resultfinished13:38:26.165558Z, frozen_inputs_rechecked=true,
+resultSHAcb14e91cbf8737d4e818a4d37494978a4fdfe0b8e70eb359655590373103e4c3;
+stderrSHA3ec6ea485e382bf219fc76872052bc2b18f58fd3b6c06b5375cc2144092e7095.
+No funded manifest or performance result from either. Operator _manifest.json
+FileNotFoundError is secondary to each guard exit; not accounting refusal/model loss.
+Exact01/02started/result/stdout/stderr preserved. Read-only diagnoses workspace
+review-results/news-stock-accounting-first-memory-failure.json SHA
+76a76bf7783cd9a6a6085d9e53033a146bb45968fe8a840a4e4807fe4e645d27 and
+review-results/news-stock-accounting-second-memory-failure.json SHA
+4321af9724d6166e73179d43b5d5185db1530f7f73cd5f8d433b3643737a88f1.
 
-CURRENT NEXT POLICY: Price indicators / Ridge / stop-loss, ten-session limit started
-2026-10-22T11:14:48.519232Z. Actual child40088/launchers23220,35036; controller
-18380/native64826 remains live. Inspectactualowner on future checks. Remaining11
-policies continue sequentially. Do not retryfirst/stopexisting/restartcampaign or
-edit frozen src/config/operator/runtime live. No ceiling change/lowerstartupgate,
-no unrelated process termination. Revisit missing first result only after current
-campaign naturally ends; originalreceipts immutable, no claimed completed12campaign.
-Monitor20744/native3851 active, no finishmarker. Only step7active.
+CURRENT THIRD POLICY: Price indicators / XGBoost / profit target, stop-loss,
+ten-session limit started2026-10-22T13:38:26.549962Z; actualchild40096/parent39472,
+controller18380/native64826 live. Remaining10policiescontinue sequentially. Inspect
+actualcurrentowner, not staleRidgePIDs. Do not retryeitherfailedpolicy or stop/restart/
+duplicatecampaign or editfrozensrc/config/operator/runtime whilelive. Revisit BOTH
+missingresults onlyafter currentcampaignnaturallyends, preserveoriginalreceipts.
+No91%ceiling change/lowerstartupgate/unrelatedprocess termination. No claimed
+completed12campaign, nofundedSPYresult. Monitor20744/native3851 active/no finishmarker.
+Onlystep7active; futureGPUbranch remainsisolated. No source/feature/model change.
 
 Implementation **bb917b2** is pushed. Human approval remains exact proposalSHA
 728f0c0d20578489664b3444a70cabf0ea1a4e66476919c7d369d53b32c5c959 and receiptSHA
