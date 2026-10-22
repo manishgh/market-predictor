@@ -54,7 +54,7 @@ Primary active policy campaign and91%RAM ceiling unchanged; only step7active.
 
 ### Current execution: approved stock accounting verified — October22
 
-CURRENT PUBLISHED BOUNDARY — October22 16:27Z. Price indicators / XGBoost /
+EARLIER PUBLISHED BOUNDARY — October22 16:27Z. Price indicators / XGBoost /
 profit target, stop-loss, ten-session limit naturally returned2 and published
 valuation_unavailable at16:26:59.481949Z. All five artifact hashes and both log
 hashes independently rechecked; frozen_inputs_rechecked=true. ResultSHA
@@ -71,17 +71,38 @@ review-results/news-stock-accounting-third-valuation-unavailable.json SHA
 2184073dea89b3691c9c497ac797af4e5bbf5f2c6a2a4917999f29d09f61322f.
 First-selection Ridge stock proof stays closed; this is a different model selection.
 
-CURRENT FOURTH POLICY: Price indicators / XGBoost / stop-loss, ten-session limit
-started2026-10-22T16:27:00.007653Z; observed actualworker40004/controller18380.
-Remaining9 executions include this fourth policy. Monitor20744 remains active;
-no finishmarker/outerexit. Inspect actualowner on futurechecks. Do not edit frozen
-source/config/operator/runtime or retry failed policies while currentcampaignlive.
-After natural campaign end, revisit both RAM-failed Ridge policies and diagnose
-exact unavailable-action evidence without weakening gates or repeating closed work.
-C:free recovered to4,954,648,576bytes at16:36Z; cause not established and no agent
-cleanup performed. Previous low-disk warning remains historical, not current capacity.
-Onlystep7active; futureGPUimplementation remains isolated until comparisons/retries
-and required evidence close. No new fit, experiment or completed campaign claimed.
+CURRENT BOUNDARY — October22 19:21Z. Price indicators / XGBoost / stop-loss,
+ten-session limit naturally returned2 and published valuation_unavailable at
+19:12:09.459401Z. Five artifact and two log hashes verified; frozen inputs rechecked.
+ResultSHA90e996664fa526fc2063b9737658fe9998d38f4f1a991fdce9d75b2b530b442f;
+manifestSHAc32b01154585942744d8ce04d0046d6a72db18eb542888b8bc0b8caf54908664;
+reportSHA39ada66230541f0bbebce51b89b5944d165d03c2eb56fd315a1c75cee09bf655.
+Same selected parquet as target+stop policy;48 of17,700 selected decisions across
+16securities/25actions unavailable,41 corporate-term replay and7 unbounded dates.
+Comparisons=null; both published reports have no funded SPY performance.
+
+Price indicators and relationships / Ridge / profit target, stop-loss, ten-session
+limit naturally returned2 BEFORE publication. Pause19:19:12.601729Z at93.411008%;
+timeout19:21:12.687592Z after120.085587s at93.262281%; resultfinished
+19:21:14.612539Z, frozen_inputs_rechecked=true. ResultSHA
+8310b89f3e8ffd76fffdeaa6324692e84f2d6944c7927e917fcb7494a6c77064;
+stderrSHAadc5daf4105f20e7639deba87d48cc40059d229ef31047874daec3d31ba784d6.
+Missing manifest is secondary to unchanged91%RAM guard; no accounting or performance
+result published. Three RAM-failed policies now require later reconsideration.
+Exact workspace verification/diagnosis receipt
+review-results/news-stock-accounting-fourth-report-fifth-memory-failure.json SHA
+15265006fbf2d95921eba0a7d19ea320b87140940266cba52ac02860a9e40bba.
+
+CURRENT SIXTH POLICY: Price indicators and relationships / Ridge / stop-loss,
+ten-session limit started2026-10-22T19:21:15.118777Z, observedactualworker41628/
+launcher8616/controller18380/native64826. Inspect actualowner nextcheck; monitor
+20744 active, no finishmarker/outerexit. Seven remaining executions include sixth.
+Five executions ended:2published unavailable reports/3RAM failures,0funded results.
+Continue current campaign naturally; no retry, restart, duplicate or frozen source/
+config/operator/runtime edit whilelive. After naturalend revisit ALLmissing results
+and exact unavailable actions, preserving all receipts/rows/gates. No guessed terms,
+zero returns or filtered lots. C:free5,068,697,600bytes at19:21Z; noagentcleanup.
+Onlystep7active. FutureGPU remainsisolated until comparisons/retries/evidence close.
 
 HISTORICAL OBSERVED CAPACITY ACTION — October22 14:00Z. C:free space fell from6.89GiB
 at13:50:33Z to0.68GiB at13:58:54Z; directdrive query627314688bytesfree. Sourceof
