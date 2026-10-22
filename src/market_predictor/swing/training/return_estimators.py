@@ -1,6 +1,7 @@
 """Train-only missing-value encoding and bounded, weighted return regressors."""
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -94,8 +95,10 @@ def fit_return_regressor(
     if family == "regularized_linear_return":
         estimator = Ridge(**fitted_parameters)
     else:
-        from xgboost import XGBRegressor
+        from xgboost import XGBRegressor, build_info
 
+        if fitted_parameters.get("device") == "cuda" and build_info().get("USE_CUDA") is not True:
+            raise ValueError("CUDA training requires a CUDA-enabled XGBoost build")
         estimator = XGBRegressor(**fitted_parameters)
     with threadpool_limits(limits=1):
         encoded, medians = _encode(features, None)
@@ -106,6 +109,10 @@ def fit_return_regressor(
             if not np.isfinite(encoded).all():
                 raise ValueError("scaled features must be finite")
         estimator.fit(encoded, labels, sample_weight=weights)
+        if fitted_parameters.get("device") == "cuda":
+            actual = json.loads(estimator.get_booster().save_config())["learner"]["generic_param"]["device"]
+            if actual != "cuda:0":
+                raise ValueError(f"CUDA training requested but fitted XGBoost used {actual!r}; CPU fallback refused")
     return FittedReturnRegressor(family, names, medians, scaler, estimator, fitted_parameters)
 
 

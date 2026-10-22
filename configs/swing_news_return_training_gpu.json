@@ -1,0 +1,46 @@
+{
+  "boosted": {
+    "colsample_bytree": 1.0,
+    "device": "cuda",
+    "learning_rate": 0.05,
+    "max_depth": 3,
+    "min_child_weight": 1.0,
+    "n_estimators": 200,
+    "n_jobs": 1,
+    "objective": "reg:squarederror",
+    "random_state": 42,
+    "reg_alpha": 0.0,
+    "reg_lambda": 10.0,
+    "subsample": 1.0,
+    "tree_method": "hist"
+  },
+  "embargo_sessions": 10,
+  "feature_profile": "technical_relationships_news",
+  "final_fit": "two_models_all_initial_fit_supervision",
+  "folds": 4,
+  "holdout_assignment": "unseeded_sha256_security_id_first_64_bits",
+  "holdout_fraction": 0.2,
+  "linear": {
+    "alpha": 1.0,
+    "fit_intercept": true,
+    "max_iter": 10000,
+    "solver": "lsqr",
+    "tol": 1e-06
+  },
+  "minimum_train_sessions": 503,
+  "missingness": "training_median_all_empty_zero_all_column_indicators",
+  "preprocessing_scope": "separately_fitted_per_fold_and_evaluation_scope",
+  "published_profile": "technical_relationships_news",
+  "readiness": {
+    "path": "data/reports/swing_news_initial_fit_readiness.json",
+    "sha256": "177ae2477bb538909cbd770a6d0ae16cd20ce40b6180220cbd72de83642d0c98"
+  },
+  "readiness_config": {
+    "path": "configs/swing_news_training_readiness.json",
+    "sha256": "6adb5ef757d396200296bf66cb29ababc15ad4117c3def06350e6b4bba797fc0"
+  },
+  "schema_version": "market_predictor.swing_return_training",
+  "scope": "initial_fit_research_only",
+  "target": "spy_fixed_horizon_excess_return",
+  "weighting": "equal_date_total_mean_row_one"
+}

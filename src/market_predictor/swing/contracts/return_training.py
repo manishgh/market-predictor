@@ -20,6 +20,7 @@ class LinearReturnSettings(HoldingContract):
 class BoostedReturnSettings(HoldingContract):
     objective: Literal["reg:squarederror"]
     tree_method: Literal["hist"]
+    device: Literal["cuda"] | None = Field(default=None, exclude_if=lambda value: value is None)
     max_depth: Literal[3]
     n_estimators: Literal[200]
     learning_rate: float = Field(ge=0.05, le=0.05)
