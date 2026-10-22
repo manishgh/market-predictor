@@ -23,6 +23,29 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 
 ### Current execution: approved stock accounting verified — October22
 
+CURRENT MEANINGFUL FAILURE — October22 11:14Z. Price indicators / Ridge / profit
+target, stop-loss, ten-session limit exited2 before publication. Actual sole91% RAM
+guard paused/resumed88.84s,5.60s,49.81s, then remained above91% for120.605628s and
+stopped at2026-10-22T11:14:24.601795Z (91.5772556707186%used). Canonical child
+26664 naturally returned2; controller result finished11:14:47.662026Z, statusfailed,
+frozen_inputs_rechecked=true. No funded manifest/performance result published.
+The operator's FileNotFoundError for _manifest.json is secondary to this guard exit;
+not evidence of accounting failure, a model loss, or changed inputs. Preserve exact
+01.started/result/stdout/stderr. First resultSHA
+06a0bb8a1710b89aa6cbde248b8747159a0e976c51a86101a9df64cb312f9581;
+exactstderrSHAba2f7cc7a94e5504b64e2cebc9896c248c2a863f39c72228cf9fde26eaf84287.
+Read-only diagnosis review-results/news-stock-accounting-first-memory-failure.json
+SHA76a76bf7783cd9a6a6085d9e53033a146bb45968fe8a840a4e4807fe4e645d27.
+
+CURRENT NEXT POLICY: Price indicators / Ridge / stop-loss, ten-session limit started
+2026-10-22T11:14:48.519232Z. Actual child40088/launchers23220,35036; controller
+18380/native64826 remains live. Inspectactualowner on future checks. Remaining11
+policies continue sequentially. Do not retryfirst/stopexisting/restartcampaign or
+edit frozen src/config/operator/runtime live. No ceiling change/lowerstartupgate,
+no unrelated process termination. Revisit missing first result only after current
+campaign naturally ends; originalreceipts immutable, no claimed completed12campaign.
+Monitor20744/native3851 active, no finishmarker. Only step7active.
+
 Implementation **bb917b2** is pushed. Human approval remains exact proposalSHA
 728f0c0d20578489664b3444a70cabf0ea1a4e66476919c7d369d53b32c5c959 and receiptSHA
 9825d6ad73a51dc9718558c797df1527e732fe31928a7f89018ac3112c46afb9.
@@ -90,7 +113,7 @@ Reviewed operator work/run_stock_accounting_backtests.py SHA
 356a05f89b95c94890dc8ea359adb03d4d4c360410eee2183ebc01ad6f985441;
 Ruff passes. Preserves exact12policies plus2original paired results, current stock
 proof/policy and earlier closed accounting proof hashes. No fit or paired rerun.
-First child actualPython26664/CLIlauncher35112/Pythonlauncher36104 started
+Historical first child actualPython26664/CLIlauncher35112/Pythonlauncher36104 started
 2026-10-22T10:02:47.263129Z: Price indicators / Ridge / profit target, stop-loss,
 ten-session limit. Future checks must inspect current owner, not stale first PID.
 Do not duplicate/restart campaign or edit frozen src/config/operator/runtime live.
