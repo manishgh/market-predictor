@@ -42,6 +42,19 @@ Next exact-request acquisition, canonical stock-event/exit implementation, focus
 checks/consolidated review/actual holding proof, then fresh frozen comparisons.
 All earlier completed proofs remain closed. Only step7active; no portfolio result.
 
+ACTUAL NARROW PRICE ACQUISITION COMPLETE. review-results/zimv-price-acquisition-real.json
+SHA8a64d273d7fbbc99fc058681a2ede6045b95a74386020c480fb509a2f4398c9a:
+9actual raw SIP1Daybars March1-11,2022, canonical transport/query/OHLCV checks,
+separate pinned projection/selection; original source selection unchanged. Archive
+ data/raw/swing_documented_spin_prices_20261022/ff6b285510263ebe0a1d2e51d0cbb654969153e96181c4f8b63aa9e55c3d5b9f.
+Original provider bytes and exact request/transport/receipt retained; no mocks.
+Necessary daughter-action coverage queried only ZIMV/SOLV across the frozen process-
+date span2019-07-09..2024-05-28 (process dates alone cannot limit economic dates).
+Each actual response has one known parent spin-off and one same-CUSIP when-issued
+to regular-way name change, no other records or page. Exact receipt/report:
+review-results/documented-daughter-action-coverage.json. These are facts, not yet
+accounting admission. No wider price collection, source rebuild, features or fits.
+
 ### Historical accounting closure before stock approval
 
 Implementation13d9d44 is pushed. The single retained RJF2023-04-13 rate1.3stock-dividend
