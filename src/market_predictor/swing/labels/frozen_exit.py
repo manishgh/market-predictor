@@ -23,6 +23,7 @@ from market_predictor.swing.contracts.holding_accounting import (
     HoldingContract,
     HoldingSpecification,
     KnownMark,
+    SimulationReference,
     Timestamp,
 )
 from market_predictor.swing.contracts.research import SwingResearchContract
@@ -236,8 +237,26 @@ def compile_frozen_exit(
             position_id=position, security_id=specification.security_id,
             fraction_of_owned=1.0, price_per_unit=fill, currency="USD",
             proceeds_id=f"{specification.decision_id}:{exit_policy}:proceeds", reason="managed_exit")
+        assert sale.order is not None
+        daughter_sales: list[ExecutionEvent] = []
+        for distribution in specification.events:
+            if (corporate_simulation is None or not isinstance(distribution, CorporateActionEvent)
+                    or not distribution.event_id.startswith("simulated-spin-off:") or distribution.effective_at is None
+                    or distribution.effective_at > at or distribution.owned_position_id != position):
+                continue
+            for leg in distribution.legs:
+                mark = marks.get((leg.position_id, at))
+                if not isinstance(mark, KnownMark) or mark.currency != "USD" or mark.value_per_unit <= 0:
+                    return FrozenExitResult(**identity, missing_reasons=(AccountingGap(
+                        code="exit_daughter_raw_price_unavailable", reference_id=f"{leg.security_id}:{day}"),))
+                assumption = SimulationReference(**corporate_simulation.policy_reference.model_dump(), basis="research_assumption")
+                daughter_sales.append(ExecutionEvent(event_id=f"{sale.event_id}:daughter:{leg.position_id}",
+                    effective_at=at, order=sale.order + 1 + len(daughter_sales), evidence=(*mark.evidence, assumption),
+                    position_id=leg.position_id, security_id=leg.security_id, fraction_of_owned=1.0,
+                    price_per_unit=mark.value_per_unit, currency="USD", proceeds_id=f"{leg.position_id}:sale-proceeds",
+                    reason="managed_exit"))
         compiled = HoldingSpecification.model_validate({**specification.model_dump(), "policy": "managed",
-            "events": (*specification.events, sale)})
+            "events": (*specification.events, sale, *daughter_sales)})
         replay = simulate_ordinary_sales(compiled, simulation, corporate_simulation=corporate_simulation)
         gaps = tuple(AccountingGap(code=code, reference_id=reference) for code, reference in sorted({
             (gap.code, gap.reference_id) for snapshot in replay.outcome.snapshots for gap in snapshot.gaps}))

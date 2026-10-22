@@ -102,7 +102,10 @@ def simulate_ordinary_sales(spec: HoldingSpecification, context: TradeSimulation
         payment_id, cash_id, pending_id = prefix + ":payment", prefix + ":cash", prefix + ":pending"
         order = max((event.order for event in events if event.effective_at == reuse and event.order is not None),
             default=-1) + 1
-        evidence = (*sale.evidence, SimulationReference(**context.policy_reference.model_dump(), basis="research_assumption"))
+        # The source-price/exit assumption stays on its validated execution. A
+        # generated settlement carries raw price evidence and its own cash clock.
+        evidence = (*(ref for ref in sale.evidence if not isinstance(ref, SimulationReference)),
+            SimulationReference(**context.policy_reference.model_dump(), basis="research_assumption"))
         events.extend((
             PaymentEvent(event_id=payment_id, effective_at=reuse, order=order, evidence=evidence,
                 claim_id=sale.proceeds_id, amount_per_claim_unit=1.0, currency="USD", pending_proceeds_id=pending_id),

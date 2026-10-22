@@ -87,7 +87,9 @@ IMPLEMENTATION_PATHS = (
     "swing/contracts/backtest_corporate_actions.py", "swing/datasets/backtest_corporate_actions.py",
     "swing/datasets/reviewed_action_dates.py", "swing/datasets/reviewed_action_sources.py",
     "swing/datasets/reviewed_cash_payouts.py", "swing/datasets/reviewed_parent_units.py",
-    "swing/datasets/reviewed_action_dispositions.py",
+    "swing/datasets/reviewed_action_dispositions.py", "swing/datasets/reviewed_spin_offs.py",
+    "swing/datasets/history_archive.py", "swing/datasets/holding_raw_sources.py",
+    "swing/datasets/corporate_action_collection.py", "sources/alpaca.py", "sources/alpaca_corporate_actions.py",
 )
 
 

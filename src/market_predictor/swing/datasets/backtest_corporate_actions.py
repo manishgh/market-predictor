@@ -36,11 +36,12 @@ from market_predictor.swing.contracts.holding_accounting import (
 )
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.action_evidence import CorporateActionEvidence
-from market_predictor.swing.datasets.action_windows import ActionWindow
+from market_predictor.swing.datasets.action_windows import ActionWindow, action_window
 from market_predictor.swing.datasets.reviewed_action_dates import load_reviewed_action_dates
 from market_predictor.swing.datasets.reviewed_action_dispositions import load_reviewed_record_dispositions
 from market_predictor.swing.datasets.reviewed_cash_payouts import load_reviewed_cash_payouts
 from market_predictor.swing.datasets.reviewed_parent_units import load_reviewed_parent_spin_units
+from market_predictor.swing.datasets.reviewed_spin_offs import load_reviewed_spin_offs
 
 
 def load_backtest_corporate_action_context(root: Path, pin: SourcePin) -> BacktestCorporateActionContext:
@@ -245,6 +246,34 @@ class BacktestCorporateActions:
             self.terms[fact.symbol, cash_identity] = _Terms(cash_identity, "cash_dividends", fact.symbol, fact.ex_date,
                 fact.declared_rate_usd, reference)
 
+        self.reviewed_spin_offs, spin_pins = load_reviewed_spin_offs(root, context.policy.reviewed_spin_offs,
+            self._records, self.reviewed_dates, approved=context.policy.documented_spin_offs is not None,
+            policy_sha256=context.policy.sha256(), retrieved_at=context.policy_reference.retrieved_at, memory_guard=memory_guard)
+        for name, digest in spin_pins.items():
+            if name in self.source_files and self.source_files[name] != digest:
+                raise DataReadinessError("documented spin cannot replace a different retained source pin")
+        self.source_files.update(spin_pins)
+        for inputs in self.reviewed_spin_offs.values():
+            for family, record in inputs.actions:
+                child_action_id = record.get("id")
+                if not isinstance(child_action_id, str) or not child_action_id.strip():
+                    raise DataReadinessError("documented daughter action has no exact identity")
+                existing = self._records.get(child_action_id)
+                if existing is not None and (family != existing[0] or json_sha256(record) != json_sha256(existing[1])):
+                    raise DataReadinessError("documented daughter action conflicts with retained record")
+                self._records[child_action_id] = family, record
+        for inputs in self.reviewed_spin_offs.values():
+            spin_fact = inputs.fact
+            first, last = spin_fact.ex_date, max(inputs.evidence, default=spin_fact.ex_date)
+            for family, record in inputs.actions:
+                if family == "spin_offs" and record["id"] == spin_fact.action_id:
+                    continue
+                participants = {value for key, value in record.items() if "symbol" in key and isinstance(value, str)}
+                window = action_window(family, record)
+                if (spin_fact.daughter_symbol not in participants or window.intersects(first, last)
+                        and self.irrelevance_reason(spin_fact.daughter_symbol, window, first, last) is None):
+                    raise DataReadinessError("documented daughter has an unresolved intervening corporate action")
+
     def irrelevance_reason(self, symbol: str, window: ActionWindow, first: date, last: date,
         *, price_history: bool = False) -> str | None:
         """Explain why an exact action cannot affect this newly opened position.
@@ -341,6 +370,11 @@ class BacktestCorporateActions:
         return None
 
     def resolves(self, symbol: str, window: ActionWindow) -> bool:
+        spin = self.reviewed_spin_offs.get(window.action_id)
+        if spin is not None and symbol == spin.fact.source_symbol and window.family == "spin_offs":
+            return (window.unavailable_reason in {"corporate_terms_require_replay", "unbounded_entitlement_or_due_bill_dates"}
+                and (window.first_relevant_date is None or window.first_relevant_date <= spin.fact.ex_date)
+                and (window.last_relevant_date is None or spin.fact.ex_date <= window.last_relevant_date))
         reviewed = self.reviewed_cash_aliases.get((symbol, window.action_id))
         term = self.terms.get((symbol, reviewed or window.action_id))
         if reviewed is not None:
@@ -396,4 +430,33 @@ class BacktestCorporateActions:
             if day in observations.index and day in refs:
                 marks.append(KnownMark(position_id=position, mark_at=close, value_per_unit=float(observations.loc[day, "close"]),
                     currency="USD", evidence=(refs[day],)))
+        for inputs in self.reviewed_spin_offs.values():
+            fact = inputs.fact
+            opening = calendar.session_open(fact.ex_date.isoformat()).to_pydatetime()
+            if fact.source_symbol != symbol or not spec.initial_entry_timestamp < opening <= spec.session_end_timestamps[-1]:
+                continue
+            prefix = "simulated-spin-off:" + json_sha256({"decision": spec.decision_id,
+                "action": fact.action_id, "policy": self.context.policy.sha256()})
+            pin = self.context.policy.reviewed_spin_offs
+            assert pin is not None
+            reference = EvidenceReference(reference=pin.path, artifact_sha256=pin.sha256,
+                interpretation_policy_sha256=self.context.policy.sha256(), record_locator=f"documented spin={fact.action_id}",
+                retrieved_at=self.context.policy_reference.retrieved_at, available_at=None)
+            assumption = SimulationReference(**self.context.policy_reference.model_dump(), basis="research_assumption")
+            daughter = prefix + ":daughter"
+            events.append(CorporateActionEvent(event_id=prefix, effective_at=opening, order=len(events),
+                evidence=(reference, assumption), owned_position_id=spec.initial_position_id, owned_security_id=spec.security_id,
+                treatment="distribution", fractional_treatment="proportional", legs=(PositionLeg(position_id=daughter,
+                    security_id=fact.daughter_security_id, kind="tradable_shares",
+                    units_per_owned_unit=fact.daughter_units_per_parent, currency="USD"),)))
+            for day in days:
+                if day < fact.ex_date or day not in inputs.observations.index or day not in inputs.evidence:
+                    continue
+                row = inputs.observations.loc[day]
+                if not bool(row.outcome_observation_valid):
+                    continue
+                for at, column in ((calendar.session_open(day.isoformat()).to_pydatetime(), "open"),
+                        (calendar.session_close(day.isoformat()).to_pydatetime(), "close")):
+                    marks.append(KnownMark(position_id=daughter, mark_at=at, value_per_unit=float(row[column]),
+                        currency="USD", evidence=(inputs.evidence[day],)))
         return HoldingSpecification.model_validate({**spec.model_dump(), "events": tuple(events), "marks": tuple(marks)})
