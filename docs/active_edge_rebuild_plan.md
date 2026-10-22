@@ -71,7 +71,7 @@ review-results/news-stock-accounting-third-valuation-unavailable.json SHA
 2184073dea89b3691c9c497ac797af4e5bbf5f2c6a2a4917999f29d09f61322f.
 First-selection Ridge stock proof stays closed; this is a different model selection.
 
-CURRENT BOUNDARY — October22 19:21Z. Price indicators / XGBoost / stop-loss,
+EARLIER BOUNDARY — October22 19:21Z. Price indicators / XGBoost / stop-loss,
 ten-session limit naturally returned2 and published valuation_unavailable at
 19:12:09.459401Z. Five artifact and two log hashes verified; frozen inputs rechecked.
 ResultSHA90e996664fa526fc2063b9737658fe9998d38f4f1a991fdce9d75b2b530b442f;
@@ -93,16 +93,37 @@ Exact workspace verification/diagnosis receipt
 review-results/news-stock-accounting-fourth-report-fifth-memory-failure.json SHA
 15265006fbf2d95921eba0a7d19ea320b87140940266cba52ac02860a9e40bba.
 
-CURRENT SIXTH POLICY: Price indicators and relationships / Ridge / stop-loss,
-ten-session limit started2026-10-22T19:21:15.118777Z, observedactualworker41628/
-launcher8616/controller18380/native64826. Inspect actualowner nextcheck; monitor
-20744 active, no finishmarker/outerexit. Seven remaining executions include sixth.
-Five executions ended:2published unavailable reports/3RAM failures,0funded results.
-Continue current campaign naturally; no retry, restart, duplicate or frozen source/
-config/operator/runtime edit whilelive. After naturalend revisit ALLmissing results
-and exact unavailable actions, preserving all receipts/rows/gates. No guessed terms,
-zero returns or filtered lots. C:free5,068,697,600bytes at19:21Z; noagentcleanup.
-Onlystep7active. FutureGPU remainsisolated until comparisons/retries/evidence close.
+CURRENT BOUNDARY — October22 19:36Z. Three additional price indicators and
+relationships policies naturally returned2 before publication under unchanged91%
+RAM/120s guard during funded corporate-action record projection. Exact receipts:
+- Ridge / stop-loss, ten-session limit: timeout19:23:25.907187Z after120.061185s,
+  94.207514%; resultfinished19:23:26.905914Z; resultSHA
+  21198a292b810c375c9bf908f40452af03037c595bc2759bdbedb8525003c193;
+  stderrSHA1dc73e48ee82822fb938ad4d950ae77ded09a7588734be45b2d4279f0e8d6e0b.
+- XGBoost / profit target, stop-loss, ten-session limit: timeout19:25:37.859142Z
+  after120.054300s,93.737292%; resultfinished19:25:38.554932Z; resultSHA
+  7c6f2cc69538e44533279cce0c0ad30532ced003b929a2810206a1234b50633e;
+  stderrSHA09791fcd337cdc21eae75c60b6f4bcf255f9cb354c24481771c5cb18e8edcf57.
+- XGBoost / stop-loss, ten-session limit: timeout19:27:48.763223Z after120.060304s,
+  93.702894%; resultfinished19:27:49.459921Z; resultSHA
+  d30e6c3e73875c1238c921985d11b4ab387b61ca4d5eb67052b9736d9cd9078d;
+  stderrSHA0815059afba98313bc7248d13762349288fe16afc75a04bfa892bf4748c27740.
+All result/log hashes verified and frozen_inputs_rechecked=true; no manifest or
+performance from these three. Missing manifest errors are secondary to RAM timeout.
+Read-only diagnosis review-results/news-stock-accounting-relationships-memory-failures.json
+SHA4707f44e63d09801a62c72bc7556019510e228afe32e6aea62bf23a8c6612216.
+All four price-and-relationships policies now failed on RAM; no model loss inferred.
+
+CURRENT NINTH POLICY: Price indicators, relationships and news / Ridge / profit
+target, stop-loss, ten-session limit started2026-10-22T19:27:49.973568Z; actualworker
+44532/launcher40680/controller18380/native64826. Inspect actualowner nextcheck.
+Four remaining executions include ninth. Eight ended:2published unavailable reports,
+6RAM failures,0funded results. Monitor20744 active, no finishmarker/outerexit.
+RAM78.11%/C:free5,041,582,080bytes observed19:36Z; noagentcleanup/guardchange.
+Continue campaign naturally, no retry/restart/duplicate/frozen dependency edit whilelive.
+After naturalend revisit ALLsix missingresults and exact unavailable-action evidence,
+preserving every receipt/row/gate. No extra fit/experiment/filteredlot/zeroreturn.
+Onlystep7active; futureGPU remainsisolated until comparisons/retries/evidence close.
 
 HISTORICAL OBSERVED CAPACITY ACTION — October22 14:00Z. C:free space fell from6.89GiB
 at13:50:33Z to0.68GiB at13:58:54Z; directdrive query627314688bytesfree. Sourceof
