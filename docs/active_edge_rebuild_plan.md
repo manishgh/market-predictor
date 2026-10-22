@@ -21,6 +21,37 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Future XGBoost GPU option — human requested October22
+
+Human explicitly selected "Enable GPU for future XGBoost training". No GPU retraining
+experiment is authorized by that choice; six completed models remain frozen.
+Implementation0ce8edc is pushed on codex/gpu-xgboost-training in isolated worktree
+C:/Users/manis/Documents/Codex/2026-09-28/c/worktrees/gpu-xgboost-training.
+Do not change primary frozen source/config/operator/runtime while comparison or its
+required retries remain live. After actual comparisons/retries end, evidence hashes
+are verified and that checkpoint closes, integrate only this reviewed implementation
+commit; keep historical requests/model artifacts unchanged. Future XGBoost training
+uses explicit boosted.device=cuda (new configs/swing_news_return_training_gpu.json,
+SHAb744957934a7f688ddbb9518363233d888c0f144ea90051e17898f369c5a900c).
+No training is scheduled merely to apply this future setting. Ridge remains CPU LSQR.
+
+Installed XGBoost3.3.0 reports USE_CUDA=true/CUDA12.9. Actual NVIDIA CUDA driver
+initialization passed, one RTX3050Laptop6GB device, driver596.08/API13020.
+Exact report workspace review-results/gpu-training-driver-preflight.json. No mocks
+or actual model fit used in hardware preflight. GPU fit itself is deliberately
+unrun: user chose future support. Next actual requested training must verify fitted
+XGBoost device cuda:0; non-CUDA build/CPU fallback refuses completed model publication.
+Old CPU configs serialize exactly as before; future CUDA choice is source/request/
+unit-bound and cannot silently masquerade as original CPU training attribution.
+
+81affected estimator/training/GPU UNITs passed18.53s; Ruff3files/strictmypy2source
+modules passed. GPU fallback tests use UNIT mocks only; not actual GPU-training
+proof. Existing CPU estimator tests use real estimators on synthetic UNIT fixtures.
+One consolidated author code/ML review no findings; independent review notclaimed.
+Workspace review-results/gpu-xgboost-design.json/gpu-xgboost-code-ml-review.json
+retain scope, invariants and exact files. Full suite unrun for component scope.
+Primary active policy campaign and91%RAM ceiling unchanged; only step7active.
+
 ### Current execution: approved stock accounting verified — October22
 
 CURRENT MEANINGFUL FAILURE — October22 11:14Z. Price indicators / Ridge / profit
