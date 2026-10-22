@@ -54,6 +54,17 @@ Primary active policy campaign and91%RAM ceiling unchanged; only step7active.
 
 ### Current execution: approved stock accounting verified — October22
 
+OBSERVED CAPACITY ACTION — October22 14:00Z. C:free space fell from6.89GiB
+at13:50:33Z to0.68GiB at13:58:54Z; directdrive query627314688bytesfree. Sourceof
+increase not established; currentpagefile allocated11478MiB/used1860MiB is only a
+current measurement, not proof of growth. Only2.3MB of exactownedtesttemporary
+fixtures; deletion wouldnotmateriallyhelp, so no cleanupperformed. Alloperational
+inputs/models/results/logs preserved. User notified to free severalGB on C: from
+user-controlledfiles/apps; no deletionofpersonal/unrelateddata authorized. Exact
+workspace receipt review-results/news-stock-accounting-low-disk-observation.json.
+Thirdpolicy40096/controller18380 stilllive, no observed diskexception atthatcheck.
+No new startupgate or change to sole91%RAMguard; continue inspectingactualreceipts.
+
 CURRENT MEANINGFUL FAILURES — October22. Both Price indicators / Ridge exit
 policies FAILED BEFORE publication under unchanged91%RAM/120second boundedpause.
 Profit target, stop-loss, ten-session limit: firstchild26664 naturalreturn2,
