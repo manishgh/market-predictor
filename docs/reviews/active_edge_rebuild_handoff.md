@@ -21,7 +21,28 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
-### Current execution: approved accounting repairs closed; stock-treatment choice pending
+### Current execution: documented daughter-share treatment approved — October22
+
+Human answered "Yes, fetch and apply that stock treatment". Exact proposalSHA
+728f0c0d20578489664b3444a70cabf0ea1a4e66476919c7d369d53b32c5c959;
+approval receipt review-results/documented-spin-off-policy-approval.json SHA
+9825d6ad73a51dc9718558c797df1527e732fe31928a7f89018ac3112c46afb9.
+Fetch only missing ZIMV raw unadjusted SIP1Dayprices2022-03-01..2022-03-11.
+For documented ZBH/ZIMV and MMM/SOLV retain parent units, credit exact issuer
+daughter ratio using proportional normalized fractions, sell daughter shares with
+parent using matching raw open/close at existing research exit clock. Existing
+20/40bpslotcosts and12policies unchanged. No tax/unknown action/feature/model/target/
+selection changes. Do not ask again.
+
+Prior finish marker preserved as news-oct20-finished-accounting-wait-20261021T222855.json
+SHA8997e14c35df0489c866aa1818617f9dabbd2bdffa96b730c0e714524a67714c.
+Reviewed monitor restarted native3851/accounting-spin-monitor.log; inspect actualPID.
+Heartbeat ACTIVE, no current finish marker/backtest. Sole RAM ceiling91% unchanged.
+Next exact-request acquisition, canonical stock-event/exit implementation, focused
+checks/consolidated review/actual holding proof, then fresh frozen comparisons.
+All earlier completed proofs remain closed. Only step7active; no portfolio result.
+
+### Historical accounting closure before stock approval
 
 Implementation13d9d44 is pushed. The single retained RJF2023-04-13 rate1.3stock-dividend
 record is explicitly refuted by the audited issuer common-share reconciliation:
