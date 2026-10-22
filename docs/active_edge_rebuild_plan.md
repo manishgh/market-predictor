@@ -93,7 +93,7 @@ Exact workspace verification/diagnosis receipt
 review-results/news-stock-accounting-fourth-report-fifth-memory-failure.json SHA
 15265006fbf2d95921eba0a7d19ea320b87140940266cba52ac02860a9e40bba.
 
-CURRENT BOUNDARY — October22 19:36Z. Three additional price indicators and
+EARLIER BOUNDARY — October22 19:36Z. Three additional price indicators and
 relationships policies naturally returned2 before publication under unchanged91%
 RAM/120s guard during funded corporate-action record projection. Exact receipts:
 - Ridge / stop-loss, ten-session limit: timeout19:23:25.907187Z after120.061185s,
@@ -114,16 +114,31 @@ Read-only diagnosis review-results/news-stock-accounting-relationships-memory-fa
 SHA4707f44e63d09801a62c72bc7556019510e228afe32e6aea62bf23a8c6612216.
 All four price-and-relationships policies now failed on RAM; no model loss inferred.
 
-CURRENT NINTH POLICY: Price indicators, relationships and news / Ridge / profit
-target, stop-loss, ten-session limit started2026-10-22T19:27:49.973568Z; actualworker
-44532/launcher40680/controller18380/native64826. Inspect actualowner nextcheck.
-Four remaining executions include ninth. Eight ended:2published unavailable reports,
-6RAM failures,0funded results. Monitor20744 active, no finishmarker/outerexit.
-RAM78.11%/C:free5,041,582,080bytes observed19:36Z; noagentcleanup/guardchange.
-Continue campaign naturally, no retry/restart/duplicate/frozen dependency edit whilelive.
-After naturalend revisit ALLsix missingresults and exact unavailable-action evidence,
-preserving every receipt/row/gate. No extra fit/experiment/filteredlot/zeroreturn.
-Onlystep7active; futureGPU remainsisolated until comparisons/retries/evidence close.
+CURRENT PUBLISHED BOUNDARY — October22 22:21Z. Price indicators, relationships
+and news / Ridge / profit target, stop-loss, ten-session limit naturally returned2
+and published valuation_unavailable at22:17:56.369219Z. Fiveartifact/twolog hashes
+verified, frozen_inputs_rechecked=true. ResultSHA
+465d0cd3396a02aacd9b6985120bce42374a9e7426d9691a77bb7b47390c029c;
+manifestSHA855eac0643547ef602f7fb74e7ad8a6d970a521ce6712c48fab7a7c045cfc9a2;
+reportSHA7fe0594cfe80f3884811297eabbaa79fb39bd1f4167494bf131be63c1f60d985.
+Of17,700 selected decision rows,18 across8securities remain unavailable:14cash
+rows/9distinct dividendactions require corporate-term replay;4ATR rows have missing
+name-change economic date (action36cf7b80-43cb-498f-9756-2a8d8945c496,
+cik:0001996862). Ten distinct actions including ATR namechange. No guesseddate/
+terms or affectedrow exclusion. Comparisons=null; no funded SPY performance.
+Exact workspace receipt review-results/news-stock-accounting-news-ridge-valuation-unavailable.json
+SHAa12737ccacae53398bea37236d22aea2b96181dac4f9215688d0c80b492a3c71.
+
+CURRENT TENTH POLICY: Price indicators, relationships and news / Ridge / stop-loss,
+ten-session limit started2026-10-22T22:17:56.925001Z; actualworker40804/launcher28384/
+controller18380/native64826. Inspect actualowner nextcheck; monitor20744active,
+no finishmarker/outerexit. Three remaining executions include tenth. Nine ended:
+3published unavailable reports/6RAMfailures/0funded results. Continue campaign
+naturally; no retry/restart/duplicate/frozen dependency edit whilelive. After natural
+end revisit ALLsix failedpolicies and exact unavailable-action evidence, retaining
+allreceipts/rows/gates. IndependentATR checkpoint remainsclosed; this missing
+source actiondate does not justify repeating its general review. FutureGPU stays
+isolated until comparisons/retries/evidence close. Onlystep7active.
 
 HISTORICAL OBSERVED CAPACITY ACTION — October22 14:00Z. C:free space fell from6.89GiB
 at13:50:33Z to0.68GiB at13:58:54Z; directdrive query627314688bytesfree. Sourceof
