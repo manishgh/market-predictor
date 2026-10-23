@@ -114,7 +114,7 @@ Read-only diagnosis review-results/news-stock-accounting-relationships-memory-fa
 SHA4707f44e63d09801a62c72bc7556019510e228afe32e6aea62bf23a8c6612216.
 All four price-and-relationships policies now failed on RAM; no model loss inferred.
 
-CURRENT PUBLISHED BOUNDARY — October22 22:21Z. Price indicators, relationships
+EARLIER PUBLISHED BOUNDARY — October22 22:21Z. Price indicators, relationships
 and news / Ridge / profit target, stop-loss, ten-session limit naturally returned2
 and published valuation_unavailable at22:17:56.369219Z. Fiveartifact/twolog hashes
 verified, frozen_inputs_rechecked=true. ResultSHA
@@ -129,16 +129,32 @@ terms or affectedrow exclusion. Comparisons=null; no funded SPY performance.
 Exact workspace receipt review-results/news-stock-accounting-news-ridge-valuation-unavailable.json
 SHAa12737ccacae53398bea37236d22aea2b96181dac4f9215688d0c80b492a3c71.
 
-CURRENT TENTH POLICY: Price indicators, relationships and news / Ridge / stop-loss,
-ten-session limit started2026-10-22T22:17:56.925001Z; actualworker40804/launcher28384/
-controller18380/native64826. Inspect actualowner nextcheck; monitor20744active,
-no finishmarker/outerexit. Three remaining executions include tenth. Nine ended:
-3published unavailable reports/6RAMfailures/0funded results. Continue campaign
-naturally; no retry/restart/duplicate/frozen dependency edit whilelive. After natural
-end revisit ALLsix failedpolicies and exact unavailable-action evidence, retaining
-allreceipts/rows/gates. IndependentATR checkpoint remainsclosed; this missing
-source actiondate does not justify repeating its general review. FutureGPU stays
-isolated until comparisons/retries/evidence close. Onlystep7active.
+CURRENT PUBLISHED BOUNDARY — October23 01:21Z. Price indicators, relationships
+and news / Ridge / stop-loss, ten-session limit naturally returned2 and published
+valuation_unavailable at2026-10-23T01:08:31.958786Z. Fiveartifact/twolog hashes
+independently verified; frozen_inputs_rechecked=true. ResultSHA
+829fd8ffb208eb1b4367b11d86c0800099e228439a8390a84119467984f1ff89;
+manifestSHAc2685bc106f84ab96726eeb41ae79140d50faa3bbf31d4a9ae7a57d15861e7ed;
+reportSHAf0695821562538e4edf35868d79bdf83a695e4d090e587605cf32629596dba66.
+Same selected/decisions parquet as news Ridge target+stop:18 of17,700 selected
+decision rows across8securities/10actions unavailable,14cash rows/9dividendactions
+require corporate-term replay and4ATR name-change rows lack an economic date.
+Comparisons=null; no funded SPY performance. All gates and selected rows retained.
+Exact workspace receipt review-results/news-stock-accounting-news-ridge-stop-valuation-unavailable.json
+SHAa7338331b44ed68602634d9b0e17e54c5ab83b231471169873d78032cef70365.
+
+CURRENT ELEVENTH POLICY: Price indicators, relationships and news / XGBoost /
+profit target, stop-loss, ten-session limit started2026-10-23T01:08:32.549867Z;
+actualworker20736/launcher43240/controller18380/native64826. Inspect actualowner
+nextcheck. Monitor20744active, no finishmarker/outerexit. Two remaining executions
+include eleventh. Ten ended:4published unavailable reports/6RAMfailures/0funded
+results. Continue campaign naturally; no retry/restart/duplicate/frozen dependency
+edit whilelive. After natural end revisit ALLsix failedpolicies and exact
+unavailable-action evidence, retaining allreceipts/rows/gates. IndependentATR
+checkpoint remainsclosed; missing source actiondate does not justify repeating its
+general review. FutureGPU stays isolated until comparisons/retries/evidence close.
+Onlystep7active. Documentation-only boundary; git diff --check required, no code
+checks or model runs for this prose update.
 
 HISTORICAL OBSERVED CAPACITY ACTION — October22 14:00Z. C:free space fell from6.89GiB
 at13:50:33Z to0.68GiB at13:58:54Z; directdrive query627314688bytesfree. Sourceof
