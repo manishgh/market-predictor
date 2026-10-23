@@ -143,7 +143,7 @@ Comparisons=null; no funded SPY performance. All gates and selected rows retaine
 Exact workspace receipt review-results/news-stock-accounting-news-ridge-stop-valuation-unavailable.json
 SHAa7338331b44ed68602634d9b0e17e54c5ab83b231471169873d78032cef70365.
 
-CURRENT FAILURE BOUNDARY — October23 01:36Z. Price indicators, relationships
+EARLIER FAILURE BOUNDARY — October23 01:36Z. Price indicators, relationships
 and news / XGBoost / profit target, stop-loss, ten-session limit naturally returned2
 before publication. RAM pause2026-10-23T01:29:09.247333Z at91.366175%; timeout
 01:31:09.369610Z after120.121987s at91.536440%, stage saved OOF policy evaluation.
@@ -155,16 +155,64 @@ performance report published. Preserve all11started/result/stdout/stderr receipt
 Exact workspace diagnosis review-results/news-stock-accounting-news-xgboost-target-memory-failure.json
 SHAedb5b23ebafad11ff2e247096c615d440a83b40d4ab9773fd034115a9d6ea7a6.
 
-CURRENT TWELFTH POLICY: Price indicators, relationships and news / XGBoost /
-stop-loss, ten-session limit started2026-10-23T01:31:21.622205Z; actualworker41956/
-launcher32828/controller18380/native64826. Inspect actualowner nextcheck.
-Monitor20744active, no finishmarker/outerexit. Last execution running; eleven ended:
-4published unavailable reports/7RAMfailures/0funded results. Continue campaign
-naturally; no retry/restart/duplicate/frozen dependency edit whilelive. After natural
-end revisit ALLseven failedpolicies and exact unavailable-action evidence, retaining
-allreceipts/rows/gates. IndependentATR checkpoint remainsclosed. FutureGPU stays
-isolated until comparisons/retries/evidence close. Onlystep7active. Documentation-
-only boundary: git diff --check; no code checks or model runs for this prose update.
+CURRENT NATURAL CAMPAIGN END — October23 01:51Z. Operator naturally exited2 at
+2026-10-23T01:47:19.9600515Z; all12 execution receipts exist. complete.json SHA
+08fcea4dabfa271423605697bad64493ab5c5507276b41997bd2e59e73a8fde7 has
+all_trials_completed=false:4valuation_unavailable publications and8RAM failures,
+zero funded performance results. The2retained paired diagnostics were reused and
+verified. All62 artifact/log/result hashes checked; every frozen_inputs_rechecked
+true. Exact workspace audit review-results/news-stock-accounting-natural-end-audit.json
+SHAaea1539cbf07feae8619e8a4be019098fd364d52acf0ab6613bd887a9b9e7fae.
+Step7 remains incomplete; execution ending is not a completed comparison.
+
+Final Price indicators, relationships and news / XGBoost / stop-loss, ten-session
+limit naturally returned2 before publication. Last pause01:45:17.946676Z at
+91.124707%; timeout01:47:18.028833Z after120.081868s at91.149065%; resultfinished
+01:47:19.286192Z. ResultSHA8925e017f9c098066b1036c06ac09b11503310e812f661738621d53790997c48;
+stderrSHA95fb5b413a3b64fc77964e523966e26d0d4cfe7b0cc57288507ae78d08d75e2f.
+Result/log hashes verified; missingmanifest secondary to unchanged91%/120s guard.
+Final diagnosis review-results/news-stock-accounting-final-memory-failure.json SHA
+91490a5b9adb1137cc748ad6dee4a8ef03e4fc96ffc5dc9703a0069a29d96ea4.
+All8missing policies (01,02,05,06,07,08,11,12) need preserved-output retries after
+resource conditions are addressed. No demonstrated code defect supports changing
+guards or reconstructing closed models/sources; no blind retry launched.
+
+POST-CAMPAIGN EXACT ACTION DIAGNOSIS: the4published unavailable reports identify
+33distinct action IDs, not33selected rows:28foreign-flagged cash dividends,
+2special cash dividends (TDG2022-08-18 andCME2023-12-27),2newspin-offs BDX/EMBC and
+LH/FTRE,1BG same-symbol name-change action lacking economic date (the report's
+ATR prefix is an indicator check, not a company namedATR). All33exact retained
+source records located and body hashes verified. No guessed currency/net taxes,
+due-bill dates, name-change effective date, filteredlots or zeroreturns admitted.
+Sourcefacts review-results/news-stock-accounting-remaining-action-facts.json SHA
+9d796ca157856ab5e94b2cb0127d5218a435f18501faa49eda68a54ce115d8d1.
+Existing approvals for ordinary/documented USDcash and ZBH/ZIMV+MMM/SOLV retained;
+they do not authorize guessed foreign payout terms or additional stock pairs.
+Issuer research references confirm proposed BDX/EMBC ratio0.2 andLH/FTRE ratio1;
+these web lookups are not canonical admitted documents. Concrete proposal with
+issuer links and unchanged matching/cost/fractional method:
+review-results/news-stock-accounting-next-decision.json SHA
+82cd57f9d9ed68a322c1b5e67d8f5c6d7a008689fdb9547f736054f40d18a482.
+Next human decision: extend source-bound stock treatment to the2exact new pairs,
+without invented taxes/cash-in-lieu. Existing USD cash approval remains sufficient
+for foreign issuers only after exact issuer USD terms are evidenced; do not ask
+again for that approval or infer USD from the listing. Then obtain canonical
+source evidence, required raw daughter data and exact BG/
+specialcash dates before a fresh reviewed accounting checkpoint. No assumptions
+are applied now. System RAM relief is also needed for reliable missing-policy
+retries; unrelated processes were observed only, not stopped. Sole91%ceiling,
+120s boundedpause/5spoll/5GiB/.75headroom unchanged; no lower startupgate.
+
+ACTUAL WORK END WHILE AWAITING HUMAN DECISION: new finishmarker
+review-results/news-oct20-finished.json SHA
+f808559c3f4dfdc3835bb24348e017f257e59389381352861dcb3b4b71a76daf.
+Monitor naturally exited0 at2026-10-23T01:55:22.0402427Z; state
+monitor_and_idle_hold_released at01:55:21.988949Z; no heavy-job owner file or
+owned Python worker remained. Older finishmarkers/receipts preserved. Heartbeat
+paused pending human decision, not claimed complete. FutureGPU implementation
+0ce8edc stays isolated until comparisons/retries/evidence close; no integration or
+fit performed. All serving/promotion/admissionfalse. Documentation-only closure:
+git diff --check; no code checks or model runs needed for this prose update.
 
 HISTORICAL OBSERVED CAPACITY ACTION — October22 14:00Z. C:free space fell from6.89GiB
 at13:50:33Z to0.68GiB at13:58:54Z; directdrive query627314688bytesfree. Sourceof
