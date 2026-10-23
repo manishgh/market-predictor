@@ -129,7 +129,7 @@ terms or affectedrow exclusion. Comparisons=null; no funded SPY performance.
 Exact workspace receipt review-results/news-stock-accounting-news-ridge-valuation-unavailable.json
 SHAa12737ccacae53398bea37236d22aea2b96181dac4f9215688d0c80b492a3c71.
 
-CURRENT PUBLISHED BOUNDARY — October23 01:21Z. Price indicators, relationships
+EARLIER PUBLISHED BOUNDARY — October23 01:21Z. Price indicators, relationships
 and news / Ridge / stop-loss, ten-session limit naturally returned2 and published
 valuation_unavailable at2026-10-23T01:08:31.958786Z. Fiveartifact/twolog hashes
 independently verified; frozen_inputs_rechecked=true. ResultSHA
@@ -143,18 +143,28 @@ Comparisons=null; no funded SPY performance. All gates and selected rows retaine
 Exact workspace receipt review-results/news-stock-accounting-news-ridge-stop-valuation-unavailable.json
 SHAa7338331b44ed68602634d9b0e17e54c5ab83b231471169873d78032cef70365.
 
-CURRENT ELEVENTH POLICY: Price indicators, relationships and news / XGBoost /
-profit target, stop-loss, ten-session limit started2026-10-23T01:08:32.549867Z;
-actualworker20736/launcher43240/controller18380/native64826. Inspect actualowner
-nextcheck. Monitor20744active, no finishmarker/outerexit. Two remaining executions
-include eleventh. Ten ended:4published unavailable reports/6RAMfailures/0funded
-results. Continue campaign naturally; no retry/restart/duplicate/frozen dependency
-edit whilelive. After natural end revisit ALLsix failedpolicies and exact
-unavailable-action evidence, retaining allreceipts/rows/gates. IndependentATR
-checkpoint remainsclosed; missing source actiondate does not justify repeating its
-general review. FutureGPU stays isolated until comparisons/retries/evidence close.
-Onlystep7active. Documentation-only boundary; git diff --check required, no code
-checks or model runs for this prose update.
+CURRENT FAILURE BOUNDARY — October23 01:36Z. Price indicators, relationships
+and news / XGBoost / profit target, stop-loss, ten-session limit naturally returned2
+before publication. RAM pause2026-10-23T01:29:09.247333Z at91.366175%; timeout
+01:31:09.369610Z after120.121987s at91.536440%, stage saved OOF policy evaluation.
+Resultfinished01:31:21.087763Z; frozen_inputs_rechecked=true; result/log hashes
+verified. ResultSHA27a0666aaf9253ea10affd5355dde868fe39c80c04ab297a081d7c46a5c02605;
+stderrSHA1988dd5dd380298d92fb6c9d95a7adb41316fe1fb8b7854cee22cf11c2270e2e.
+Missing manifest is secondary to unchanged91%RAM/120s guard. No accounting or
+performance report published. Preserve all11started/result/stdout/stderr receipts.
+Exact workspace diagnosis review-results/news-stock-accounting-news-xgboost-target-memory-failure.json
+SHAedb5b23ebafad11ff2e247096c615d440a83b40d4ab9773fd034115a9d6ea7a6.
+
+CURRENT TWELFTH POLICY: Price indicators, relationships and news / XGBoost /
+stop-loss, ten-session limit started2026-10-23T01:31:21.622205Z; actualworker41956/
+launcher32828/controller18380/native64826. Inspect actualowner nextcheck.
+Monitor20744active, no finishmarker/outerexit. Last execution running; eleven ended:
+4published unavailable reports/7RAMfailures/0funded results. Continue campaign
+naturally; no retry/restart/duplicate/frozen dependency edit whilelive. After natural
+end revisit ALLseven failedpolicies and exact unavailable-action evidence, retaining
+allreceipts/rows/gates. IndependentATR checkpoint remainsclosed. FutureGPU stays
+isolated until comparisons/retries/evidence close. Onlystep7active. Documentation-
+only boundary: git diff --check; no code checks or model runs for this prose update.
 
 HISTORICAL OBSERVED CAPACITY ACTION — October22 14:00Z. C:free space fell from6.89GiB
 at13:50:33Z to0.68GiB at13:58:54Z; directdrive query627314688bytesfree. Sourceof
