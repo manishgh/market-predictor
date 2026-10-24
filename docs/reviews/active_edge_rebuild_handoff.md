@@ -1,5 +1,32 @@
 # Active Edge Rebuild Handoff
 
+### Fresh retry boundary: both Price indicators / Ridge exits hit RAM guard — October24 16:14UTC
+
+Two of12frozen executions naturally ended with return2, both before publication;
+zero new funded performance results. Price indicators / Ridge / profit target,
+stop-loss, ten-session limit timed out2026-10-24T16:06:21.549782Z after120.1666341s
+at92.4639026%systemRAM; resultfinished16:07:36.887024Z. The stop-loss, ten-session
+limit policy timed out16:12:54.194506Z after120.0840154s at92.2518979%; resultfinished
+16:12:54.915293Z. Both used the unchanged91%ceiling/120s wait. First policy's earlier
+short pressure pauses resumed; the final pause timed out. Missing output manifests
+are secondary to these guards, not new accounting failures or model performance.
+All result/start/stdout/stderr receipts retained and log hashes independently
+verified, frozen_inputs_rechecked=true. Exact diagnosis workspace
+review-results/news-gap-fixed-technical-ridge-memory-failures-20261024.json SHA
+b7766c29a60c60645fbf4dd01fc5f76812784f84fb67901dbb1ca27ae00356d5.
+All538current source/config/operator hashes and all6final-model hashes rechecked;
+accounting realproof remains unchanged. No guard edits, cleanup or interruption.
+
+CURRENT: Price indicators / XGBoost / profit target, stop-loss, ten-session limit
+started2026-10-24T16:12:55.349682Z. Actualworker15764/launcher49416/controller7472,
+monitor49568; owner project-swing-corporate-action-evidence observed16:14UTC.
+Inspect actual owner next check. Ten executions remain including this one. No
+complete/outer-exit/finish marker. Let all remaining frozen policies end naturally;
+no source/config/runtime edits, duplicate launch or blind retry while live. At
+natural campaign end retain all receipts, then diagnose the smallest necessary
+memory reduction before retrying missing results, preserving91% and all economics.
+GPU/API implementations stay isolated until comparisons/retries/evidence close.
+
 ### User-requested code walkthrough and trained-model API link — October24
 
 ISOLATED implementation70eb21b pushed on codex/trained-model-api-cleanup,
