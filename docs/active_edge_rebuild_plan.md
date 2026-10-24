@@ -1,5 +1,54 @@
 # Active Edge Rebuild Plan
 
+### User-requested code walkthrough and trained-model API link — October24
+
+ISOLATED implementation70eb21b pushed on codex/trained-model-api-cleanup,
+worktree C:/Users/manis/Documents/Codex/2026-09-28/c/worktrees/trained-model-api-cleanup.
+Human requested teaching the code structure, unnecessary code/log cleanup and API
+linkage to the completed models. README now maps collection -> features -> fitting
+-> saved models/predictions -> economic evaluation -> research/production APIs.
+The old research workbench listed two classifier candidates and mixed probabilities
+and numerical scores. Its replacement inventories all six completed return specs,
+using three original pinned run manifests and the canonical unit verifier.
+/v1/research/predict requires an exact historical session; reads original saved
+TEMPORAL OOF predictions, preserves signed/zero/null values and returns decision,
+security and run/request/unit/model/prediction hashes. No estimator deserialization,
+refit, nearest-date fallback, final-refit-as-OOF, production activation or changed
+91% ceiling. New catalog/README/service remain ISOLATED: primary frozen src/config
+and operator/runtime are unchanged. Keep this worktree until integration.
+
+28affected UNITs passed13.78s; scoped Ruff and strictmypy4sources passed; JS syntax
+and git diff checks passed. Six real saved-data HTTP queries exactly matched six
+original predictions; all six final-model hashes unchanged. Actual receipt workspace
+review-results/trained-return-api-real-20261024.json SHA
+46fe91fdf9c2c7866409cd9a6dee2d268c5ea0e929a2bbfafca8f9b50f13c2d1.
+538current frozen campaign source/config/operator hashes independently rechecked.
+One consolidated AUTHOR review no findings, no independent review claimed:
+review-results/trained-model-api-consolidated-review-20261024.json SHA
+343bd726478cab16ccc4385ad21656585ff99beb287367874d411824268b2587.
+Full suite and browser rendering unrun; HTTP/static contract and JS syntax checked.
+
+Cleanup removed only11unreferenced September6 synthetic test fixture directories,
+one unreferenced migration helper and one obsolete unbound console log:13targets,
+3473files/4167725bytes. Every deleted file hash retained workspace
+review-results/research-api-cleanup-deletions-20261024.json. The unreferenced tracked
+debug.json dump is deleted in the isolated branch only. All raw/provider sources,
+trained models, campaign receipts and operational failure logs retained. Do not
+repeat broad cleanup or delete retained source/model evidence as ordinary logs.
+
+Step7 remains the ONLY active plan step. Fresh news_gap_fixed_20261024 campaign
+still running its first Price indicators / Ridge / profit target, stop-loss,
+ten-session policy; worker48860/controller7472 at latest observation, monitor49568.
+No new result/complete/outer-exit yet. Inspect actual owner next check. Continue
+naturally, no restart/duplicate/edits to primary frozen dependencies. After current
+comparisons/retries and evidence checkpoint close, integrate reviewed future GPU
+implementation and then70eb21b without changing saved model bytes. Step9 accepted
+production API remains PENDING: current production contract consumes classifier
+probabilities, while these six models predict signed excess returns. Fresh live
+return forecasts still require matching live features, an explicit return release/
+response contract and existing acceptance/admission evidence. Research historical
+access is complete in isolation; do not call production linkage/acceptance complete.
+
 ## Ordered execution plan — October 9
 
 Goal: learn future stock returns from existing price/fundamental state and all
