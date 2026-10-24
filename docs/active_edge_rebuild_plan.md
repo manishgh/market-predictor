@@ -1,8 +1,8 @@
 # Active Edge Rebuild Plan
 
-### Fresh retry boundary: relationships XGBoost RAM failure — October24 19:46UTC
+### Fresh retry boundary: both relationships XGBoost RAM failures — October24 19:59UTC
 
-Seven of12frozen executions naturally ended: six RAM failures and one
+Eight of12frozen executions naturally ended: seven RAM failures and one
 published valuation_unavailable report; ZERO funded performance comparisons.
 Price indicators and relationships / Ridge / stop-loss, ten-session limit
 naturally returned2 and published2026-10-24T19:27:28.092243Z. Five artifact and two
@@ -43,17 +43,31 @@ all538current frozen source/config/operator files and six final models independe
 Exact diagnosis workspace
 review-results/news-gap-fixed-relationships-xgboost-target-memory-failure-20261024.json
 SHA1c51fc736dbf80359927103ffcba6fcd0320314d0f46bfa92c548a36dab3ef55.
+Price indicators and relationships / XGBoost / stop-loss, ten-session limit
+also naturally returned2 before publication2026-10-24T19:58:52.627836Z.
+Final saved OOF evaluation pause19:56:48.825379Z at91.0004356% RAM;
+timeout19:58:48.899692Z after120.074012s at91.6837564%. Earlier pauses resumed;
+only the final bounded wait timed out. Missing manifest is secondary, not an
+accounting or performance result. ResultSHA
+24061943210166eb24b5f850af07c9c3a60ed6f758f98a7e60f35cacb63e870d;
+stderrSHAbc3fa4a85fe55a1fd33e20a6b8bbc9d796e9d6b1f0f0a2ebe2d5fa3f13f48d59.
+Result/start/logs retained and hashes verified; frozen_inputs_rechecked=true;
+538current frozen files and all six final models independently rechecked unchanged.
+Exact diagnosis workspace
+review-results/news-gap-fixed-relationships-xgboost-stop-memory-failure-20261024.json
+SHA3259a2a55b0e8585aebdafe5fa11fedbd42a873112a38fc8baef24603735672b.
 No guard/runtime edits or interruption. Prior low-disk observation receipt remains
 review-results/news-gap-fixed-disk-observation-20261024T1644.json SHA
 e4e8a6664a51969e8234e95e13227d6ed764311de06195df98aab99d2875caa5;
-C: free6024953856bytes independently observed19:46UTC, no disk-write failure/agent cleanup.
+C: free3816300544bytes independently observed19:59UTC, no disk-write failure/agent cleanup.
 
-CURRENT: Price indicators and relationships / XGBoost / stop-loss, ten-session limit
-started2026-10-24T19:44:37.803862Z; actualworker49336/launcher4268,
-controller7472/monitor49568, owner project-swing-corporate-action-evidence at19:46UTC.
-Inspect actual owner nextcheck. Five remaining executions include this one.
-No complete/outer-exit/finish. Continue all frozen policies naturally;
-no stop/restart/duplicate/retry or edits to source/config/operator/runtime while live.
+CURRENT: Price indicators, relationships and news / Ridge / profit target,
+stop-loss, ten-session limit started2026-10-24T19:58:53.080848Z;
+actualworker40564/launcher30484/controller7472/monitor49568,
+owner project-swing-corporate-action-evidence at19:59UTC. Inspect actual owner nextcheck.
+Four remaining executions include this one. No complete/outer-exit/finish.
+Continue all frozen policies naturally; no stop/restart/duplicate/retry or edits to
+source/config/operator/runtime while live.
 At natural end preserve full audit, then address exact remaining corporate terms and
 smallest necessary memory reduction before further retries, preserving91%, all models,
 rows, clocks, costs and unsupported-action gates. GPU/API integrations remain isolated
