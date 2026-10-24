@@ -1,5 +1,20 @@
 # Active Edge Rebuild Plan
 
+### Resource observation — October24 16:44UTC
+
+Current Price indicators and relationships / Ridge / stop-loss, ten-session limit
+worker10392/launcher24804 remains live with controller7472 and monitor49568. Still
+five ended RAM failures and zero new publications; no complete/outer-exit/finish.
+Latest short RAM pressure pause resumed35.6987865s at16:32:17.056784Z77.1420959%;
+this was NOT a timeout. Current owner initial-fit-raw-share-plan. C: free space
+independently measured274677760bytes, then275906560bytes (about263MiB). No disk-write
+failure observed; do not claim that disk space stopped this run, add a new startup
+gate, delete protected evidence or interrupt the frozen campaign. Recheck actual
+space on future checks and preserve exact evidence if a write fails. Workspace
+review-results/news-gap-fixed-disk-observation-20261024T1644.json SHA
+e4e8a6664a51969e8234e95e13227d6ed764311de06195df98aab99d2875caa5.
+User notified once about the measured space; stay quiet if unchanged.
+
 ### Fresh retry boundary: five RAM failures, no published performance — October24 16:29UTC
 
 Five of12frozen executions naturally ended with return2 BEFOREpublication. All
