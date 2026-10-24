@@ -11,6 +11,61 @@ The system is not deployed. There are no supported legacy models or compatibilit
 paths. Serving fails closed until a model passes validation and is published in a
 hash-verified promoted bundle.
 
+## Reading The Code
+
+Follow one prediction through these layers. The command modules connect the
+layers; they should not contain a second implementation of their calculations.
+
+| Layer | Where to read | What it owns |
+| --- | --- | --- |
+| Entry points | `collection_cli.py`, `research_cli.py`, `production_cli.py`, `commands/` | Provider collection, research jobs and production operations are separate command surfaces. |
+| Source evidence | `sources/`, `collection/`, `canonical/` | Provider responses, availability timestamps, normalized data and immutable file identities. |
+| Contracts | `core/`, `swing/contracts/` | Required fields, source pins, feature order, fitting settings and the ten-session objective. |
+| Historical datasets and features | `swing/datasets/`, `swing/features/`, `edge_rebuild/` | Turn existing prices, relationships and available news into model inputs. |
+| Learned return models | `swing/features/return_candidate.py`, `swing/training/return_estimators.py`, `swing/training/return_artifacts.py` | Fit Ridge/XGBoost, learn preprocessing on training rows, and save models plus validation predictions. |
+| Economic evaluation | `commands/swing_oof_policy_evaluation.py`, `swing/evaluation/`, `swing/datasets/backtest_corporate_actions.py` | Replay saved predictions through entry/exit policies, fees, dividends, splits and daughter-share sales; compare funded NAV with SPY. |
+| Research API | `research_api/catalog.py`, `service.py`, `server.py` | Inventory the six trained specifications and query their exact saved historical return predictions. |
+| Production API and release | `api.py`, `serving/`, `governance/promotion/`, `release.py` | Admit an accepted release, build matching live features, score and retain prediction evidence. |
+
+The paths in this table are relative to `src/market_predictor/`. Read
+`commands/swing_return_training.py` first, then follow its call into
+`swing/features/return_candidate.py`. For an HTTP request, start with
+`research_api/server.py`, follow `ResearchModelService.predict`, and finally
+`swing/training/return_artifacts.py` for the shared artifact checks.
+
+```mermaid
+flowchart LR
+    A[Saved provider evidence] --> B[Features available at decision time]
+    B --> C[Training and validation]
+    C --> D[Saved models and validation predictions]
+    D --> E[Funded backtests versus SPY]
+    D --> F[Research API: historical predictions]
+    E --> G[Acceptance and release gates]
+    G --> H[Production API with matching live features]
+```
+
+The six specifications are three input profiles, each fitted with Ridge and
+XGBoost. A `model.joblib` holds a fitted estimator and its learned preprocessing.
+`predictions.parquet` holds what a validation model predicted for later rows it
+did not fit. `_request.json` records the fitting recipe and source pins;
+`_manifest.json` identifies the resulting files by hash. A backtest report is a
+separate economic evaluation, not another training result.
+
+Training is complete. The accounting repairs are verified and funded backtests
+are running. Production acceptance is pending: the current production serving
+contract consumes classifier probabilities, while these models predict signed
+returns. Enabling live return forecasts requires the matching live feature path,
+an explicit return response/release contract, completed economic assessment and
+the existing admission evidence. A historical lookup cannot stand in for these.
+
+Keep code/configuration in Git; retain operational artifacts under `data/` and
+`models/`. Logs explain attempts and failures, while manifests bind actual outputs.
+Do not delete a log or artifact merely because it is old: raw evidence, fitted
+models, hash-bound sources and campaign receipts are protected. Reproducible,
+unreferenced test scratch and one-off debug dumps can be removed after checking
+their consumers. Retired internal packages still used by shared calculations
+need a reference-safe migration before removal.
+
 ## Nightly Monitoring Registration
 
 `market-predictor-prod register-session-predictions --as-of 2026-09-28T22:05:00+00:00`
@@ -714,10 +769,11 @@ artifact paths, pins, pending source issues and verification results are maintai
 in `docs/reviews/active_edge_rebuild_handoff.md`. Do not substitute a current file's
 hash for an independently reviewed source identity just to make a resume succeed.
 
-The local research workbench inventories two configured swing experiments:
-technical and technical-with-catalyst. It reports the real training
-state of every experiment. A `no_candidate` result remains unavailable rather than
-being replaced by a fallback model.
+The local research workbench inventories the six completed return specifications:
+`technical_ridge`, `technical_xgboost`, `relationships_ridge`,
+`relationships_xgboost`, `news_ridge`, and `news_xgboost`. Its server-owned catalog
+pins the three original training manifests and verifies fitted model bytes.
+Each query verifies the selected temporal fold's model and prediction artifacts.
 
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn `
@@ -727,10 +783,23 @@ being replaced by a fallback model.
 ```
 
 Open `http://127.0.0.1:8123`. The workbench is non-actionable and does not alter the
-production API. Scoring reads only integrity-checked snapshots registered through
-the canonical live feature store. Missing, stale, non-finite, or schema-incomplete
-features cause a readiness error; the workbench does not substitute zero values or
-proxy ETF approximations for missing cross-sectional features.
+production API. Choose an exact historical session and tickers. The API reads
+saved temporal out-of-fold predictions; it does not refit or deserialize a model,
+recompute scores, choose the nearest date, or use a final refit as historical
+validation. These already inspected dates are development evidence. Dates outside
+the recorded validation sessions return unavailable, including today's date.
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8123/v1/research/models
+Invoke-RestMethod http://127.0.0.1:8123/v1/research/predict -Method Post -ContentType application/json -Body '{"model_id":"news_ridge","session_date":"2021-07-21","tickers":["ABT"]}'
+```
+
+The signed `predicted_excess_return` is the ten-session stock net return minus
+SPY gross return in decimal units: `-0.012` means -1.2 percentage points relative
+to SPY, not a 1.2% probability. An unavailable prediction stays JSON `null`; a
+genuine zero stays `0.0`. Responses include decision/security identity and exact
+run, request, unit, model and prediction hashes. Missing or modified artifacts
+refuse the query. No release is activated and `actionable` remains false.
 
 ## Verification
 

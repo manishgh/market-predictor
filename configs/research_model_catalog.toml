@@ -1,15 +1,19 @@
 schema = "market_predictor.research_model_catalog"
 
-[[models]]
-id = "swing_technical_with_catalyst"
-label = "Swing - Technical and Catalyst"
-mode = "swing"
-uses_catalyst = true
-artifact_directory = "data/models/swing/technical_with_catalyst"
+[[profiles]]
+id = "technical"
+label = "Price indicators"
+artifact_directory = "data/research/swing_technical_return_models_initial_fit"
+manifest_sha256 = "0a30ef2f8e3b95cee252f8c1d1bb5be3c6b98cddda4e47d68e835ad5c1892551"
 
-[[models]]
-id = "swing_technical"
-label = "Swing - Technical"
-mode = "swing"
-uses_catalyst = false
-artifact_directory = "data/models/swing/technical"
+[[profiles]]
+id = "relationships"
+label = "Price indicators and relationships"
+artifact_directory = "data/research/swing_relationship_return_models_initial_fit"
+manifest_sha256 = "7a699020920024ed29b5d8547724f5355fdc2202ca176f11d38f23418bd4666e"
+
+[[profiles]]
+id = "news"
+label = "Price indicators, relationships and news"
+artifact_directory = "data/research/swing_news_return_models_initial_fit"
+manifest_sha256 = "48f3ff9aff50e4eb6be6704808d8a0db5e1b42cbcb21f0cc79f0f4555ccb479b"

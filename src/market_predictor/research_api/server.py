@@ -1,28 +1,27 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from datetime import date
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from market_predictor.research_api.service import (
-    ResearchFeatureSource,
     ResearchFeatureUnavailableError,
     ResearchModelService,
     ResearchModelUnavailableError,
-    model_state_record,
 )
 
 
 class ResearchPredictionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     model_id: str = Field(min_length=1, max_length=64)
     tickers: Annotated[list[str], Field(min_length=1, max_length=100)]
-    as_of: datetime | None = None
+    session_date: date
 
     @field_validator("tickers")
     @classmethod
@@ -32,33 +31,23 @@ class ResearchPredictionRequest(BaseModel):
             raise ValueError("tickers must use canonical US symbol syntax")
         return normalized
 
-    @field_validator("as_of")
-    @classmethod
-    def validate_as_of(cls, value: datetime | None) -> datetime | None:
-        if value is not None and value.utcoffset() is None:
-            raise ValueError("as_of must be timezone-aware")
-        return value
-
-
 def create_research_app(
     *,
     repository_root: Path | str = Path("."),
     catalog_path: Path | None = None,
-    feature_source: ResearchFeatureSource | None = None,
 ) -> FastAPI:
     root = Path(repository_root).resolve()
     service = ResearchModelService(
         root,
         catalog_path=catalog_path,
-        feature_source=feature_source,
     )
     static_root = Path(__file__).resolve().parent / "static"
     app = FastAPI(
         title="Market Predictor Research Workbench",
         version="0.1.0",
         description=(
-            "Non-actionable model inspection and research scoring over registered, "
-            "causal feature snapshots."
+            "Inspect six trained return specifications and their exact saved historical "
+            "validation predictions. No live scoring or release activation."
         ),
     )
     app.mount("/assets", StaticFiles(directory=static_root), name="research-assets")
@@ -76,7 +65,7 @@ def create_research_app(
         return {
             "boundary": "research_only",
             "actionable": False,
-            "models": [model_state_record(state) for state in service.model_states()],
+            "models": service.model_states(),
         }
 
     @app.post("/v1/research/predict")
@@ -85,7 +74,7 @@ def create_research_app(
             result = service.predict(
                 model_id=request.model_id,
                 tickers=request.tickers,
-                as_of=request.as_of or datetime.now(UTC),
+                session_date=request.session_date,
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Unknown research model id.") from exc
@@ -95,7 +84,7 @@ def create_research_app(
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         return {
             "boundary": "research_only",
-            "warning": "Scores are research evidence and are not trading instructions.",
+            "warning": "Saved historical validation predictions; not live forecasts or trading instructions.",
             **result,
         }
 

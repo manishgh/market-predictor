@@ -1,185 +1,122 @@
+"""Server-owned pins for the six completed research return specifications."""
 from __future__ import annotations
 
 import hashlib
-import json
+import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any
+
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.json_integrity import parse_strict_json_object
+from market_predictor.evidence.io import inside
+from market_predictor.swing.training.return_artifacts import verify_unit
 
 CATALOG_SCHEMA = "market_predictor.research_model_catalog"
-EXPECTED_MODEL_IDS = frozenset(
-    {
-        "swing_technical_with_catalyst",
-        "swing_technical",
-    }
-)
+FAMILIES = {"ridge": "regularized_linear_return", "xgboost": "shallow_boosted_return"}
+PROFILES = {"technical": "existing_technical", "relationships": "technical_relationships", "news": "technical_relationships_news"}
+TARGET = "spy_fixed_horizon_excess_return"
+FLAGS = ("serving_eligible", "promotion_eligible", "portfolio_evaluated", "outer_validation_opened", "historical_test_opened")
 
 
 @dataclass(frozen=True, slots=True)
 class ResearchModelSpec:
     model_id: str
     label: str
-    mode: Literal["swing"]
-    uses_catalyst: bool
+    profile: str
+    family: str
     artifact_directory: Path
+    manifest_sha256: str
 
 
-@dataclass(frozen=True, slots=True)
-class ResearchModelState:
-    spec: ResearchModelSpec
-    training_status: str
-    artifact_available: bool
-    integrity_verified: bool
-    promotion_permitted: bool
-    candidate_id: str | None
-    reason: str
-    artifact_sha256: str | None
-
-    @property
-    def research_scoring_available(self) -> bool:
-        return (
-            self.training_status == "candidate"
-            and self.artifact_available
-            and self.integrity_verified
-        )
+def verified_bytes(path: Path, digest: str, *, limit: int = 64 * 1024**2) -> bytes:
+    if re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+        raise DataReadinessError("research artifact has no valid SHA256 pin")
+    with path.open("rb") as stream:
+        content = stream.read(limit + 1)
+    if len(content) > limit or hashlib.sha256(content).hexdigest() != digest:
+        raise DataReadinessError("research artifact is oversized or differs from its pinned bytes")
+    return content
 
 
-def load_research_model_specs(
-    catalog_path: Path,
-    *,
-    repository_root: Path,
-) -> dict[str, ResearchModelSpec]:
+def pinned_object(path: Path, digest: str) -> dict[str, Any]:
+    return parse_strict_json_object(verified_bytes(path, digest, limit=4 * 1024**2), label="research artifact")
+
+
+def load_research_model_specs(catalog_path: Path, *, repository_root: Path) -> dict[str, ResearchModelSpec]:
     with catalog_path.open("rb") as handle:
         payload = tomllib.load(handle)
-    if payload.get("schema") != CATALOG_SCHEMA:
-        raise ValueError("research model catalog schema is invalid")
-    raw_models = payload.get("models")
-    if not isinstance(raw_models, list):
-        raise ValueError("research model catalog must define a model list")
-
-    specs: dict[str, ResearchModelSpec] = {}
-    combinations: set[tuple[str, bool]] = set()
-    root = repository_root.resolve()
-    for raw in raw_models:
-        if not isinstance(raw, dict):
-            raise ValueError("research model catalog contains an invalid model")
-        model_id = str(raw.get("id", "")).strip()
-        label = str(raw.get("label", "")).strip()
-        mode = str(raw.get("mode", "")).strip().lower()
-        uses_catalyst = raw.get("uses_catalyst")
-        relative_directory = Path(str(raw.get("artifact_directory", "")).strip())
-        if (
-            model_id not in EXPECTED_MODEL_IDS
-            or not label
-            or mode != "swing"
-            or not isinstance(uses_catalyst, bool)
-            or relative_directory.is_absolute()
-            or ".." in relative_directory.parts
-        ):
-            raise ValueError(f"research model catalog entry is invalid: {model_id or '<missing>'}")
-        if model_id in specs:
-            raise ValueError(f"duplicate research model id: {model_id}")
-        combination = (mode, uses_catalyst)
-        if combination in combinations:
-            raise ValueError("research model catalog duplicates a mode/catalyst combination")
-        combinations.add(combination)
-        specs[model_id] = ResearchModelSpec(
-            model_id=model_id,
-            label=label,
-            mode=cast(Literal["swing"], mode),
-            uses_catalyst=uses_catalyst,
-            artifact_directory=root / relative_directory,
-        )
-    if set(specs) != EXPECTED_MODEL_IDS:
-        missing = sorted(EXPECTED_MODEL_IDS.difference(specs))
-        raise ValueError(f"research model catalog is incomplete: {missing}")
+    if payload.get("schema") != CATALOG_SCHEMA or set(payload) != {"schema", "profiles"}:
+        raise ValueError("research catalog must contain the current return profiles")
+    specs = {}
+    seen = set()
+    for profile in payload["profiles"]:
+        name = profile["id"]
+        if name not in PROFILES or name in seen or not profile["label"]:
+            raise ValueError("research catalog profile is invalid or duplicated")
+        relative = Path(profile["artifact_directory"])
+        digest = profile["manifest_sha256"]
+        if relative.is_absolute() or ".." in relative.parts or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            raise ValueError("research catalog artifact path or pin is invalid")
+        seen.add(name)
+        for learner, family in FAMILIES.items():
+            model_id = f"{name}_{learner}"
+            specs[model_id] = ResearchModelSpec(model_id, f"{profile['label']} / {learner}", name, family,
+                inside(repository_root, relative), digest)
+    if seen != set(PROFILES):
+        raise ValueError("research catalog requires exactly three return profiles")
     return specs
 
 
-def inspect_research_model(spec: ResearchModelSpec) -> ResearchModelState:
-    model_card_path = spec.artifact_directory / "model_card.json"
-    candidate_path = spec.artifact_directory / "candidate.joblib"
-    manifest_path = spec.artifact_directory / "_manifest.json"
-    if not model_card_path.is_file():
-        return ResearchModelState(
-            spec=spec,
-            training_status="missing",
-            artifact_available=False,
-            integrity_verified=False,
-            promotion_permitted=False,
-            candidate_id=None,
-            reason="Training output is missing its model card.",
-            artifact_sha256=None,
-        )
-
-    card = _read_json(model_card_path, "model card")
-    status = str(card.get("status", "missing"))
-    promotion_permitted = card.get("promotion_permitted") is True
-    candidate_id_raw = card.get("candidate_id")
-    candidate_id = str(candidate_id_raw) if candidate_id_raw else None
-    if status == "no_candidate":
-        return ResearchModelState(
-            spec=spec,
-            training_status=status,
-            artifact_available=False,
-            integrity_verified=manifest_path.is_file(),
-            promotion_permitted=False,
-            candidate_id=None,
-            reason="Training completed, but no candidate passed the configured validation gates.",
-            artifact_sha256=None,
-        )
-    if status != "candidate" or not candidate_path.is_file() or not manifest_path.is_file():
-        return ResearchModelState(
-            spec=spec,
-            training_status=status,
-            artifact_available=candidate_path.is_file(),
-            integrity_verified=False,
-            promotion_permitted=promotion_permitted,
-            candidate_id=candidate_id,
-            reason="Candidate files are incomplete or inconsistent with the model card.",
-            artifact_sha256=None,
-        )
-
-    manifest = _read_json(manifest_path, "model manifest")
-    files = manifest.get("files")
-    candidate_record = files.get("candidate.joblib") if isinstance(files, dict) else None
-    expected_sha256 = (
-        str(candidate_record.get("sha256", ""))
-        if isinstance(candidate_record, dict)
-        else ""
-    )
-    actual_sha256 = _file_sha256(candidate_path)
-    integrity_verified = expected_sha256 == actual_sha256
-    return ResearchModelState(
-        spec=spec,
-        training_status=status,
-        artifact_available=True,
-        integrity_verified=integrity_verified,
-        promotion_permitted=promotion_permitted,
-        candidate_id=candidate_id,
-        reason=(
-            "Candidate is available for non-actionable research scoring."
-            if integrity_verified
-            else "Candidate artifact hash does not match its manifest."
-        ),
-        artifact_sha256=actual_sha256 if integrity_verified else None,
-    )
+def load_run(spec: ResearchModelSpec) -> tuple[dict[str, Any], dict[str, Any]]:
+    manifest = pinned_object(spec.artifact_directory / "_manifest.json", spec.manifest_sha256)
+    request = pinned_object(spec.artifact_directory / "_request.json", manifest["request_sha256"])
+    if (manifest.get("schema") != "market_predictor.swing_return_training"
+            or manifest.get("status") != "complete_research_only"
+            or request.get("schema") != "market_predictor.swing_return_training_request"
+            or any(record.get(flag) is not False for record in (manifest, request) for flag in FLAGS)
+            or request["policy"]["target"] != TARGET
+            or request["policy"]["feature_profile"] != PROFILES[spec.profile]):
+        raise DataReadinessError("completed research return scope or profile differs")
+    expected = {f"{family}/{scope}/fold-{fold}" for family in FAMILIES.values()
+                for scope in ("temporal", "security_transfer") for fold in range(1, 5)}
+    expected |= {f"{family}/final_refit" for family in FAMILIES.values()}
+    if set(manifest["units"]) != expected or [fold["number"] for fold in request["folds"]] != [1, 2, 3, 4]:
+        raise DataReadinessError("research return run has an incomplete fit inventory")
+    return manifest, request
 
 
-def _read_json(path: Path, label: str) -> dict[str, Any]:
+def load_unit(spec: ResearchModelSpec, manifest: dict[str, Any], request: dict[str, Any],
+              key: str) -> tuple[Path, dict[str, Any]]:
+    record = manifest["units"][key]
+    directory = inside(spec.artifact_directory, key)
+    if not directory.as_posix().endswith("/" + record["path"]):
+        raise DataReadinessError("research unit directory differs from the recorded path")
+    unit_manifest = pinned_object(directory / "_manifest.json", record["manifest_sha256"])
+    unit = unit_manifest["unit"]
+    if (unit["family"] != spec.family or unit["scope"] != ("final_refit" if key.endswith("final_refit") else "temporal")
+            or unit["feature_names"] != request["feature_names"] or unit["target"] != TARGET):
+        raise DataReadinessError("research unit family, scope, target or feature order differs")
+    verified = verify_unit(directory, manifest_sha256=record["manifest_sha256"],
+        request_sha256=manifest["request_sha256"], unit=unit)
+    return directory, verified
+
+
+def model_state_record(spec: ResearchModelSpec) -> dict[str, Any]:
+    state: dict[str, Any] = {"id": spec.model_id, "label": spec.label, "family": spec.family,
+        "profile": spec.profile, "training_status": "unavailable", "integrity_verified": False,
+        "historical_predictions_available": False, "live_scoring_available": False,
+        "serving_eligible": False, "promotion_eligible": False, "actionable": False,
+        "manifest_sha256": spec.manifest_sha256, "target": TARGET, "horizon_sessions": 10}
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(f"{label} is unreadable: {path}") from exc
-    if not isinstance(payload, dict):
-        raise ValueError(f"{label} must contain a JSON object: {path}")
-    return payload
-
-
-def _file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+        manifest, request = load_run(spec)
+        _, final = load_unit(spec, manifest, request, f"{spec.family}/final_refit")
+        state.update(training_status=manifest["status"], integrity_verified=True,
+            historical_predictions_available=True, feature_count=len(request["feature_names"]),
+            final_model_sha256=final["files"]["model.joblib"],
+            validation_start=request["folds"][0]["score"][0], validation_end=request["folds"][-1]["score"][-1],
+            reason="Training completed. Saved temporal validation predictions are available; live release acceptance is pending.")
+    except (OSError, ValueError, KeyError, TypeError, DataReadinessError):
+        state["reason"] = "Pinned training artifacts are missing, modified or inconsistent."
+    return state

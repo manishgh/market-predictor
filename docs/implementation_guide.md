@@ -2,7 +2,7 @@
 
 Status: current edge-rebuild path
 
-Last updated: 2026-09-20
+Last updated: 2026-10-24
 
 Read `AGENTS.md`, `docs/active_edge_rebuild_plan.md`, and
 `docs/reviews/active_edge_rebuild_handoff.md` first. Command `--help` output and code
@@ -23,8 +23,18 @@ promoted atomic bundle exists.
 
 `serving/requests.py` defines the public swing prediction and replay requests.
 `api.py` exposes only the swing route and rejects retired route configuration.
-`research_api/catalog.py` and `configs/research_model_catalog.toml` limit the
-catalog-driven workbench to two swing experiments. Dedicated intraday command
+`research_api/catalog.py` and `configs/research_model_catalog.toml` bind the
+workbench to the six completed return specifications (three input profiles times
+Ridge/XGBoost) through independently recorded training-manifest hashes.
+`/v1/research/predict` requires an exact historical session and reads only saved
+temporal validation predictions, preserving negative, zero and unavailable values.
+Each query verifies the fold artifacts through the canonical return-artifact
+reader; final refits never stand in for out-of-fold evidence. This historical
+API does not supply fresh live forecasts or satisfy production release gates.
+The old two-candidate classifier workbench scorer is removed without aliases.
+The production classifier-probability contract remains unchanged; the accepted
+numerical-return response and matching live feature path remain pending step9.
+Dedicated intraday command
 adapters and old cross-sectional commands are deleted without aliases. Shared
 S&P archive collection/event extraction now belong to `commands/sp500_sources.py`.
 Prospective news/SIP collection, canonical bar clocks and swing training remain.

@@ -64,7 +64,7 @@ label {
   font-weight: 650;
 }
 
-select, textarea, button {
+select, textarea, input, button {
   width: 100%;
   min-height: 42px;
   border-radius: 4px;
@@ -72,7 +72,7 @@ select, textarea, button {
   letter-spacing: 0;
 }
 
-select, textarea {
+select, textarea, input {
   border: 1px solid #aeb7c0;
   background: var(--surface);
   color: #17202a;
@@ -135,14 +135,10 @@ th, td { padding: 11px 12px; text-align: left; vertical-align: top; border-botto
 th { background: #f3f5f6; color: #46515c; white-space: nowrap; font-size: 12px; }
 tbody tr:last-child td { border-bottom: 0; }
 .empty { padding: 34px 12px; text-align: center; color: var(--muted); }
-.score { font-variant-numeric: tabular-nums; font-weight: 650; }
 
 details { min-width: 190px; }
 summary { color: var(--accent); cursor: pointer; font-weight: 600; }
-.feature-list { margin: 9px 0 0; padding: 0; list-style: none; max-height: 240px; overflow-y: auto; }
-.feature-list li { display: flex; justify-content: space-between; gap: 18px; padding: 5px 0; border-bottom: 1px solid #eef0f2; }
-.feature-list code { overflow-wrap: anywhere; color: #37424c; }
-.feature-list span { font-variant-numeric: tabular-nums; white-space: nowrap; }
+pre { max-width: 100%; overflow-x: auto; font-size: 12px; }
 
 .rejections { margin-top: 20px; padding: 16px; border-left: 4px solid #d89b31; background: #fff8eb; }
 .rejections ul { margin: 0; padding-left: 20px; color: #5f4b27; font-size: 13px; }

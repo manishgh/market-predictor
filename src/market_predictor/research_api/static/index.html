@@ -10,20 +10,23 @@
   <header class="topbar">
     <div>
       <h1>Market Predictor</h1>
-      <p>Research scoring workbench</p>
+      <p>Trained return models and saved validation predictions</p>
     </div>
     <span class="boundary-badge">Research only</span>
   </header>
 
   <main class="workspace">
     <section class="controls" aria-labelledby="controls-title">
-      <h2 id="controls-title">Prediction request</h2>
+      <h2 id="controls-title">Historical prediction lookup</h2>
 
       <label for="model-select">Model</label>
       <select id="model-select" disabled>
         <option>Loading model catalog...</option>
       </select>
       <p id="model-status" class="field-status" aria-live="polite"></p>
+
+      <label for="session-date">Historical session</label>
+      <input id="session-date" type="date" required>
 
       <label for="tickers">US tickers</label>
       <textarea
@@ -35,7 +38,7 @@
       ></textarea>
 
       <button id="execute-btn" type="button" disabled>
-        Run research score
+        Read saved predictions
       </button>
       <p id="request-status" class="request-status" role="status" aria-live="polite"></p>
     </section>
@@ -43,7 +46,8 @@
     <section class="results" aria-labelledby="results-title">
       <div class="results-heading">
         <div>
-          <h2 id="results-title">Ranked evidence</h2>
+          <h2 id="results-title">Saved return predictions</h2>
+          <p>Ten-session stock net return minus SPY gross return. Values are percentage points (pp), not probabilities.</p>
           <p id="result-context">No request has been run.</p>
         </div>
         <span id="result-count" class="count">0</span>
@@ -53,15 +57,14 @@
         <table>
           <thead>
             <tr>
-              <th scope="col">Rank</th>
               <th scope="col">Ticker</th>
-              <th scope="col">Research score</th>
-              <th scope="col">Feature time</th>
-              <th scope="col">Feature evidence</th>
+              <th scope="col">Predicted excess return</th>
+              <th scope="col">Availability</th>
+              <th scope="col">Decision time</th>
             </tr>
           </thead>
           <tbody id="prediction-rows">
-            <tr><td colspan="5" class="empty">Awaiting a valid request.</td></tr>
+            <tr><td colspan="4" class="empty">Awaiting a valid request.</td></tr>
           </tbody>
         </table>
       </div>
@@ -70,6 +73,7 @@
         <h3 id="rejections-title">Unavailable tickers</h3>
         <ul id="rejection-list"><li>None</li></ul>
       </section>
+      <details><summary>Model and prediction provenance</summary><pre id="provenance"></pre></details>
     </section>
   </main>
 
