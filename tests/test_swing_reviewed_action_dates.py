@@ -76,13 +76,38 @@ def test_official_effective_date_excludes_future_identity_change_without_cash_or
     assert record == _name()
 
 
-@pytest.mark.parametrize("first,last", [("2024-01-03", "2024-02-01"), ("2024-02-01", "2024-02-02"),
-    ("2024-02-02", "2024-02-10")])
-def test_identity_boundary_crossing_and_later_mapping_remain_unavailable(provider: Any, first: str, last: str) -> None:
+@pytest.mark.parametrize("first,last", [("2024-01-03", "2024-02-01"), ("2024-02-01", "2024-02-02")])
+def test_identity_boundary_crossing_and_effective_day_remain_unavailable(provider: Any, first: str, last: str) -> None:
     record = _name()
     bridge = _with_facts(provider, "name_changes", record, {"effective_date": "2024-02-01"})
     assert bridge.irrelevance_reason("AAA", action_window("name_changes", record),
         date.fromisoformat(first), date.fromisoformat(last)) is None
+
+
+
+@pytest.mark.parametrize("price_history", [False, True])
+def test_new_same_symbol_raw_window_after_reviewed_change_needs_no_prior_ownership_mapping(
+    provider: Any, price_history: bool,
+) -> None:
+    record = _name()
+    bridge = _with_facts(provider, "name_changes", record, {"effective_date": "2024-02-01"})
+    window = action_window("name_changes", record)
+    assert bridge.irrelevance_reason("AAA", window, date(2024, 2, 2), date(2024, 2, 12),
+        price_history=price_history) == "new_same_symbol_raw_window_after_official_identity_change"
+    assert bridge.irrelevance_reason("OTHER", window, date(2024, 2, 2), date(2024, 2, 12),
+        price_history=price_history) is None
+    assert not bridge.terms and not bridge.split_ratios("AAA", date(2024, 1, 1), date(2024, 3, 1))
+    assert record == _name()
+
+
+def test_post_change_symbol_alias_and_unsourced_date_remain_unavailable(provider: Any) -> None:
+    record = _name() | {"new_symbol": "BBB"}
+    bridge = _with_facts(provider, "name_changes", record, {"effective_date": "2024-02-01"})
+    window = action_window("name_changes", record)
+    for symbol in ("AAA", "BBB"):
+        assert bridge.irrelevance_reason(symbol, window, date(2024, 2, 2), date(2024, 2, 12)) is None
+    bridge.reviewed_dates.clear()
+    assert bridge.irrelevance_reason("AAA", window, date(2024, 2, 2), date(2024, 2, 12)) is None
 
 
 def test_official_spin_dates_bound_prior_holding_but_do_not_create_daughter_shares(provider: Any) -> None:

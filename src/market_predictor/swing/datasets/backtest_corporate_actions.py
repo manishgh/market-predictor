@@ -307,9 +307,17 @@ class BacktestCorporateActions:
             if last < parent_units.ex_date:
                 return "regular_way_parent_sold_before_distribution_entitlement"
         if family == "name_changes":
-            if (reviewed is not None and symbol in (record.get("old_symbol"), record.get("new_symbol"))
-                    and last < reviewed.economic_dates["effective_date"]):
-                return "holding_ends_before_official_identity_change"
+            if reviewed is not None and symbol in (record.get("old_symbol"), record.get("new_symbol")):
+                effective = reviewed.economic_dates["effective_date"]
+                if last < effective:
+                    return "holding_ends_before_official_identity_change"
+                # The caller independently binds a fresh raw-price window and
+                # ownership. A same-ticker change strictly before that window
+                # needs no conversion of an already-owned old security class.
+                # Crossing the date, its unknown intraday clock, and ticker
+                # aliases still require their separate ownership treatment.
+                if first > effective and record.get("old_symbol") == record.get("new_symbol") == symbol:
+                    return "new_same_symbol_raw_window_after_official_identity_change"
             old_cusip, new_cusip = record.get("old_cusip"), record.get("new_cusip")
             if (isinstance(old_cusip, str) and len(old_cusip) == 9 and old_cusip.isalnum()
                     and old_cusip == new_cusip and symbol in (record.get("old_symbol"), record.get("new_symbol"))):

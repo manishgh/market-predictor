@@ -1,0 +1,31 @@
+schema_version = "market_predictor.backtest_corporate_actions"
+scope = "retrospective_research_only"
+ordinary_dividend_cash = "declared_rate_at_ex_date_close"
+dividend_reuse = "subsequent_sessions_only"
+split_units = "recorded_ratio_proportional_normalized_shares"
+benchmark_distributions = "retain_cash_without_reinvestment"
+unknown_actions = "valuation_unavailable_without_filtering_selected_lots"
+production_eligible = false
+documented_spin_offs = "proportional_daughter_shares_sold_with_parent"
+
+documented_cash_payouts = "issuer_declared_usd_at_ex_date_close"
+
+[reviewed_action_dates]
+path = "data/research/swing_backtest_reviewed_action_dates_20261024.json"
+sha256 = "2bde854cebf48dba08a06979d785bd8828a536833331e0e4096e26514bfd3ca7"
+
+[reviewed_cash_payouts]
+path = "data/research/swing_backtest_reviewed_cash_payouts_20261024.json"
+sha256 = "46ba9bace720d4f8733fe8ae0b7d6105dbc37a1e5dfde6900f068d63e58aefd8"
+
+[reviewed_parent_units]
+path = "data/research/swing_backtest_reviewed_parent_spin_units_20261024.json"
+sha256 = "938f7b6aa420e9895b366ad95dbfa8ae18dc2923b94878f35788a50b430f8069"
+
+[reviewed_record_dispositions]
+path = "data/research/swing_backtest_reviewed_action_record_dispositions.json"
+sha256 = "097e6b7088affc4676e530d16bb83b61ba45ed98a6b7f90b023b743076d0d3a9"
+
+[reviewed_spin_offs]
+path = "data/research/swing_backtest_reviewed_documented_spin_offs_20261024.json"
+sha256 = "553cc2a90dbfd55674bb26d81d6b11f2a1923159ae48c3e8c4c5843ee29c2b56"
