@@ -1,55 +1,50 @@
 # Active Edge Rebuild Handoff
 
-### Resource observation — October24 16:44UTC
+### Fresh retry boundary: first unavailable-valuation report — October24 19:29UTC
 
-Current Price indicators and relationships / Ridge / stop-loss, ten-session limit
-worker10392/launcher24804 remains live with controller7472 and monitor49568. Still
-five ended RAM failures and zero new publications; no complete/outer-exit/finish.
-Latest short RAM pressure pause resumed35.6987865s at16:32:17.056784Z77.1420959%;
-this was NOT a timeout. Current owner initial-fit-raw-share-plan. C: free space
-independently measured274677760bytes, then275906560bytes (about263MiB). No disk-write
-failure observed; do not claim that disk space stopped this run, add a new startup
-gate, delete protected evidence or interrupt the frozen campaign. Recheck actual
-space on future checks and preserve exact evidence if a write fails. Workspace
-review-results/news-gap-fixed-disk-observation-20261024T1644.json SHA
-e4e8a6664a51969e8234e95e13227d6ed764311de06195df98aab99d2875caa5.
-User notified once about the measured space; stay quiet if unchanged.
+Six of12frozen executions naturally ended: five earlier RAM failures and one
+published valuation_unavailable report; ZERO funded performance comparisons.
+Price indicators and relationships / Ridge / stop-loss, ten-session limit
+naturally returned2 and published2026-10-24T19:27:28.092243Z. Five artifact and two
+log hashes independently verified; frozen_inputs_rechecked=true; all538current
+source/config/operator hashes independently rechecked. ResultSHA
+ea422675f34dfdcdbd95fa76ff0a4e3a098400cd534537e5cd3977822008c42b;
+manifestSHA4f57ae418c34c53a68c5d9d096f321c80194186a2d8226d6b40c37bdae7af396;
+reportSHA56c9d0598464ffc99eb05259a2351bbdae7e3a37257550851726d0ddcb00b103.
 
-### Fresh retry boundary: five RAM failures, no published performance — October24 16:29UTC
+Of17700selected decisions (345036candidate decision rows), ONE STERIS/STE row
+is unavailable: decisionf7de5364851af15d50a989f778be3ff8a377d2069d99dd0393def65249e996a1,
+cik:0001757898, session2022-11-07. Cash action0765b43c-d79b-4a00-b83e-783736774ffb
+requires corporate_terms_require_replay. Exact saved provider record: rate0.47,
+ex-date2022-11-21, record2022-11-22, pay/process2022-12-16, foreign=true,special=false.
+Two original source bodies independently hash-bound, sameSHA
+a9f6791a2e8af17ed57602bf1a6e8876e3c3186b84e815120ba4c1995026cae2.
+No currency/tax inference or zero return. Comparisons null; all selected rows retained.
+The closed accounting proof covered different technical-XGBoost/news-Ridge selections;
+this new relationship selection does not authorize repeating that closed proof.
+Exact new receipt workspace
+review-results/news-gap-fixed-relationships-ridge-stop-valuation-unavailable-20261024.json
+SHA410ddde25842673e0772a92b22d4a9b815bde62b0b71600785d2c59ec1a28d28.
 
-Five of12frozen executions naturally ended with return2 BEFOREpublication. All
-four Price indicators policies (Ridge/XGBoost under both exits) and Price indicators
-and relationships / Ridge / profit target, stop-loss, ten-session limit exhausted
-the unchanged91%systemRAM guard's120s bounded wait. Zero new funded performance
-reports. Missing manifests are secondary to the RAM guard, not accounting results.
-The first two Ridge failures remain exactly preserved in workspace
+Earlier five RAM failures remain protected: first two Ridge evidence
 review-results/news-gap-fixed-technical-ridge-memory-failures-20261024.json SHA
-b7766c29a60c60645fbf4dd01fc5f76812784f84fb67901dbb1ca27ae00356d5.
-
-NEW exact evidence: Price indicators / XGBoost / profit target, stop-loss,
-ten-session limit timeout16:18:19.174729Z120.0768247s92.4732375%; resultfinished
-16:18:19.888287Z. Price indicators / XGBoost / stop-loss, ten-session limit timeout
-16:20:30.927229Z120.0559419s92.0136630%; resultfinished16:20:31.647923Z. Price
-indicators and relationships / Ridge / profit target, stop-loss, ten-session limit
-timeout16:22:42.525538Z120.0600979s91.7470831%; resultfinished16:22:43.290014Z.
-The latter two stopped during funded corporate-action record projection; the
-XGBoost target/stop policy's earlier short projection/evaluation pauses resumed,
-then the final saved OOF evaluation pause timed out. All result/start/stdout/stderr
-receipts retained, log hashes independently verified, frozen_inputs_rechecked=true.
-Exact diagnosis workspace review-results/news-gap-fixed-xgboost-relationships-memory-failures-20261024.json
+b7766c29a60c60645fbf4dd01fc5f76812784f84fb67901dbb1ca27ae00356d5;
+next three review-results/news-gap-fixed-xgboost-relationships-memory-failures-20261024.json
 SHAfbb4c3b300194883516953593300373604872801a53fc081bc72ec4651dfba90.
-All538current frozen source/config/operator hashes independently rechecked. No
-runtime/guard edits, cleanup or interruption; six trained models remain frozen.
+No guard/runtime edits or interruption. Prior low-disk observation receipt remains
+review-results/news-gap-fixed-disk-observation-20261024T1644.json SHA
+e4e8a6664a51969e8234e95e13227d6ed764311de06195df98aab99d2875caa5;
+C: free862941184bytes observed19:29UTC, no disk-write failure/agent cleanup.
 
-CURRENT: Price indicators and relationships / Ridge / stop-loss, ten-session limit
-started2026-10-24T16:22:43.742697Z. Actualworker10392/launcher24804/controller7472,
-monitor49568; owner project-swing-corporate-action-evidence observed16:29UTC.
-Inspect actual owner next check. Seven executions remain including this one. No
-complete/outer-exit/finish marker. Let remaining frozen policies end naturally;
-no source/config/runtime edits, duplicate launch or blind retry while live. At
-natural campaign end retain all receipts, then diagnose the smallest necessary
-memory reduction before retrying missing results, preserving91% and all economics.
-GPU/API implementations stay isolated until comparisons/retries/evidence close.
+CURRENT: Price indicators and relationships / XGBoost / profit target, stop-loss,
+ten-session limit started2026-10-24T19:27:28.546329Z; actualworker35068/launcher37804,
+controller7472/monitor49568. Inspect actual owner nextcheck. Six remaining executions
+include this one. No complete/outer-exit/finish. Continue all frozen policies naturally;
+no stop/restart/duplicate/retry or edits to source/config/operator/runtime while live.
+At natural end preserve full audit, then address exact remaining corporate terms and
+smallest necessary memory reduction before further retries, preserving91%, all models,
+rows, clocks, costs and unsupported-action gates. GPU/API integrations remain isolated
+until comparisons/retries/evidence close. Step7 remains the sole active plan step.
 
 ### User-requested code walkthrough and trained-model API link — October24
 
