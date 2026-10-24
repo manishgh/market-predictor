@@ -21,6 +21,76 @@ remain fixed. TradingFlow remains independently owned. Tests alone are not a win
 | 9. Accepted prediction API V1 | Pending | Historical/live features use the same transformation and ordering; signed numerical returns, missing inputs and acceptance are explicit. Coordinate TradingFlow long/swing consumption without modifying its active work unilaterally. |
 | 10. Merge and push accepted work | Pending | Publish reviewed implementation checkpoints on the current branch; merge accepted final work to main and push only after its required data/model/consumer conditions are actually satisfied. |
 
+### Approved accounting-gap repair verified — October24
+
+Implementation a136c8a is pushed. Human explicitly authorized fixing the accounting
+gaps and retrying the failed backtests while preserving trained models and91%RAM.
+Approval workspace review-results/accounting-gap-fix-approval-20261024.json SHA
+ d24e7826760f652614cc8db63a0059cb4730080e67586c3641f9ca04a8c91cee.
+No further approval is required for the exact BDX/EMBC and LH/FTRE treatment.
+
+New configs/swing_backtest_accounting_gaps_20261024.toml SHA
+8c131b69a3d775f9a7e7dced4706e3396a78399ab53d589da5579154f9b34244
+preserves all old policy/artifact bytes and adds thirty issuer-gross USD cash
+entitlements, two daughter distributions and Bunge's sourced November1,2023 date.
+Eight provider cash amounts were net values; use sourced declared gross, not an
+inferred withholding factor. Real issuer/SEC HTTP bodies and rejected attempts
+are retained data/raw/swing_accounting_gap_facts_20261024. Two narrow SIP requests
+acquired nine EMBC raw1Day sessions Apr1–13,2022 and nine FTRE sessions Jul3–14,2023;
+two full required daughter action-coverage queries retained. BDX daughter ratio.2,
+LH1.0, original parent units, proportional normalized fractions, daughter sale with
+parent at matching raw open/close research clock. Costs20/40bps remain once per lot.
+
+One small canonical change handles the demonstrated four March2024 Bunge decisions:
+independently bound fresh same-ticker raw windows strictly after the reviewed date
+need no translation of already-owned old-class shares. Effective-day/crossing
+windows, symbol aliases and unknown action economics still fail closed.
+Two new UNIT regressions failed before the fix;101affected synthetic UNIT poison/
+accounting/funded-input tests passed23.34s. Ruff3files and strictmypy2source modules
+passed. One consolidated author code/source review no findings, independent review
+not claimed, workspace review-results/accounting-gap-consolidated-review-20261024.json
+SHA22666a0229f54abbbf797099de9a9ff426e6b49bb8b70b45054520e9b57d18a9.
+Full suite unrun for scoped accounting component.
+
+ACTUAL REAL proof naturally exited0, review-results/accounting-gap-fixes-real-20261024.json
+SHA666fb01ae15bd204ec906679e53a54ba876a1f897b72789598aed37baf1ce280.
+Both affected selections retain17700 rows each with zero remaining action gaps:
+technical XGBoost selectedSHAed3e7f53e24d390710e2ae30b1e8e50dfa6ca987a66b9c1e103a0102bd117812;
+news Ridge selectedSHA5b4fe0d306dc355e1fa8fae602e80651fb84c8a29f862dd2589aefc2331b7f05.
+All48technical and18news previously affected holdings passed both frozen exits,
+132actual replays reconcile independent raw sales plus distinct declared cash,
+cost once and full settlement.3822 source/implementation/model hashes independently
+rechecked. This proves targeted accounting, not full portfolio/SPY performance.
+The six trained specifications, features, targets, weights, splits, selection,
+parent barriers/fills/exits,91%/120s/5s guard and5GiB/.75GiB limits remain unchanged.
+
+All prior receipts preserved. Proof attempt01 refused a nested helper lease before
+loading; fixed helper sequencing only. Attempt02 helper expected favorable target
+gap improvement; corrected helper to frozen target-at-barrier rule, no runtime fill
+change. Attempt03 passed alltechnical48 but exposed four Bunge post-date gaps;
+exact evidence retained and minimal sourced-date remedy above. Helpers/logs/exits
+are retained with attempt suffixes. No pressure timeout in final successful proof;
+actual bounded pauses/resumes preserved in its log. Never delete old receipts.
+
+NEXT: launch prepared workspace work/run_gap_fixed_backtests_20261024.py SHA
+b66c0afea4e6d47c796ab1407095f981802bb97c8c272b26f3e21a4cd969a2eb
+with the passed proof, fresh campaign news_gap_fixed_20261024 and fresh workspace
+review-results/news-gap-fixed-20261024. Retry eight RAM-failed and four unavailable
+policies; reuse the two original paired diagnostics. Prior natural complete SHA
+08fcea4dabfa271423605697bad64493ab5c5507276b41997bd2e59e73a8fde7 is historical.
+No duplicate, restart, frozen source/config/operator/runtime edits while live.
+Require natural exit, all12 receipts,2 retained pairs and every artifact/log hash.
+All admission/serving/promotion false; no final-refit-as-OOF or fabricated future data.
+Future GPU implementation stays isolated until comparisons/retries/evidence close.
+
+Heartbeat15minutes is ACTIVE under new authorization. Read-only monitor actual
+Python49568, accounting-gap-monitor-20261024.log/.exit.json; inspect current owner
+in news-oct20-monitor-state.json, never assume stale PIDs. Prior finish f808559c3f4dfdc3835bb24348e017f257e59389381352861dcb3b4b71a76daf
+preserved as news-oct20-finished-accounting-gap-human-wait-20261024T1513.json.
+At actual work end write fresh finish, verify natural monitor exit/released idle
+hold and no owned heavy job. Stay quiet unchanged; notify meaningful boundaries.
+Only step7 remains in progress. No refits, no guard change, no unrelated cleanup.
+
 ### Future XGBoost GPU option — human requested October22
 
 Human explicitly selected "Enable GPU for future XGBoost training". No GPU retraining
