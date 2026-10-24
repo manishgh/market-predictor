@@ -72,11 +72,17 @@ exact evidence retained and minimal sourced-date remedy above. Helpers/logs/exit
 are retained with attempt suffixes. No pressure timeout in final successful proof;
 actual bounded pauses/resumes preserved in its log. Never delete old receipts.
 
-NEXT: launch prepared workspace work/run_gap_fixed_backtests_20261024.py SHA
+CURRENT LIVE: fresh authorized retries launched2026-10-24T15:33:00.286360Z.
+Operator workspace work/run_gap_fixed_backtests_20261024.py SHA
 b66c0afea4e6d47c796ab1407095f981802bb97c8c272b26f3e21a4cd969a2eb
-with the passed proof, fresh campaign news_gap_fixed_20261024 and fresh workspace
-review-results/news-gap-fixed-20261024. Retry eight RAM-failed and four unavailable
-policies; reuse the two original paired diagnostics. Prior natural complete SHA
+binds the passed proof, campaign news_gap_fixed_20261024 and workspace
+review-results/news-gap-fixed-20261024. Accepted request SHA
+2feb6e2e11d7fca20b232c1b40f7b7928a9cf9ba659c036be048d58bffdb6bcd.
+First active policy: Price indicators / Ridge / profit target, stop-loss, ten-session
+limit. Actual first Pythonworker48860/launcher48436/controller7472/launcher47828,
+outerexec17670; inspect actual owner on every continuation. No result yet.
+Outer news-gap-fixed-20261024.log/.exit.json. Eight RAM-failed and four unavailable
+policies retry sequentially; two original paired diagnostics reused. Prior natural complete SHA
 08fcea4dabfa271423605697bad64493ab5c5507276b41997bd2e59e73a8fde7 is historical.
 No duplicate, restart, frozen source/config/operator/runtime edits while live.
 Require natural exit, all12 receipts,2 retained pairs and every artifact/log hash.
