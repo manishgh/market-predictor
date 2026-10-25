@@ -1,5 +1,30 @@
 # Active Edge Rebuild Handoff
 
+### User amendment — October 25: one ATR swing stop prepared
+
+Human instruction: "Make stop loss at 1x only, atr 3:1". The next swing policy
+uses a 1.0 ATR stop and unchanged 3.0 ATR target, giving planned reward/risk 3:1
+before costs. Ten-session horizon, ATR14 daily basis, stop-first ambiguity,
+gap fills, costs, all six trained models and intraday policy remain unchanged.
+Implementation is isolated on codex/swing-one-atr-stop, commit46c5309, workspace
+worktrees/swing-one-atr-stop. It changes one config and two runtime modules plus
+four UNIT files. 152 synthetic UNITs passed (81 in18.58s,71 in10.21s), Ruff six
+Python files and strict mypy two sources passed. One consolidated AUTHOR review
+found no supported findings; it is not an independent review. Full suite and real
+retained-data/new-policy performance evaluation are UNRUN. Evidence: workspace
+review-results/swing-one-atr-stop-amendment-20261025.json.
+
+The live memory_terms_fixed_20261025 campaign STILL uses its original1.5 ATR
+stop. Do not edit its primary source/config/operator/runtime, stop, restart or
+duplicate it. Let all12 policies finish naturally and audit the actual evidence.
+Then integrate the one-ATR amendment under a fresh evaluation request preserving
+original model/feature/source identities. Existing saved-configuration evidence
+certifies naming equivalence only; it cannot certify this numerical stop change.
+Do not rewrite old pins or weaken that verifier. Keep all original reports/models.
+No refit, feature rebuild, promotion or live deployment is implied. Step7 remains
+the sole active step. No external push attempted; prior disclosure approval is
+still unanswered. GPU/API worktrees remain isolated until comparison closure.
+
 ### Current checkpoint — October25 14:10UTC
 
 The actual PRIMARY all-six proof passed and naturally exited0 at14:05:19.0557735Z.
