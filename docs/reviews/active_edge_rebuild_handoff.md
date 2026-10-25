@@ -1,6 +1,56 @@
 # Active Edge Rebuild Handoff
 
-### Fresh retry boundary: news XGBoost target valuation unavailable — October25 08:29UTC
+### Natural end audited: frozen backtests — October25 11:29UTC
+
+All12execution receipts and the natural outer exit2 are present. The last policy,
+Price indicators, relationships and news / XGBoost / stop-loss, ten-session limit,
+naturally returned2 before publication2026-10-25T11:28:20.143518Z. Its saved OOF
+pause began11:26:06.345897Z at91.4528144% system RAM; timeout11:28:06.904613Z
+after120.5584131s at91.6340431%. Earlier pauses resumed. Missing manifest is
+secondary to the unchanged91%/120s guard, not a funded performance result.
+ResultSHA98ce4b015a13d44071bd50883c1ce61618b7259cd57cbe4e0269cf9b0d158667;
+stderrSHA0a682d99b53ba9fb0d99f799673bb6096702f8298b02f26d66368f19eca3a896.
+Natural outer exit2026-10-25T11:28:20.9150894Z, receiptSHA
+0cbfe0ae42d934b3d4d995f545dbbfd1a3036da36bdceb1404462237eb3ecd44.
+Campaign completeSHA b739b655f83438ab22a6e819d86344f4f00dd0bd95b77bfc73a84fb694fbee84.
+Its all_trials_completed remains false: executions ended, evaluations did not succeed.
+
+Final counts: ten memory failures (nine system-RAM bounded-wait timeouts and one
+process-budget/headroom failure), two valuation_unavailable publications, ZERO funded
+performance comparisons. Sixteen selected decision occurrences across the two reports
+remain unavailable; do not count these as16distinct actions or substitute zero returns.
+Two original paired diagnostics remain retained. Every result/start/log/artifact hash,
+538current frozen files,3842input pins and all six final models independently rechecked
+unchanged.4384distinct file hashes verified. Full audit workspace
+review-results/news-gap-fixed-natural-end-audit-20261025.json
+SHA2654378ea724b2e1379f85dae7b6ef59a37e048f4156bf5ca22d0ada6f2d521e.
+The read-only audit helper initially used trial_id instead of request trial id; the
+lookup was corrected before writing the audit. No campaign rerun or artifact change.
+
+Worker50724/launcher2164/controller7472 exited naturally; actual CIM check11:29UTC
+found only monitor49568, whose owner/worker are null. Monitor remains running while
+authorized repairs are pending; no new finish marker and no final idle-hold release
+claimed. Do not mark step7 complete. Earlier receipts below remain historical evidence.
+
+Next bounded repair: reduce retained evaluator memory without changing the91% system
+ceiling,5GiB process budget/.75GiB headroom,120s bounded pause or5s polling. The current
+evaluator accumulates all selected full-calendar holding specifications before ledger
+replay; the ledger also retains each lot's full-calendar snapshot steps. Investigate
+incremental use of the canonical replay and compact settled tails; verify exact base/
+stress ledger parity, all selected rows/zero days, clocks/costs/exits and missing-action
+gates before any retry. No implementation or numerical equivalence claimed yet. Source
+exact issuer cash/entitlement/date terms for the six remaining provider actions (the
+five news-XGBoost actions and earlier STE November2022); preserve original provider
+records and issuer response bytes. Do not infer tax, currency, due bills, rounded spin
+ratios, unknown payouts or fractional-share cash. No blind retry. Keep GPU/API changes
+isolated until all comparisons/retries and their evidence close.
+
+Local docs-only commit da3f411 is not pushed; origin remains82ffc16. Automatic approval
+review rejected pushing internal evidence to a remote whose disclosure authorization
+was unverified. Origin identity/history verified, privacy unverified; async human push
+approval remains pending. Do not bypass the rejection. Monitoring/audit continue locally.
+
+### Historical publication boundary — October25 08:29UTC
 
 Eleven of12frozen executions naturally ended: nine memory failures and two
 published valuation_unavailable reports; ZERO funded performance comparisons.
@@ -114,17 +164,10 @@ review-results/news-gap-fixed-disk-observation-20261024T1644.json SHA
 e4e8a6664a51969e8234e95e13227d6ed764311de06195df98aab99d2875caa5;
 C: free2631364608bytes independently observedOctober25 08:29UTC, no disk-write failure/agent cleanup.
 
-CURRENT FINAL EXECUTION: Price indicators, relationships and news / XGBoost /
-stop-loss, ten-session limit started2026-10-25T08:20:09.812285Z;
-actualworker50724/launcher2164/controller7472/monitor49568 verified08:29UTC;
-owner initial-fit-raw-share-plan. Inspect actual owner nextcheck.
-One execution remains, currently running. No complete/outer-exit/finish.
-Continue all frozen policies naturally; no stop/restart/duplicate/retry or edits to
-source/config/operator/runtime while live.
-At natural end preserve full audit, then address exact remaining corporate terms and
-smallest necessary memory reduction before further retries, preserving91%, all models,
-rows, clocks, costs and unsupported-action gates. GPU/API integrations remain isolated
-until comparisons/retries/evidence close. Step7 remains the sole active plan step.
+Historical last launch: news XGBoost stop-loss/ten-session policy began08:20:09.812285Z
+with worker50724/launcher2164. It has now ended; the authoritative natural-end audit
+and next bounded repair are at the top of this document. Step7 remains the sole active
+step. GPU/API integrations remain isolated until comparisons/retries/evidence close.
 
 ### User-requested code walkthrough and trained-model API link — October24
 
@@ -163,8 +206,7 @@ trained models, campaign receipts and operational failure logs retained. Do not
 repeat broad cleanup or delete retained source/model evidence as ordinary logs.
 
 Step7 remains the ONLY active plan step. The current campaign boundary and actual
-worker are recorded at the top of this document. Continue naturally, with no restart,
-duplicate or edits to primary frozen dependencies. After current
+execution status are recorded at the top of this document. After current
 comparisons/retries and evidence checkpoint close, integrate reviewed future GPU
 implementation and then70eb21b without changing saved model bytes. Step9 accepted
 production API remains PENDING: current production contract consumes classifier
