@@ -1,5 +1,16 @@
 # Active Edge Rebuild Handoff
 
+### Current checkpoint — October25 13:42UTC
+
+The isolated six-selection TEL accounting proof passed66actual holding reconciliations
+with zero gaps and unchanged six-model/selected-ID hashes. Memory/issuer-source fixes
+are integrated locally as4b96da4/2d5957e. Seventeen unchanged LF/CRLF module-byte
+differences prevented the exact integration gate; no primary files were normalized.
+A fresh actual PRIMARY all-six proof is running, worker50700 at13:42UTC; result/log
+remaining-accounting-all-six-primary-real-20261025. No full12policy retry or funded
+portfolio result yet. Exact evidence and next gates are below. Remote remains82ffc16;
+automatic-review disclosure approval is still pending. No external push attempted.
+
 ### Natural end audited: frozen backtests — October25 11:29UTC
 
 All12execution receipts and the natural outer exit2 are present. The last policy,
@@ -35,7 +46,7 @@ claimed. Do not mark step7 complete. Earlier receipts below remain historical ev
 Current bounded repair: memory implementation27b8aa7 and exact issuer-ratio/ten-session
 source-loader correctionb12d99c are LOCAL on codex/frozen-backtest-memory-repair,
 worktree C:/Users/manis/Documents/Codex/2026-09-28/c/worktrees/frozen-backtest-memory-repair.
-Neither is integrated. Existing primary frozen source/config/runtime remain unchanged;
+These are now integrated locally as4b96da4/2d5957e; exact primary-runtime proof below is running;
 new separately named accounting facts/config below preserve every original artifact.
 Keep91% system ceiling,5GiB process/.75GiB headroom,120s pause/5s poll, all six models,
 selected rows/zero days, costs and clocks unchanged. No refits or feature rebuilding.
@@ -171,26 +182,64 @@ SHA7276f7a64f511c6421a2eb701db1dd68dd5a74daf8ca0460140c59d4260a87b1.
 Total official collection24attempts:17archived_unreviewed including three SEC indexes,
 seven rejected responses retained. Provider VLTO collection is separate.
 
-CURRENT proof work/verify_remaining_accounting_all_six_tel_20261025.py
-SHA5c45207fced6c6a876fa516c58036d85b2ea0a1bbb7f3e2d6c26e824f38eb9f4
-is running; actual worker50820/launcher30304 identity verified13:11UTC.
-Log review-results/remaining-accounting-all-six-tel-real-20261025.log;
-eventual result remaining-accounting-all-six-tel-real-20261025.json and natural exit
-remaining-accounting-all-six-tel-real-20261025.exit.json are not yet complete.
-It checks all six selections' exact sorted decision-ID equality with the prior scan,
-all17700selected windows per arm and actual newly resolved lots under both exits.
-No feature pipeline/model fit. Let it end naturally; inspect actual owner next check.
-No dependency/operator/runtime changes or duplicate/restart while live. Monitor49568
-remains pending authorized work; no finish marker or final idle-hold release.
+The isolated TEL all-six proof PASSED and naturally exited0 at
+2026-10-25T13:32:46.5293534Z. Receipt remaining-accounting-all-six-tel-real-20261025.json
+SHAfe15d7e95357534570056f02d336d46a296c4b3d6e507debea33c63e9467f2df;
+logSHA973bf727945965cb9011bb46ecbd030d79b3c6fa4d0d8c913161fc17d556ea41;
+exitSHA8d2a26824995c0ec9189640f639ae6900804bedabbb9aa48afb08ae3561f5c87.
+All six17700-row selections retained exactly the prior sorted decision IDs; zero
+remaining action gaps. Newly resolved selected occurrences by arm0,0,1,17,0,15;
+actual independent raw-sale/cash/cost/settlement reconciliations0,0,2,34,0,30=66.
+4138source files,165actual loaded modules and all six final models rechecked.
+No funded portfolio or full-selection memory-scaling claim. Prior132Oct24 and bounded
+three-lot20/40bps proofs remain closed and were not repeated.
 
-Future12policy operator work/run_memory_terms_fixed_backtests_20261025.py now binds
-the separate TEL config and fresh TEL proof path; PREPARED but UNRUN. Its prior draft
-is preserved as run_memory_terms_fixed_backtests_pre_tel_20261025.py. It requires a
-successful real all-six proof, six final model hashes, actual integrated module byte
-equality and unchanged four memory modules from the closed three-lot parity proof.
-No policy retry until these gates pass and local27b8aa7+b12d99c are integrated.
-Earlier campaigns stay naturally ended. GPU/API remain isolated until all comparisons,
-retries and evidence close. Step7 remains sole active step.
+The reviewed memory and issuer-loader changes are now locally integrated on primary
+as4b96da4 and2d5957e (original isolated27b8aa7/b12d99c retained). Git source/test diff
+against the reviewed branch is empty; Ruff eight changed files and strictmypy five
+changed source files passed.173memory and78loader synthetic UNIT passes remain
+unchanged; full suite unrun, component tier. No model fit or feature rebuilding.
+
+Exact integration byte preflight STOPPED before producing an integration receipt:
+seventeen unchanged primary modules have CRLF bytes while the isolated checkout has
+LF bytes. All seventeen compare exactly after newline normalization; no code-content
+diff. The first refusal is primary src/market_predictor/__init__.py. Diagnosis
+integrated-module-line-ending-diagnosis-20261025.json
+SHA4d5748c7665a7411330b287ca2fca107f0496a963808d626d72ae321d97696fb.
+Do not normalize primary source files, rewrite old provenance or relax the byte gate.
+The read-only helper traceback was followed by successful lint/types in one shell;
+its outer exit0 is NOT treated as an integration pass. Actual failure and exact gate
+remedy are retained in AUTHOR delta review (not independent)
+memory-terms-retry-primary-module-review-20261025.json
+SHA8873ec0aa52ce9aae1c7093dacd5b10769ec94e70da36bf83553bcabd220b117.
+
+CURRENT work/verify_remaining_accounting_all_six_primary_20261025.py
+SHAe46ef283f4b6e8fb35c1f0763b0984d9d56d7cf4701145a73d5b8c789f6880af
+is running against the actual integrated PRIMARY runtime, not isolated imports.
+Actual worker50700/launcher38792/controller48284 identity verified13:42UTC;
+monitor49568 owner project-swing-corporate-action-evidence initially. Inspect actual
+owner next check. Log remaining-accounting-all-six-primary-real-20261025.log;
+eventual result remaining-accounting-all-six-primary-real-20261025.json and natural
+exit remaining-accounting-all-six-primary-real-20261025.exit.json are not complete.
+The repeat is required by the demonstrated actual-runtime byte conflict, not an
+economic change or blind retry. It checks all six exact selected-ID hashes against
+the passed isolated proof and all windows/affected actual holdings under both exits.
+No source/config/operator/dependency/runtime edits or duplicate/restart while live.
+Monitor remains pending authorized work; no finish marker/final idle-hold release.
+
+Future12policy operator work/run_memory_terms_fixed_backtests_20261025.py now requires
+the actual PRIMARY all-six proof path and actual primary module byte hashes, with
+every original source/model/selection/accounting gate unchanged. PREPARED but UNRUN;
+Ruff passed, SHA d982bfb03fb201b45bb37c6bce7d55e3f25a210c953d0f7ee46002a937f7552a.
+Prior pre-TEL and isolated-TEL drafts/reviews remain preserved separately. The current
+policy remains TEL config b74eb86252754520ea15974111cc7297804012c4a857ced27e7b6cfe6bb4f664.
+After actual primary proof natural success, verify its source/module/model pins,
+then run the actual twelve frozen policies sequentially with fresh campaign
+memory_terms_fixed_20261025/state review-results/memory-terms-fixed-20261025.
+No full policy retry yet. No further accounting-gap/source collection is needed
+unless the actual primary proof identifies a new exact failure. Keep91%/5GiB/.75GiB/
+120s/5s poll, models/allrows/zero days/costs/clocks/gates unchanged. GPU/API remain
+isolated until all comparisons/retries/evidence close. Step7 remains sole active step.
 
 Local docs-only commit da3f411 is not pushed; origin remains82ffc16. Automatic approval
 review rejected pushing internal evidence to a remote whose disclosure authorization
