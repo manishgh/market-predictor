@@ -6,10 +6,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 import pandas as pd
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
@@ -28,6 +28,14 @@ from market_predictor.swing.datasets.reviewed_action_dates import ReviewedAction
 from market_predictor.swing.datasets.reviewed_action_sources import verify_reviewed_action_sources
 
 
+class IssuerDistributionRatio(HoldingContract):
+    """Exact whole-share terms transcribed from one pinned issuer document."""
+
+    daughter_units: int = Field(gt=0, strict=True)
+    parent_units: int = Field(gt=0, strict=True)
+    official_receipt: SourcePin
+
+
 class ReviewedSpinOff(HoldingContract):
     action_id: str = Field(min_length=1)
     retained_record_sha256: Sha256
@@ -38,10 +46,20 @@ class ReviewedSpinOff(HoldingContract):
     daughter_security_id: str = Field(min_length=1)
     ex_date: date
     daughter_units_per_parent: float = Field(gt=0, allow_inf_nan=False)
+    issuer_ratio: IssuerDistributionRatio | None = None
     price_selection: SourcePin
     price_response_receipt: SourcePin | None = None
     action_coverage_receipt: SourcePin
     official_receipts: tuple[SourcePin, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def exact_issuer_ratio(self) -> Self:
+        if self.issuer_ratio is not None and (
+            self.issuer_ratio.official_receipt not in self.official_receipts
+            or self.daughter_units_per_parent != self.issuer_ratio.daughter_units / self.issuer_ratio.parent_units
+        ):
+            raise ValueError("issuer spin ratio requires exact integer terms and its verified official receipt")
+        return self
 
 
 class ReviewedSpinOffArtifact(HoldingContract):
@@ -66,10 +84,11 @@ def _object(root: Path, pin: SourcePin, pins: dict[str, str]) -> dict[str, Any]:
     return parse_strict_json_object(inside(root, pin.path).read_bytes(), label="documented spin source")
 
 
-def _transport(root: Path, pin: SourcePin, pins: dict[str, str], state: str) -> tuple[dict[str, Any], HttpByteResponse]:
+def _transport(root: Path, pin: SourcePin, pins: dict[str, str], state: str | tuple[str, ...]) -> tuple[dict[str, Any], HttpByteResponse]:
     receipt = _object(root, pin, pins)
     directory = inside(root, pin.path).parent
-    if receipt.get("state") != state or not isinstance(receipt.get("body_path"), str):
+    states = (state,) if isinstance(state, str) else state
+    if receipt.get("state") not in states or not isinstance(receipt.get("body_path"), str):
         raise DataReadinessError("documented daughter source lacks a complete acquired receipt")
     def source(leaf: str) -> Path:
         path = inside(directory, leaf)
@@ -123,7 +142,7 @@ def load_reviewed_spin_offs(root: Path, pin: SourcePin | None,
                 or isinstance(child_rate, bool) or not isinstance(child_rate, (int, float))):
             raise DataReadinessError("documented spin ratio lacks positive numeric source terms")
         if (not 0 < parent_rate < math.inf or not 0 < child_rate < math.inf
-                or child_rate / parent_rate != fact.daughter_units_per_parent):
+                or (fact.issuer_ratio is None and child_rate / parent_rate != fact.daughter_units_per_parent)):
             raise DataReadinessError("documented spin ratio differs from retained source terms")
         selection = _object(root, fact.price_selection, pins)
         segments = [segment for segment in selection["segments"]
@@ -140,7 +159,8 @@ def load_reviewed_spin_offs(root: Path, pin: SourcePin | None,
                 or pins.get(price_path.relative_to(root).as_posix()) != unit["bars_sha256"]):
             raise DataReadinessError("documented daughter raw price binding differs")
         if fact.price_response_receipt is not None:
-            query, response = _transport(root, fact.price_response_receipt, pins, "acquired_exact_nine_sessions")
+            query, response = _transport(root, fact.price_response_receipt, pins,
+                ("acquired_exact_nine_sessions", "acquired_exact_ten_sessions"))
             params = query.get("params", {})
             if (params.get("symbols") != fact.daughter_symbol or params.get("timeframe") != "1Day"
                     or params.get("feed") != "sip" or params.get("adjustment") != "raw"
@@ -151,6 +171,10 @@ def load_reviewed_spin_offs(root: Path, pin: SourcePin | None,
                 raise DataReadinessError("documented daughter raw prices are incomplete or ambiguous")
             replay = _validated_bars(list(page.bars[fact.daughter_symbol]), unit=unit,
                 ingested_at=response.retrieved_at_utc, adjustment="raw")
+            receipt = _object(root, fact.price_response_receipt, pins)
+            expected_rows = 9 if receipt["state"] == "acquired_exact_nine_sessions" else 10
+            if len(replay) != expected_rows or receipt.get("rows", expected_rows) != expected_rows:
+                raise DataReadinessError("documented daughter acquired session count differs")
             projection = pd.read_parquet(price_path)
             if projection.to_dict("records") != replay.to_dict("records"):
                 raise DataReadinessError("documented daughter raw projection differs from original provider bytes")

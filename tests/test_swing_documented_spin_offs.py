@@ -25,6 +25,7 @@ from market_predictor.swing.contracts.holding_accounting import (
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.action_windows import ActionWindow
 from market_predictor.swing.datasets.backtest_corporate_actions import BacktestCorporateActions, load_backtest_corporate_action_context
+from market_predictor.swing.datasets.reviewed_spin_offs import ReviewedSpinOff
 from market_predictor.swing.evaluation.holding_accounting import replay_holding
 from market_predictor.swing.evaluation.trade_simulation import simulate_ordinary_sales
 from tests.test_swing_backtest_corporate_actions import _prices
@@ -55,9 +56,12 @@ def _http(root: Path, name: str, url: str, params: dict[str, Any], payload: dict
 
 
 def _spin(provider: Any, *, ex: str = "2024-01-04", fault: str | None = None,
-    raw_response: bool = False, approve: bool = True) -> BacktestCorporateActions:
+    raw_response: bool = False, approve: bool = True, issuer_ratio: bool = False,
+    price_state: str = "acquired_exact_nine_sessions") -> BacktestCorporateActions:
     record = {"id": "exact-spin", "source_symbol": "AAA", "source_cusip": "012345678", "source_rate": 1,
         "new_symbol": "CHILD", "new_cusip": "987654321", "new_rate": 0.25, "ex_date": ex}
+    if issuer_ratio:
+        record["new_rate"] = 0.333333333
     _with_facts(provider, "spin_offs", record, {"ex_date": ex, "record_date": "2024-01-02", "payable_date": ex})
     date_artifact = json.loads((provider.root / "reviewed-dates.json").read_text())
     prices = pd.read_parquet(provider.root / "raw/AAA.parquet")
@@ -94,7 +98,7 @@ def _spin(provider: Any, *, ex: str = "2024-01-04", fault: str | None = None,
             "end": "2024-01-18T04:59:59.999999+00:00", "feed": "sip", "limit": 1000,
             "adjustment": "raw", "sort": "asc", "asof": "2024-01-17"}
         more, price_receipt = _http(provider.root, "child-prices", "https://data.alpaca.markets/v2/stocks/bars", params,
-            {"bars": {"CHILD": raw_rows}, "next_page_token": None}, "acquired_exact_nine_sessions")
+            {"bars": {"CHILD": raw_rows}, "next_page_token": None}, price_state)
         pins.update(more)
     fact = {"action_id": record["id"], "retained_record_sha256": json_sha256(record), "source_symbol": "AAA",
         "source_cusip": "012345678", "daughter_symbol": "CHILD", "daughter_cusip": "987654321",
@@ -103,6 +107,10 @@ def _spin(provider: Any, *, ex: str = "2024-01-04", fault: str | None = None,
         "price_response_receipt": price_receipt.model_dump(mode="json") if price_receipt else None,
         "action_coverage_receipt": action_receipt.model_dump(mode="json"),
         "official_receipts": date_artifact["records"][0]["official_receipts"]}
+    if issuer_ratio:
+        fact["daughter_units_per_parent"] = 1 / 3
+        fact["issuer_ratio"] = {"daughter_units": 1, "parent_units": 3,
+            "official_receipt": fact["official_receipts"][0]}
     if fault == "ratio":
         fact["daughter_units_per_parent"] = 0.5
     if fault == "record":
@@ -124,6 +132,47 @@ def _spin(provider: Any, *, ex: str = "2024-01-04", fault: str | None = None,
     provider.corporate_actions = bridge
     provider.source_files.update(bridge.source_files)
     return bridge
+
+
+def test_verified_issuer_ratio_preserves_exact_third_despite_rounded_provider(provider: Any) -> None:
+    _prices(provider, [], target_day="2024-01-05")
+    bridge = _spin(provider, issuer_ratio=True, raw_response=True)
+    lot = provider.lot(provider.selected_ids[0])
+    assert not lot.missing_reasons and lot.specification is not None
+    fact = bridge.reviewed_spin_offs["exact-spin"].fact
+    assert fact.daughter_units_per_parent == 1 / 3
+    replay = simulate_ordinary_sales(lot.specification, provider.simulation, corporate_simulation=bridge.context)
+    assert replay.outcome.snapshots[-1].net_return == pytest.approx(0.06 + (1 / 3) * 12 / 100 - 0.002)
+    assert replay.next_open_settlement.fully_settled
+
+
+@pytest.mark.parametrize("fault", ["fractional_integer", "zero", "missing_integer", "mismatched_units", "unbound_receipt"])
+def test_issuer_ratio_requires_exact_integer_terms_and_verified_receipt(provider: Any, fault: str) -> None:
+    bridge = _spin(provider, issuer_ratio=True)
+    raw = bridge.reviewed_spin_offs["exact-spin"].fact.model_dump(mode="json")
+    if fault == "fractional_integer":
+        raw["issuer_ratio"]["parent_units"] = 3.0
+    elif fault == "zero":
+        raw["issuer_ratio"]["parent_units"] = 0
+    elif fault == "missing_integer":
+        del raw["issuer_ratio"]["parent_units"]
+    elif fault == "mismatched_units":
+        raw["daughter_units_per_parent"] = 0.333333333
+    else:
+        raw["issuer_ratio"]["official_receipt"]["sha256"] = "e" * 64
+    with pytest.raises(ValueError):
+        ReviewedSpinOff.model_validate(raw)
+
+
+def test_ten_session_daughter_receipt_replays_original_projection(provider: Any) -> None:
+    bridge = _spin(provider, ex="2024-01-03", raw_response=True, price_state="acquired_exact_ten_sessions")
+    assert len(bridge.reviewed_spin_offs["exact-spin"].observations) == 10
+
+
+@pytest.mark.parametrize("state", ["acquired_exact_ten_sessions", "request_failed"])
+def test_wrong_session_count_or_failed_price_receipt_refused(provider: Any, state: str) -> None:
+    with pytest.raises(DataReadinessError):
+        _spin(provider, raw_response=True, price_state=state)
 
 
 @pytest.mark.parametrize("raw_response", [False, True])
