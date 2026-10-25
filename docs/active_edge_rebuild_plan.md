@@ -58,7 +58,7 @@ SHA702fd33d8391391894b323ebc09c154f94bb5154c74029b07c8f364661892a81.
 This three-lot proof does NOT establish full17700selection memory scaling or funded
 performance. Full retry remains unrun. Full test suite unrun; component tier.
 
-Remaining exact issuer facts are built, pending all-six real scan/replay.22official
+Historical pre-TEL issuer facts were built for the prior all-six scan.22official
 HTTP attempts retained:16archived_unreviewed including three SEC indexes,6rejected
 responses retained. First18attempt collection receipts remain unchanged:
 remaining-accounting-fact-collection-20261025.json SHA
@@ -112,7 +112,7 @@ stating no new network request. All original evidence remains pinned. Source ver
 unchanged. All four revised artifacts passed that verifier in preflight workspace
 review-results/remaining-accounting-receipt-bindings-preflight-20261025.json
 SHA0d130ab8cb3d0566d0abe5e070ca8b2caa90517733e37df19682648b6b0aadd1.
-Current config configs/swing_backtest_remaining_accounting_request_bound_20261025.toml
+Historical request-bound config configs/swing_backtest_remaining_accounting_request_bound_20261025.toml
 SHA04b1d65d134a80318674808a502b0d783d1893e222e06ef2c24e2b6230e00a18;
 current source review workspace
 review-results/remaining-accounting-source-review-request-bound-20261025.json
@@ -128,7 +128,7 @@ SHA2f1a186edaa93fd1aedbad2bf48e5b6cd136091cc2edbd43b26a96f15389aa47;
 attempt02logSHAb20d3849dc23624648dacebaa8c8ca621415bb793c03c45cd63867333fa7482a.
 No runtime/verifier change. New separately named artifacts retain the single existing
 date record and merge unique corroborating receipts. Prior attempts/artifacts retained.
-Current config configs/swing_backtest_remaining_accounting_final_20261025.toml
+Historical pre-TEL config configs/swing_backtest_remaining_accounting_final_20261025.toml
 SHA5ea3d798f05b513939e67497324ced830dc5188c83f4e3dd96e33345971e623a;
 current source review review-results/remaining-accounting-source-review-final-20261025.json
 SHA88a5a5f90b0a32ba902ea7cd9b94fbe5acaa78b8a12fed39f00c268958f5f6df.
@@ -139,25 +139,58 @@ The preflight's read-only first helper used model_validate on JSON lists against
 strict tuple fields; preserved then corrected to the same model_validate_json entry
 point used by the real loaders. No accounting input alteration from that helper fix.
 
-Fresh all-six proof attempt03 is CURRENTLY RUNNING after these exact diagnoses and
-preflight: workspace work/verify_remaining_accounting_all_six_final_20261025.py
-SHA0b9f093725c9e2e80b9f646c16c7879a6eea088a4474842a8a9586121ef9d115,
-log review-results/remaining-accounting-all-six-real-20261025.attempt03.log.
-Actual worker40264/launcher47484 identity verified12:41UTC; monitor49568 owner
-verify-remaining-accounting-all-six. It reuses four published selections and recreates
-only two unpublished selections through unchanged canonical temporal OOF selection,
-not the feature pipeline or estimator. Every17700selected window is scanned; only
-newly resolved actual lots are reconciled under both exits. No final result/exit yet.
-No dependency/operator/runtime edits or duplicate/restart while live. Let it end
-naturally; inspect actual owner next check. No finish marker/idle-hold release yet.
+All-six attempt03 naturally exited1 at2026-10-25T13:01:07.7629335Z after
+all six17700-row selections were scanned. Five selections have zero remaining action
+gaps; the relationships/XGBoost selection contains one TEL cash distribution for
+session2021-11-08, decision8a9db1d2e8f97e7a6c5f206546af82ef2e77ea036787f122dae9add315b2f600.
+The exact retained action9ed03bb2-bd0c-4606-814e-9cc964518123 has ex2021-11-18,
+recordNov19/payDec3/rate.50. This is a new issuer cash-term gate, not a memory,
+arithmetic, changed-selection or metadata failure. The proof retained32newly resolved
+selected occurrences and64successful actual raw-sale/cash/cost/settlement reconciliations
+under both frozen exits. Receipt remaining-accounting-all-six-real-20261025.json
+SHA21a9659869d7caa1c0cbee6cb51cf334f84f9d60d529ad650cb7956116769bb8;
+logSHA5e9676eb4d1d216799e80f0797f2909b8df1bbf447470fa05f706f0d6334d3ac;
+exitSHA2f385131f8a873b0a9098302af464004945c51790f6b78059361da3c894a050a.
+No funded portfolio performance. Every original helper/log/exit/fact remains retained.
 
-Fresh12policy operator work/run_memory_terms_fixed_backtests_20261025.py is PREPARED
-but UNRUN. Ruff passed. It requires successful all-six proof, six final model hashes,
-actual integrated module equality with the proof and unchanged four memory-module
-hashes from the closed three-lot real parity proof. No policy retry until these real
-gates pass and the reviewed local implementations are integrated. Earlier campaigns
-remain naturally ended; never restart or delete them. GPU/API integrations remain
-isolated until all comparisons/retries/evidence close. Step7 remains sole active step.
+TEL source acquisition retained one issuer HTTP403 (excluded) and one successful SEC
+December24,2021 quarter10-Q. Its original inline-XBRL cash-paid dividend per common
+share is0.50 with explicit USD/share units, quarter2021-09-25 through2021-12-24;
+individual ex/record/pay clocks remain exactly bound to the retained provider record.
+No currency/tax inference. Collection remaining-accounting-fact-collection-tel-20261025.json
+SHA4a4fc528be090a53ce6244f20345e1d681f1397751580d90930886eab68909bb;
+inspection remaining-tel-primary-source-20261025.json
+SHAda3c66507db701b442fba4e2256e2363082b9bc80d3b1dfa9eef3447bb4acd73.
+The separate current config is configs/swing_backtest_remaining_accounting_tel_20261025.toml
+SHAb74eb86252754520ea15974111cc7297804012c4a857ced27e7b6cfe6bb4f664,
+source review remaining-accounting-source-review-tel-20261025.json
+SHAb6d91798b096c2697fc0b6a69ae4560d8ef1350180474fe37bc1ecea3e711c2c.
+Typed schemas, unique identities and unchanged exact source verifier passed:
+remaining-accounting-tel-bindings-preflight-20261025.json
+SHA7276f7a64f511c6421a2eb701db1dd68dd5a74daf8ca0460140c59d4260a87b1.
+Total official collection24attempts:17archived_unreviewed including three SEC indexes,
+seven rejected responses retained. Provider VLTO collection is separate.
+
+CURRENT proof work/verify_remaining_accounting_all_six_tel_20261025.py
+SHA5c45207fced6c6a876fa516c58036d85b2ea0a1bbb7f3e2d6c26e824f38eb9f4
+is running; actual worker50820/launcher30304 identity verified13:11UTC.
+Log review-results/remaining-accounting-all-six-tel-real-20261025.log;
+eventual result remaining-accounting-all-six-tel-real-20261025.json and natural exit
+remaining-accounting-all-six-tel-real-20261025.exit.json are not yet complete.
+It checks all six selections' exact sorted decision-ID equality with the prior scan,
+all17700selected windows per arm and actual newly resolved lots under both exits.
+No feature pipeline/model fit. Let it end naturally; inspect actual owner next check.
+No dependency/operator/runtime changes or duplicate/restart while live. Monitor49568
+remains pending authorized work; no finish marker or final idle-hold release.
+
+Future12policy operator work/run_memory_terms_fixed_backtests_20261025.py now binds
+the separate TEL config and fresh TEL proof path; PREPARED but UNRUN. Its prior draft
+is preserved as run_memory_terms_fixed_backtests_pre_tel_20261025.py. It requires a
+successful real all-six proof, six final model hashes, actual integrated module byte
+equality and unchanged four memory modules from the closed three-lot parity proof.
+No policy retry until these gates pass and local27b8aa7+b12d99c are integrated.
+Earlier campaigns stay naturally ended. GPU/API remain isolated until all comparisons,
+retries and evidence close. Step7 remains sole active step.
 
 Local docs-only commit da3f411 is not pushed; origin remains82ffc16. Automatic approval
 review rejected pushing internal evidence to a remote whose disclosure authorization
