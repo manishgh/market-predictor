@@ -118,23 +118,46 @@ current source review workspace
 review-results/remaining-accounting-source-review-request-bound-20261025.json
 SHA7f9cebbc35544552d42dea53e69af9dab5971af16d58a37cec4ff635a92213ab.
 
-Fresh all-six proof is CURRENTLY RUNNING after this exact diagnosis/preflight:
-workspace work/verify_remaining_accounting_all_six_request_bound_20261025.py, log
-review-results/remaining-accounting-all-six-real-20261025.attempt02.log. Actual worker
-46836/launcher39868 identity verified12:31UTC; evidence-loader owner confirmed by monitor.
-It reuses four original published selections and reconstructs only two unpublished
-selections via canonical saved temporal OOF selection, no feature pipeline/model load/
-refit. It scans every17700selection/window, compares prior/new action gates and
-reconciles only newly resolved raw lots under both frozen exits. No final proof/exit
-receipt yet. Do not edit this operator/dependencies/runtime while live; let it end
-naturally. Inspect actual owner, not stale PID. Monitor49568 remains active for pending
-work; no finish marker/idle-hold release.
+The request-bound all-six attempt02 naturally exited1 at12:33:13.2846413Z BEFORE
+selection scanning/replay. The strict date loader rejected a second DHR date record
+already present in the retained October21/24 artifact. Existing and appended records
+have identical economic dates and retained-record SHA
+7d92fb134acc530432fbd8db5df1da2005b9df65f4a740d7194fd6683190c140.
+Diagnosis workspace review-results/remaining-accounting-duplicate-date-failure-20261025.json
+SHA2f1a186edaa93fd1aedbad2bf48e5b6cd136091cc2edbd43b26a96f15389aa47;
+attempt02logSHAb20d3849dc23624648dacebaa8c8ca621415bb793c03c45cd63867333fa7482a.
+No runtime/verifier change. New separately named artifacts retain the single existing
+date record and merge unique corroborating receipts. Prior attempts/artifacts retained.
+Current config configs/swing_backtest_remaining_accounting_final_20261025.toml
+SHA5ea3d798f05b513939e67497324ced830dc5188c83f4e3dd96e33345971e623a;
+current source review review-results/remaining-accounting-source-review-final-20261025.json
+SHA88a5a5f90b0a32ba902ea7cd9b94fbe5acaa78b8a12fed39f00c268958f5f6df.
+Typed schemas, unique fact identities and unchanged source verifier all passed preflight
+review-results/remaining-accounting-final-bindings-preflight-20261025.json
+SHAa3567acc93594f874bc4442a450c1d2744ba642cd40deac412f9230c92e0a175.
+The preflight's read-only first helper used model_validate on JSON lists against
+strict tuple fields; preserved then corrected to the same model_validate_json entry
+point used by the real loaders. No accounting input alteration from that helper fix.
 
-Next: inspect actual all-six proof result. Diagnose exact remaining gaps or failed
-reconciliation without dropping rows. Only after real gates pass, integrate reviewed
-local remedies, bind fresh operator/request/source pins and execute actual12frozen
-policies naturally. No restart of old campaigns or blind retry. GPU/API remain isolated
-until all comparisons/retries/evidence close. Step7 remains sole active step.
+Fresh all-six proof attempt03 is CURRENTLY RUNNING after these exact diagnoses and
+preflight: workspace work/verify_remaining_accounting_all_six_final_20261025.py
+SHA0b9f093725c9e2e80b9f646c16c7879a6eea088a4474842a8a9586121ef9d115,
+log review-results/remaining-accounting-all-six-real-20261025.attempt03.log.
+Actual worker40264/launcher47484 identity verified12:41UTC; monitor49568 owner
+verify-remaining-accounting-all-six. It reuses four published selections and recreates
+only two unpublished selections through unchanged canonical temporal OOF selection,
+not the feature pipeline or estimator. Every17700selected window is scanned; only
+newly resolved actual lots are reconciled under both exits. No final result/exit yet.
+No dependency/operator/runtime edits or duplicate/restart while live. Let it end
+naturally; inspect actual owner next check. No finish marker/idle-hold release yet.
+
+Fresh12policy operator work/run_memory_terms_fixed_backtests_20261025.py is PREPARED
+but UNRUN. Ruff passed. It requires successful all-six proof, six final model hashes,
+actual integrated module equality with the proof and unchanged four memory-module
+hashes from the closed three-lot real parity proof. No policy retry until these real
+gates pass and the reviewed local implementations are integrated. Earlier campaigns
+remain naturally ended; never restart or delete them. GPU/API integrations remain
+isolated until all comparisons/retries/evidence close. Step7 remains sole active step.
 
 Local docs-only commit da3f411 is not pushed; origin remains82ffc16. Automatic approval
 review rejected pushing internal evidence to a remote whose disclosure authorization
