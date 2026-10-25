@@ -1,6 +1,45 @@
 # Active Edge Rebuild Plan
 
-### First actual publication — October 25 20:16UTC
+### Second policy RAM timeout; third policy live — October 25 21:33UTC
+
+Price indicators / Ridge / stop-loss, ten-session limit naturally returned2 before
+publication, finished21:21:57.948275Z. After a pause at21:19:14.686011Z, system RAM
+stayed above the unchanged91%ceiling for120.095745s; timeout21:21:14.782059Z at
+94.30786457%. Earlier20:59pause resumed after5.107569s. Exact terminal stderr:
+'memory guard stopped saved OOF policy evaluation: system memory 94.31% used;
+requires strictly below 91% within 120 seconds'. This is a system RAM bounded-wait
+timeout, not a process RSS-budget failure. Missing manifest in the original result
+is secondary; no accounting or performance publication exists for this policy.
+No disk error is recorded. Original result/start/logs remain immutable.
+
+Read-only audit independently rechecked both log hashes, all543frozen source/config/
+operator hashes and all6trained model hashes; no source/runtime/request changes.
+Receipt workspace review-results/memory-terms-fixed-technical-ridge-stop-memory-failure-20261025.json
+SHA2052149f993064e02608ac8673cc3bb29dfc2579e1c202fe30107e9cf294d67a;
+resultSHAc8e0e9a173931bdebe55ce445d4bcdda144d6f30e5aba88f88cd6c9ae25fe4eb;
+stderrSHA34a313154246170a5c490703a504c749a0b00ac2a3cec1a990f2872cefac3336.
+The4320input pins were not all rehashed in this monitoring audit.
+
+CURRENT THIRD Price indicators / XGBoost / profit target, stop-loss, ten-session
+limit started21:22:00.579440Z. StartedSHA62a0e5077236e55ffb0762d143fbc45239951a7cb9a32a92f2273c043c23d2c7.
+Actual worker49364/venvlauncher47836/nativeCLI22096/controller40020 exact command
+and ancestry verified by elevated CIM21:33UTC; former worker10532 absent. Monitor
+49568 remains active; C:free2453598208bytes at21:33:00Z. Inspect fresh process/owner
+on the next check; no null-owner or stale-PID finish inference.
+
+Two of12execution receipts now exist: one complete arithmetic diagnostic publication
+with source admission pending, and one RAM failure. ZERO admitted funded performance.
+Let all12current1.5ATR policies end naturally, then audit12start/results, natural
+outer exit,2retained pairs, all actual artifact/log hashes and frozen source/model/
+runtime inputs. No stop/restart/duplicate, live source/config/operator/runtime or
+dependency edits, guard weakening, admission changes, further cleanup or blind retry.
+Diagnose the smallest remaining remedy after natural end, then evaluate the human
+one-ATR amendment with a fresh request and preserved original model/feature lineage.
+One-ATR/GPU/API worktrees remain isolated; no refit or source-foundation rebuild.
+Step7 remains sole active; no serving/promotion/admission or external push approval.
+Primary0512b85 was documentation only before this monitoring update; remote82ffc16.
+
+### Historical first-publication boundary — October 25 20:16UTC
 
 Price indicators / Ridge / profit target, stop-loss, ten-session limit naturally
 returned2 at20:16:20.724829Z and published event_accounting_diagnostics. The actual
