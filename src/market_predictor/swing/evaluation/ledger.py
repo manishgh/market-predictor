@@ -252,7 +252,7 @@ def build_event_aware_funded_swing_ledger(
         sale_times = {item.source_event_id: item.executed_at for item in outcome.executed_sales}
         previous_cash = 0.0
         previous_close = spec.initial_entry_timestamp
-        steps = []
+        steps: list[dict[str, Any]] = []
         for index, snapshot in enumerate(outcome.snapshots):
             end = snapshot.session_end_timestamp
             releases = tuple(item for item in outcome.cash_releases if previous_close < item.available_at <= end)
@@ -273,14 +273,17 @@ def build_event_aware_funded_swing_ledger(
                 if previous_close < item.executed_at <= end}
             sale_cash = math.fsum(item.amount for item in releases
                 if item.source_kind == "sale_proceeds" and sale_by_payment.get(item.payment_event_id) in sale_ids)
-            steps.append({
-                "tradable": snapshot.tradable_value, "unpaid": snapshot.unpaid_proceeds_value,
-                "contingent": snapshot.contingent_right_value, "cash_before_open": before_open,
-                "released_cash": released, "sale_proceeds": sale_proceeds,
-                "sale_cash_at_exit": sale_cash,
-                "fully_settled": snapshot.fully_settled,
-                "gaps": tuple(item.model_dump(mode="json") for item in snapshot.gaps),
-            })
+            # The funding loop removes a lot at its first fully settled snapshot.
+            # Validate every canonical snapshot above, retaining only consumed steps.
+            if not steps or not steps[-1]["fully_settled"]:
+                steps.append({
+                    "tradable": snapshot.tradable_value, "unpaid": snapshot.unpaid_proceeds_value,
+                    "contingent": snapshot.contingent_right_value, "cash_before_open": before_open,
+                    "released_cash": released, "sale_proceeds": sale_proceeds,
+                    "sale_cash_at_exit": sale_cash,
+                    "fully_settled": snapshot.fully_settled,
+                    "gaps": tuple(item.model_dump(mode="json") for item in snapshot.gaps),
+                })
             previous_cash = snapshot.cumulative_cash_released
             previous_close = end
         if not outcome.fully_settled and len(ends) != len(closes) - offset:

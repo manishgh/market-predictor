@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 
 import exchange_calendars as xcals
@@ -202,14 +202,14 @@ def evaluate_funded_swing_accounting(
 
 
 def evaluate_event_aware_swing_accounting(
-    selected: pd.DataFrame, holdings: Sequence[HoldingSpecification],
+    selected: pd.DataFrame, holdings: Sequence[HoldingSpecification] | Callable[[], Iterable[HoldingSpecification]],
     benchmark_holdings: Mapping[str, HoldingSpecification], *, config: SwingLedgerConfig,
     strategy_contract: StrategyContract, research_contract: SwingResearchContract,
     session_calendar: tuple[str, ...],
     simulation: TradeSimulationContext | None = None,
     corporate_simulation: BacktestCorporateActionContext | None = None,
 ) -> dict[str, Any]:
-    """Compare event-aware NAV without treating claims as cash or admitting raw sources."""
+    """Compare event-aware NAV; a holding factory must replay identical base/stress inputs."""
     research_contract.assert_strategy_matches(strategy_contract)
     if (config.horizon_sessions != research_contract.horizon_sessions
             or config.expected_round_trip_cost_bps != research_contract.base_round_trip_cost_bps):
@@ -260,12 +260,12 @@ def evaluate_event_aware_swing_accounting(
             "summary": {"economic_conditions_passed": False, "eligible": False,
                 "net_cagr_difference_vs_spy": None}, "session_dates": sessions}
     base = funded_ledger.build_event_aware_funded_swing_ledger(
-        selected, holdings, config, session_calendar=session_calendar,
+        selected, holdings() if callable(holdings) else holdings, config, session_calendar=session_calendar,
         research_contract_sha256=research_contract.sha256(), execution_policy="managed",
         simulation=simulation, corporate_simulation=corporate_simulation,
     )
     stress = funded_ledger.build_event_aware_funded_swing_ledger(
-        selected, holdings, config, session_calendar=session_calendar,
+        selected, holdings() if callable(holdings) else holdings, config, session_calendar=session_calendar,
         research_contract_sha256=research_contract.sha256(), execution_policy="managed",
         simulation=simulation, corporate_simulation=corporate_simulation,
         additional_round_trip_cost=(research_contract.stress_cost_multiplier - 1)

@@ -507,7 +507,8 @@ def test_available_publication_calls_real_accounting_once_and_settles_each_sale_
         nonlocal calls
         calls += 1
         assert state["lease"]
-        for spec in args[1]:
+        assert callable(args[1])
+        for spec in args[1]():
             assert len([event for event in spec.events if isinstance(event, ExecutionEvent)]) == 1
             assert not any(isinstance(event, PaymentEvent) for event in spec.events)
             replay = simulate_ordinary_sales(spec, kwargs["simulation"])

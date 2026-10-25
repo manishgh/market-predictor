@@ -23,6 +23,7 @@ from market_predictor.modeling.strategy_contract import StrategyContract, load_s
 from market_predictor.research import news_runtime_memory
 from market_predictor.research.news_decision_features import NEWS_COLUMNS
 from market_predictor.research.news_decision_verification import validate_news_decision_receipt
+from market_predictor.research.swing_holding_spool import temporary_holding_spool
 from market_predictor.swing.contracts.holding_accounting import HoldingSpecification
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.issuer_reaction import REACTION_COLUMNS
@@ -71,7 +72,8 @@ _REQUIRED_PARENT = (*_IDENTITIES, "feature_eligible", "daily_bar_count", "primar
 SELECTION_METADATA_SEMANTICS = ("canonical/joins.py", "swing/features/pipeline.py", "swing/features/research_join.py")
 _SCORE_COLUMNS = (*_IDENTITIES, "feature_eligible", "scope_eligible", "security_holdout", "predicted_excess_return", "prediction_status")
 IMPLEMENTATION_PATHS = (
-    "research/swing_oof_policy_evaluation.py", "swing/training/return_artifacts.py", "swing/training/return_comparison.py",
+    "research/swing_oof_policy_evaluation.py", "research/swing_holding_spool.py",
+    "swing/training/return_artifacts.py", "swing/training/return_comparison.py",
     "swing/training/return_validation.py", "swing/contracts/return_training.py", "swing/contracts/training_readiness.py",
     "swing/contracts/__init__.py", "swing/contracts/holding_accounting.py",
     "swing/contracts/issuer_reaction.py", "swing/contracts/issuer_reaction_profile.py",
@@ -545,8 +547,12 @@ def publish_saved_oof_policy_evaluation(
         state.update(saved=saved, decisions=decisions, selected=selected, counts=counts)
         return selected, saved.entry_sessions
 
-    with verified_funded_policy_inputs(root=root, target_config=target_config, evidence=evidence, strategy=strategy,
-        selection_loader=selection_loader, exit_policy=exit_policy, memory_guard=_guard, corporate_actions=corporate_actions) as provider:
+    with (
+        verified_funded_policy_inputs(root=root, target_config=target_config, evidence=evidence, strategy=strategy,
+            selection_loader=selection_loader, exit_policy=exit_policy, memory_guard=_guard,
+            corporate_actions=corporate_actions) as provider,
+        temporary_holding_spool(output, memory_guard=_guard) as holdings,
+    ):
         _require(bool(state), "funded provider did not load the bound OOF selection")
         saved, decisions, selected, counts = state["saved"], state["decisions"], state["selected"], state["counts"]
         _require(provider.config == target_config and provider.policy.research_contract == research_contract
@@ -554,7 +560,6 @@ def publish_saved_oof_policy_evaluation(
                  and provider.valuation_sessions == swing_valuation_sessions(saved.entry_sessions, 10)
                  and provider.valuation_sessions[-1] == "2024-05-28"
                  and set(provider.selected_ids) == set(selected.decision_id), "funded provider calendar/selection/research differs")
-        holdings: list[HoldingSpecification] = []
         benchmarks: dict[str, HoldingSpecification] = {}
         gaps: list[dict[str, Any]] = []
         for decision in selected.itertuples(index=False):
@@ -567,6 +572,7 @@ def publish_saved_oof_policy_evaluation(
                              "reasons": list(lot.missing_reasons) or ["funded_lot_or_exit_unavailable"]})
             else:
                 holdings.append(_unsimulated_lot(lot, provider.valuation_sessions))
+        holdings.seal()
         expected_benchmarks = {"SPY", "QQQ", *selected.primary_benchmark.astype(str)}
         _require(set(provider.benchmark_tickers) == expected_benchmarks, "funded benchmark identities differ")
         for ticker in sorted(expected_benchmarks):
@@ -582,7 +588,7 @@ def publish_saved_oof_policy_evaluation(
         else:
             ledger_selected = selected.copy()
             ledger_selected["session_date_et"] = ledger_selected.session_date_et.map(date.isoformat)
-            accounting = evaluate_event_aware_swing_accounting(ledger_selected, holdings, benchmarks,
+            accounting = evaluate_event_aware_swing_accounting(ledger_selected, holdings.read, benchmarks,
                 config=_LedgerConfig(research.horizon_sessions, research.base_round_trip_cost_bps,
                                      strategy.swing.maximum_trades_per_decision),
                 strategy_contract=strategy, research_contract=research, session_calendar=saved.entry_sessions,
