@@ -32,43 +32,35 @@ found only monitor49568, whose owner/worker are null. Monitor remains running wh
 authorized repairs are pending; no new finish marker and no final idle-hold release
 claimed. Do not mark step7 complete. Earlier receipts below remain historical evidence.
 
-Next bounded repair: reduce retained evaluator memory without changing the91% system
-ceiling,5GiB process budget/.75GiB headroom,120s bounded pause or5s polling. The current
-evaluator accumulates all selected full-calendar holding specifications before ledger
-replay; the ledger also retains each lot's full-calendar snapshot steps. Investigate
-incremental use of the canonical replay and compact settled tails; verify exact base/
-stress ledger parity, all selected rows/zero days, clocks/costs/exits and missing-action
-gates before any retry. Isolated implementation and synthetic checks are below; real-data
-memory evidence remains pending. Source
-exact issuer cash/entitlement/date terms for the six remaining provider actions (the
-five news-XGBoost actions and earlier STE November2022); preserve original provider
-records and issuer response bytes. Do not infer tax, currency, due bills, rounded spin
-ratios, unknown payouts or fractional-share cash. No blind retry. Keep GPU/API changes
-isolated until all comparisons/retries and their evidence close.
+Current bounded repair: memory implementation27b8aa7 and exact issuer-ratio/ten-session
+source-loader correctionb12d99c are LOCAL on codex/frozen-backtest-memory-repair,
+worktree C:/Users/manis/Documents/Codex/2026-09-28/c/worktrees/frozen-backtest-memory-repair.
+Neither is integrated. Existing primary frozen source/config/runtime remain unchanged;
+new separately named accounting facts/config below preserve every original artifact.
+Keep91% system ceiling,5GiB process/.75GiB headroom,120s pause/5s poll, all six models,
+selected rows/zero days, costs and clocks unchanged. No refits or feature rebuilding.
 
-Isolated memory implementation27b8aa7 is locally committed on
-codex/frozen-backtest-memory-repair, worktree
-C:/Users/manis/Documents/Codex/2026-09-28/c/worktrees/frozen-backtest-memory-repair.
-Primary frozen source/config/runtime remain unchanged. The evaluator now writes
-canonical holding values to a temporary compressed stream and checks its sealed hash/
-count on each base/stress read. The ledger validates every canonical snapshot but
-retains steps only through first settlement, when the existing funding loop removes
-the lot. The sole canonical funding, holding, exit and cost kernels remain in use.
-All173affected synthetic UNITs passed470.99s across seven modules; Ruff six changed
-files and strictmypy four changed sources passed. Hash/count tampering, object lifetime,
-cleanup, base/stress full-tail parity, zero days, settlement, action gaps and exits are
-covered. One consolidated AUTHOR review no findings, no independent review claimed:
-workspace review-results/frozen-backtest-memory-author-review-20261025.json
+The memory evaluator uses a sealed temporary gzip stream of unchanged canonical lots;
+base/stress reads verify hash/count. The ledger validates all snapshots and retains
+steps only through first settlement.173affected synthetic UNITs passed470.99s; Ruff
+six files/strictmypy four sources passed. Consolidated AUTHOR review/no independent
+review: workspace review-results/frozen-backtest-memory-author-review-20261025.json
 SHA42c51970fdbbd965b2b01486aa54d6eca3adac84e5c73e78592a947714013e54.
-Full suite unrun; component verification tier. Real-data memory/parity proof and a
-full17700selection retry remain UNRUN; do not call the memory remedy closed or integrated.
-No model deserialization/refit or feature/source-foundation work. No owned heavy job
-remains after these UNIT/source-collection commands; monitor49568 remains for pending work.
 
-Exact-source acquisition for the six observed actions retained18HTTP attempts under
-the shared lease and unchanged memory guard:12responses archived_unreviewed (including
-two SEC submissions indexes), six rejected responses retained. None admitted as facts.
-Archive data/raw/swing_accounting_remaining_facts_20261025; workspace collection reports:
+Bounded REAL memory parity proof PASSED naturalexit0. Prespecified first three saved
+news-XGBoost selected lots by session/security/id were BDX,WRB,EFX, each717full-calendar
+snapshots. Original actual primary ledger (frozen SHA5d8b47ae3598f0e37d4c18316b6caafc1505cea924ce481f6e253c20bea4885b)
+and isolated repaired ledger outputs matched EXACTLY at20/40bps, including all zero
+days. Actual module/source/six-model hashes rechecked, no mocks/model loads/refits.
+Temporary stream removed. Receipt workspace
+review-results/frozen-backtest-memory-real-parity-20261025.json
+SHA702fd33d8391391894b323ebc09c154f94bb5154c74029b07c8f364661892a81.
+This three-lot proof does NOT establish full17700selection memory scaling or funded
+performance. Full retry remains unrun. Full test suite unrun; component tier.
+
+Remaining exact issuer facts are built, pending all-six real scan/replay.22official
+HTTP attempts retained:16archived_unreviewed including three SEC indexes,6rejected
+responses retained. First18attempt collection receipts remain unchanged:
 remaining-accounting-fact-collection-20261025.json SHA
 4822b53ff60f112ebaef6112f2bf9e6f0cd938d9b18b12db3610ddcf0e5fb46a;
 remaining-accounting-fact-collection-sec-20261025.json SHA
@@ -77,16 +69,52 @@ remaining-accounting-fact-collection-sec-filings-20261025.json SHA
 59cbad084bcc2f76cefbf422a9e72ae4eb016ff074f4bdb29200d0207cace84f;
 remaining-accounting-fact-collection-ste-exhibits-20261025.json SHA
 fd439850db88ba8a21354fee820ac8b0d3ad53ed11fa6dabcf569e6b943a2e17.
-Alternate SEC filings were discovered from retained official indexes. The May3STERIS
-8-K/exhibit covers a board appointment, not the dividend; retain but exclude it as
-dividend evidence. The December2022-quarter SEC statement shows declared47cents per
-ordinary share; individual entitlement/date/currency bindings still require source
-review. Saved Danaher information statement explicitly distinguishes regular-way and
-ex-distribution entitlement; do not use record date alone. No new accounting config,
-reviewed fact artifact, daughter-price collection or further policy retry yet.
-Next: real retained-data memory parity proof using explicit limited selected-lot scope,
-then source-review/build exact remaining facts and prove all current selections' action
-coverage before retry. No full-portfolio performance claim from a limited lot proof.
+New SEC June2023STERIS, COF September2021 and NXP October2022 quarters plus COF index
+were identified from actual saved indexes and archived. The May3STERIS board
+appointment 8-K/exhibit stays excluded as dividend evidence. Original inline-XBRL
+USD-per-share units and matching quarter contexts explicitly confirm all five cash
+amounts: COF.60ordinary+.60special once against retained1.2record, PNR.21,NXPI.845,
+STE.47 November2022 and.47 June2023. Provider dates retained; no tax/currency inference.
+STERIS June provider.3525 replaced by issuer gross.47, with no inferred tax factor.
+
+DHR issuer and completed-distribution SEC bodies explicitly bind1VLTO/3DHR, Sep13
+record, Sep30distribution, Oct2regular-way credit/ex and entitlement trading with the
+regular-way parent. No record-date shortcut, guessed due bills or fractional cash.
+Existing approved normalized proportional daughter shares/matched parent exit used.
+Ten actual VLTO raw SIP daily bars Oct2-13,2023 retained with source response/projection
+and complete daughter action coverage. Acquisition receipt workspace
+review-results/vlto-price-acquisition-real-20261025.json SHA
+1ff3950ed3cf5f41226456a6afb5c72832db73b69754f915607e24ffdc36c9bb.
+Provider rounded.333333333 remains unchanged. Source-loaderb12d99c accepts an explicit
+positive integer issuer ratio only with its verified official receipt and exact
+fact ratio; absent issuer terms, original exact provider-ratio equality remains.
+Nine/ten-session receipt counts and original raw projection are validated.78focused
+synthetic UNITs passed23.20s; Ruff two files/strictmypy one source/diffcheck passed.
+Consolidated AUTHOR review/no independent review workspace
+review-results/remaining-spin-source-author-review-20261025.json
+SHAc6cb7aa871913f931aa0aba2c8db1973286cdfc5c9519457c2972de859585828.
+
+New config configs/swing_backtest_remaining_accounting_20261025.toml
+SHA0b158579f077cbd44691c35f41fa37385366a954c2f8b66a0cd478c97bb0df26
+points to four new separate reviewed artifacts. Exact source review workspace
+review-results/remaining-accounting-source-review-20261025.json
+SHA6dfb19a4bdb3e989764c8d69d2a8e073f2f092bfe54d3064fc591d3d96971ae7.
+All-six actual selection scan/newly affected lot proof is CURRENTLY RUNNING:
+workspace work/verify_remaining_accounting_all_six_20261025.py, log
+review-results/remaining-accounting-all-six-real-20261025.log. Actual Python41864
+launcher40596 identity verified12:27UTC. It reuses four original published selections
+and reconstructs only two unpublished selections via canonical saved temporal OOF
+selection, no feature pipeline/model load/refit. It scans every17700selection/window,
+compares prior/new action gates and reconciles only newly resolved raw lots under both
+frozen exits. No final proof/exit receipt yet. Do not edit this operator, dependencies
+or runtime while live; let it end naturally. Inspect actual owner, not stale PID.
+Monitor49568 remains active for pending work; no finish marker/idle-hold release.
+
+Next: inspect actual all-six proof result. Diagnose any exact remaining gaps or failed
+reconciliation without dropping rows. Only after real gates pass, integrate reviewed
+local remedies, bind fresh operator/request/source pins and execute actual12frozen
+policies naturally. No restart of old campaigns and no blind retry. GPU/API remain
+isolated until all comparisons/retries/evidence close. Step7 remains sole active step.
 
 Local docs-only commit da3f411 is not pushed; origin remains82ffc16. Automatic approval
 review rejected pushing internal evidence to a remote whose disclosure authorization
