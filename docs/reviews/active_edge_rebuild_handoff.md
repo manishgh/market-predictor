@@ -1,5 +1,42 @@
 # Active Edge Rebuild Handoff
 
+### First actual publication — October 25 20:16UTC
+
+Price indicators / Ridge / profit target, stop-loss, ten-session limit naturally
+returned2 at20:16:20.724829Z and published event_accounting_diagnostics. The actual
+base/stress ledgers computed all17700selected/funded holdings each over717sessions,
+including zero days. Selected-ID SHA5de958a8656ef31ab987bbaaf5f6ea4a6f3bed74833284c8230adb84b6355d3a
+matches the closed primary selection proof. No memory/process-budget timeout or
+disk failure occurred; seven pressure pauses resumed naturally. This is a complete
+arithmetic diagnostic publication, NOT independently admitted funded performance.
+
+Report eligibility blocker is event_source_admission_pending. Canonical accounting
+explicitly sets this after ledger computation; no missing valuation is recorded.
+The unchanged operator accepts only(0,computed) or(2,valuation_unavailable), so it
+retains status failed with 'Exit code/report does not identify a completed funded
+result'. Preserve that receipt and publication; do not patch the live operator,
+clear admission flags or blindly rerun. Economic-condition checks also fail in this
+diagnostic report; no outperformance/acceptance claim is supported.
+
+Independent read-only audit verified five publication artifact hashes, two logs,
+all543live source/config/operator hashes and six model hashes. Receipt workspace
+review-results/memory-terms-fixed-technical-ridge-target-diagnostics-20261025.json
+SHAca279e7776535b26ed9cfed4caedb068271c7daf72c32a27c517f13bc853c569.
+Original result SHAff5c00aea444521fbe5de35a3030bae24edd6c7e0a5283db876a18ffbf2210b9;
+manifest68effec8c1267efe8203e26c2b77a972102ba38555492251e3a88049483df63c;
+reportc7d5f5b8238d5f58fb9635b091d1b721e14f6398d5622f4a33affe56d627c537.
+Audit helper first overasserted the replay-ID dictionary equaled an integer; it
+refused read-only, then len(mapping) passed. Original helper/diagnosis retained.
+No runtime/report bytes changed.
+
+CURRENT SECOND Price indicators / Ridge / stop-loss, ten-session limit started
+20:16:21.951629Z. Actual worker10532/venvlauncher16180/nativeCLI28708/controller40020
+ancestry and exact policy command verified after launch; first worker10024 gone.
+Inspect fresh owner/CIM next check; do not reuse stale PIDs. Let all12end naturally,
+retain2paired diagnostics and perform full natural-end audit before repairs/new
+one-ATR evaluation. One ATR remains isolated; no new result under that policy.
+Step7 remains sole active, no serving/promotion/admission or external push.
+
 ### Authorized disposable-cache cleanup — October 25
 
 The human authorized deleting safe intermediary files while retaining news,
