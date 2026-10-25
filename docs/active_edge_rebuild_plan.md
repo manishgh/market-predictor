@@ -38,12 +38,55 @@ evaluator accumulates all selected full-calendar holding specifications before l
 replay; the ledger also retains each lot's full-calendar snapshot steps. Investigate
 incremental use of the canonical replay and compact settled tails; verify exact base/
 stress ledger parity, all selected rows/zero days, clocks/costs/exits and missing-action
-gates before any retry. No implementation or numerical equivalence claimed yet. Source
+gates before any retry. Isolated implementation and synthetic checks are below; real-data
+memory evidence remains pending. Source
 exact issuer cash/entitlement/date terms for the six remaining provider actions (the
 five news-XGBoost actions and earlier STE November2022); preserve original provider
 records and issuer response bytes. Do not infer tax, currency, due bills, rounded spin
 ratios, unknown payouts or fractional-share cash. No blind retry. Keep GPU/API changes
 isolated until all comparisons/retries and their evidence close.
+
+Isolated memory implementation27b8aa7 is locally committed on
+codex/frozen-backtest-memory-repair, worktree
+C:/Users/manis/Documents/Codex/2026-09-28/c/worktrees/frozen-backtest-memory-repair.
+Primary frozen source/config/runtime remain unchanged. The evaluator now writes
+canonical holding values to a temporary compressed stream and checks its sealed hash/
+count on each base/stress read. The ledger validates every canonical snapshot but
+retains steps only through first settlement, when the existing funding loop removes
+the lot. The sole canonical funding, holding, exit and cost kernels remain in use.
+All173affected synthetic UNITs passed470.99s across seven modules; Ruff six changed
+files and strictmypy four changed sources passed. Hash/count tampering, object lifetime,
+cleanup, base/stress full-tail parity, zero days, settlement, action gaps and exits are
+covered. One consolidated AUTHOR review no findings, no independent review claimed:
+workspace review-results/frozen-backtest-memory-author-review-20261025.json
+SHA42c51970fdbbd965b2b01486aa54d6eca3adac84e5c73e78592a947714013e54.
+Full suite unrun; component verification tier. Real-data memory/parity proof and a
+full17700selection retry remain UNRUN; do not call the memory remedy closed or integrated.
+No model deserialization/refit or feature/source-foundation work. No owned heavy job
+remains after these UNIT/source-collection commands; monitor49568 remains for pending work.
+
+Exact-source acquisition for the six observed actions retained18HTTP attempts under
+the shared lease and unchanged memory guard:12responses archived_unreviewed (including
+two SEC submissions indexes), six rejected responses retained. None admitted as facts.
+Archive data/raw/swing_accounting_remaining_facts_20261025; workspace collection reports:
+remaining-accounting-fact-collection-20261025.json SHA
+4822b53ff60f112ebaef6112f2bf9e6f0cd938d9b18b12db3610ddcf0e5fb46a;
+remaining-accounting-fact-collection-sec-20261025.json SHA
+5a834cc76145aadd27210fc24f230a09068cc67858faeac947a2ddee54ec8821;
+remaining-accounting-fact-collection-sec-filings-20261025.json SHA
+59cbad084bcc2f76cefbf422a9e72ae4eb016ff074f4bdb29200d0207cace84f;
+remaining-accounting-fact-collection-ste-exhibits-20261025.json SHA
+fd439850db88ba8a21354fee820ac8b0d3ad53ed11fa6dabcf569e6b943a2e17.
+Alternate SEC filings were discovered from retained official indexes. The May3STERIS
+8-K/exhibit covers a board appointment, not the dividend; retain but exclude it as
+dividend evidence. The December2022-quarter SEC statement shows declared47cents per
+ordinary share; individual entitlement/date/currency bindings still require source
+review. Saved Danaher information statement explicitly distinguishes regular-way and
+ex-distribution entitlement; do not use record date alone. No new accounting config,
+reviewed fact artifact, daughter-price collection or further policy retry yet.
+Next: real retained-data memory parity proof using explicit limited selected-lot scope,
+then source-review/build exact remaining facts and prove all current selections' action
+coverage before retry. No full-portfolio performance claim from a limited lot proof.
 
 Local docs-only commit da3f411 is not pushed; origin remains82ffc16. Automatic approval
 review rejected pushing internal evidence to a remote whose disclosure authorization
