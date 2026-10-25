@@ -1,5 +1,22 @@
 # Active Edge Rebuild Plan
 
+### Authorized disposable-cache cleanup — October 25
+
+The human authorized deleting safe intermediary files while retaining news,
+candles, trained models and training inputs. Removed ONLY92 signed tool-cache
+directories (82mypy,6Ruff,4pytest),421files/1448657078logicalbytes. C: free space
+after deletion was2842509312bytes. No raw/canonical/features/model/report/log or
+runtime source/dependency cleanup; all worktrees and evidence remain retained.
+All543live source/config/operator hashes and six final model hashes rechecked
+unchanged; all4320input-pin files still present (not all rehashed). Running first
+Price indicators/Ridge/target-stop-ten-session worker10024 remained active with
+increasing CPU, no new result or failure. Do not repeat unchanged disk notices.
+Receipts: workspace review-results/disposable-cache-cleanup-20261025.json and
+disposable-cache-cleanup-verification-20261025.json. The cache-removal helper's
+first preflight refused before deletion on a PowerShell Split-Path parameter-set
+error; exact helper and diagnosis retained, resolved by IO.Path on absolute paths.
+No tests/refits/replay/restart were needed or performed for this cleanup.
+
 ### User amendment — October 25: one ATR swing stop prepared
 
 Human instruction: "Make stop loss at 1x only, atr 3:1". The next swing policy
