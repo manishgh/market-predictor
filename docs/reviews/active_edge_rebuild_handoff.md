@@ -1,6 +1,45 @@
 # Active Edge Rebuild Handoff
 
-### Second policy RAM timeout; third policy live — October 25 21:33UTC
+### Third policy RAM timeout; fourth policy live — October 25 21:48UTC
+
+Price indicators / XGBoost / profit target, stop-loss, ten-session limit naturally
+returned2 before publication, finished21:36:31.637118Z. Fifteen earlier91%pressure
+pauses resumed. Final pause21:34:28.890544Z timed out21:36:28.967519Z after120.0766784s
+at91.26541112%system RAM under the unchanged91%ceiling/120sbounded wait. Exact stderr:
+'memory guard stopped saved OOF policy evaluation: system memory 91.27% used;
+requires strictly below 91% within 120 seconds'. Missing manifest is secondary;
+no accounting or performance publication exists for this policy. This is system
+RAM pressure, not a process RSS-budget failure; no disk error is recorded.
+
+Read-only audit verified both log hashes, all543frozen source/config/operator hashes
+and all6trained model hashes unchanged. Receipt workspace
+review-results/memory-terms-fixed-technical-xgboost-target-memory-failure-20261025.json
+SHA76939156ed37c5b07fafd2470db5637fd58ee79d4158930c8d3a935be30f4e85;
+resultSHA0b4c980e99e251347b1da974d17c75fcf840f43b7b962d9b30320614b397d07b;
+stderrSHAd945c285ee6587e954c161f0a4a2e13bab3421bb39c6cd4bb56bf8e90b834c0c.
+All original results/start/logs remain retained;4320input-pin bytes not all rehashed
+in this monitoring audit. No source/config/operator/runtime/request changes.
+
+CURRENT FOURTH Price indicators / XGBoost / stop-loss, ten-session limit started
+21:36:32.947345Z. StartedSHAe700eed436e36a8c89aad8877dc0c159279709bec58f907dbd8f45e6ede146ca.
+Actual worker-to-controller ancestry 47572/16796/50852/40020 and exact policy command
+verified by elevated CIM at2026-10-25T21:47:36.8957521Z; previous worker49364 absent. Monitor49568
+remains. C:free2426884096bytes at that observation. Inspect fresh owner/processes
+next; never infer completion from a null owner or reuse stale worker identity.
+
+Three of12execution receipts exist: one complete arithmetic diagnostic publication
+with source admission pending, plus two system RAM failures. ZERO admitted funded
+performance. Let all12current1.5ATR policies end naturally, then audit every start/
+result, natural outer exit,2retained paired diagnostics, actual artifact/log hashes
+and frozen source/model/runtime inputs. No stop/restart/duplicate, live source/config/
+operator/runtime/dependency edits, guard/admission weakening, cleanup or blind retry.
+Diagnose the smallest necessary remedy after natural end; human1ATR amendment still
+requires a fresh evaluation request preserving immutable original model/feature/source
+lineage. One-ATR/GPU/API worktrees remain isolated. No refit/foundation rebuild.
+Step7 remains sole active; serving/promotion/admission false. Primaryaae6b8f was
+documentation only before this update; remote82ffc16/no external push authorization.
+
+### Historical second-policy boundary — October 25 21:33UTC
 
 Price indicators / Ridge / stop-loss, ten-session limit naturally returned2 before
 publication, finished21:21:57.948275Z. After a pause at21:19:14.686011Z, system RAM
