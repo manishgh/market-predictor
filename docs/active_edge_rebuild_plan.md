@@ -1,9 +1,9 @@
 # Active Edge Rebuild Plan
 
-### Fresh retry boundary: news Ridge stop process-memory failure — October25 05:44UTC
+### Fresh retry boundary: news XGBoost target valuation unavailable — October25 08:29UTC
 
-Ten of12frozen executions naturally ended: nine memory failures and one
-published valuation_unavailable report; ZERO funded performance comparisons.
+Eleven of12frozen executions naturally ended: nine memory failures and two
+published valuation_unavailable reports; ZERO funded performance comparisons.
 Price indicators and relationships / Ridge / stop-loss, ten-session limit
 naturally returned2 and published2026-10-24T19:27:28.092243Z. Five artifact and two
 log hashes independently verified; frozen_inputs_rechecked=true; all538current
@@ -25,6 +25,32 @@ this new relationship selection does not authorize repeating that closed proof.
 Exact new receipt workspace
 review-results/news-gap-fixed-relationships-ridge-stop-valuation-unavailable-20261024.json
 SHA410ddde25842673e0772a92b22d4a9b815bde62b0b71600785d2c59ec1a28d28.
+
+Price indicators, relationships and news / XGBoost / profit target, stop-loss,
+ten-session limit naturally returned2 and published valuation_unavailable at
+2026-10-25T08:20:09.265678Z. Of345036candidate decisions,17700selected rows
+remain retained;15selected decisions have unavailable action evidence: COF6,
+PNR2, NXPI2, STE4 and DHR1. Fourteen cash rows plus one ATR spin row are gated:
+six COF cash rows and the DHR ATR row have unbounded_entitlement_or_due_bill_dates;
+the eight PNR/NXPI/STE cash rows require corporate_terms_require_replay.
+Exact action IDs: COF e1c22453-4ca9-4e8e-850e-4484a28cb46d;
+PNR c610ac50-47f0-4984-a004-fde068b88bae;
+NXPI b84c65cc-5780-4d88-b26d-dc0e67963c54;
+STE c106194d-9516-4e00-b79f-cf2efb389adc;
+DHR 6c3b1ef0-d7bc-4993-81b3-f9c6d18543ce (provider daughter VLTO).
+The saved provider records are evidence to investigate, not issuer terms. Do not
+infer currency, tax, due-bill dates or an exact one-third ratio from rounded provider
+values. All15decision IDs/sessions, five original action records and ten source-body
+hashes are retained in the exact receipt. No rows filtered or zero returns substituted;
+comparisons null, economic eligibility and all serving/promotion/admission false.
+ResultSHA d16e9a1d2cd9f4ed3661e8ef737f5a8c75ece6924553fddf4679fc0ff0e4adb0;
+manifestSHA8c38c79dcf6dec194255a84406cff192daa11fc3a13fe17dea05f33f26e74910;
+reportSHAeb1d5bfd4d945f63ec74e77d4d9075b180fdd09fc11baf6a7a14f3d6b8eb25e8.
+Five artifact and two log hashes independently verified; frozen_inputs_rechecked=true;
+all538current frozen source/config/operator files and six final models independently
+rechecked unchanged. Exact receipt workspace
+review-results/news-gap-fixed-news-xgboost-target-valuation-unavailable-20261025.json
+SHAa0bf35bf11a2cfa3693c1eadb7a1e74b9ccc409c9242972eab57b5c248894d14.
 
 Earlier five RAM failures remain protected: first two Ridge evidence
 review-results/news-gap-fixed-technical-ridge-memory-failures-20261024.json SHA
@@ -86,13 +112,13 @@ No accounting or funded performance result was published.
 No guard/runtime edits or interruption. Prior low-disk observation receipt remains
 review-results/news-gap-fixed-disk-observation-20261024T1644.json SHA
 e4e8a6664a51969e8234e95e13227d6ed764311de06195df98aab99d2875caa5;
-C: free3003797504bytes independently observedOctober25 05:44UTC, no disk-write failure/agent cleanup.
+C: free2631364608bytes independently observedOctober25 08:29UTC, no disk-write failure/agent cleanup.
 
-CURRENT: Price indicators, relationships and news / XGBoost / profit target,
-stop-loss, ten-session limit started2026-10-25T05:32:19.657233Z;
-actualworker1272/launcher42480/controller7472/monitor49568 verified05:44UTC;
+CURRENT FINAL EXECUTION: Price indicators, relationships and news / XGBoost /
+stop-loss, ten-session limit started2026-10-25T08:20:09.812285Z;
+actualworker50724/launcher2164/controller7472/monitor49568 verified08:29UTC;
 owner initial-fit-raw-share-plan. Inspect actual owner nextcheck.
-Two remaining executions include this one. No complete/outer-exit/finish.
+One execution remains, currently running. No complete/outer-exit/finish.
 Continue all frozen policies naturally; no stop/restart/duplicate/retry or edits to
 source/config/operator/runtime while live.
 At natural end preserve full audit, then address exact remaining corporate terms and
@@ -136,11 +162,9 @@ debug.json dump is deleted in the isolated branch only. All raw/provider sources
 trained models, campaign receipts and operational failure logs retained. Do not
 repeat broad cleanup or delete retained source/model evidence as ordinary logs.
 
-Step7 remains the ONLY active plan step. Fresh news_gap_fixed_20261024 campaign
-still running its first Price indicators / Ridge / profit target, stop-loss,
-ten-session policy; worker48860/controller7472 at latest observation, monitor49568.
-No new result/complete/outer-exit yet. Inspect actual owner next check. Continue
-naturally, no restart/duplicate/edits to primary frozen dependencies. After current
+Step7 remains the ONLY active plan step. The current campaign boundary and actual
+worker are recorded at the top of this document. Continue naturally, with no restart,
+duplicate or edits to primary frozen dependencies. After current
 comparisons/retries and evidence checkpoint close, integrate reviewed future GPU
 implementation and then70eb21b without changing saved model bytes. Step9 accepted
 production API remains PENDING: current production contract consumes classifier
