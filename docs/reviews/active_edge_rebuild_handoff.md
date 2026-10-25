@@ -1,15 +1,19 @@
 # Active Edge Rebuild Handoff
 
-### Current checkpoint — October25 13:42UTC
+### Current checkpoint — October25 14:10UTC
 
-The isolated six-selection TEL accounting proof passed66actual holding reconciliations
-with zero gaps and unchanged six-model/selected-ID hashes. Memory/issuer-source fixes
-are integrated locally as4b96da4/2d5957e. Seventeen unchanged LF/CRLF module-byte
-differences prevented the exact integration gate; no primary files were normalized.
-A fresh actual PRIMARY all-six proof is running, worker50700 at13:42UTC; result/log
-remaining-accounting-all-six-primary-real-20261025. No full12policy retry or funded
-portfolio result yet. Exact evidence and next gates are below. Remote remains82ffc16;
-automatic-review disclosure approval is still pending. No external push attempted.
+The actual PRIMARY all-six proof passed and naturally exited0 at14:05:19.0557735Z.
+All6x17700selected IDs are unchanged, with zero action gaps and66actual both-exit
+holding reconciliations across33newly resolved selected occurrences. Actual primary
+module bytes, all six final models and the four memory modules passed prelaunch
+checks. The fresh12policy campaign memory_terms_fixed_20261025 is NOW LIVE, request
+0360e79e7e2e5f80b0becd31988f846ff28b094069c3f0992ccdb46d57aca014.
+First Price indicators / Ridge / profit target, stop-loss, ten-session limit started
+14:09:15.595598Z; actual worker10024/controller40020 identity verified14:10UTC.
+No completed result/funded performance at launch. Do not edit frozen sources/configs/
+operator/runtime or stop/restart/duplicate the live campaign. Inspect actual owner.
+Local source commits4b96da4/2d5957e remain integrated; GPU/API stay isolated. Remote
+remains82ffc16 with disclosure approval pending; no external push attempted.
 
 ### Natural end audited: frozen backtests — October25 11:29UTC
 
@@ -46,7 +50,7 @@ claimed. Do not mark step7 complete. Earlier receipts below remain historical ev
 Current bounded repair: memory implementation27b8aa7 and exact issuer-ratio/ten-session
 source-loader correctionb12d99c are LOCAL on codex/frozen-backtest-memory-repair,
 worktree C:/Users/manis/Documents/Codex/2026-09-28/c/worktrees/frozen-backtest-memory-repair.
-These are now integrated locally as4b96da4/2d5957e; exact primary-runtime proof below is running;
+These are now integrated locally as4b96da4/2d5957e; exact primary-runtime proof below passed; the fresh full campaign is live;
 new separately named accounting facts/config below preserve every original artifact.
 Keep91% system ceiling,5GiB process/.75GiB headroom,120s pause/5s poll, all six models,
 selected rows/zero days, costs and clocks unchanged. No refits or feature rebuilding.
@@ -67,7 +71,7 @@ Temporary stream removed. Receipt workspace
 review-results/frozen-backtest-memory-real-parity-20261025.json
 SHA702fd33d8391391894b323ebc09c154f94bb5154c74029b07c8f364661892a81.
 This three-lot proof does NOT establish full17700selection memory scaling or funded
-performance. Full retry remains unrun. Full test suite unrun; component tier.
+performance. The fresh full retry is now live; no result at launch. Full test suite unrun; component tier.
 
 Historical pre-TEL issuer facts were built for the prior all-six scan.22official
 HTTP attempts retained:16archived_unreviewed including three SEC indexes,6rejected
@@ -213,33 +217,65 @@ remedy are retained in AUTHOR delta review (not independent)
 memory-terms-retry-primary-module-review-20261025.json
 SHA8873ec0aa52ce9aae1c7093dacd5b10769ec94e70da36bf83553bcabd220b117.
 
-CURRENT work/verify_remaining_accounting_all_six_primary_20261025.py
-SHAe46ef283f4b6e8fb35c1f0763b0984d9d56d7cf4701145a73d5b8c789f6880af
-is running against the actual integrated PRIMARY runtime, not isolated imports.
-Actual worker50700/launcher38792/controller48284 identity verified13:42UTC;
-monitor49568 owner project-swing-corporate-action-evidence initially. Inspect actual
-owner next check. Log remaining-accounting-all-six-primary-real-20261025.log;
-eventual result remaining-accounting-all-six-primary-real-20261025.json and natural
-exit remaining-accounting-all-six-primary-real-20261025.exit.json are not complete.
-The repeat is required by the demonstrated actual-runtime byte conflict, not an
-economic change or blind retry. It checks all six exact selected-ID hashes against
-the passed isolated proof and all windows/affected actual holdings under both exits.
-No source/config/operator/dependency/runtime edits or duplicate/restart while live.
-Monitor remains pending authorized work; no finish marker/final idle-hold release.
+The actual PRIMARY all-six proof PASSED, completed2026-10-25T14:05:18.748935Z,
+naturalexit0 at14:05:19.0557735Z. Receipt
+review-results/remaining-accounting-all-six-primary-real-20261025.json
+SHAbbd2ca64dccdf2f33c45220a84ff4c3885993247b170684eae25f786ce8a759b;
+logSHA79c16843bdf2dd632859157fe2623f553257c3369aade430198936aef976115b;
+exitSHAc47694f1cd8ef3d85652c82d63b377fa7991d7f543ae3fdd3149fc110c89e91d.
+All six17700-row selections retained exactly the passed isolated selected-ID hashes,
+zero remaining action gaps.33newly resolved selected occurrences across six model
+selections were independently reconciled under both frozen exits=66actual raw-sale/
+cash/cost/settlement checks.4138source files,165actual primary modules and six final
+models rechecked by the proof. Worker50700/launcher38792 naturally gone and heavy
+lease absent before the new launch. No mock, model refit, feature rebuild, full17700
+memory-scaling or funded portfolio claim from this limited accounting proof.
 
-Future12policy operator work/run_memory_terms_fixed_backtests_20261025.py now requires
-the actual PRIMARY all-six proof path and actual primary module byte hashes, with
-every original source/model/selection/accounting gate unchanged. PREPARED but UNRUN;
-Ruff passed, SHA d982bfb03fb201b45bb37c6bce7d55e3f25a210c953d0f7ee46002a937f7552a.
-Prior pre-TEL and isolated-TEL drafts/reviews remain preserved separately. The current
-policy remains TEL config b74eb86252754520ea15974111cc7297804012c4a857ced27e7b6cfe6bb4f664.
-After actual primary proof natural success, verify its source/module/model pins,
-then run the actual twelve frozen policies sequentially with fresh campaign
-memory_terms_fixed_20261025/state review-results/memory-terms-fixed-20261025.
-No full policy retry yet. No further accounting-gap/source collection is needed
-unless the actual primary proof identifies a new exact failure. Keep91%/5GiB/.75GiB/
-120s/5s poll, models/allrows/zero days/costs/clocks/gates unchanged. GPU/API remain
-isolated until all comparisons/retries/evidence close. Step7 remains sole active step.
+Prelaunch audit independently rechecked all165actual primary module byte hashes,
+six final model hashes, current policy, four memory modules against the closed real
+three-lot parity proof and all six selected-ID hashes. All66recorded economic and
+identity rows exactly equal the isolated proof. Full specification digests differ:
+the existing corporate-context loader records retrieved_at=datetime.now(UTC), so each
+real run retains its own audit clock. Neither digest/receipt/clock was rewritten.
+The audit helper initially asserted full replay-record equality including this hash;
+it refused, its original helper is preserved, and the helper comparison was corrected
+to all economic/identity fields. No accounting source, runtime or operator gate changed.
+Exact observed failure diagnosis primary-proof-audit-digest-assumption-20261025.json
+SHA67c8830a98e91f8fe2ad099fe6defaf8c8f3355d48eaf84d4dba31b07a268001.
+Successful audit primary-runtime-accounting-proof-audit-20261025.json
+SHA1c55daf588b5d827bab0439620a5a742a857c9d9221cf2a943e1f4d9601dd67f.
+Do not repeat the passed primary/isolated/three-lot/132Oct24 proofs absent new evidence.
+
+FRESH ACTUAL12policy campaign memory_terms_fixed_20261025 is NOW LIVE. Reviewed
+operator work/run_memory_terms_fixed_backtests_20261025.py
+SHAd982bfb03fb201b45bb37c6bce7d55e3f25a210c953d0f7ee46002a937f7552a
+passed every prelaunch source/policy/module/model/memory/retained-pair gate before
+writing the accepted request at2026-10-25T14:09:14.337745Z. Workspace state
+review-results/memory-terms-fixed-20261025, requestSHA
+0360e79e7e2e5f80b0becd31988f846ff28b094069c3f0992ccdb46d57aca014;
+543frozen current source/config/operator files,4320input pins, exactly12original
+policies and two retained original paired diagnostics. Earlier naturally ended
+campaigns/requests/artifacts/logs remain retained; no resume or replacement.
+
+First Price indicators / Ridge / profit target, stop-loss, ten-session limit started
+2026-10-25T14:09:15.595598Z. Started receiptSHA
+247a714e6cf4b7cac574eeec86576e7cef5260a7b02219d1ae55e692b6c8f9e8.
+Actual worker10024/venvlauncher49512/nativeCLI39224/controller40020/venvlauncher51772
+identity/ancestry verified14:10UTC. Monitor49568 owner initially
+project-swing-corporate-action-evidence. Inspect actual owner every check; these PIDs
+describe launch only. Zero completed result receipts/new funded performance at launch.
+Outer log memory-terms-fixed-20261025.log; eventual natural exit
+memory-terms-fixed-20261025.exit.json and state complete.json. Each policy has separate
+started/result/stdout/stderr receipts. No complete/outerexit/finish marker yet.
+
+Let all twelve policies end naturally, sequentially. No source/config/operator/runtime
+edits, duplicate/restart/stop or blind retry while live. Keep91%/5GiB/.75GiB/120s/5s poll,
+all models/selected rows/zero days/costs/clocks/gates unchanged. Require all12actual
+receipts, natural outer exit, all artifact/log hashes and frozen_inputs_rechecked
+before final audit. Diagnose any new failure with exact evidence after natural end;
+do not substitute zero returns or remove unavailable rows. No serving/promotion/
+admission. Monitor remains active pending work; no final idle-hold release. GPU/API
+remain isolated until all comparisons/retries/evidence close. Step7 sole active step.
 
 Local docs-only commit da3f411 is not pushed; origin remains82ffc16. Automatic approval
 review rejected pushing internal evidence to a remote whose disclosure authorization
