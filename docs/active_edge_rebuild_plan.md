@@ -94,27 +94,47 @@ Consolidated AUTHOR review/no independent review workspace
 review-results/remaining-spin-source-author-review-20261025.json
 SHAc6cb7aa871913f931aa0aba2c8db1973286cdfc5c9519457c2972de859585828.
 
-New config configs/swing_backtest_remaining_accounting_20261025.toml
+Initial config configs/swing_backtest_remaining_accounting_20261025.toml
 SHA0b158579f077cbd44691c35f41fa37385366a954c2f8b66a0cd478c97bb0df26
-points to four new separate reviewed artifacts. Exact source review workspace
-review-results/remaining-accounting-source-review-20261025.json
-SHA6dfb19a4bdb3e989764c8d69d2a8e073f2f092bfe54d3064fc591d3d96971ae7.
-All-six actual selection scan/newly affected lot proof is CURRENTLY RUNNING:
-workspace work/verify_remaining_accounting_all_six_20261025.py, log
-review-results/remaining-accounting-all-six-real-20261025.log. Actual Python41864
-launcher40596 identity verified12:27UTC. It reuses four original published selections
-and reconstructs only two unpublished selections via canonical saved temporal OOF
-selection, no feature pipeline/model load/refit. It scans every17700selection/window,
-compares prior/new action gates and reconciles only newly resolved raw lots under both
-frozen exits. No final proof/exit receipt yet. Do not edit this operator, dependencies
-or runtime while live; let it end naturally. Inspect actual owner, not stale PID.
-Monitor49568 remains active for pending work; no finish marker/idle-hold release.
+and first source-review SHA6dfb19a4bdb3e989764c8d69d2a8e073f2f092bfe54d3064fc591d3d96971ae7
+are preserved. The first all-six proof naturally exited1 at12:27:42.4120117Z BEFORE
+selection scanning/holding replay. Strict source verification rejected missing
+request_sha256 metadata in the retained collection receipts; response body/transport
+hashes, successful status and exact URLs were intact. Failure diagnosis workspace
+review-results/remaining-accounting-source-receipt-failure-20261025.json
+SHAd25666e359aa5cd543cc5858085bf33a9c303ca93b45681ea17078ea4f0d6570;
+original logSHA0f361d4dad2074196d91504843ba05097514626c715c1fe71a771db64b9a94b6.
 
-Next: inspect actual all-six proof result. Diagnose any exact remaining gaps or failed
+No original receipt was edited or refetched. New explicitly derived receipt projections
+compute request_sha256 from unchanged retained request bytes and link the original
+receipt hash; request/transport/body bytes are copied exactly, with derivation metadata
+stating no new network request. All original evidence remains pinned. Source verifier
+unchanged. All four revised artifacts passed that verifier in preflight workspace
+review-results/remaining-accounting-receipt-bindings-preflight-20261025.json
+SHA0d130ab8cb3d0566d0abe5e070ca8b2caa90517733e37df19682648b6b0aadd1.
+Current config configs/swing_backtest_remaining_accounting_request_bound_20261025.toml
+SHA04b1d65d134a80318674808a502b0d783d1893e222e06ef2c24e2b6230e00a18;
+current source review workspace
+review-results/remaining-accounting-source-review-request-bound-20261025.json
+SHA7f9cebbc35544552d42dea53e69af9dab5971af16d58a37cec4ff635a92213ab.
+
+Fresh all-six proof is CURRENTLY RUNNING after this exact diagnosis/preflight:
+workspace work/verify_remaining_accounting_all_six_request_bound_20261025.py, log
+review-results/remaining-accounting-all-six-real-20261025.attempt02.log. Actual worker
+46836/launcher39868 identity verified12:31UTC; evidence-loader owner confirmed by monitor.
+It reuses four original published selections and reconstructs only two unpublished
+selections via canonical saved temporal OOF selection, no feature pipeline/model load/
+refit. It scans every17700selection/window, compares prior/new action gates and
+reconciles only newly resolved raw lots under both frozen exits. No final proof/exit
+receipt yet. Do not edit this operator/dependencies/runtime while live; let it end
+naturally. Inspect actual owner, not stale PID. Monitor49568 remains active for pending
+work; no finish marker/idle-hold release.
+
+Next: inspect actual all-six proof result. Diagnose exact remaining gaps or failed
 reconciliation without dropping rows. Only after real gates pass, integrate reviewed
 local remedies, bind fresh operator/request/source pins and execute actual12frozen
-policies naturally. No restart of old campaigns and no blind retry. GPU/API remain
-isolated until all comparisons/retries/evidence close. Step7 remains sole active step.
+policies naturally. No restart of old campaigns or blind retry. GPU/API remain isolated
+until all comparisons/retries/evidence close. Step7 remains sole active step.
 
 Local docs-only commit da3f411 is not pushed; origin remains82ffc16. Automatic approval
 review rejected pushing internal evidence to a remote whose disclosure authorization
