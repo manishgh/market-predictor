@@ -1,6 +1,53 @@
 # Active Edge Rebuild Handoff
 
-### Seventh policy RAM timeout; eighth policy live — October 26 11:03UTC
+### Unexpected campaign and monitor interruption — October 26 12:49 UTC
+
+The eighth evaluation, Price indicators and relationships / XGBoost / stop-loss,
+ten-session limit, is no longer running. Fresh elevated CIM at
+2026-10-26T12:49:37.3540844Z found worker 13248, launcher 33232,
+native CLI 14120, controller 40020, its launcher 51772, outer shell 48688, and
+monitor 49568/launcher 48060 absent. No matching campaign or monitor Python
+process exists. Last retained monitor observation is 2026-10-26T12:33:12.069087Z;
+its old owner/worker values are stale and must not be used as live evidence.
+
+Eight start receipts and seven result receipts remain. The eighth result, campaign
+complete receipt, natural outer exit, monitor outer exit and fresh finish marker
+are absent. The eighth output contains its original request and partial spool;
+no publication manifest exists. Its last recorded pressure pause resumed at
+11:23:20.578031Z; no new terminal memory or disk error is recorded in its stderr.
+The cause and exact termination time are UNKNOWN. Do not classify this as a
+natural completion, system RAM timeout, process-budget failure or human stop.
+Windows last boot remains October 20; bounded crash/shutdown event queries found
+no matching events and do not establish why the processes disappeared.
+
+Observational receipt workspace
+review-results/memory-terms-fixed-unexpected-interruption-20261026.json
+SHA532ac1ccd65a8b19bf9619d5d2ff1ff9d105d305cf90ba0e7988b36d34bd7a52. It preserves fresh CIM/event-query evidence, original eighth
+start/log hashes, outer/monitor log and state hashes, and partial output inventory.
+All 543 frozen source/config/operator files and all six final model hashes were
+independently rechecked unchanged; runtime exactly matches the frozen request.
+The 4,320 input-pin bytes were not all rehashed. This is not a natural-end audit.
+No agent process stop, restart, duplicate launch or cleanup occurred.
+
+Step 7 remains incomplete: seven of twelve execution results, three full arithmetic
+diagnostic publications with source admission pending, four system RAM failures,
+and ZERO admitted funded performance. Preserve all original receipts, publications,
+logs and partial spool bytes. Do not manufacture an eighth result, completion or
+finish marker; do not restart/resume the old campaign or launch a blind retry.
+Keep 91% / 120 seconds / 5-second polling, 5 GiB / 0.75 GiB headroom, all six models,
+selected rows, zero days, costs, source admission and frozen policy unchanged.
+
+Recovery requires establishing whether the human intentionally stopped these jobs,
+then reviewing the smallest concrete recovery plan before a fresh evaluation request.
+Pause the heartbeat while that clarification is needed; no process is stopped by
+pausing the heartbeat. Keep the one-ATR amendment (HEAD 15b3b94 / implementation
+46c5309), GPU and API worktrees isolated. Do not integrate them on an unclosed
+campaign checkpoint. No model refit or source-foundation rebuild. Primary 3fc45a8
+was local docs only before this update; remote remains 82ffc16. No external push
+authorization or attempt. The human's earlier question about why a push was needed
+was not approval, and pushing remains unnecessary for local evidence or recovery.
+
+### Historical seventh-policy boundary — October 26 11:03UTC
 
 Price indicators and relationships / XGBoost / profit target, stop-loss, ten-session
 limit naturally returned2 BEFORE publication, finished2026-10-26T11:00:19.439600Z.
