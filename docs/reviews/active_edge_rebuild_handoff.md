@@ -1,6 +1,54 @@
 # Active Edge Rebuild Handoff
 
-### Fourth policy RAM timeout; fifth policy live — October 25 22:03UTC
+### Fifth diagnostic publication; sixth policy live — October 26 04:19UTC
+
+Price indicators and relationships / Ridge / profit target, stop-loss, ten-session
+limit naturally returned2, finished2026-10-26T04:02:17.385206Z. Actual publication is
+event_accounting_diagnostics: base and stress each computed17700selected/funded/
+replayed simulated holdings over717sessions including zero days. Selected-ID hash
+c535aa61c8cfe07e59f2e600468c2ad25d2f3ee140d42b3759c7a4142f55737b exactly matches
+the closed primary proof. All41system91%pressure pauses resumed; no memory timeout,
+process-budget failure or disk error is recorded. No admitted funded performance.
+
+Source admission remains pending: eligibilityblocker event_source_admission_pending.
+Economic conditions also failed. Unchanged operator accepts only(0,computed) or
+(2,valuation_unavailable), so its original failed receipt records 'Exit code/report
+does not identify a completed funded result'. Preserve that receipt and the actual
+diagnostic publication; do not relabel accepted, clear admission or patch live code.
+
+Read-only audit verified5artifact and2log hashes, all543frozen source/config/operator
+hashes and all6finalmodel hashes unchanged. Receipt workspace
+review-results/memory-terms-fixed-relationships-ridge-target-diagnostics-20261026.json
+SHA72cfbcef058931e0936368a25a38eea7fbef0223bbfec9f8c39abc555404737e;
+resultSHA4562647587cc008e817aba69c31518d761831ea75af915ffe6ccd067a2bf2ef7;
+manifestSHA6a6726a19dffd5207fd45afac60cb9f413279eedcf28f49e864932dd61ac9ab5;
+reportSHA3eb59ba1fa1da0aa7dc7adeabfa4a2f60fb784bc426b71bf106fb934f45fdc79;
+stdoutSHA945106bad6807fc97d1d1a14b2fb1d47cd4bdff1f169ba8ef8275c808d3b3aa7;
+stderrSHAc74d7556e935bed169d109168021fb5cce06df7c3d665621f7db17a8fd7b1329.
+Report6453source pins and request4320input pins not all byte-rehashed in this audit.
+Original start/result/log/artifact bytes preserved; no live runtime/request edits.
+
+CURRENT SIXTH Price indicators and relationships / Ridge / stop-loss, ten-session
+limit started2026-10-26T04:02:18.740428Z. StartedSHAa543c39187727338bd3f8690675fbafd64e1e83a636a345ac7f8dd543d3e0525.
+Actual worker-to-controller ancestry 13696/48364/36064/40020 and exact command verified elevated
+CIM at2026-10-26T04:18:19.0076472Z; formerworker40652 absent. Monitor49568/ownerinitial-fit-raw-share-plan
+remains; C:free1479462912bytes at observation. Inspect fresh owner+CIM next;
+never infer completion from stale PIDs or null owner. No complete/outerexit/finish.
+
+Five of12execution receipts now exist: two full arithmetic diagnostics with source
+admission pending and three systemRAM failures. ZERO admitted funded performance.
+Let ALL12current1.5ATR executions finish NATURALLY, then audit12start/results,
+natural outer exit,2retainedpairs, all actualartifact/loghashes and frozen source/
+model/runtime inputs. No stop/restart/duplicate, live source/config/operator/runtime/
+dependency edits,91%/120s/5spoll/5GiB/.75headroom changes, admission weakening,
+further cleanup absent new need or blind retry. Diagnose smallest necessary remedy
+after natural end; then human1ATR amendment through fresh request preserving
+immutable original model/feature/source lineage; no refit/foundation rebuild.
+OneATRHEAD15b3b94/impl46c5309, GPU/API remain isolated. Step7 sole active;
+serving/promotion/admission false. Primaryf74e9e9 was local docs only before this
+update; remote82ffc16. No external push authorization or attempt.
+
+### Historical fourth-policy boundary — October 25 22:03UTC
 
 Price indicators / XGBoost / stop-loss, ten-session limit naturally returned2 before
 publication, finished21:51:52.209522Z. Four earlier91%pressure pauses resumed. Final
