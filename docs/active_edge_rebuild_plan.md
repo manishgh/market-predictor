@@ -1,6 +1,51 @@
 # Active Edge Rebuild Plan
 
-### Sixth diagnostic publication; seventh policy live — October 26 10:33UTC
+### Seventh policy RAM timeout; eighth policy live — October 26 11:03UTC
+
+Price indicators and relationships / XGBoost / profit target, stop-loss, ten-session
+limit naturally returned2 BEFORE publication, finished2026-10-26T11:00:19.439600Z.
+Two earlier91%pressure pauses resumed. Final pause10:57:13.130009Z timed out at
+10:59:13.285822Z after120.155513s at94.80280962%systemRAM under the unchanged
+91%ceiling/120sbounded wait. Exact stderr: 'memory guard stopped saved OOF policy evaluation: system memory 94.80% used; requires strictly below 91% within 120 seconds'.
+This is a SYSTEM RAM timeout, not a process RSS-budget failure. Missing manifest
+is secondary; no accounting or performance publication exists for this policy.
+No disk error is recorded in stderr. Original result/start/log bytes preserved.
+
+Read-only audit independently verified both log hashes, all543frozen source/config/
+operator hashes and all6finalmodel hashes unchanged. Receipt workspace
+review-results/memory-terms-fixed-relationships-xgboost-target-memory-failure-20261026.json
+SHAcae21a466eb74e334d914953775758f735dac0f1c3a990bb3feb269f99f8b1dd;
+resultSHA1b988d471171bdae8ca85c519dc2562ec58c0f56662d8610b6bb6ad132e980ba;
+stderrSHA213b9ce0f7b41baa1494ade80d2da282b670ccda9e14d40563cd6388769e928b.
+Input4320pin bytes not all rehashed in this audit. No live source/config/operator/
+runtime/current-request edits, campaign interruption or duplicate launch.
+
+CURRENT EIGHTH Price indicators and relationships / XGBoost / stop-loss,
+ten-session limit started2026-10-26T11:00:23.360605Z.
+StartedSHA60c99af03c376bd4deebfd464cbd0a922948018030662e092a080d886016e8d2.
+Actual worker-to-controller ancestry 13248/33232/14120/40020 and exact command verified elevated
+CIM at2026-10-26T11:02:52.1477617Z; formerworker51840 absent. Monitor49568 remains active.
+C:free15273308160bytes at observation; no agent cleanup performed.
+Inspect fresh owner+CIM next; no stale-PID or null-owner completion inference.
+No complete/outerexit/freshfinishmarker.
+
+Seven of12execution results now exist: three full arithmetic diagnostics with source
+admission pending and four systemRAM failures. ZERO admitted funded performance.
+Let ALL12current1.5ATR executions finish NATURALLY, then audit12start/results,
+natural outer exit,2retainedpairs, all actualartifact/loghashes and frozen source/
+model/runtime inputs. No stop/restart/duplicate, live source/config/operator/runtime/
+dependency edits,91%/120s/5spoll/5GiB/.75headroom changes, admission weakening,
+further cleanup absent new need or blind retry. Preserve original failed receipts
+and diagnostic publications separately; do not relabel accepted or clear admission.
+Diagnose the smallest necessary remedy after natural end, then human1ATR amendment
+through a fresh request preserving immutable original model/feature/source lineage;
+no refit/foundation rebuild. OneATRHEAD15b3b94/impl46c5309, GPU/API remain isolated.
+Step7 sole active; serving/promotion/admission false. Primary7649ba1 was local docs
+only before this update; remote82ffc16, no external push authorization or attempt.
+Human asked why docs push was needed; explained optional off-machine backup only,
+unnecessary for backtests/monitoring. This question did not grant push authorization.
+
+### Historical sixth-policy boundary — October 26 10:33UTC
 
 Price indicators and relationships / Ridge / stop-loss, ten-session limit naturally
 returned2, finished2026-10-26T10:19:42.141923Z. Actual publication is
