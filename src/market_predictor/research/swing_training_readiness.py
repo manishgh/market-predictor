@@ -10,6 +10,7 @@ import exchange_calendars as xcals
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256, load_canonical_artifact, manifest_path_for
+from market_predictor.core import runtime_memory
 from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.core.system_memory import assert_system_memory_available, system_memory_snapshot
 from market_predictor.edge_rebuild.temporal_manifest import build_temporal_schedule, load_temporal_manifest_config
@@ -17,7 +18,6 @@ from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.modeling.strategy_contract import load_strategy_contract
-from market_predictor.research import news_runtime_memory
 from market_predictor.research.issuer_reaction_verification import validate_issuer_reaction_receipt
 from market_predictor.research.news_decision_publication import ARTIFACT_TYPE as NEWS_ARTIFACT_TYPE
 from market_predictor.research.news_decision_publication import CLOSED as NEWS_CLOSED
@@ -60,14 +60,14 @@ REACTION_IMPLEMENTATION_PATHS = (
 NEWS_IMPLEMENTATION_PATHS = (
     "research/swing_return_inputs.py", "swing/contracts/return_training.py",
     "research/news_decision_verification.py", "research/news_decision_publication.py",
-    "research/news_decision_features.py", "research/news_runtime_memory.py",
+    "research/news_decision_features.py", "core/runtime_memory.py",
     "core/system_memory.py", "resources.py", "process_memory.py",
 )
 
 
 def _guard(policy: TrainingReadinessPolicy) -> None:
     if policy.published_profile == NEWS_PROFILE:
-        news_runtime_memory.guard(stage="swing news training readiness")
+        runtime_memory.guard(stage="swing news training readiness")
         return
     assert_memory_budget(stage="swing training readiness", hard_budget_gib=5.0, headroom_gib=0.75)
     snapshot = system_memory_snapshot()

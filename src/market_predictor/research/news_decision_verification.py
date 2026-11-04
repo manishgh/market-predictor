@@ -11,6 +11,7 @@ import pandas as pd
 
 from market_predictor.canonical.store import file_sha256, load_canonical_artifact
 from market_predictor.catalysts.issuer_events.news_query_scope import SourcePin as NewsSourcePin
+from market_predictor.core import runtime_memory as memory
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
@@ -35,7 +36,8 @@ SCOPE = "complete_saved_parent_and_news_source_projection"
 PROFILE = publication_owner.PROFILE
 ARTIFACT_TYPE = publication_owner.ARTIFACT_TYPE
 IMPLEMENTATION_PATHS = (
-    "research/news_decision_verification.py", "research/news_runtime_memory.py", "research/news_source_index_inputs.py",
+    "research/news_decision_verification.py", "research/news_runtime_memory.py", "core/runtime_memory.py",
+    "research/news_source_index_inputs.py",
     "research/news_decision_projection.py", "research/news_sentiment_copy_evidence.py",
     "swing/datasets/return_relationship_integrity.py", "swing/contracts/holding_materialization.py",
     "swing/contracts/saved_evaluation_configuration.py", "swing/contracts/return_training.py",
@@ -319,7 +321,7 @@ def verify_news_decision_rows(*, root: Path, publication: SourcePin, output: Pat
         raise FileExistsError(f"immutable news verification receipt exists: {output}")
     runtime_dir = heavy_job_runtime_dir()
     with heavy_job_lease("verify-news-decision-rows", runtime_dir=runtime_dir if runtime_dir.is_absolute() else root / runtime_dir):
-        runtime.guard("news full monthly verification")
+        memory.guard("news full monthly verification")
         verified = _metadata(root, publication)
         contracts = dict(research_contract=research_contract, strategy_contract=strategy_contract, temporal_contract=temporal_contract)
         correspondence = _configuration_correspondence(root, configuration_evidence, contracts, verified.source_files)
@@ -358,7 +360,7 @@ def verify_news_decision_rows(*, root: Path, publication: SourcePin, output: Pat
                      and verified.request["historical_implementation_files"] == parent.historical_implementation_files,
                      "news replay parent metadata differs")
             for month in parent_owner.MONTHS:
-                runtime.guard("news full monthly verification")
+                memory.guard("news full monthly verification")
                 baseline = parent.read_month(month)
                 record = verified.months[month]
                 expected_parent = parent.manifest["months"][month]
@@ -399,7 +401,7 @@ def verify_news_decision_rows(*, root: Path, publication: SourcePin, output: Pat
         final_files = _metadata(root, publication).source_files
         _require(all(verified.source_files.get(key) == value for key, value in final_files.items()),
                  "news publication changed at final check")
-        runtime.guard("news verification receipt publication")
+        memory.guard("news verification receipt publication")
         output.parent.mkdir(parents=True, exist_ok=True)
         write_json_object(output, report)
         return report
@@ -408,7 +410,7 @@ def verify_news_decision_rows(*, root: Path, publication: SourcePin, output: Pat
 def validate_news_decision_receipt(root: Path, publication: SourcePin, receipt: SourcePin) -> VerifiedNewsDecisionPublication:
     """Validate pinned receipt/artifacts without numerical replay; caller owns its lease."""
     root = root.resolve()
-    runtime.guard("news verification receipt validation")
+    memory.guard("news verification receipt validation")
     report = read_object(inside(root, receipt.path), receipt.sha256)
     verified = _metadata(root, publication)
     contracts = {key: SourcePin.model_validate(value) for key, value in report["contract_pins"].items()}

@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from market_predictor.catalysts.issuer_events.news_query_scope import SourcePin
+from market_predictor.core import runtime_memory as memory
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
@@ -37,7 +38,7 @@ REVISION = "4556d13015211d73dccd3fdd39d39232506f3e43"
 AVAILABILITY_POLICY = "provider_publication_proxy_plus_fixed_inference_latency"
 MAX_RECORD_BYTES = 2 * 1024**2
 IMPLEMENTATION_PATHS = (
-    "research/news_sentiment_copy_evidence.py", "research/news_runtime_memory.py",
+    "research/news_sentiment_copy_evidence.py", "research/news_runtime_memory.py", "core/runtime_memory.py",
     "research/news_decision_features.py", "research/news_corpus_enrichment.py",
     "research/news_source_index_inputs.py",
     "catalysts/issuer_events/news_query_scope.py", "swing/datasets/return_relationship_integrity.py",
@@ -114,7 +115,7 @@ def _lines(path: Path) -> Iterator[tuple[int, dict[str, Any], str]]:
             _require(len(raw) <= MAX_RECORD_BYTES and raw.endswith(b"\n"), "corpus record exceeds bound or lacks terminator")
             number += 1
             if number % 128 == 1:
-                runtime.guard("sentiment copy corpus stream")
+                memory.guard("sentiment copy corpus stream")
             record = json.loads(raw)
             _require(isinstance(record, dict), "corpus record is not an object")
             yield number, record, hashlib.sha256(raw).hexdigest()
@@ -148,7 +149,7 @@ def _candidates(source: sqlite3.Connection, output: sqlite3.Connection) -> Count
     output.execute("CREATE TABLE seen_versions(version_id TEXT PRIMARY KEY)")
     counts: Counter[str] = Counter()
     def check_memory() -> int:
-        runtime.guard("sentiment copy conflict scan")
+        memory.guard("sentiment copy conflict scan")
         return 0
 
     source.set_progress_handler(check_memory, 100000)
@@ -157,7 +158,7 @@ def _candidates(source: sqlite3.Connection, output: sqlite3.Connection) -> Count
             FROM versions WHERE payload IS NOT NULL GROUP BY source,document,digest
             HAVING COUNT(DISTINCT json_extract(payload,'$.sentiment_score'))>1 ORDER BY source,document,digest""")
         for group in groups:
-            runtime.guard("sentiment copy group")
+            memory.guard("sentiment copy group")
             counts["conflicting_exact_version_groups"] += 1
             for row in source.execute("SELECT copy_id,version_id,payload FROM versions WHERE source=? AND document=?",
                                       (group["source"], group["document"])):
@@ -243,7 +244,7 @@ def build_news_sentiment_copy_evidence(*, root: Path, source_index: SourcePin, o
     runtime_dir = heavy_job_runtime_dir()
     runtime_dir = runtime_dir if runtime_dir.is_absolute() else root / runtime_dir
     with heavy_job_lease("news-sentiment-copy-evidence", runtime_dir=runtime_dir):
-        runtime.guard("sentiment copy evidence")
+        memory.guard("sentiment copy evidence")
         _require(not output.exists() and not stage.exists(), "copy evidence output or stage already exists")
         with source_inputs.open_news_source_link_index(root=root, index=source_index) as source:
             source_manifest = read_object(inside(root, source_index.path), source_index.sha256)
@@ -286,7 +287,7 @@ def build_news_sentiment_copy_evidence(*, root: Path, source_index: SourcePin, o
                 counts["corpus_versions_checked"] = processed
                 db.execute("DROP TABLE seen_versions")
                 db.commit()
-                runtime.guard("sentiment copy evidence compact output")
+                memory.guard("sentiment copy evidence compact output")
                 db.execute("VACUUM")
             artifacts = {name: runtime.file_sha256(stage / name) for name in ("_request.json", "index.sqlite")}
             runtime.recheck_files(root, files)
@@ -301,7 +302,7 @@ def build_news_sentiment_copy_evidence(*, root: Path, source_index: SourcePin, o
             "artifacts": artifacts, "counts": dict(counts), "source_files": files, "implementation_files": implementations,
             "producer_source_provenance": {"source_index": dict(source.producer_source_provenance),
                 "corpus": corpus_request.get("source_files", {})}, **CLOSED}
-        runtime.guard("sentiment copy evidence publication")
+        memory.guard("sentiment copy evidence publication")
         write_json_object(stage / "_manifest.json", manifest)
         _require({item.name for item in stage.iterdir()} == {"_manifest.json", "_request.json", "index.sqlite"},
                  "copy evidence stage inventory differs")
@@ -343,7 +344,7 @@ def open_news_sentiment_copy_evidence(*, root: Path, evidence: SourcePin,
                                      source_index: SourcePin) -> Iterator[SentimentCopyEvidenceReader]:
     """Consume compact evidence under caller's lease, retaining raw provenance only."""
     root = root.resolve()
-    runtime.guard("sentiment copy evidence input")
+    memory.guard("sentiment copy evidence input")
     files: dict[str, str] = {}
     path = runtime.pin_file(root, evidence.path, evidence.sha256, files)
     _require(path.name == "_manifest.json" and not path.parent.name.endswith(".partial"), "copy evidence must be completed")

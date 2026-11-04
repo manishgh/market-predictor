@@ -11,7 +11,6 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.registry import MODEL_STATUS_PROMOTED, verify_model_artifact
 from market_predictor.release import verify_local_release
-from market_predictor.serving.bundle import verify_serving_bundle
 from market_predictor.swing.contracts import SWING_MODEL_TYPE
 
 
@@ -46,17 +45,6 @@ def require_swing_release(root: Path, release_id: str, trust_store: Path) -> Non
     except ValueError as exc:
         raise DataReadinessError(str(exc)) from exc
     _require_swing_model(candidate)
-
-
-def require_swing_bundle(root: Path, bundle_id: str, trust_store: Path) -> None:
-    """Historical verification alone cannot authorize a retired product route."""
-    bundle = verify_serving_bundle(
-        root,
-        bundle_id,
-        attestation_trust_store_path=trust_store,
-    )
-    if bundle["mode"] != "swing" or bundle["horizon"] != "10b":
-        raise DataReadinessError("production serving requires swing with horizon 10b")
 
 
 def _require_swing_model(candidate: Mapping[str, Any]) -> None:

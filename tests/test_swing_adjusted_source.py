@@ -119,6 +119,66 @@ def test_missing_entire_stock_stream_preserves_population(contract: StrategyCont
     assert rows.technical_missing_reasons.map(lambda value: "adjusted_history_warmup_crosses_missing_session" in value).all()
 
 
+def test_explicit_live_bounds_preserve_historical_numerical_values(contract: StrategyContract) -> None:
+    args = _source_inputs()
+    original = build_adjusted_technical_source(**args, contract=contract)
+    bounded = build_adjusted_technical_source(**args, contract=contract,
+        history_start=args["expected_history_sessions"][0], history_end=args["expected_history_sessions"][-1])
+    pd.testing.assert_frame_equal(original.rows, bounded.rows, check_exact=True)
+
+
+def test_current_forecast_history_retains_actual_late_observation_clocks(contract: StrategyContract) -> None:
+    args = _source_inputs()
+    args["decisions"] = args["decisions"].iloc[[-1]].copy()
+    args["raw_decision_bars"] = args["raw_decision_bars"].iloc[[-1]].copy()
+    decision = args["decisions"].decision_time_utc.iloc[0]
+    observed = decision - pd.Timedelta(minutes=1)
+    for name in ("adjusted_bars", "benchmark_bars", "raw_decision_bars"):
+        args[name]["available_at_utc"] = observed
+    args["memberships"]["available_at_utc"] = observed
+    with pytest.raises(DataReadinessError, match="after frozen swing cutoff"):
+        build_adjusted_technical_source(**args, contract=contract)
+    result = build_adjusted_technical_source(**args, contract=contract, observation_cutoff=decision)
+    assert result.rows.return_20d.notna().all()
+    assert result.rows.technical_available_at_utc.eq(observed).all()
+    assert result.rows.raw_dollar_volume_available_at_utc.eq(observed).all()
+    assert result.rows.decision_time_utc.eq(decision).all()
+
+
+def test_future_live_bound_is_explicit_and_historical_default_stays_closed(contract: StrategyContract) -> None:
+    import exchange_calendars as xcals
+
+    args = _source_inputs()
+    old = args["expected_history_sessions"]
+    calendar = xcals.get_calendar("XNYS")
+    sessions = tuple(calendar.sessions_in_range("2025-01-02", "2026-04-30")[:len(old)].date)
+    mapping = dict(zip(old, sessions, strict=True))
+    for name in ("decisions", "adjusted_bars", "benchmark_bars", "raw_decision_bars"):
+        frame = args[name]
+        dates = pd.to_datetime(frame.bar_start_utc, utc=True).dt.tz_convert("America/New_York").dt.date.map(mapping)
+        for column in ("bar_start_utc", "bar_end_utc", "available_at_utc", "decision_time_utc"):
+            if column not in frame:
+                continue
+            if column == "bar_start_utc":
+                frame[column] = pd.to_datetime(dates.map(lambda day: calendar.session_open(pd.Timestamp(day))), utc=True)
+            elif column == "bar_end_utc":
+                frame[column] = pd.to_datetime(dates.map(lambda day: calendar.session_close(pd.Timestamp(day))), utc=True)
+            elif column == "available_at_utc":
+                frame[column] = frame.bar_end_utc + pd.Timedelta(minutes=15)
+            else:
+                from market_predictor.canonical.cutoffs import swing_prediction_cutoffs
+                frame[column] = swing_prediction_cutoffs(dates)
+        if "session_date_et" in frame:
+            frame["session_date_et"] = dates
+    args["expected_history_sessions"] = sessions
+    with pytest.raises(DataReadinessError):
+        build_adjusted_technical_source(**args, contract=contract)
+    result = build_adjusted_technical_source(**args, contract=contract,
+        history_start=sessions[0], history_end=sessions[-1])
+    assert result.rows.return_20d.notna().all()
+    np.testing.assert_allclose(result.rows.dollar_volume_log, np.log1p(123 * 456))
+
+
 def test_single_gap_recovers_at_configured_clean_warmup(contract: StrategyContract) -> None:
     args = _source_inputs()
     args["adjusted_bars"] = args["adjusted_bars"].drop(index=35)

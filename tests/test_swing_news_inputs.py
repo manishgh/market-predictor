@@ -73,7 +73,7 @@ def test_news_guard_delegates_to_bounded_news_runtime(monkeypatch: pytest.Monkey
                                                    "maximum_system_used_percent": 91})
     guard = Mock()
     old = Mock(side_effect=AssertionError("old immediate memory owner called"))
-    monkeypatch.setattr(readiness.news_runtime_memory, "guard", guard)
+    monkeypatch.setattr(readiness.runtime_memory, "guard", guard)
     monkeypatch.setattr(readiness, "assert_memory_budget", old)
     readiness._guard(policy)
     guard.assert_called_once_with(stage="swing news training readiness")

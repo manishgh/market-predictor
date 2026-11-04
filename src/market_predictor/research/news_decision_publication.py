@@ -77,7 +77,8 @@ def _time(value: Any) -> datetime:
     return cast(datetime, stamp.tz_convert("UTC").to_pydatetime())
 
 
-def _decisions(frame: pd.DataFrame, clocks: Mapping[str, str]) -> tuple[features.NewsDecision, ...]:
+def _decisions(frame: pd.DataFrame, clocks: Mapping[str, str], *,
+               semantics: features.Semantics = "historical_proxy") -> tuple[features.NewsDecision, ...]:
     result = []
     for row in frame.to_dict("records"):
         technical: dict[str, features.TechnicalValue] = {}
@@ -85,7 +86,7 @@ def _decisions(frame: pd.DataFrame, clocks: Mapping[str, str]) -> tuple[features
             value = row[name]
             clock = row[clocks[name]]
             technical[name] = features.TechnicalValue(None if pd.isna(value) else float(value),
-                                                       None if pd.isna(clock) else _time(clock), "historical_proxy")
+                                                       None if pd.isna(clock) else _time(clock), semantics)
         result.append(features.NewsDecision(row["decision_id"], row["security_id"], _time(row["decision_time_utc"]), **technical))
     return tuple(result)
 
@@ -114,8 +115,10 @@ def _parity(baseline: pd.DataFrame, result: pd.DataFrame) -> None:
 
 
 def build_news_month(*, parent: ResearchFeaturePartition, reader: NewsSliceReader,
-                     identity_lookup: IdentityLookup | None = None) -> ResearchFeaturePartition:
+                     identity_lookup: IdentityLookup | None = None,
+                     purpose: features.Purpose = "research_proxy") -> ResearchFeaturePartition:
     """Append the shared kernel's columns without changing any inherited economics."""
+    _require(purpose in ("research_proxy", "observed_live"), "news composition purpose is invalid")
     parent_inputs._guard()
     baseline = parent.rows
     _require(len(parent.model_columns) == 124 and len(set(parent.model_columns)) == 124 and baseline.columns.is_unique
@@ -128,7 +131,8 @@ def build_news_month(*, parent: ResearchFeaturePartition, reader: NewsSliceReade
     for security, group in baseline.groupby("security_id", sort=True):
         parent_inputs._guard()
         _require(isinstance(security, str) and bool(security), "parent stock identity is invalid")
-        decisions = _decisions(group, parent.availability_columns)
+        decisions = _decisions(group, parent.availability_columns,
+                               semantics="observed" if purpose == "observed_live" else "historical_proxy")
         sliced = reader.for_period(security, min(row.decision_time_utc for row in decisions),
                                    max(row.decision_time_utc for row in decisions))
         _require(all(link.security_id == security for link in sliced.links) and
@@ -148,7 +152,7 @@ def build_news_month(*, parent: ResearchFeaturePartition, reader: NewsSliceReade
         if not usable_decisions:
             continue
         results = project_news_decisions(decisions=usable_decisions, versions=sliced.versions, links=sliced.links,
-                                         coverage=sliced.coverage, purpose="research_proxy", identity_lookup=identity_lookup)
+                                         coverage=sliced.coverage, purpose=purpose, identity_lookup=identity_lookup)
         _require(len(results) == len(usable_decisions), "news kernel lost decisions")
         for decision, projection in zip(usable_decisions, results, strict=True):
             result = projection.features

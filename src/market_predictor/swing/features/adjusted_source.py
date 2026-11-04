@@ -9,6 +9,7 @@ import exchange_calendars as xcals
 import numpy as np
 import pandas as pd
 
+from market_predictor.canonical.cutoffs import swing_prediction_cutoffs
 from market_predictor.canonical.joins import decisions_from_completed_bars, join_universe_membership
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.modeling.strategy_contract import StrategyContract
@@ -60,7 +61,7 @@ def expected_adjusted_history_sessions(
     return tuple(sorted(required))
 
 
-def _bars(frame: pd.DataFrame) -> pd.DataFrame:
+def _bars(frame: pd.DataFrame, *, history_start: date = WARMUP_START, history_end: date = NUMERIC_END) -> pd.DataFrame:
     if not frame.columns.is_unique or not set(BAR_COLUMNS).issubset(frame):
         raise DataReadinessError("adjusted source requires canonical daily bars")
     data = frame.loc[:, list(BAR_COLUMNS)].copy()
@@ -71,7 +72,7 @@ def _bars(frame: pd.DataFrame) -> pd.DataFrame:
         if data[column].isna().any():
             raise DataReadinessError("adjusted bar clock missing")
     data["session_date_et"] = data.bar_start_utc.dt.tz_convert("America/New_York").dt.date
-    if not data.session_date_et.between(WARMUP_START, NUMERIC_END).all():
+    if not data.session_date_et.between(history_start, history_end).all():
         raise DataReadinessError("technical history escapes warmup/initial-fit numeric bounds")
     if data.duplicated(["ticker", "session_date_et"]).any():
         raise DataReadinessError("adjusted history duplicates a session")
@@ -89,6 +90,8 @@ def build_adjusted_technical_source(
     decisions: pd.DataFrame, adjusted_bars: pd.DataFrame, benchmark_bars: pd.DataFrame,
     memberships: pd.DataFrame, raw_decision_bars: pd.DataFrame, *, security_id: str,
     expected_history_sessions: tuple[date, ...], contract: StrategyContract,
+    history_start: date = WARMUP_START, history_end: date = NUMERIC_END,
+    observation_cutoff: pd.Timestamp | None = None,
 ) -> AdjustedTechnicalSource:
     """Build one independently source-bound issuer, retaining every parent decision.
 
@@ -103,17 +106,26 @@ def build_adjusted_technical_source(
     if identity.empty or set(identity.security_id) != {security_id}:
         raise DataReadinessError("adjusted source requires exactly one canonical issuer")
     identity["session_date_et"] = identity.decision_time_utc.dt.tz_convert("America/New_York").dt.date
-    calendar = tuple(xcals.get_calendar("XNYS").sessions_in_range(WARMUP_START, NUMERIC_END).date)
+    if history_start > history_end or history_start < WARMUP_START:
+        raise DataReadinessError("technical source history bounds are invalid")
+    calendar = tuple(xcals.get_calendar("XNYS").sessions_in_range(history_start, history_end).date)
     expected = expected_history_sessions
     if (not expected or tuple(sorted(set(expected))) != expected or not set(expected).issubset(calendar)
-            or not identity.session_date_et.between(DECISION_START, NUMERIC_END).all()
+            or not identity.session_date_et.between(DECISION_START, history_end).all()
             or not set(identity.session_date_et).issubset(expected)):
         raise DataReadinessError("adjusted source expected history or decision window is invalid")
     parent = join_universe_membership(identity, memberships)
     if set(parent.security_id) != {security_id}:
         raise DataReadinessError("corrected membership differs from canonical decision identity")
     parent = parent.set_index("decision_id").loc[identity.decision_id].reset_index()
-    stock, benchmarks = _bars(adjusted_bars), _bars(benchmark_bars)
+    stock = _bars(adjusted_bars, history_start=history_start, history_end=history_end)
+    benchmarks = _bars(benchmark_bars, history_start=history_start, history_end=history_end)
+    if observation_cutoff is not None:
+        observation_cutoff = pd.Timestamp(observation_cutoff)
+        if (observation_cutoff.tzinfo is None or not identity.decision_time_utc.eq(observation_cutoff).all()
+                or stock.available_at_utc.gt(observation_cutoff).any()
+                or benchmarks.available_at_utc.gt(observation_cutoff).any()):
+            raise DataReadinessError("current forecast history must be observed by its one decision cutoff")
     if len(set(stock.ticker)) > 1:
         raise DataReadinessError("one issuer must use one coherent provider/asof stream")
     if not set(stock.session_date_et).issubset(expected):
@@ -144,8 +156,15 @@ def build_adjusted_technical_source(
             missing.append("adjusted_benchmark_warmup_crosses_missing_session")
         reasons.append(tuple(missing))
     if not stock.empty and not benchmarks.empty and any(not reason for reason in reasons):
-        history = decisions_from_completed_bars(stock, mode="swing-nightly")
-        history = _history_memberships(history, own_memberships, security_id)
+        history = decisions_from_completed_bars(stock,
+            mode="swing-nightly" if observation_cutoff is None else "research-bar-availability")
+        if observation_cutoff is not None:
+            # These are price-history positions for ONE current forecast, never
+            # historical predictions. Keep the actual bar observation clocks.
+            history["decision_time_utc"] = observation_cutoff
+            history["decision_group_id"] = observation_cutoff.isoformat()
+            history["prediction_cutoff_policy_id"] = "current_forecast_history"
+        history = _history_memberships(history, own_memberships, security_id, observation_cutoff=observation_cutoff)
         history["feature_profile"] = "technical_market"
         features = build_swing_predictor_history(history, benchmarks, contract=contract).set_index("session_date_et")
         for index, row in rows.iterrows():
@@ -175,24 +194,32 @@ def build_adjusted_technical_source(
     return AdjustedTechnicalSource(rows, clocks)
 
 
-def _history_memberships(history: pd.DataFrame, memberships: pd.DataFrame, security_id: str) -> pd.DataFrame:
+def _history_memberships(history: pd.DataFrame, memberships: pd.DataFrame, security_id: str, *,
+                         observation_cutoff: pd.Timestamp | None = None) -> pd.DataFrame:
     # Validate with the canonical owner even when all warmup membership is unknown.
     join_universe_membership(history.iloc[:0], memberships)
     candidates = history.copy()
     matches = pd.Series(0, index=candidates.index)
-    cutoff = candidates.decision_time_utc
+    cutoff = candidates.decision_time_utc if observation_cutoff is None else swing_prediction_cutoffs(candidates.session_date_et)
     for record in memberships.to_dict(orient="records"):
         start = pd.Timestamp(record["effective_from_utc"])
         available = pd.Timestamp(record["available_at_utc"])
         end = record["effective_to_utc"]
-        selected = cutoff.ge(start) & cutoff.ge(available)
+        known = cutoff.ge(available) if observation_cutoff is None else pd.Series(available <= observation_cutoff, index=candidates.index)
+        selected = cutoff.ge(start) & known
         if pd.notna(end):
             selected &= cutoff.lt(pd.Timestamp(end))
         matches.loc[selected] += 1
         candidates.loc[selected, "ticker"] = record["ticker"]
+        if observation_cutoff is not None:
+            for name in _CONTEXT:
+                source = {"membership_available_at_utc": "available_at_utc", "membership_effective_from_utc": "effective_from_utc",
+                          "membership_effective_to_utc": "effective_to_utc"}.get(name, name)
+                candidates.loc[selected, name] = record[source]
     if matches.gt(1).any():
         raise DataReadinessError("historical issuer membership is ambiguous at a warmup cutoff")
-    joined = join_universe_membership(candidates.loc[matches.eq(1)], memberships)
+    joined = (join_universe_membership(candidates.loc[matches.eq(1)], memberships)
+              if observation_cutoff is None else candidates.loc[matches.eq(1)])
     payload = joined.loc[:, ["session_date_et", "ticker", *_CONTEXT]]
     result = history.drop(columns="ticker").merge(payload, on="session_date_et", how="left", validate="one_to_one")
     result["ticker"] = result.ticker.fillna(str(history.ticker.iloc[0]))

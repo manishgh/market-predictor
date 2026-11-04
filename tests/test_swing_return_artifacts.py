@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
@@ -63,3 +64,71 @@ def test_publication_memory_failure_leaves_no_successful_unit(unit: tuple[Path, 
             unit={"scope": "final_refit", "family": model.family}, model=model,
             predictions=None, metrics={}, guard=Mock(side_effect=MemoryBudgetError("peak")))
     assert not output.exists()
+
+
+@pytest.fixture
+def completed_run(tmp_path: Path) -> tuple[Path, dict[str, Any], dict[str, Any]]:
+    request = {"schema": "market_predictor.swing_return_training_request",
+        "policy": {"target": owner.TARGET, "scope": "initial_fit_research_only"},
+        "folds": [{"number": number} for number in range(1, 5)], **dict.fromkeys(owner.FLAGS, False)}
+    units = {f"{family}/{scope}/fold-{fold}": {} for family in owner.FAMILIES
+             for scope in owner.SCOPES for fold in range(1, 5)}
+    units.update({f"{family}/final_refit": {} for family in owner.FAMILIES})
+    manifest = {"schema": "market_predictor.swing_return_training", "status": "complete_research_only",
+        "units": units, **dict.fromkeys(owner.FLAGS, False)}
+    return tmp_path, manifest, request
+
+
+def _write_completed_run(case: tuple[Path, dict[str, Any], dict[str, Any]]) -> tuple[Path, str]:
+    directory, manifest, request = case
+    (directory / "_request.json").write_text(json.dumps(request), encoding="utf-8")
+    manifest["request_sha256"] = file_sha256(directory / "_request.json")
+    (directory / "_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return directory, file_sha256(directory / "_manifest.json")
+
+
+def test_completed_run_metadata_does_not_load_estimators(
+    completed_run: tuple[Path, dict[str, Any], dict[str, Any]], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    directory, digest = _write_completed_run(completed_run)
+    monkeypatch.setattr(owner.joblib, "load", Mock(side_effect=AssertionError("metadata verification must not load a model")))
+    manifest, request = owner.verify_completed_return_run(directory, manifest_sha256=digest)
+    assert (manifest, request) == completed_run[1:]
+
+
+@pytest.mark.parametrize("change", ["scope", "target", "request_admission", "manifest_admission", "status", "missing_fit", "folds"])
+def test_completed_run_rejects_pinned_wrong_scope_or_incomplete_evidence(
+    completed_run: tuple[Path, dict[str, Any], dict[str, Any]], change: str,
+) -> None:
+    _, manifest, request = completed_run
+    if change == "scope":
+        request["policy"]["scope"] = "another_research_experiment"
+    elif change == "target":
+        request["policy"]["target"] = "another_return"
+    elif change == "request_admission":
+        request["serving_eligible"] = True
+    elif change == "manifest_admission":
+        manifest["promotion_eligible"] = True
+    elif change == "status":
+        manifest["status"] = "incomplete"
+    elif change == "missing_fit":
+        manifest["units"].pop(next(iter(manifest["units"])))
+    else:
+        request["folds"].reverse()
+    directory, digest = _write_completed_run(completed_run)
+    with pytest.raises(DataReadinessError):
+        owner.verify_completed_return_run(directory, manifest_sha256=digest)
+
+
+def test_completed_run_preserves_caller_metadata_bound_and_hash_pins(
+    completed_run: tuple[Path, dict[str, Any], dict[str, Any]],
+) -> None:
+    directory, digest = _write_completed_run(completed_run)
+    with pytest.raises(DataReadinessError, match="bounded reader"):
+        owner.verify_completed_return_run(directory, manifest_sha256=digest, maximum_metadata_bytes=10)
+    with pytest.raises(DataReadinessError, match="pinned bytes"):
+        owner.verify_completed_return_run(directory, manifest_sha256="0" * 64)
+    request = directory / "_request.json"
+    request.write_bytes(request.read_bytes() + b" ")
+    with pytest.raises(DataReadinessError, match="pinned bytes"):
+        owner.verify_completed_return_run(directory, manifest_sha256=digest)

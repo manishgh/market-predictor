@@ -21,6 +21,7 @@ from market_predictor.edge_rebuild.training.swing_types import (
 from market_predictor.edge_rebuild.training.walk_forward import (
     _split_fit_calibration,
 )
+from market_predictor.modeling.candidate_probabilities import candidate_calibrated_probabilities, candidate_raw_scores
 from market_predictor.swing.features.panel import (
     SWING_FEATURE_PROFILE,
 )
@@ -198,7 +199,7 @@ def _fit_candidate(
     else:
         estimator.fit(x_fit, y_fit, sample_weight=fit_weight)
     del x_fit, y_fit, fit_weight
-    raw = _raw_probability(
+    raw = candidate_raw_scores(
         estimator,
         train.loc[calibration_mask, columns].to_numpy(dtype="float32", copy=False),
     )
@@ -254,36 +255,15 @@ def _linex_objective(
     return grad, hess
 
 
-def _raw_probability(estimator: Any, features: np.ndarray) -> np.ndarray:
-    if hasattr(estimator, "predict_proba"):
-        probability = np.asarray(estimator.predict_proba(features)[:, 1], dtype="float64")
-    else:
-        probability = np.asarray(estimator.predict(features), dtype="float64")
-    if not np.isfinite(probability).all():
-        raise DataReadinessError("estimator produced non-finite probabilities")
-    return probability
-
-
 def _predict_probability(
     fitted: FittedCandidate,
     frame: pd.DataFrame,
     feature_columns: tuple[str, ...],
 ) -> np.ndarray:
-    raw = _raw_probability(
-        fitted.estimator,
+    return candidate_calibrated_probabilities(
+        fitted.estimator, fitted.calibrator,
         frame.loc[:, list(feature_columns)].to_numpy(dtype="float32", copy=False),
     )
-    calibrated = np.asarray(
-        fitted.calibrator.predict_proba(raw.reshape(-1, 1))[:, 1],
-        dtype="float64",
-    )
-    if (
-        not np.isfinite(calibrated).all()
-        or (calibrated < 0.0).any()
-        or (calibrated > 1.0).any()
-    ):
-        raise DataReadinessError("calibrated probabilities must be finite in [0, 1]")
-    return calibrated
 
 
 

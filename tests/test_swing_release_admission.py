@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
-from datetime import datetime, tzinfo
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,17 +15,13 @@ import market_predictor.commands.release as release_commands
 import market_predictor.release as release_module
 import market_predictor.serving.admission as admission
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.production_cli import app
 from market_predictor.promotion_attestation import promotion_attestation_path_for
 from market_predictor.release import publish_local_release, verify_local_release
-from market_predictor.serving.bundle import SERVING_BUNDLE_MANIFEST, publish_serving_bundle
+from market_predictor.serving.bundle import SERVING_BUNDLE_MANIFEST, verify_serving_bundle
 from tests.r4_fixtures import test_signing_material as signing_material_for_test
+from tests.support.historical_serving_bundle import historical_bundle_fixture, historical_bundle_inputs, historical_bundle_timestamp
 from tests.support.swing_release import promoted_swing_candidate, retired_intraday_candidate
-from tests.test_feature_store import _frame as swing_frame
-from tests.test_feature_store import _publish as publish_swing_features
-from tests.test_serving_bundle import _inputs as historical_bundle_inputs
-from tests.test_serving_bundle import _timestamp as bundle_timestamp
 
 
 def _publish_args(model: Path, evidence: Path, repository: Path) -> list[str]:
@@ -42,55 +37,6 @@ def _publish_args(model: Path, evidence: Path, repository: Path) -> list[str]:
         "--attestation-trust-store",
         str(trust),
     ]
-
-
-@pytest.mark.parametrize("mode", ("intraday", "unified", "unknown"))
-@pytest.mark.parametrize("command", ("publish-live-features", "publish-serving-bundle"))
-def test_unsupported_mode_rejected_before_io(tmp_path: Path, mode: str, command: str) -> None:
-    args = [command, "--mode", mode]
-    if command == "publish-live-features":
-        args += ["--input-path", str(tmp_path / "absent.parquet"), "--live-dir", str(tmp_path / "live")]
-    else:
-        args += [
-            "--horizon",
-            "10b",
-            "--model-release-id",
-            "a" * 64,
-            "--feature-snapshot",
-            str(tmp_path / "absent.parquet"),
-            "--attestation-trust-store",
-            str(tmp_path / "absent.json"),
-            "--release-root",
-            str(tmp_path / "releases"),
-        ]
-    result = CliRunner().invoke(app, args)
-    assert result.exit_code == 2
-    assert "mode must be swing" in result.output
-    assert not list(tmp_path.iterdir())
-
-
-def test_serving_horizon_is_checked_before_io(tmp_path: Path) -> None:
-    result = CliRunner().invoke(
-        app,
-        [
-            "publish-serving-bundle",
-            "--mode",
-            "swing",
-            "--horizon",
-            "60m",
-            "--model-release-id",
-            "a" * 64,
-            "--feature-snapshot",
-            str(tmp_path / "missing.parquet"),
-            "--attestation-trust-store",
-            str(tmp_path / "missing.json"),
-            "--release-root",
-            str(tmp_path / "release"),
-        ],
-    )
-    assert result.exit_code == 2
-    assert "horizon must be 10b" in result.output
-    assert not list(tmp_path.iterdir())
 
 
 @pytest.mark.parametrize("activation", ("--activate", "--no-activate"))
@@ -145,42 +91,6 @@ def _pre_retirement_release(
         return publish_local_release(
             repository, model_path=model, evidence_manifest_path=evidence, attestation_trust_store_path=trust
         )
-
-
-@pytest.mark.parametrize("command", ("activate-serving-bundle", "rollback-serving-bundle"))
-def test_historical_bundle_cannot_change_active_pointer(tmp_path: Path, command: str) -> None:
-    repository, trust, release_id, features = historical_bundle_inputs(tmp_path, "historical")
-    swing = publish_serving_bundle(
-        repository,
-        mode="swing",
-        horizon="10b",
-        model_release_id=release_id,
-        feature_path=features,
-        attestation_trust_store_path=trust,
-        generated_at=bundle_timestamp(),
-    )
-    historical = _rehashed_intraday_bundle(repository, str(swing["bundle_id"]))
-    pointer = repository / "active_serving_bundle.json"
-    before = pointer.read_bytes()
-    result = CliRunner().invoke(
-        app, [command, "--bundle-id", historical, "--release-root", str(repository), "--attestation-trust-store", str(trust)]
-    )
-    assert isinstance(result.exception, DataReadinessError)
-    assert "intraday serving bundles are retired" in str(result.exception)
-    assert pointer.read_bytes() == before
-
-
-def test_intraday_bundle_publication_is_refused_before_io(tmp_path: Path) -> None:
-    with pytest.raises(DataReadinessError, match="intraday serving bundles are retired"):
-        publish_serving_bundle(
-            tmp_path / "repository",
-            mode="intraday",  # type: ignore[arg-type]
-            horizon="60m",
-            model_release_id="a" * 64,
-            feature_path=tmp_path / "absent.parquet",
-            attestation_trust_store_path=tmp_path / "absent.json",
-        )
-    assert not list(tmp_path.iterdir())
 
 
 def _rehashed_intraday_bundle(repository: Path, bundle_id: str) -> str:
@@ -297,55 +207,6 @@ def test_strict_manifest_parse_does_not_accept_duplicate_keys(tmp_path: Path) ->
             admission.require_swing_release(tmp_path, release_id, trust)
 
 
-def test_swing_bundle_activation_and_rollback_keep_previous_generation_rule(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class FixtureClock(datetime):
-        @classmethod
-        def now(cls, tz: tzinfo | None = None) -> datetime:
-            return bundle_timestamp().astimezone(tz)
-
-    monkeypatch.setattr("market_predictor.serving.bundle.datetime", FixtureClock)
-    _, trust, _ = signing_material_for_test()
-    repository = tmp_path / "repository"
-    store = LiveFeatureStore(tmp_path)
-    publish_swing_features(store, swing_frame(), bundle_timestamp())
-    features, _ = store.paths("swing")
-    ids = []
-    for marker in ("first", "second", "third"):
-        model, evidence = promoted_swing_candidate(tmp_path / marker, marker)
-        release = publish_local_release(
-            repository,
-            model_path=model,
-            evidence_manifest_path=evidence,
-            activate=False,
-            attestation_trust_store_path=trust,
-        )
-        bundle = publish_serving_bundle(
-            repository,
-            mode="swing",
-            horizon="10b",
-            model_release_id=str(release["release_id"]),
-            feature_path=features,
-            attestation_trust_store_path=trust,
-            generated_at=bundle_timestamp(),
-        )
-        ids.append(str(bundle["bundle_id"]))
-    pointer_path = repository / "active_serving_bundle.json"
-    before = pointer_path.read_bytes()
-    base = ["--release-root", str(repository), "--attestation-trust-store", str(trust)]
-    invalid = CliRunner().invoke(app, ["rollback-serving-bundle", "--bundle-id", ids[0], *base])
-    assert isinstance(invalid.exception, DataReadinessError)
-    assert "immediately previous" in str(invalid.exception)
-    assert pointer_path.read_bytes() == before
-    valid = CliRunner().invoke(app, ["rollback-serving-bundle", "--bundle-id", ids[1], *base])
-    assert valid.exit_code == 0, (valid.output, valid.exception)
-    assert json.loads(pointer_path.read_bytes())["bundle_id"] == ids[1]
-    activate = CliRunner().invoke(app, ["activate-serving-bundle", "--bundle-id", ids[2], *base])
-    assert activate.exit_code == 0, (activate.output, activate.exception)
-    assert json.loads(pointer_path.read_bytes())["bundle_id"] == ids[2]
-
-
 @pytest.mark.parametrize("failure", ("untrusted_signer", "tampered_attestation"))
 def test_cli_does_not_weaken_signature_verification(tmp_path: Path, failure: str) -> None:
     model, evidence = promoted_swing_candidate(tmp_path / "source", failure)
@@ -366,3 +227,23 @@ def test_cli_does_not_weaken_signature_verification(tmp_path: Path, failure: str
     assert result.exit_code != 0
     assert "attestation" in str(result.exception)
     assert not repository.exists()
+
+
+@pytest.mark.parametrize("mode", ("intraday", "unified", "unknown"))
+def test_unsupported_live_feature_mode_rejected_before_io(tmp_path: Path, mode: str) -> None:
+    result = CliRunner().invoke(app, ["publish-live-features", "--mode", mode,
+        "--input-path", str(tmp_path / "absent.parquet"), "--live-dir", str(tmp_path / "live")])
+    assert result.exit_code == 2
+    assert "mode must be swing" in result.output
+    assert not list(tmp_path.iterdir())
+
+
+def test_historical_intraday_bundle_remains_rejected_by_reader(tmp_path: Path) -> None:
+    repository, trust, release_id, features = historical_bundle_inputs(tmp_path, "historical")
+    swing = historical_bundle_fixture(repository, trust, release_id, features)
+    old_id = _rehashed_intraday_bundle(repository, str(swing["bundle_id"]))
+    pointer = repository / "active_serving_bundle.json"
+    before = pointer.read_bytes()
+    with pytest.raises(DataReadinessError, match="intraday serving bundles are retired"):
+        verify_serving_bundle(repository, old_id, attestation_trust_store_path=trust, as_of=historical_bundle_timestamp())
+    assert pointer.read_bytes() == before

@@ -16,9 +16,10 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
+from market_predictor.core import runtime_memory as memory
+from market_predictor.core.runtime_memory import guard as _runtime_guard
 from market_predictor.core.system_memory import SystemMemory
 from market_predictor.research import news_source_links as n
-from market_predictor.research.news_runtime_memory import guard as _runtime_guard
 
 CUT = datetime(2024, 1, 10, 22, tzinfo=UTC)
 STAMP = CUT - timedelta(hours=2)
@@ -27,7 +28,7 @@ STAMP = CUT - timedelta(hours=2)
 @pytest.fixture(autouse=True)
 def synthetic_resource_guard(monkeypatch: pytest.MonkeyPatch) -> None:
     # Resource boundaries have their own UNIT suite; these test source bindings.
-    monkeypatch.setattr(n.runtime, "guard", lambda stage="news source links": None)
+    monkeypatch.setattr(memory, "guard", lambda stage="news source links": None)
 
 
 def _sha(value: str) -> str:
@@ -193,6 +194,22 @@ def test_period_keeps_old_link_and_newer_unusable_unlinked_revision(db: sqlite3.
     )
     assert features.suppressed_story_count == 1
     assert features.as_values()["news_direct_other_present_3d"] is None
+
+
+def test_observed_reader_never_relabels_historical_versions(db: sqlite3.Connection) -> None:
+    _insert_version(db, "old", _metadata(), _record(), link=True)
+    reader = n.NewsSourceLinkReader({}, {}, db, decision_end_utc=CUT + timedelta(days=1000),
+                                    availability_semantics="observed")
+    with pytest.raises(n.DataReadinessError, match="historical proxy"):
+        reader.for_period("A", CUT, CUT)
+
+
+def test_explicit_observed_bound_does_not_expand_historical_reader(db: sqlite3.Connection) -> None:
+    later = datetime(2025, 1, 10, 22, tzinfo=UTC)
+    with pytest.raises(n.DataReadinessError, match="initial-fit evidence"):
+        n.NewsSourceLinkReader({}, {}, db).for_period("A", later, later)
+    assert n.NewsSourceLinkReader({}, {}, db, decision_end_utc=later,
+        availability_semantics="observed").for_period("A", later, later).versions == ()
 
 
 def test_future_revision_is_masked_and_unknown_clock_is_explicit(db: sqlite3.Connection) -> None:
@@ -599,9 +616,9 @@ def test_original_binding_io_does_not_reenter_old_eightyfive_guard(
     db: sqlite3.Connection,
 ) -> None:
     archive, metadata = _original_archive(tmp_path, monkeypatch)
-    monkeypatch.setattr(n.runtime, "guard", _runtime_guard)
-    monkeypatch.setattr(n.runtime, "assert_memory_budget", lambda **kwargs: None)
-    monkeypatch.setattr(n.runtime, "system_memory_snapshot", lambda: SystemMemory(1000, 110))
+    monkeypatch.setattr(memory, "guard", _runtime_guard)
+    monkeypatch.setattr(memory, "assert_memory_budget", lambda **kwargs: None)
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: SystemMemory(1000, 110))
 
     def obsolete_guard() -> None:
         raise AssertionError("new bridge reentered completed producer memory policy")

@@ -41,6 +41,7 @@ from market_predictor.governance.promotion import (
 from market_predictor.governance.promotion import (
     bundle_verification as _promotion_verification,
 )
+from market_predictor.modeling.candidate_probabilities import candidate_calibrated_probabilities
 from market_predictor.modeling.feature_reference import (
     feature_reference_names_sha256,
     feature_reference_profile_sha256,
@@ -502,20 +503,7 @@ class SwingInferenceEngine:
                 model_matrix = matrix[:, [feature_positions[column] for column in model_columns]]
             except KeyError as exc:
                 raise DataReadinessError("promoted swing model feature subset is outside its bundle") from exc
-            try:
-                raw = np.asarray(estimator.predict_proba(model_matrix), dtype="float64")
-                if raw.ndim != 2 or raw.shape != (len(model_matrix), 2):
-                    raise ValueError("estimator probability shape is invalid")
-                calibrated = np.asarray(
-                    calibrator.predict_proba(raw[:, 1].reshape(-1, 1))[:, 1],
-                    dtype="float64",
-                )
-            except (AttributeError, TypeError, ValueError) as exc:
-                raise DataReadinessError("promoted swing model could not score live features") from exc
-            if calibrated.shape != (len(model_matrix),) or not np.isfinite(calibrated).all():
-                raise DataReadinessError("promoted swing model produced invalid probabilities")
-            if bool(((calibrated < 0.0) | (calibrated > 1.0)).any()):
-                raise DataReadinessError("promoted swing probabilities are outside [0, 1]")
+            calibrated = candidate_calibrated_probabilities(estimator, calibrator, model_matrix)
             return tuple(float(value) for value in calibrated)
 
         if not requested_models or "all" in requested_models:

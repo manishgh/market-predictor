@@ -13,6 +13,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
+from market_predictor.core import runtime_memory as memory
 from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.core.system_memory import SystemMemory
 from market_predictor.research import news_runtime_memory as runtime
@@ -20,25 +21,25 @@ from market_predictor.research import news_runtime_memory as runtime
 
 @pytest.mark.parametrize("available,allowed", [(200, True), (150, True), (101, True), (100, True), (91, True), (90, False), (89, False)])
 def test_percentage_only_requested_boundary(monkeypatch: pytest.MonkeyPatch, available: int, allowed: bool) -> None:
-    monkeypatch.setattr(runtime, "MAXIMUM_SYSTEM_PAUSE_SECONDS", 0.0)
+    monkeypatch.setattr(memory, "MAXIMUM_SYSTEM_PAUSE_SECONDS", 0.0)
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(runtime, "assert_memory_budget", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(memory, "assert_memory_budget", lambda **kwargs: calls.append(kwargs))
     # Even this tiny synthetic available byte count is admitted below91: no2GiB floor.
-    monkeypatch.setattr(runtime, "system_memory_snapshot", lambda: SystemMemory(1000, available))
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: SystemMemory(1000, available))
     if allowed:
-        runtime.guard(stage="unit")
+        memory.guard(stage="unit")
     else:
         with pytest.raises(MemoryBudgetError, match="strictly below 91"):
-            runtime.guard(stage="unit")
+            memory.guard(stage="unit")
     assert calls == [{"stage": "unit", "hard_budget_gib": 5.0, "headroom_gib": 0.75}]
 
 
 @pytest.mark.parametrize("snapshot", [None, SystemMemory(0, 0), SystemMemory(100, -1), SystemMemory(100, 101)])
 def test_unknown_or_invalid_system_snapshot_rejects(monkeypatch: pytest.MonkeyPatch, snapshot: SystemMemory | None) -> None:
-    monkeypatch.setattr(runtime, "assert_memory_budget", lambda **kwargs: None)
-    monkeypatch.setattr(runtime, "system_memory_snapshot", lambda: snapshot)
+    monkeypatch.setattr(memory, "assert_memory_budget", lambda **kwargs: None)
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: snapshot)
     with pytest.raises(MemoryBudgetError, match="measurement unavailable"):
-        runtime.guard()
+        memory.guard()
 
 
 def test_process_budget_failure_is_not_relaxed(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -46,14 +47,14 @@ def test_process_budget_failure_is_not_relaxed(monkeypatch: pytest.MonkeyPatch) 
         assert kwargs["hard_budget_gib"] == 5.0 and kwargs["headroom_gib"] == 0.75
         raise MemoryBudgetError("synthetic process pressure")
 
-    monkeypatch.setattr(runtime, "assert_memory_budget", process)
+    monkeypatch.setattr(memory, "assert_memory_budget", process)
     with pytest.raises(MemoryBudgetError, match="process pressure"):
-        runtime.guard()
+        memory.guard()
 
 
 def test_bounded_io_uses_new_guard_preserves_hashes_and_rejects_mutation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(runtime, "assert_memory_budget", lambda **kwargs: None)
-    monkeypatch.setattr(runtime, "system_memory_snapshot", lambda: SystemMemory(1000, 110))
+    monkeypatch.setattr(memory, "assert_memory_budget", lambda **kwargs: None)
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: SystemMemory(1000, 110))
     path = tmp_path / "unit.bin"
     path.write_bytes(b"synthetic source")
     expected = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -68,8 +69,8 @@ def test_bounded_io_uses_new_guard_preserves_hashes_and_rejects_mutation(tmp_pat
 
 
 def test_parquet_batch_io_admits_above_old_eightyfive_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(runtime, "assert_memory_budget", lambda **kwargs: None)
-    monkeypatch.setattr(runtime, "system_memory_snapshot", lambda: SystemMemory(1000, 120))
+    monkeypatch.setattr(memory, "assert_memory_budget", lambda **kwargs: None)
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: SystemMemory(1000, 120))
     path = tmp_path / "unit.parquet"
     pd.DataFrame({"value": range(600)}).to_parquet(path, index=False)
     assert list(runtime.parquet_rows(path, ("value",))) == [{"value": number} for number in range(600)]
@@ -90,16 +91,16 @@ class FakeClock:
 @pytest.fixture
 def clock(monkeypatch: pytest.MonkeyPatch) -> FakeClock:
     value = FakeClock()
-    monkeypatch.setattr(runtime.time, "monotonic", lambda: value.now)
-    monkeypatch.setattr(runtime.time, "sleep", value.sleep)
-    monkeypatch.setattr(runtime, "assert_memory_budget", lambda **kwargs: None)
+    monkeypatch.setattr(memory.time, "monotonic", lambda: value.now)
+    monkeypatch.setattr(memory.time, "sleep", value.sleep)
+    monkeypatch.setattr(memory, "assert_memory_budget", lambda **kwargs: None)
     return value
 
 
 def test_healthy_guard_does_not_sleep_or_log(clock: FakeClock, monkeypatch: pytest.MonkeyPatch,
                                            capsys: pytest.CaptureFixture[str]) -> None:
-    monkeypatch.setattr(runtime, "system_memory_snapshot", lambda: SystemMemory(10000, 901))
-    runtime.guard()
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: SystemMemory(10000, 901))
+    memory.guard()
     assert clock.sleeps == []
     assert capsys.readouterr().err == ""
 
@@ -108,9 +109,9 @@ def test_exact_boundary_recovers_and_logs_actual_facts(clock: FakeClock, monkeyp
                                                      capsys: pytest.CaptureFixture[str]) -> None:
     snapshots = iter([SystemMemory(10000, 900), SystemMemory(10000, 901)])
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(runtime, "system_memory_snapshot", lambda: next(snapshots))
-    monkeypatch.setattr(runtime, "assert_memory_budget", lambda **kwargs: calls.append(kwargs))
-    runtime.guard(stage="unit recovery")
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: next(snapshots))
+    monkeypatch.setattr(memory, "assert_memory_budget", lambda **kwargs: calls.append(kwargs))
+    memory.guard(stage="unit recovery")
     assert clock.sleeps == [5.0]
     assert calls == [{"stage": "unit recovery", "hard_budget_gib": 5.0, "headroom_gib": 0.75}] * 2
     events = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
@@ -127,10 +128,10 @@ def test_exact_boundary_recovers_and_logs_actual_facts(clock: FakeClock, monkeyp
 def test_sustained_pressure_times_out_at_monotonic_deadline(clock: FakeClock, monkeypatch: pytest.MonkeyPatch,
                                                          capsys: pytest.CaptureFixture[str]) -> None:
     calls: list[object] = []
-    monkeypatch.setattr(runtime, "assert_memory_budget", lambda **kwargs: calls.append(kwargs))
-    monkeypatch.setattr(runtime, "system_memory_snapshot", lambda: SystemMemory(100, 8))
+    monkeypatch.setattr(memory, "assert_memory_budget", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: SystemMemory(100, 8))
     with pytest.raises(MemoryBudgetError, match="within 120 seconds"):
-        runtime.guard()
+        memory.guard()
     assert clock.now == 120.0
     assert clock.sleeps == [5.0] * 24
     assert len(calls) == 25
@@ -147,9 +148,9 @@ def test_sustained_pressure_times_out_at_monotonic_deadline(clock: FakeClock, mo
 def test_invalid_measurement_during_pause_fails_immediately(clock: FakeClock, monkeypatch: pytest.MonkeyPatch,
                                                           invalid: Any, capsys: pytest.CaptureFixture[str]) -> None:
     snapshots = iter([SystemMemory(100, 8), invalid])
-    monkeypatch.setattr(runtime, "system_memory_snapshot", lambda: next(snapshots))
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: next(snapshots))
     with pytest.raises(MemoryBudgetError, match="measurement unavailable"):
-        runtime.guard()
+        memory.guard()
     assert clock.sleeps == [5.0]
     assert [json.loads(line)["event"] for line in capsys.readouterr().err.splitlines()] == ["pause"]
 
@@ -163,10 +164,10 @@ def test_process_failure_during_pause_is_immediate(clock: FakeClock, monkeypatch
         if calls == 2:
             raise MemoryBudgetError("UNIT process pressure")
 
-    monkeypatch.setattr(runtime, "assert_memory_budget", process)
-    monkeypatch.setattr(runtime, "system_memory_snapshot", lambda: SystemMemory(100, 8))
+    monkeypatch.setattr(memory, "assert_memory_budget", process)
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: SystemMemory(100, 8))
     with pytest.raises(MemoryBudgetError, match="UNIT process pressure"):
-        runtime.guard()
+        memory.guard()
     assert clock.sleeps == [5.0]
 
 
@@ -195,7 +196,7 @@ def test_data_io_does_not_start_while_paused_and_results_unchanged(
 
     clock.during_sleep = during_pause
     snapshots = iter([SystemMemory(100, 8)])
-    monkeypatch.setattr(runtime, "system_memory_snapshot", lambda: next(snapshots, SystemMemory(100, 10)))
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: next(snapshots, SystemMemory(100, 10)))
     monkeypatch.setattr(Path, "open", tracked_open)
     monkeypatch.setattr(runtime.pq, "ParquetFile", tracked_parquet)
     if kind == "hash":

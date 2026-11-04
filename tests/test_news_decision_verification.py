@@ -40,7 +40,7 @@ def case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     raw = _write(tmp_path, "raw_payload.txt", "UNIT original news payload")
     with publisher.open_news_source_link_index(root=tmp_path, index=source.config) as reader:
         assert reader.producer_source_provenance[raw.path] == raw.sha256
-    monkeypatch.setattr(owner.runtime, "guard", lambda *args, **kwargs: None)
+    monkeypatch.setattr(owner.memory, "guard", lambda *args, **kwargs: None)
     monkeypatch.setattr(owner, "heavy_job_lease", lambda *args, **kwargs: nullcontext())
     code = _write(tmp_path, "verifier.py", "# UNIT verifier inventory")
     monkeypatch.setattr(owner, "_implementation", lambda root: {code.path: code.sha256})

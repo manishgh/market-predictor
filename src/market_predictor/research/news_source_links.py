@@ -14,18 +14,19 @@ import sqlite3
 from collections import Counter
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, cast
 
 import pandas as pd
 import pyarrow.parquet as pq
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from market_predictor.catalysts.issuer_events import attribution as original_attribution
 from market_predictor.catalysts.issuer_events.news_query_scope import SourcePin
 from market_predictor.catalysts.sec_filings.document_collection import RECEIPT_COLUMNS, TERMINAL_STATES
+from market_predictor.core import runtime_memory as memory
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.evidence.hashing import json_sha256
@@ -55,7 +56,7 @@ IMPLEMENTATION_PATHS = tuple(
             *saved.IMPLEMENTATION_PATHS,
             *corpus._IMPLEMENTATION_PATHS,
             "research/news_source_links.py",
-            "research/news_runtime_memory.py",
+            "research/news_runtime_memory.py", "core/runtime_memory.py",
             "research/news_decision_features.py",
             "research/issuer_content_review_sources.py",
             "research/legacy_query_identity_proofs.py",
@@ -94,6 +95,15 @@ class NewsSourceLinkPolicy(_Strict):
     population_database: SourcePin
     identity_manifest: SourcePin
     archives: tuple[NewsLinkArchive, ...]
+    decision_end_utc: datetime = saved.END.to_pydatetime()
+    availability_semantics: Literal["historical_proxy", "observed"] = "historical_proxy"
+
+    @field_validator("decision_end_utc")
+    @classmethod
+    def aware_decision_end(cls, value: datetime) -> datetime:
+        if value.utcoffset() is None:
+            raise ValueError("source-link decision bound must be timezone-aware")
+        return value
 
 
 def _require(condition: bool, message: str) -> None:
@@ -269,7 +279,7 @@ def _original_artifact(root: Path, item: dict[str, Any], files: dict[str, str], 
     _require(
         all(sidecar.get("inputs", {}).get(key) == value for key, value in inputs.items()), "original sentiment child input binding differs"
     )
-    runtime.guard()
+    memory.guard()
     _require(cast(Any, pq).ParquetFile(path).metadata.num_rows == item["rows"], "original sentiment child row count differs")
     return path
 
@@ -286,7 +296,8 @@ def _batches(rows: Iterator[dict[str, Any]], size: int = 256) -> Iterator[list[d
 
 
 def _load_alpaca(
-    root: Path, archive: NewsLinkArchive, db: sqlite3.Connection, bridge: pd.DataFrame, legacy: pd.DataFrame, files: dict[str, str]
+    root: Path, archive: NewsLinkArchive, db: sqlite3.Connection, bridge: pd.DataFrame, legacy: pd.DataFrame, files: dict[str, str],
+    *, decision_end_utc: datetime = saved.END.to_pydatetime(),
 ) -> None:
     collection_path = _pin(root, archive.collection_manifest, files)
     relation_path = _pin(root, archive.attribution_manifest, files)
@@ -314,10 +325,10 @@ def _load_alpaca(
     identities_by_security = original_attribution._identities_by_security(identities)
     events = saved._artifacts(collection)
     for chunk, item in sorted(saved._artifacts(attribution).items()):
-        runtime.guard()
+        memory.guard()
         _require(chunk in events, "relation child lacks original source events")
         original = events[chunk]
-        if saved._clock(original["start_utc"]) > saved.END:
+        if saved._clock(original["start_utc"]) > decision_end_utc:
             continue
         _require(item["source_event_sha256"] == original["sha256"], "attribution raw event artifact differs")
         event_path = _child(root, original, files, {"chunk_id": chunk, "collection_request_sha256": collection["request_sha256"]})
@@ -336,7 +347,7 @@ def _load_alpaca(
         )
         event_columns = tuple(name for name in saved.EVENT_COLUMNS if name not in {"title", "summary", "text"})
         for event in runtime.parquet_rows(event_path, event_columns):
-            if saved._clock(event["available_at_utc"]) > saved.END or saved._version_clock(event) > saved.END:
+            if saved._clock(event["available_at_utc"]) > decision_end_utc or saved._version_clock(event) > decision_end_utc:
                 continue
             payload = {
                 key: event[key]
@@ -367,7 +378,7 @@ def _load_alpaca(
             frame = pd.DataFrame(direct)
             mapped = map_legacy_query_relations(map_news_relations(frame, bridge), legacy) if archive.name != "corrected" else frame
             for relation in mapped.to_dict("records"):
-                if saved._clock(relation["event_feature_available_at_utc"]) > saved.END:
+                if saved._clock(relation["event_feature_available_at_utc"]) > decision_end_utc:
                     continue
                 _require(
                     relation["attribution_policy_sha256"] == request["attribution_policy_sha256"]
@@ -421,12 +432,12 @@ def _load_sec(root: Path, settings: dict[str, Any], db: sqlite3.Connection, file
     archive = HoldingSourcePin.model_validate(settings["sec_archive"])
     inventory = HoldingSourcePin.model_validate(settings["sec_inventory"])
     directory, manifest, _, parent = sec_sources._sec_metadata(root, archive, inventory, files)
-    filings, clock_pin = sec_sources._filing_map(root, inventory, parent, files, runtime.guard)
+    filings, clock_pin = sec_sources._filing_map(root, inventory, parent, files, memory.guard)
     terminal: set[str] = set()
     for name, shard in sorted(manifest["shards"].items()):
         path = runtime.pin_file(root, str(directory / "shards" / f"{name}.parquet"), shard["parquet_sha256"], files)
         count, zip_checked = 0, False
-        for row in sec_sources._rows(path, runtime.guard):
+        for row in sec_sources._rows(path, memory.guard):
             count += 1
             clean = {
                 key: int(row[key]) if row[key] is not None and key in {"attempt", "status_code", "body_length"} else row[key]
@@ -472,7 +483,7 @@ def _load_corpus(directory: Path, manifest: dict[str, Any], source: sqlite3.Conn
             continue
         for record in corpus._read_lines(directory / name):
             if count % 256 == 0:
-                runtime.guard()
+                memory.guard()
             row = source.execute(
                 "SELECT cluster_id,security_id,source_family,content_json FROM versions WHERE version_id=?", (record["version_id"],)
             ).fetchone()
@@ -672,7 +683,7 @@ def _materialize_versions(
     )
     for row in cursor:
         if counts["query_copy_records"] % 256 == 0:
-            runtime.guard()
+            memory.guard()
         counts["query_copy_records"] += 1
         metadata = _metadata(row["record_json"])
         found = db.execute("SELECT payload,metadata FROM enriched WHERE version_id=?", (row["version_id"],)).fetchone()
@@ -752,7 +763,7 @@ def build_news_source_link_index(
     runtime_dir = heavy_job_runtime_dir()
     runtime_dir = runtime_dir if runtime_dir.is_absolute() else root / runtime_dir
     with heavy_job_lease("news-source-link-index", runtime_dir=runtime_dir):
-        runtime.guard()
+        memory.guard()
         _require(not output.exists() and not stage.exists(), "source-link output or partial stage already exists")
         files: dict[str, str] = {}
         policy = NewsSourceLinkPolicy.model_validate_json(_pin(root, config, files).read_bytes())
@@ -776,7 +787,7 @@ def build_news_source_link_index(
         with closing(_connect(stage / "index.sqlite")) as db, closing(_connect(database, readonly=True)) as source:
             _schema(db)
             for archive in policy.archives:
-                _load_alpaca(root, archive, db, bridge, legacy, files)
+                _load_alpaca(root, archive, db, bridge, legacy, files, decision_end_utc=policy.decision_end_utc)
             _load_sec(root, settings, db, files)
             _load_corpus(directory, manifest, source, db)
             counts = _materialize_versions(source, db, policy.population_database.sha256, progress)
@@ -858,6 +869,8 @@ class NewsSourceLinkReader:
     source_files: Mapping[str, str]
     implementation_files: Mapping[str, str]
     _db: sqlite3.Connection
+    decision_end_utc: datetime = field(default=saved.END.to_pydatetime(), kw_only=True)
+    availability_semantics: Literal["historical_proxy", "observed"] = field(default="historical_proxy", kw_only=True)
 
     def proof(self, sha256: str) -> dict[str, Any]:
         row = self._db.execute("SELECT payload FROM proofs WHERE sha256=?", (sha256,)).fetchone()
@@ -878,7 +891,8 @@ class NewsSourceLinkReader:
         The pure kernel masks each decision's future versions and company links.
         """
         start, end = _clock(start_utc), _clock(end_utc)
-        _require(start <= end and end <= saved.END.to_pydatetime(), "source-link period escapes initial-fit evidence")
+        _require(start <= end and end <= self.decision_end_utc,
+                 "source-link period escapes initial-fit evidence or registered observed bounds")
         _require(type(max_versions) is int and 0 < max_versions <= MAX_SLICE_VERSIONS, "source-link slice limit differs")
         _require(isinstance(security_id, str) and bool(security_id.strip()), "security identity is required")
         rows = self._db.execute(
@@ -910,6 +924,10 @@ class NewsSourceLinkReader:
                 (row["copy_id"], security_id, end.isoformat()),
             ):
                 links.append(_decode_link(link["payload"]))
+        if self.availability_semantics == "observed":
+            _require(all(item.semantics == "observed" for item in versions)
+                     and all(item.semantics == "observed" for item in links),
+                     "observed source-link reader cannot consume historical proxy records")
         return SourceLinkedNewsSlice(tuple(versions), tuple(links), tuple(uncertainties))
 
 
@@ -949,7 +967,8 @@ def open_news_source_link_index(*, root: Path, index: SourcePin) -> Iterator[New
     )
     with closing(_connect(path.parent / "index.sqlite", readonly=True)) as db:
         try:
-            yield NewsSourceLinkReader(files, manifest["implementation_files"], db)
+            yield NewsSourceLinkReader(files, manifest["implementation_files"], db,
+                decision_end_utc=policy.decision_end_utc, availability_semantics=policy.availability_semantics)
         finally:
             runtime.recheck_files(root, files)
             runtime.recheck_files(root, manifest["implementation_files"])

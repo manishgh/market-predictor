@@ -18,7 +18,7 @@ from tests.test_news_source_links import CUT, STAMP, _insert_version, _metadata,
 
 @pytest.fixture
 def case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    monkeypatch.setattr(owner.runtime, "guard", lambda *args, **kwargs: None)
+    monkeypatch.setattr(owner.memory, "guard", lambda *args, **kwargs: None)
     old_code = tmp_path / "original_reader.py"
     old_code.write_text("# Synthetic UNIT original implementation identity", encoding="utf-8")
     new_code = tmp_path / "adapter.py"

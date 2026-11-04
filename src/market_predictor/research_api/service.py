@@ -28,7 +28,8 @@ class ResearchFeatureUnavailableError(RuntimeError):
 class ResearchModelService:
     def __init__(self, repository_root: Path, *, catalog_path: Path | None = None) -> None:
         self.repository_root = repository_root.resolve()
-        self.specs = load_research_model_specs(catalog_path or Path(__file__).resolve().parents[3] / "configs/research_model_catalog.toml",
+        self.catalog_path = catalog_path or Path(__file__).resolve().parents[3] / "configs/research_model_catalog.toml"
+        self.specs = load_research_model_specs(self.catalog_path,
             repository_root=self.repository_root)
 
     def model_states(self) -> list[dict[str, Any]]:

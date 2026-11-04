@@ -1,13 +1,16 @@
+"""Read-only verification of historical model/feature bundle artifacts.
+
+These recorded bundles use serving_bundles/ and active_serving_bundle.json.
+Current inference consumes active_generation.json through swing_inference.py;
+this module cannot publish, activate or roll back either format.
+"""
 from __future__ import annotations
 
 import hashlib
 import json
-import os
-import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 from market_predictor.core import path_integrity
 from market_predictor.core.errors import DataReadinessError
@@ -18,7 +21,6 @@ from market_predictor.feature_store import (
     LiveFeatureStoreConfig,
 )
 from market_predictor.live_features import LIVE_ARTIFACT_TYPES, LIVE_SCHEMA_VERSIONS, LiveMode
-from market_predictor.locking import file_lock
 from market_predictor.registry import file_sha256
 from market_predictor.release import verify_local_release
 
@@ -27,123 +29,6 @@ ACTIVE_SERVING_BUNDLE_SCHEMA = "market_predictor.active_serving_bundle"
 SERVING_BUNDLE_MANIFEST = "bundle.json"
 ACTIVE_SERVING_BUNDLE_POINTER = "active_serving_bundle.json"
 _BUNDLE_DIRECTORY = "serving_bundles"
-_FEATURE_ASSET = "features/features.parquet"
-_FEATURE_MANIFEST_ASSET = "features/features.parquet.manifest.json"
-
-
-def publish_serving_bundle(
-    root: Path,
-    *,
-    mode: LiveMode,
-    horizon: str,
-    model_release_id: str,
-    feature_path: Path,
-    attestation_trust_store_path: Path,
-    activate: bool = True,
-    generated_at: datetime | None = None,
-    feature_store_config: LiveFeatureStoreConfig | None = None,
-) -> dict[str, Any]:
-    """Publish an immutable model/feature serving generation."""
-
-    mode = _live_mode(mode)
-    repository = _repository_root(root)
-    generated = _utc(generated_at or datetime.now(UTC))
-    release = verify_local_release(
-        repository,
-        model_release_id,
-        attestation_trust_store_path=attestation_trust_store_path,
-    )
-    model_manifest = _load_release_model_manifest(
-        repository,
-        release,
-        model_release_id=model_release_id,
-    )
-    model_identity = _model_identity(model_manifest, mode=mode, horizon=horizon)
-    releases_root = repository / "releases"
-    release_manifest_path = releases_root / model_release_id / "release.json"
-
-    bundles_root = repository / _BUNDLE_DIRECTORY
-    bundles_root.mkdir(parents=True, exist_ok=True)
-    staging = bundles_root / f".staging-{uuid4().hex}"
-    with file_lock(repository / ".serving-bundle-publish"):
-        try:
-            staging.mkdir(parents=False, exist_ok=False)
-            staged_feature = staging / _FEATURE_ASSET
-            staged_manifest = staging / _FEATURE_MANIFEST_ASSET
-            staged_feature.parent.mkdir(parents=True, exist_ok=True)
-            _copy_file_durable(feature_path.resolve(), staged_feature)
-            _copy_file_durable(_feature_manifest_path(feature_path).resolve(), staged_manifest)
-
-            feature_manifest = _load_json_object(
-                staged_manifest,
-                "live feature manifest",
-            )
-            feature_store = LiveFeatureStore(
-                Path("."),
-                _staged_feature_config(mode, staged_feature, feature_store_config),
-            )
-            feature_store.validate(mode, as_of=generated)
-            _validate_feature_manifest_identity(feature_manifest, mode=mode)
-            feature_identity = _feature_identity(feature_manifest)
-
-            identity: dict[str, Any] = {
-                "schema": SERVING_BUNDLE_SCHEMA,
-                "mode": mode,
-                "horizon": horizon,
-                "generated_at_utc": generated.isoformat(),
-                "model_release_id": model_release_id,
-                "model_release_manifest_sha256": file_sha256(release_manifest_path),
-                **model_identity,
-                "feature_path": _FEATURE_ASSET,
-                "feature_manifest_path": _FEATURE_MANIFEST_ASSET,
-                "feature_manifest_sha256": file_sha256(staged_manifest),
-                **feature_identity,
-            }
-            bundle_id = _json_sha256(identity)
-            bundle = {**identity, "bundle_id": bundle_id}
-            _write_json_atomic(staging / SERVING_BUNDLE_MANIFEST, bundle)
-
-            destination = bundles_root / bundle_id
-            if destination.exists():
-                verified = verify_serving_bundle(
-                    repository,
-                    bundle_id,
-                    attestation_trust_store_path=attestation_trust_store_path,
-                    as_of=generated,
-                    feature_store_config=feature_store_config,
-                )
-            else:
-                _verify_bundle_directory(
-                    staging,
-                    repository=repository,
-                    expected_bundle_id=bundle_id,
-                    attestation_trust_store_path=attestation_trust_store_path,
-                    as_of=generated,
-                    feature_store_config=feature_store_config,
-                )
-                os.replace(staging, destination)
-                _fsync_directory(bundles_root)
-                verified = verify_serving_bundle(
-                    repository,
-                    bundle_id,
-                    attestation_trust_store_path=attestation_trust_store_path,
-                    as_of=generated,
-                    feature_store_config=feature_store_config,
-                )
-        finally:
-            if staging.exists():
-                _remove_staging_directory(staging, bundles_root)
-
-    result = dict(verified)
-    if activate:
-        result["active_pointer"] = activate_serving_bundle(
-            repository,
-            bundle_id,
-            attestation_trust_store_path=attestation_trust_store_path,
-            activated_at=generated,
-            feature_store_config=feature_store_config,
-        )
-    return result
 
 
 def verify_serving_bundle(
@@ -166,53 +51,6 @@ def verify_serving_bundle(
         as_of=as_of,
         feature_store_config=feature_store_config,
     )
-
-
-def activate_serving_bundle(
-    root: Path,
-    bundle_id: str,
-    *,
-    attestation_trust_store_path: Path,
-    activated_at: datetime | None = None,
-    feature_store_config: LiveFeatureStoreConfig | None = None,
-) -> dict[str, Any]:
-    repository = _repository_root(root)
-    pointer_path = repository / ACTIVE_SERVING_BUNDLE_POINTER
-    with file_lock(pointer_path):
-        return _activate_serving_bundle_locked(
-            repository,
-            bundle_id,
-            pointer_path=pointer_path,
-            attestation_trust_store_path=attestation_trust_store_path,
-            activated_at=activated_at,
-            feature_store_config=feature_store_config,
-        )
-
-
-def rollback_serving_bundle(
-    root: Path,
-    bundle_id: str,
-    *,
-    attestation_trust_store_path: Path,
-    activated_at: datetime | None = None,
-    feature_store_config: LiveFeatureStoreConfig | None = None,
-) -> dict[str, Any]:
-    repository = _repository_root(root)
-    pointer_path = repository / ACTIVE_SERVING_BUNDLE_POINTER
-    with file_lock(pointer_path):
-        current = _load_active_pointer(pointer_path)
-        if current.get("previous_bundle_id") != bundle_id:
-            raise DataReadinessError(
-                "serving bundle rollback target must be the immediately previous bundle"
-            )
-        return _activate_serving_bundle_locked(
-            repository,
-            bundle_id,
-            pointer_path=pointer_path,
-            attestation_trust_store_path=attestation_trust_store_path,
-            activated_at=activated_at,
-            feature_store_config=feature_store_config,
-        )
 
 
 def load_active_serving_bundle(
@@ -256,42 +94,6 @@ def serving_bundle_asset_paths(
         _safe_child(bundle_dir, str(bundle["feature_path"])),
         _release_model_path(repository, bundle),
     )
-
-
-def _activate_serving_bundle_locked(
-    repository: Path,
-    bundle_id: str,
-    *,
-    pointer_path: Path,
-    attestation_trust_store_path: Path,
-    activated_at: datetime | None,
-    feature_store_config: LiveFeatureStoreConfig | None,
-) -> dict[str, Any]:
-    timestamp = _utc(activated_at or datetime.now(UTC))
-    bundle = verify_serving_bundle(
-        repository,
-        bundle_id,
-        attestation_trust_store_path=attestation_trust_store_path,
-        as_of=timestamp,
-        feature_store_config=feature_store_config,
-    )
-    previous_bundle_id: str | None = None
-    if pointer_path.exists():
-        previous_bundle_id = str(_load_active_pointer(pointer_path)["bundle_id"])
-    manifest_path = repository / _BUNDLE_DIRECTORY / bundle_id / SERVING_BUNDLE_MANIFEST
-    content = {
-        "schema": ACTIVE_SERVING_BUNDLE_SCHEMA,
-        "bundle_id": bundle_id,
-        "bundle_manifest_sha256": file_sha256(manifest_path),
-        "previous_bundle_id": previous_bundle_id,
-        "activated_at_utc": timestamp.isoformat(),
-    }
-    pointer = {**content, "pointer_sha256": _json_sha256(content)}
-    _write_json_atomic(pointer_path, pointer)
-    verified = _load_active_pointer(pointer_path)
-    if verified["bundle_id"] != bundle["bundle_id"]:
-        raise DataReadinessError("active serving bundle pointer changed during activation")
-    return verified
 
 
 def _verify_bundle_directory(
@@ -580,10 +382,6 @@ def _target_matches_horizon(target: str, horizon: str) -> bool:
     return f"_{horizon.strip().lower()}" in target.lower()
 
 
-def _feature_manifest_path(path: Path) -> Path:
-    return path.with_suffix(path.suffix + ".manifest.json")
-
-
 def _safe_child(root: Path, relative: str) -> Path:
     candidate = Path(relative)
     if not relative or candidate.is_absolute() or ".." in candidate.parts:
@@ -614,47 +412,6 @@ def _repository_root(root: Path) -> Path:
     if not resolved.is_dir():
         raise DataReadinessError("serving repository is not a directory")
     return resolved
-
-
-def _remove_staging_directory(staging: Path, root: Path) -> None:
-    resolved = staging.resolve()
-    repository = root.resolve()
-    if not resolved.is_relative_to(repository) or not staging.name.startswith(".staging-"):
-        raise DataReadinessError("refusing to remove an unsafe serving bundle staging path")
-    shutil.rmtree(staging)
-
-
-def _copy_file_durable(source: Path, destination: Path) -> None:
-    if not source.is_file():
-        raise FileNotFoundError(source)
-    with source.open("rb") as source_handle, destination.open("xb") as target:
-        shutil.copyfileobj(source_handle, target, length=1024 * 1024)
-        target.flush()
-        os.fsync(target.fileno())
-
-
-def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-    try:
-        with temporary.open("x", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2, sort_keys=True)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-        _fsync_directory(path.parent)
-    finally:
-        temporary.unlink(missing_ok=True)
-
-
-def _fsync_directory(path: Path) -> None:
-    if os.name == "nt":
-        return
-    descriptor = os.open(path, os.O_RDONLY)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
 
 
 def _load_json_object(path: Path, name: str) -> dict[str, Any]:

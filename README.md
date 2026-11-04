@@ -11,6 +11,10 @@ The system is not deployed. There are no supported legacy models or compatibilit
 paths. Serving fails closed until a model passes validation and is published in a
 hash-verified promoted bundle.
 
+Current inference reads `active_generation.json` and `generations/<id>`. The
+unconsumed `publish-serving-bundle` CLI and its activation/rollback commands are
+removed. The old bundle format retains a read-only historical verifier.
+
 ## Reading The Code
 
 Follow one prediction through these layers. The command modules connect the
@@ -115,7 +119,7 @@ expanded parquet bytes and two million rows, with a 4 GiB process memory guard.
 This command publishes existing authorities; collection and scheduling remain
 separate operations. No current real-data source request or promoted release has
 been verified by this checkpoint. Synthetic checks do not establish live readiness,
-profitability or permission to trade. API v4 consumer status is recorded in
+profitability or permission to trade. V1 consumer status is recorded in
 `docs/contracts/tradingflow_handoff.md`.
 
 ## Unified Product Boundary
@@ -769,37 +773,51 @@ artifact paths, pins, pending source issues and verification results are maintai
 in `docs/reviews/active_edge_rebuild_handoff.md`. Do not substitute a current file's
 hash for an independently reviewed source identity just to make a resume succeed.
 
-The local research workbench inventories the six completed return specifications:
+The canonical V1 API exposes the six completed return specifications:
 `technical_ridge`, `technical_xgboost`, `relationships_ridge`,
-`relationships_xgboost`, `news_ridge`, and `news_xgboost`. Its server-owned catalog
-pins the three original training manifests and verifies fitted model bytes.
-Each query verifies the selected temporal fold's model and prediction artifacts.
+`relationships_xgboost`, `news_ridge`, and `news_xgboost`. The optional workbench
+uses the same application, authentication, request bounds and error envelope.
+Its server-owned catalog pins the three original training manifests.
+
+For local development, set `API_ENVIRONMENT=development`,
+`API_AUTH_MODE=development` and `API_DEVELOPMENT_BEARER_TOKEN` to a private token
+of at least 32 characters in your environment. Production requires configured
+Entra authentication. Start the workbench from the repository root:
 
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn `
-  market_predictor.research_api.server:app `
+  market_predictor.research_api.server:create_research_app `
+  --factory `
   --host 127.0.0.1 `
   --port 8123
 ```
 
-Open `http://127.0.0.1:8123`. The workbench is non-actionable and does not alter the
-production API. Choose an exact historical session and tickers. The API reads
-saved temporal out-of-fold predictions; it does not refit or deserialize a model,
-recompute scores, choose the nearest date, or use a final refit as historical
-validation. These already inspected dates are development evidence. Dates outside
-the recorded validation sessions return unavailable, including today's date.
+Open `http://127.0.0.1:8123` and enter the bearer token in the workbench. In
+development, `/docs` provides Swagger UI and `/openapi.json` provides OpenAPI;
+select **Authorize** in Swagger and enter the same token. Entra mode disables
+these documentation endpoints. The three research endpoints require
+`predictions.read` and share the configured request body, ticker and rate limits.
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:8123/v1/research/models
-Invoke-RestMethod http://127.0.0.1:8123/v1/research/predict -Method Post -ContentType application/json -Body '{"model_id":"news_ridge","session_date":"2021-07-21","tickers":["ABT"]}'
+$headers = @{ Authorization = "Bearer $env:API_DEVELOPMENT_BEARER_TOKEN" }
+Invoke-RestMethod http://127.0.0.1:8123/v1/research/models -Headers $headers
+Invoke-RestMethod http://127.0.0.1:8123/v1/research/predict -Headers $headers -Method Post -ContentType application/json -Body '{"model_id":"news_ridge","session_date":"2021-07-21","tickers":["ABT"]}'
+Invoke-RestMethod http://127.0.0.1:8123/v1/research/forecast -Headers $headers -Method Post -ContentType application/json -Body '{"model_id":"technical_ridge","tickers":["MSFT"]}'
 ```
 
-The signed `predicted_excess_return` is the ten-session stock net return minus
-SPY gross return in decimal units: `-0.012` means -1.2 percentage points relative
-to SPY, not a 1.2% probability. An unavailable prediction stays JSON `null`; a
-genuine zero stays `0.0`. Responses include decision/security identity and exact
-run, request, unit, model and prediction hashes. Missing or modified artifacts
-refuse the query. No release is activated and `actionable` remains false.
+Historical queries read the exact session's saved temporal out-of-fold predictions,
+without refitting, choosing a nearby date or substituting the final refit. These
+inspected dates are development evidence. Fresh forecasts use the frozen final
+model with verified current observed features. If those inputs have not been
+published, the request returns 503 rather than a saved prediction.
+
+`predicted_excess_return` is signed ten-session stock net return minus SPY gross
+return in decimal units: `-0.012` means -1.2 percentage points relative to SPY.
+It is not a probability. An unavailable prediction remains JSON `null`; a genuine
+zero stays `0.0`. Raw prices, news, feature values and artifact paths are not
+accepted in HTTP requests. No release is activated, no trading admission is granted,
+and `actionable` remains false. See [the API usage guide](docs/research_api.md)
+for request semantics and errors.
 
 ## Verification
 

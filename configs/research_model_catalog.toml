@@ -17,3 +17,11 @@ id = "news"
 label = "Price indicators, relationships and news"
 artifact_directory = "data/research/swing_news_return_models_initial_fit"
 manifest_sha256 = "48f3ff9aff50e4eb6be6704808d8a0db5e1b42cbcb21f0cc79f0f4555ccb479b"
+
+[forecast]
+maximum_snapshot_age_seconds = 129600
+maximum_snapshot_bytes = 67108864
+maximum_snapshot_rows = 2000
+
+publication_directory = "data/live/returns/current"
+# Register publication_manifest_sha256 only after verified observed publication.

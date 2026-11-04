@@ -7,10 +7,10 @@ from typing import Any
 
 import pytest
 
+from market_predictor.core import runtime_memory as runtime
 from market_predictor.core.errors import MemoryBudgetError
 from market_predictor.core.system_memory import SystemMemory
 from market_predictor.research import news_parent_inputs as parent
-from market_predictor.research import news_runtime_memory as runtime
 
 
 def _snapshot(monkeypatch: pytest.MonkeyPatch, percentage: float) -> list[dict[str, Any]]:
@@ -58,5 +58,5 @@ def test_parent_keeps_process_budget_failure(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_parent_pins_executed_runtime_and_existing_memory_owners() -> None:
-    assert {"research/news_runtime_memory.py", "resources.py", "process_memory.py", "core/system_memory.py"}.issubset(
+    assert {"core/runtime_memory.py", "resources.py", "process_memory.py", "core/system_memory.py"}.issubset(
         parent.IMPLEMENTATION_PATHS)

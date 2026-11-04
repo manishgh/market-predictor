@@ -22,16 +22,11 @@ from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.resources import assert_peak_memory_budget, release_process_memory
 from market_predictor.swing.contracts.return_training import ReturnTrainingPolicy
 from market_predictor.swing.datasets.symbol_corrections import pinned_object
-from market_predictor.swing.training.return_artifacts import verify_unit
+from market_predictor.swing.training.return_artifacts import FAMILIES, FLAGS, SCOPES, TARGET, verify_completed_return_run, verify_unit
 
-TARGET = "spy_fixed_horizon_excess_return"
-FAMILIES = ("regularized_linear_return", "shallow_boosted_return")
-SCOPES = ("temporal", "security_transfer")
-FLAGS = ("serving_eligible", "promotion_eligible", "portfolio_evaluated", "outer_validation_opened",
-    "historical_test_opened")
 PROFILE_BINDINGS = {"feature_profile", "published_profile", "readiness", "readiness_config"}
 NEWS_PROFILE = "technical_relationships_news"
-NEWS_RUNTIME_PATHS = ("research/news_runtime_memory.py", "resources.py", "process_memory.py", "core/system_memory.py")
+NEWS_RUNTIME_PATHS = ("core/runtime_memory.py", "resources.py", "process_memory.py", "core/system_memory.py")
 
 
 def _paired_requests(requests: list[dict[str, Any]]) -> dict[str, Any]:
@@ -68,7 +63,7 @@ def _paired_requests(requests: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _comparison_guard(news: bool) -> None:
     if news:
-        from market_predictor.research.news_runtime_memory import guard
+        from market_predictor.core.runtime_memory import guard
         assert_peak_memory_budget(stage="saved news prediction comparison", hard_budget_gib=5.0, headroom_gib=0.75)
         guard(stage="saved news prediction comparison")
     else:
@@ -157,22 +152,10 @@ def _guard() -> None:
 def _run(root: Path, directory: Path, digest: str, pins: dict[str, str]) -> tuple[dict[str, Any], dict[str, Any]]:
     path = inside(root, directory)
     manifest_path = path / "_manifest.json"
-    manifest = pinned_object(manifest_path, digest)
+    manifest, request = verify_completed_return_run(path, manifest_sha256=digest)
     pins[manifest_path.relative_to(root).as_posix()] = digest
     request_path = path / "_request.json"
-    request = pinned_object(request_path, manifest["request_sha256"])
     pins[request_path.relative_to(root).as_posix()] = manifest["request_sha256"]
-    if (manifest.get("schema") != "market_predictor.swing_return_training"
-            or manifest.get("status") != "complete_research_only"
-            or request.get("schema") != "market_predictor.swing_return_training_request"
-            or any(record.get(flag) is not False for record in (manifest, request) for flag in FLAGS)):
-        raise DataReadinessError("comparison requires complete initial-fit development runs without promotion")
-    expected = {f"{family}/{scope}/fold-{fold}" for family in FAMILIES for scope in SCOPES for fold in range(1, 5)}
-    expected |= {f"{family}/final_refit" for family in FAMILIES}
-    if (set(manifest["units"]) != expected or request["policy"]["target"] != TARGET
-            or request["policy"]["scope"] != "initial_fit_research_only"
-            or [fold["number"] for fold in request["folds"]] != [1, 2, 3, 4]):
-        raise DataReadinessError("comparison run target, scope or fold inventory differs")
     return manifest, request
 
 

@@ -74,9 +74,9 @@ def test_news_exception_cannot_waive_other_difference(change: str) -> None:
 
 
 def test_funded_guards_share_requested_ceiling_without_changing_paired_comparison(monkeypatch: pytest.MonkeyPatch) -> None:
-    from market_predictor.research import news_runtime_memory
+    from market_predictor.core import runtime_memory
     calls: list[str] = []
-    monkeypatch.setattr(news_runtime_memory, "guard", lambda **kwargs: calls.append("news"))
+    monkeypatch.setattr(runtime_memory, "guard", lambda **kwargs: calls.append("news"))
     monkeypatch.setattr(comparison, "assert_peak_memory_budget", lambda **kwargs: None)
     monkeypatch.setattr(comparison, "_guard", lambda: calls.append("comparison-baseline"))
     monkeypatch.setattr(oof, "_guard", lambda: calls.append("oof-baseline"))

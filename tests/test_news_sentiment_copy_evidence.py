@@ -61,7 +61,7 @@ def _corpus(state: dict[str, Any]) -> None:
 def synthetic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     root = tmp_path
     monkeypatch.setenv("MARKET_PREDICTOR_RUNTIME_DIR", str(root / "data/runtime"))
-    monkeypatch.setattr(owner.runtime, "guard", lambda *args, **kwargs: None)
+    monkeypatch.setattr(owner.memory, "guard", lambda *args, **kwargs: None)
     package = root / "src/market_predictor"
     for name in owner.IMPLEMENTATION_PATHS:
         destination = package / name

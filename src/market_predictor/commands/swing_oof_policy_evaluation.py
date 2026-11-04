@@ -9,10 +9,10 @@ import typer
 from pydantic import ValidationError
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core import runtime_memory
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.io import inside
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError
-from market_predictor.research import news_runtime_memory
 from market_predictor.research.swing_oof_policy_evaluation import Learner, publish_saved_oof_policy_evaluation
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.action_evidence import load_corporate_action_evidence
@@ -21,7 +21,7 @@ from market_predictor.swing.labels.frozen_exit import ExitPolicy
 
 
 def _action_memory_guard() -> None:
-    news_runtime_memory.guard(stage="funded corporate-action record projection")
+    runtime_memory.guard(stage="funded corporate-action record projection")
 
 
 def register_saved_oof_policy_command(app: typer.Typer) -> None:

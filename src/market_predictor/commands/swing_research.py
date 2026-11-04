@@ -40,6 +40,33 @@ from market_predictor.swing.sentiment_history import score_alpaca_news_history
 
 
 def register_swing_research_commands(app: typer.Typer, console: Console) -> None:
+    @app.command("publish-observed-return-features")
+    def publish_observed_return_features_command(
+        request_path: Path = typer.Option(..., "--request", help="Typed observed-input registration JSON."),
+        output_directory: Path = typer.Option(..., help="New immutable feature generation directory."),
+        root: Path = typer.Option(Path(".")),
+        maximum_source_bytes: int = typer.Option(536_870_912, min=1),
+        maximum_source_rows: int = typer.Option(2_000_000, min=1),
+        maximum_snapshot_rows: int = typer.Option(2_000, min=1),
+    ) -> None:
+        """Construct frozen-model inputs from registered observed authorities; never fit models."""
+        from market_predictor.core.json_integrity import parse_strict_json_object
+        from market_predictor.research.observed_return_publication import publish_observed_return_features
+        from market_predictor.swing.features.observed_return_publication import ObservedReturnPublicationRequest
+
+        if request_path.stat().st_size > 1024**2:
+            raise typer.BadParameter("Observed-input registration exceeds the one-MiB metadata budget.")
+        request = ObservedReturnPublicationRequest.model_validate(
+            parse_strict_json_object(request_path.read_bytes(), label="observed return publication request"))
+        try:
+            report = publish_observed_return_features(root=root, request=request, output_directory=output_directory,
+                maximum_source_bytes=maximum_source_bytes, maximum_source_rows=maximum_source_rows,
+                maximum_snapshot_rows=maximum_snapshot_rows)
+        except HeavyJobBusyError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=HEAVY_JOB_BUSY_EXIT_CODE) from exc
+        typer.echo(json.dumps({key: report[key] for key in ("status", "manifest_sha256")}, sort_keys=True))
+
     @app.command("plan-swing-initial-fit-raw-prices")
     def plan_swing_initial_fit_raw_prices_command(
         root: Path = typer.Option(Path(".")),

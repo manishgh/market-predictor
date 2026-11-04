@@ -416,7 +416,7 @@ def test_publication_uses_one_provider_lease_and_preserves_every_selected_gap(
         "maximum_system_pause_seconds": 120.0, "system_memory_poll_seconds": 5.0,
         "minimum_system_free_gib": None, "maximum_process_memory_gib": 5.0,
         "process_headroom_gib": 0.75, "historical_training_policy_unchanged": True}
-    for name in ("research/news_runtime_memory.py", "commands/swing_oof_policy_evaluation.py",
+    for name in ("core/runtime_memory.py", "commands/swing_oof_policy_evaluation.py",
             "swing/datasets/action_evidence.py", "swing/datasets/corrected_outcomes.py", "swing/datasets/action_scope.py"):
         key = f"src/market_predictor/{name}"
         assert request["implementation_files"][key] == report["source_files"][key]

@@ -1,313 +1,87 @@
+"""Historical bundle verification remains read-only after writer retirement."""
 from __future__ import annotations
 
 import json
-import tempfile
-import unittest
-from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.production_cli import app
-from market_predictor.release import publish_local_release
-from market_predictor.serving.bundle import (
-    activate_serving_bundle,
-    load_active_serving_bundle,
-    publish_serving_bundle,
-    rollback_serving_bundle,
-    verify_serving_bundle,
-)
+from market_predictor.serving import bundle as historical
 from market_predictor.swing.contracts import SWING_FEATURE_SCHEMA_VERSION
-from tests.r4_fixtures import test_signing_material as signing_material_for_test
-from tests.support.swing_release import promoted_swing_candidate
-from tests.test_feature_store import _frame as swing_frame
-from tests.test_feature_store import _publish as publish_swing_features
+from tests.support.historical_serving_bundle import (
+    historical_bundle_fixture,
+    historical_bundle_inputs,
+    historical_bundle_timestamp,
+)
+
+RETIRED_BUNDLE_COMMANDS = ("publish-serving-bundle", "activate-serving-bundle", "rollback-serving-bundle",
+                          "verify-serving-bundle", "show-active-serving-bundle")
 
 
-class ServingBundleTests(unittest.TestCase):
-    def test_cli_publishes_complete_bundle(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            repository = root / "repository"
-            _, trust_store, _ = signing_material_for_test()
-            model, evidence = promoted_swing_candidate(root / "source", "cli-bundle")
-            release = publish_local_release(repository, model_path=model,
-                evidence_manifest_path=evidence, activate=False,
-                attestation_trust_store_path=trust_store)
-            release_id = str(release["release_id"])
-            store = LiveFeatureStore(root)
-            publish_swing_features(store, swing_frame(), _timestamp())
-            feature_path, _ = store.paths("swing")
-
-            result = CliRunner().invoke(
-                app,
-                [
-                    "publish-serving-bundle",
-                    "--mode",
-                    "swing",
-                    "--horizon",
-                    "10b",
-                    "--model-release-id",
-                    release_id,
-                    "--feature-snapshot",
-                    str(feature_path),
-                    "--release-root",
-                    str(repository),
-                    "--attestation-trust-store",
-                    str(trust_store),
-                    "--generated-at",
-                    _timestamp().isoformat(),
-                ],
-            )
-
-            self.assertEqual(
-                result.exit_code,
-                0,
-                msg=f"{result.output}\n{result.exception}",
-            )
-            self.assertTrue((repository / "active_serving_bundle.json").is_file())
-
-    def test_publishes_and_loads_one_complete_atomic_bundle(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            repository, trust_store, release_id, feature_path = _inputs(root, "one")
-
-            published = publish_serving_bundle(
-                repository,
-                mode="swing",
-                horizon="10b",
-                model_release_id=release_id,
-                feature_path=feature_path,
-                attestation_trust_store_path=trust_store,
-                generated_at=_timestamp(),
-            )
-            active = load_active_serving_bundle(
-                repository,
-                attestation_trust_store_path=trust_store,
-                as_of=_timestamp(),
-            )
-
-            self.assertEqual(active["bundle"]["bundle_id"], published["bundle_id"])
-            self.assertEqual(active["bundle"]["model_release_id"], release_id)
-            self.assertEqual(
-                active["bundle"]["feature_schema_version"],
-                SWING_FEATURE_SCHEMA_VERSION,
-            )
-            self.assertEqual(
-                active["bundle"]["calibration_method"],
-                "isotonic_prior_fold_only",
-            )
-
-    def test_partial_bundle_never_replaces_active_pointer(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            repository, trust_store, release_id, feature_path = _inputs(root, "complete")
-            complete = publish_serving_bundle(
-                repository,
-                mode="swing",
-                horizon="10b",
-                model_release_id=release_id,
-                feature_path=feature_path,
-                attestation_trust_store_path=trust_store,
-                generated_at=_timestamp(),
-            )
-            partial_id = "f" * 64
-            partial = repository / "serving_bundles" / partial_id
-            partial.mkdir(parents=True)
-            (partial / "bundle.json").write_text("{}", encoding="utf-8")
-
-            with self.assertRaises(DataReadinessError):
-                activate_serving_bundle(
-                    repository,
-                    partial_id,
-                    attestation_trust_store_path=trust_store,
-                    activated_at=_timestamp(),
-                )
-
-            active = load_active_serving_bundle(
-                repository,
-                attestation_trust_store_path=trust_store,
-                as_of=_timestamp(),
-            )
-            self.assertEqual(active["bundle"]["bundle_id"], complete["bundle_id"])
-
-    def test_feature_mutation_invalidates_bundle(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            repository, trust_store, release_id, feature_path = _inputs(root, "mutation")
-            published = publish_serving_bundle(
-                repository,
-                mode="swing",
-                horizon="10b",
-                model_release_id=release_id,
-                feature_path=feature_path,
-                attestation_trust_store_path=trust_store,
-                generated_at=_timestamp(),
-                activate=False,
-            )
-            bundle_id = str(published["bundle_id"])
-            bundled_feature = (
-                repository
-                / "serving_bundles"
-                / bundle_id
-                / "features"
-                / "features.parquet"
-            )
-            bundled_feature.write_bytes(b"mutated")
-
-            with self.assertRaisesRegex(DataReadinessError, "feature artifact integrity"):
-                verify_serving_bundle(
-                    repository,
-                    bundle_id,
-                    attestation_trust_store_path=trust_store,
-                    as_of=_timestamp(),
-                )
-
-    def test_rollback_targets_verified_immediately_previous_bundle(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            repository, trust_store, first_release, feature_path = _inputs(root, "first")
-            first = publish_serving_bundle(
-                repository,
-                mode="swing",
-                horizon="10b",
-                model_release_id=first_release,
-                feature_path=feature_path,
-                attestation_trust_store_path=trust_store,
-                generated_at=_timestamp(),
-            )
-            second_model, second_evidence = promoted_swing_candidate(root / "second", "second")
-            second_release = publish_local_release(
-                repository,
-                model_path=second_model,
-                evidence_manifest_path=second_evidence,
-                attestation_trust_store_path=trust_store,
-                activate=False,
-            )
-            second = publish_serving_bundle(
-                repository,
-                mode="swing",
-                horizon="10b",
-                model_release_id=str(second_release["release_id"]),
-                feature_path=feature_path,
-                attestation_trust_store_path=trust_store,
-                generated_at=_timestamp() + timedelta(minutes=1),
-            )
-
-            rolled_back = rollback_serving_bundle(
-                repository,
-                str(first["bundle_id"]),
-                attestation_trust_store_path=trust_store,
-                activated_at=_timestamp() + timedelta(minutes=2),
-            )
-
-            self.assertEqual(rolled_back["bundle_id"], first["bundle_id"])
-            self.assertEqual(rolled_back["previous_bundle_id"], second["bundle_id"])
-
-    def test_concurrent_activation_leaves_one_verified_generation(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            repository, trust_store, first_release, feature_path = _inputs(root, "one")
-            bundle_ids: list[str] = []
-            for marker, release_id in (("one", first_release), ("two", "")):
-                if not release_id:
-                    model, evidence = promoted_swing_candidate(root / marker, marker)
-                    release = publish_local_release(
-                        repository,
-                        model_path=model,
-                        evidence_manifest_path=evidence,
-                        attestation_trust_store_path=trust_store,
-                        activate=False,
-                    )
-                    release_id = str(release["release_id"])
-                bundle = publish_serving_bundle(
-                    repository,
-                    mode="swing",
-                    horizon="10b",
-                    model_release_id=release_id,
-                    feature_path=feature_path,
-                    attestation_trust_store_path=trust_store,
-                    generated_at=_timestamp(),
-                    activate=False,
-                )
-                bundle_ids.append(str(bundle["bundle_id"]))
-
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                pointers = list(
-                    pool.map(
-                        lambda bundle_id: activate_serving_bundle(
-                            repository,
-                            bundle_id,
-                            attestation_trust_store_path=trust_store,
-                            activated_at=_timestamp(),
-                        ),
-                        bundle_ids,
-                    )
-                )
-
-            active = load_active_serving_bundle(
-                repository,
-                attestation_trust_store_path=trust_store,
-                as_of=_timestamp(),
-            )
-            self.assertIn(active["bundle"]["bundle_id"], bundle_ids)
-            self.assertEqual(
-                {str(pointer["bundle_id"]) for pointer in pointers},
-                set(bundle_ids),
-            )
-
-    def test_manifest_policy_mutation_breaks_content_identity(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            repository, trust_store, release_id, feature_path = _inputs(root, "policy")
-            published = publish_serving_bundle(
-                repository,
-                mode="swing",
-                horizon="10b",
-                model_release_id=release_id,
-                feature_path=feature_path,
-                attestation_trust_store_path=trust_store,
-                generated_at=_timestamp(),
-                activate=False,
-            )
-            bundle_id = str(published["bundle_id"])
-            manifest_path = repository / "serving_bundles" / bundle_id / "bundle.json"
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            manifest["prediction_policy_sha256"] = "0" * 64
-            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-
-            with self.assertRaisesRegex(DataReadinessError, "content hash"):
-                verify_serving_bundle(
-                    repository,
-                    bundle_id,
-                    attestation_trust_store_path=trust_store,
-                    as_of=_timestamp(),
-                )
+@pytest.fixture
+def recorded(tmp_path: Path) -> tuple[Path, Path, dict[str, object]]:
+    repository, trust, release_id, features = historical_bundle_inputs(tmp_path, "recorded")
+    return repository, trust, historical_bundle_fixture(repository, trust, release_id, features)
 
 
-def _inputs(root: Path, marker: str) -> tuple[Path, Path, str, Path]:
-    repository = root / "repository"
-    _, trust_store, _ = signing_material_for_test()
-    model, evidence = promoted_swing_candidate(root / "models" / marker, marker)
-    release = publish_local_release(
-        repository,
-        model_path=model,
-        evidence_manifest_path=evidence,
-        attestation_trust_store_path=trust_store,
-        activate=False,
-    )
-    store = LiveFeatureStore(root)
-    publish_swing_features(store, swing_frame(), _timestamp())
-    feature_path, _ = store.paths("swing")
-    return repository, trust_store, str(release["release_id"]), feature_path
+@pytest.mark.parametrize("command", RETIRED_BUNDLE_COMMANDS)
+def test_obsolete_bundle_commands_cannot_change_recorded_pointer(recorded, command: str) -> None:
+    repository, _, _ = recorded
+    pointer = repository / "active_serving_bundle.json"
+    before = pointer.read_bytes()
+    result = CliRunner().invoke(app, [command])
+    assert result.exit_code == 2
+    assert "No such command" in result.output
+    assert pointer.read_bytes() == before
 
 
-def _timestamp() -> datetime:
-    return datetime(2026, 7, 10, 22, 5, tzinfo=UTC)
+def test_historical_owner_has_no_publication_or_activation_path() -> None:
+    for name in ("publish_serving_bundle", "activate_serving_bundle", "rollback_serving_bundle"):
+        assert not hasattr(historical, name)
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_complete_historical_bundle_is_verified_without_mutation(recorded) -> None:
+    repository, trust, bundle = recorded
+    before = {path.relative_to(repository): path.read_bytes() for path in repository.rglob("*") if path.is_file()}
+    active = historical.load_active_serving_bundle(repository, attestation_trust_store_path=trust,
+                                                   as_of=historical_bundle_timestamp())
+    assert active["bundle"]["bundle_id"] == bundle["bundle_id"]
+    assert active["bundle"]["feature_schema_version"] == SWING_FEATURE_SCHEMA_VERSION
+    assert active["bundle"]["calibration_method"] == "isotonic_prior_fold_only"
+    assert {path.relative_to(repository): path.read_bytes() for path in repository.rglob("*") if path.is_file()} == before
+
+
+def test_feature_mutation_invalidates_historical_bundle(recorded) -> None:
+    repository, trust, bundle = recorded
+    feature = repository / "serving_bundles" / str(bundle["bundle_id"]) / "features/features.parquet"
+    feature.write_bytes(b"mutated")
+    with pytest.raises(DataReadinessError, match="feature artifact integrity"):
+        historical.verify_serving_bundle(repository, str(bundle["bundle_id"]), attestation_trust_store_path=trust,
+                                         as_of=historical_bundle_timestamp())
+
+
+def test_manifest_policy_mutation_breaks_historical_content_identity(recorded) -> None:
+    repository, trust, bundle = recorded
+    path = repository / "serving_bundles" / str(bundle["bundle_id"]) / "bundle.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest["prediction_policy_sha256"] = "0" * 64
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(DataReadinessError, match="content hash"):
+        historical.verify_serving_bundle(repository, str(bundle["bundle_id"]), attestation_trust_store_path=trust,
+                                         as_of=historical_bundle_timestamp())
+
+
+def test_partial_historical_bundle_cannot_replace_recorded_pointer(recorded) -> None:
+    repository, trust, _ = recorded
+    pointer = repository / "active_serving_bundle.json"
+    before = pointer.read_bytes()
+    directory = repository / "serving_bundles" / ("f" * 64)
+    directory.mkdir()
+    (directory / "bundle.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(DataReadinessError):
+        historical.verify_serving_bundle(repository, "f" * 64, attestation_trust_store_path=trust,
+                                         as_of=historical_bundle_timestamp())
+    assert pointer.read_bytes() == before

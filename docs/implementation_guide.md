@@ -42,8 +42,13 @@ Prospective news/SIP collection, canonical bar clocks and swing training remain.
 `serving/admission.py` checks the current product boundary for production release
 commands. `commands/release.py` prechecks a promoted swing candidate, publishes with
 activation disabled, rechecks the exact immutable release manifest, then optionally
-activates. Local/bundle activation and rollback reject retired models; bundles must
-be swing `10b`. Historical artifact verification remains read-only. A source
+activates. Local-release activation and rollback reject retired models. The old
+`publish-serving-bundle`, activation, rollback, verification and show-active CLI
+commands are removed: their `serving_bundles/` artifacts and root
+`active_serving_bundle.json` pointer were not consumed by the current API. `serving/bundle.py` retains read-only historical
+verification. Current model inference reads `active_generation.json` and
+`generations/<id>` through `serving/swing_inference.py`; no new promotion or
+activation path is supplied by this retirement. A source
 replacement race can leave a rejected, nonactive artifact, retained as evidence.
 `commands/production.py` rejects non-swing feature publication before reading data.
 Internal historical domain contracts are not a compatibility promise or complete

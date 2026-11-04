@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 from uuid import uuid4
 
+from market_predictor.admission import InferenceAdmissionController
 from market_predictor.api_security import (
     API_SCOPES,
     ApiAuthenticator,
@@ -29,6 +30,9 @@ from market_predictor.core.prediction_contracts import (
     PredictionServiceError,
     PredictionValidationError,
 )
+from market_predictor.research_api.forecast import ReturnForecastService
+from market_predictor.research_api.routes import register_return_model_routes
+from market_predictor.research_api.service import ResearchModelService
 from market_predictor.serving.investment_replay import AlpacaReplayPriceProvider, InvestmentReplayService
 from market_predictor.serving.prediction_service import (
     PredictionService,
@@ -58,6 +62,7 @@ def create_app(
     rate_limiter: PrincipalRateLimiter | None = None,
     maximum_body_bytes: int | None = None,
     replay_enabled: bool | None = None,
+    return_model_service: ResearchModelService | None = None,
 ) -> FastAPI:
     if FastAPI is None:
         raise RuntimeError("FastAPI is not installed. Install the api extras/dependencies before serving.")
@@ -121,7 +126,7 @@ def create_app(
 
     app = FastAPI(
         title="Market Predictor API",
-        version="0.1.0",
+        version="1",
         description="Prediction intelligence for long-only swing; no order execution.",
         lifespan=lifespan,
         docs_url=None if configured_security.mode == "entra" else "/docs",
@@ -308,6 +313,21 @@ def create_app(
             raise PredictionReadinessError
         return _run_replay(configured_replay_service, request, runtime_telemetry)
 
+    return_models = return_model_service or ResearchModelService(Path(getattr(prediction_service, "root", ".")))
+    forecast_budget = settings.runtime_memory_budget_gib if settings is not None else getattr(prediction_service, "memory_budget_gib", 5.0)
+    forecast_headroom = (settings.runtime_memory_headroom_gib if settings is not None
+                         else getattr(prediction_service, "memory_headroom_gib", 0.75))
+    shared_admission = getattr(prediction_service, "admission", None)
+    if shared_admission is None:
+        shared_admission = InferenceAdmissionController(max_concurrent_requests=1,
+            memory_budget_gib=forecast_budget, memory_headroom_gib=forecast_headroom)
+    forecast_reservation = (settings.runtime_inference_memory_reservation_gib if settings is not None
+                            else getattr(prediction_service, "inference_memory_reservation_gib", 0.5))
+    register_return_model_routes(app, return_models, ReturnForecastService(return_models,
+        memory_budget_gib=forecast_budget, memory_headroom_gib=forecast_headroom,
+        admission=shared_admission, inference_memory_reservation_gib=forecast_reservation),
+        max_tickers_per_request=settings.runtime_max_tickers_per_request if settings is not None
+        else getattr(prediction_service, "max_tickers_per_request", 100))
     return app
 
 
@@ -418,6 +438,9 @@ def _boundary_error(
 def _required_scope(method: str, path: str) -> str | None:
     return {
         ("POST", "/v1/predictions/swing"): "predictions.read",
+        ("GET", "/v1/research/models"): "predictions.read",
+        ("POST", "/v1/research/predict"): "predictions.read",
+        ("POST", "/v1/research/forecast"): "predictions.read",
         ("GET", "/v1/operations/health"): "operations.read",
         ("GET", "/v1/metrics"): "metrics.read",
         ("POST", "/v1/replays/investment"): "replay.execute",

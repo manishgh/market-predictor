@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 
 from market_predictor.commands import swing_oof_policy_evaluation as command
+from market_predictor.core import runtime_memory as runtime
 from market_predictor.core.errors import MemoryBudgetError
 from market_predictor.core.system_memory import SystemMemory
-from market_predictor.research import news_runtime_memory as runtime
 from market_predictor.research import swing_oof_policy_evaluation as oof
 
 

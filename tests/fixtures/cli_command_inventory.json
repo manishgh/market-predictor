@@ -31,14 +31,12 @@
   ],
   "production": [
     "activate-local-release",
-    "activate-serving-bundle",
     "build-outcome-performance-report",
     "collect-outcome-bars",
     "mature-outcomes",
     "publish-drift-assessment",
     "publish-live-features",
     "publish-local-release",
-    "publish-serving-bundle",
     "publish-swing-live-inputs",
     "quarantine-outcome-receipt",
     "record-monitoring-not-run",
@@ -46,12 +44,9 @@
     "register-outcome-intents",
     "register-session-predictions",
     "rollback-local-release",
-    "rollback-serving-bundle",
     "serve-api",
     "show-active-local-release",
-    "show-active-serving-bundle",
-    "verify-local-release",
-    "verify-serving-bundle"
+    "verify-local-release"
   ],
   "research": [
     "attribute-alpaca-news-history",
@@ -104,6 +99,7 @@
     "publish-edge-sec-identity-authority",
     "publish-edge-swing-analyst-revision-ablation",
     "publish-issuer-review-packets",
+    "publish-observed-return-features",
     "publish-sec-acceptance-clock",
     "publish-swing-issuer-family-cohort",
     "publish-verified-universe",

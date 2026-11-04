@@ -15,12 +15,12 @@ from pandas.testing import assert_frame_equal
 
 from market_predictor.canonical.cutoffs import swing_prediction_cutoffs
 from market_predictor.canonical.store import file_sha256, manifest_path_for
+from market_predictor.core import runtime_memory
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.temporal_manifest import build_temporal_schedule, load_temporal_manifest_config
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.modeling.strategy_contract import StrategyContract, load_strategy_contract
-from market_predictor.research import news_runtime_memory
 from market_predictor.research.news_decision_features import NEWS_COLUMNS
 from market_predictor.research.news_decision_verification import validate_news_decision_receipt
 from market_predictor.research.swing_holding_spool import temporary_holding_spool
@@ -119,7 +119,7 @@ def _require(condition: bool, message: str) -> None:
 
 
 def _guard() -> None:
-    news_runtime_memory.guard(stage="saved OOF policy evaluation")
+    runtime_memory.guard(stage="saved OOF policy evaluation")
 
 
 def _profile_guard(profile: str) -> None:
@@ -504,9 +504,9 @@ def publish_saved_oof_policy_evaluation(
                "corporate_action_assumptions": (corporate_context.policy.model_dump(mode="json")
                                                  if corporate_context is not None else None),
                "historical_target_and_model_artifacts_unchanged": True,
-               "memory_policy": {"maximum_system_used_percent": news_runtime_memory.MAXIMUM_SYSTEM_USED_PERCENT,
-                   "maximum_system_pause_seconds": news_runtime_memory.MAXIMUM_SYSTEM_PAUSE_SECONDS,
-                   "system_memory_poll_seconds": news_runtime_memory.SYSTEM_MEMORY_POLL_SECONDS,
+               "memory_policy": {"maximum_system_used_percent": runtime_memory.MAXIMUM_SYSTEM_USED_PERCENT,
+                   "maximum_system_pause_seconds": runtime_memory.MAXIMUM_SYSTEM_PAUSE_SECONDS,
+                   "system_memory_poll_seconds": runtime_memory.SYSTEM_MEMORY_POLL_SECONDS,
                    "minimum_system_free_gib": None, "maximum_process_memory_gib": 5.0,
                    "process_headroom_gib": 0.75, "historical_training_policy_unchanged": True},
                "selection_metadata": {"scope": "full_saved_monthly_cohort_before_oof_or_scope_filtering",

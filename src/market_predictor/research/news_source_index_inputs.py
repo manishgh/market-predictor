@@ -14,6 +14,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 from market_predictor.catalysts.issuer_events.news_query_scope import SourcePin
+from market_predictor.core import runtime_memory as memory
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.io import inside
 from market_predictor.research import news_runtime_memory as runtime
@@ -21,6 +22,7 @@ from market_predictor.research import news_source_links as original
 from market_predictor.swing.datasets.return_relationship_integrity import pins, read_object
 
 IMPLEMENTATION_PATHS = (
+    "core/runtime_memory.py",
     "research/news_source_index_inputs.py", "swing/datasets/return_relationship_integrity.py",
     "catalysts/issuer_events/news_query_scope.py", "core/json_integrity.py", "evidence/io.py",
 )
@@ -56,7 +58,7 @@ def _inventory(directory: Path) -> None:
 def open_news_source_link_index(*, root: Path, index: SourcePin) -> Iterator[ConsumedNewsSourceLinkReader]:
     """Open the original read-only SQLite reader under the caller's existing lease."""
     root = root.resolve()
-    runtime.guard("saved source-link index input")
+    memory.guard("saved source-link index input")
     files: dict[str, str] = {}
     path = runtime.pin_file(root, index.path, index.sha256, files)
     _require(path.name == "_manifest.json", "source-index consumption requires a manifest pin")

@@ -153,6 +153,25 @@ def test_future_technical_clock_is_rejected_by_shared_kernel() -> None:
         n.build_news_month(parent=parent, reader=Reader(_source()))
 
 
+def test_observed_composition_uses_same_kernel_and_refuses_proxy_versions() -> None:
+    source = _source()
+    observed = replace(source,
+        versions=tuple(replace(item, semantics="observed") for item in source.versions),
+        links=tuple(replace(item, semantics="observed") for item in source.links))
+    expected = n.build_news_month(parent=_parent(), reader=Reader(source))
+    actual = n.build_news_month(parent=_parent(), reader=Reader(observed), purpose="observed_live")
+    pd.testing.assert_frame_equal(expected.rows, actual.rows, check_exact=True)
+    with pytest.raises(ValueError, match="historical proxies"):
+        n.build_news_month(parent=_parent(), reader=Reader(source), purpose="observed_live")
+
+
+def test_observed_unknown_coverage_is_not_news_absence() -> None:
+    result = n.build_news_month(parent=_parent(), reader=Reader(SourceLinkedNewsSlice((), (), ())),
+                                purpose="observed_live")
+    assert result.rows.news_direct_earnings_present_3d.isna().all()
+    assert result.rows.news_direct_source_coverage_known_alpaca_3d.eq(0).all()
+
+
 def _fixture(root: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     months = ("2024-01", "2024-02")
     parts = {months[0]: _parent(), months[1]: _parent(cut=datetime(2024, 2, 10, 22, tzinfo=UTC), ids=("d3", "d4"))}

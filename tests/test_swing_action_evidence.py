@@ -68,8 +68,8 @@ def test_accidental_cached_record_mutation_rejected(inventory: dict[str, Any]) -
 def test_funded_guard_replaces_old_system_floor_without_changing_evidence(
     inventory: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from market_predictor.core import runtime_memory as runtime
     from market_predictor.core.system_memory import SystemMemory
-    from market_predictor.research import news_runtime_memory as runtime
     report = _run(inventory, _empty)
     original = _load(inventory, report["audit_sha256"])
     monkeypatch.setattr(action_evidence, "assert_system_memory_available",

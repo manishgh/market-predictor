@@ -11,13 +11,11 @@ from typing import Any
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.evidence.io import inside
-from market_predictor.swing.training.return_artifacts import verify_unit
+from market_predictor.swing.training.return_artifacts import TARGET, verify_completed_return_run, verify_unit
 
 CATALOG_SCHEMA = "market_predictor.research_model_catalog"
 FAMILIES = {"ridge": "regularized_linear_return", "xgboost": "shallow_boosted_return"}
 PROFILES = {"technical": "existing_technical", "relationships": "technical_relationships", "news": "technical_relationships_news"}
-TARGET = "spy_fixed_horizon_excess_return"
-FLAGS = ("serving_eligible", "promotion_eligible", "portfolio_evaluated", "outer_validation_opened", "historical_test_opened")
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,7 +45,7 @@ def pinned_object(path: Path, digest: str) -> dict[str, Any]:
 def load_research_model_specs(catalog_path: Path, *, repository_root: Path) -> dict[str, ResearchModelSpec]:
     with catalog_path.open("rb") as handle:
         payload = tomllib.load(handle)
-    if payload.get("schema") != CATALOG_SCHEMA or set(payload) != {"schema", "profiles"}:
+    if payload.get("schema") != CATALOG_SCHEMA or set(payload).difference({"schema", "profiles", "forecast"}):
         raise ValueError("research catalog must contain the current return profiles")
     specs = {}
     seen = set()
@@ -70,20 +68,10 @@ def load_research_model_specs(catalog_path: Path, *, repository_root: Path) -> d
 
 
 def load_run(spec: ResearchModelSpec) -> tuple[dict[str, Any], dict[str, Any]]:
-    manifest = pinned_object(spec.artifact_directory / "_manifest.json", spec.manifest_sha256)
-    request = pinned_object(spec.artifact_directory / "_request.json", manifest["request_sha256"])
-    if (manifest.get("schema") != "market_predictor.swing_return_training"
-            or manifest.get("status") != "complete_research_only"
-            or request.get("schema") != "market_predictor.swing_return_training_request"
-            or any(record.get(flag) is not False for record in (manifest, request) for flag in FLAGS)
-            or request["policy"]["target"] != TARGET
-            or request["policy"]["feature_profile"] != PROFILES[spec.profile]):
-        raise DataReadinessError("completed research return scope or profile differs")
-    expected = {f"{family}/{scope}/fold-{fold}" for family in FAMILIES.values()
-                for scope in ("temporal", "security_transfer") for fold in range(1, 5)}
-    expected |= {f"{family}/final_refit" for family in FAMILIES.values()}
-    if set(manifest["units"]) != expected or [fold["number"] for fold in request["folds"]] != [1, 2, 3, 4]:
-        raise DataReadinessError("research return run has an incomplete fit inventory")
+    manifest, request = verify_completed_return_run(spec.artifact_directory,
+        manifest_sha256=spec.manifest_sha256, maximum_metadata_bytes=4 * 1024**2)
+    if request["policy"]["feature_profile"] != PROFILES[spec.profile]:
+        raise DataReadinessError("completed research return profile differs")
     return manifest, request
 
 
