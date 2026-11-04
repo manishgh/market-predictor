@@ -1,6 +1,65 @@
 # Active Edge Rebuild Handoff
 
-### Unexpected campaign and monitor interruption — October 26 12:49 UTC
+### V1 API checkpoint — November 4 (fresh-data activation pending)
+
+Active branch: codex/v1-trained-return-api. Code d07e176 is committed and pushed;
+the original codex/v1-canonical-cleanup branch was pushed through 43843e1 first.
+The active code has one V1 API application and one shared route/security boundary.
+Optional workbench factory, Swagger bearer authorization, schemas and examples are
+in docs/research_api.md. Historical and fresh routes accept model_id+tickers;
+history also requires exact session_date, and fresh accepts optional aware as_of.
+Clients do not submit raw news, prices, feature vectors or artifact paths.
+
+Historical access is VERIFIED: all six actual ASGI responses exactly equal retained
+temporal OOF predictions. Six original final models also produced finite outputs
+from real retained ordered inputs in a separately scoped functional check; those
+outputs are not fresh, OOF, performance or deployment evidence. All six original
+model hashes remain unchanged. Current observed feature generations are NOT
+registered: all six fresh routes correctly return 503. Fresh activation and Step7
+remain incomplete; no serving/promotion/admission or TCP deployment is claimed.
+
+The observed publisher traverses canonical adjusted/raw/benchmark bars, observed
+membership/news authorities, original cohort and exact 120/124/209 feature kernels.
+It preserves raw dollar volume, complete peer population, actual observation clocks,
+missing values, abstentions and fitted preprocessing. Existing naming-only saved
+configuration evidence resolves original strategy pins without rewriting them.
+Run publish-observed-return-features with typed registered authorities, then bind
+its immutable directory+manifestSHA in the catalog and verify actual fresh requests.
+No current observed authority/data collection or fresh performance proof was run.
+
+Three agents reviewed API/runtime,44 collection/canonical/features/training modules,
+and ML fitting/serving/registry wiring. Supported findings were fixed: shared memory
+and completed-run owners; canonical errors/request bounds; causal fresh composition;
+shared inference admission; shared raw-score/calibration extraction; retired obsolete
+serving-bundle writers/CLI. Historical bundle readers remain. Current production
+inference reads active_generation.json and generations/<id>; no new promotion path
+or compatibility alias was introduced. This is bounded review, not an exhaustive
+assertion that every repository module has no defects.
+
+Validation selections passed 125 (shared memory/artifacts), 137 (changed consumers),
+393 (feature/API/architecture), 72 (final API/security), 52 (raw-score/inference), and
+43 (retirement/CLI/architecture) cases. Counts overlap and must not be summed as
+unique tests. Ruff on 51 Python files, strict mypy on 30 sources, JS syntax and whitespace passed.
+Full suite UNRUN; component/API checkpoint only. Resolved fixture/setup/helper
+refusals and original attempts are retained in the checkpoint evidence.
+
+Training stock/news Parquet, feature publications and six models remain under
+C:/project/market-predictor/data; the old Codex workspace is absent. Narrow cleanup
+removed 2,774,358,913 logical bytes of signature-verified abandoned private SQLite
+merges/bytecode plus 495,997,919 bytes of this task's completed synthetic UNIT/typecheck
+fixtures. No raw/canonical/feature/model/report/log data was deleted. Remaining
+inventory measured at least 97,564,332,255 bytes; four inaccessible model directories
+prevent a complete total. Do not delete referenced inputs to meet an arbitrary 100 GB.
+
+Durable evidence: C:/Users/manis/Documents/Codex/review-results/v1-trained-return-api-20261104/checkpoint.json
+SHA daecff037a928ec12cb1bbf959db9dff033009b4bb9e4cc72afdf4b13fc97c38.
+Final actual ASGI receipt SHA 4d37bfa2bbaadd7c8edbf6f3a114a0e050d91850e40d98cdd9e91e198c008c9a.
+The 91% / 120 s / 5 s poll / 5 GiB / 0.75 GiB headroom guard functions are AST-identical after moving
+to core/runtime_memory.py. Original requests/models/artifact bytes were retained.
+The interrupted 12-policy campaign stays paused/incomplete; no restart, outer-exit
+or natural completion inference. The 1 ATR amendment and GPU integration remains separate pending work.
+
+### Historical interruption boundary — October 26 12:49 UTC
 
 The eighth evaluation, Price indicators and relationships / XGBoost / stop-loss,
 ten-session limit, is no longer running. Fresh elevated CIM at
