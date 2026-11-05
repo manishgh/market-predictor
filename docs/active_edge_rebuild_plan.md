@@ -1,5 +1,89 @@
 # Active Edge Rebuild Plan
 
+### Evidence and daily forecast continuation — November 5
+
+User authorizes implementation with a design/plan reviewer, an ML engineer,
+independent senior Quant ML verification and code review. Use established libraries
+and canonical project paths; no one-off operational scripts, duplicate calculations,
+new configuration families or broad naming cleanup. Work occurs on
+`codex/model-evidence-pipeline-20261105`, isolated from original data and models.
+
+Ordered checkpoints (only checkpoint 2 is in progress):
+
+1. **Saved outcome availability (`implemented_verified_local`).** Explain the 102,370 unavailable
+   outcomes among 289,802 scored temporal stock-date rows without changing the
+   frozen supervision mask, labels, models or numerical performance metrics.
+   Full supervision requires stock/SPY/QQQ/sector outcomes; a finite SPY target
+   alone is not the existing evaluation criterion. Reuse saved prediction metadata,
+   artifact verification, resource guards and workspace lease. Add a bounded,
+   reusable diagnostic with exact fold/session/security counts, disjoint outcome
+   categories, explicitly overlapping original reason counts, immutable provenance
+   and no estimator deserialization. No provider causation is inferred from a
+   stored reason. Exit: population reconciles to 187,432 known plus 102,370
+   unavailable; finite targets excluded by comparison requirements are separate;
+   focused unit/poison tests, Ruff, strict mypy, real retained-data diagnostic,
+   independent Quant and code reviews pass. Input/model hashes stay unchanged.
+   Failure publishes no report and grants no training or serving permission.
+2. **Economic recovery (`in_progress`).** Inspect retained completion/interruption
+   evidence and original request contracts. Preserve the twelve-policy comparison,
+   models, costs, selected rows and prior receipts. Only a justified fresh request
+   may execute; never resume the interrupted campaign blindly. Any unavailable
+   source/accounting facts remain explicit. No one-ATR or GPU integration.
+3. **Observed forecast inputs (`pending`).** Inventory actual observed source
+   authorities and current coverage, then use the existing publisher and exact
+   120/124/209 feature kernels. Freeze full peer population before ticker selection.
+   Register a verified immutable generation and restart the service because its
+   catalog is loaded at initialization. Verify real research forecasts, including
+   refusal for stale/future/absent evidence. Collection and scheduling use existing
+   owners; do not introduce another feature builder or a custom scheduler.
+4. **Model decision (`pending`).** Complete accepted economic assessment before
+   choosing a model or returning `no_candidate`. A new feature experiment requires
+   a separately frozen hypothesis and comparison. Existing retrospective sources
+   cannot become observed evidence by relabeling. Prospective evidence and
+   return-compatible production admission remain required for actionable output.
+
+The design reviewer approved checkpoint 1 after identifying the full-comparison
+supervision distinction. Senior Quant review independently confirmed it on saved
+metadata. Their implementation and code reviews remain separate exit requirements.
+Past validation results and May 2024 training cutoff are development evidence;
+neither the number of iterations nor model age alone authorizes another refit.
+R7.8 deployment remains deferred. This amendment does not claim the previous
+funded campaign completed or explain its interruption.
+
+November 5 user clarification: download missing candles/news when needed; exclude
+unrecoverable stocks from the next training corpus within a cumulative 10% cap.
+SPY is mandatory and is never part of stock exclusions. Reuse the existing cohort
+contract: original 631 modeled identities, 45 inherited/current exclusions, leaving
+at most 18 further identities (63/631 maximum). Select exclusions from source
+availability/identity evidence, never realized returns. Exclude entire identities
+before peer features, labels and news associations; preserve shared articles needed
+by retained issuers and immutable records referenced by previous model artifacts.
+No-news days and terminal-immature outcomes are not reasons to exclude a stock.
+Missing shared benchmarks require repair rather than removal of affected stocks.
+
+Checkpoint 1 implementation `cc62a91`: 44 focused synthetic UNIT/CLI cases passed,
+Ruff passed four affected files and strict mypy two changed source files (imports
+silent). Independent Sol code and Astra Quant reviews accepted final code. The real
+canonical `audit-saved-swing-outcomes` on the retained technical/Ridge/temporal run
+completed after an 81.182-second host-memory pause recovered from 93.53% to88.74%.
+Report is in the task outputs `outcome-availability-temporal.json`, SHA256
+`08f13c5ce693da9c66551788235a2ec5b1f733674a0b767e5b3a44b68fed15ee`.
+345,036 saved stock-date rows contain 289,802 scored rows:187,432 known outcomes,
+96,864 missing SPY targets and5,506 finite targets excluded by full supervision.
+No original metrics, labels, source files or models were rewritten. Git changes
+remain local; no remote push is claimed or required for the next data assessment.
+
+Checkpoint2 bounded execution: Astra recommends the first uncompleted news cell,
+news/Ridge/target-stop-ten-session, with the existing canonical
+`evaluate-saved-swing-policy` CLI and new output
+`data/research/news_ridge_target_recovery_20261105`. Preserve original model/feature
+pins, 1.5-ATR policy, costs and cohort; use already-reviewed remaining-accounting
+TEL evidence, not the older incomplete gap configuration. News training pins already
+match current strategy/temporal settings; naming correspondence is not required for
+this arm. No old spool or campaign restart. A valid diagnostic publication with
+exit2 is not a failed process merely because it cannot authorize production.
+Record its true economic result separately from pending source admission.
+
 ### V1 API checkpoint — November 4 (fresh-data activation pending)
 
 Active branch: codex/v1-trained-return-api. Code d07e176 is committed and pushed;

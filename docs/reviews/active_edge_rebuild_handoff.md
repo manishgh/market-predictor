@@ -1,5 +1,53 @@
 # Active Edge Rebuild Handoff
 
+### Verified diagnostic; bounded economic recovery — November 5
+
+User requested autonomous implementation with design review, ML engineering,
+independent senior Quant verification and code review. Active implementation branch
+is `codex/model-evidence-pipeline-20261105`, based on clean `9e6f802` at
+`C:/Users/manis/Documents/Codex/2026-11-05/c-project-market-predictor/work/market-predictor`.
+Original `C:/project/market-predictor` retains all data/model artifacts unchanged.
+The active plan now records four ordered checkpoints; only the saved-outcome
+diagnostic is implemented and verified locally (`cc62a91`); only bounded economic
+recovery is in progress. No old evaluation process has been restarted.
+
+Design finding: the original 102,370 unavailable of 289,802 scored temporal rows
+uses a stock/SPY/QQQ/sector supervision mask. A projected inspection found 5,506
+of those excluded rows have finite SPY targets. Preserve the existing mask and
+report the distinction; do not claim every excluded row lacks a SPY outcome.
+The missingness is structured, so saved model errors describe the evaluated
+subset. Source reasons are retained observations, not proof of provider causes.
+
+Verification:44 focused UNIT/CLI tests passed, Ruff passed four affected files,
+strict mypy passed two changed sources with silent imports. Initial CLI cleanup
+permission refusal was resolved with writable workspace TEMP/TMP. Final code review
+by Sol6.1 and deep Quant review by Astra found no remaining scoped defects.
+Full suite unrun: component diagnostic only. Guard/lease/tamper/holdout/overlap
+tests are synthetic UNIT evidence, distinct from the actual retained-data audit.
+
+Real audit completed via canonical CLI against original data root. Initial host
+memory93.53% paused work; at81.182seconds memory88.74% allowed continuation.
+Report `C:/Users/manis/Documents/Codex/2026-11-05/c-project-market-predictor/outputs/outcome-availability-temporal.json`
+SHA256 `08f13c5ce693da9c66551788235a2ec5b1f733674a0b767e5b3a44b68fed15ee`.
+It verifies four temporal folds:345,036 saved rows,289,802 scored,187,432 known,
+96,864 absent SPY target and5,506 finite SPY target/full-comparison exclusions.
+Shared lease released. No model deserialization, fitting or altered metrics.
+
+Next: one fresh canonical news/Ridge/target-stop-ten-session evaluation under
+existing source pins and remaining-accounting TEL policy. New output:
+`data/research/news_ridge_target_recovery_20261105`. Never resume old spool or
+infer its interruption cause. Preserve 1.5ATR and frozen twelve-cell roster.
+Existing relationships/Ridge/stop diagnostics fail economics independently of
+source admission (base/stress annualized SPY differences about-6.56/-11.49pp).
+SPY is mandatory. Current cohort excludes45/631 (7.13%); at most18 additional
+whole identities fit the10% ceiling.48/423 scored identities show persistent
+stock-component gaps; do not exclude all or cherry-pick18 based on returns.
+No extra exclusions or corpus deletion have been performed.
+
+All six models stay frozen and non-actionable. Fresh observed publication is
+still absent; production return admission and prospective evidence remain pending.
+New commits are local only; no external push or model improvement is claimed.
+
 ### V1 API checkpoint — November 4 (fresh-data activation pending)
 
 Active branch: codex/v1-trained-return-api. Code d07e176 is committed and pushed;
