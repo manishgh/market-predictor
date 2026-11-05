@@ -4,12 +4,32 @@ from pathlib import Path
 
 import typer
 
+from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
+from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError
 from market_predictor.research.swing_return_training import train_swing_returns
+from market_predictor.swing.training.outcome_diagnostics import audit_saved_outcomes
 from market_predictor.swing.training.retained_runs import verify_completed_run_integrity
 from market_predictor.swing.training.return_comparison import compare_saved_returns
 
 
 def register_swing_return_training_command(app: typer.Typer) -> None:
+    @app.command("audit-saved-swing-outcomes")
+    def audit_outcomes(root: Path = typer.Option(...), directory: Path = typer.Option(...),
+        manifest_sha256: str = typer.Option(...), output: Path = typer.Option(...),
+        family: str = typer.Option("regularized_linear_return"),
+        scope: str = typer.Option("temporal")) -> None:
+        """Explain retained outcome availability without changing training or evaluation."""
+        try:
+            result = audit_saved_outcomes(root=root, directory=directory, manifest_sha256=manifest_sha256,
+                output=output, family=family, scope=scope)
+        except HeavyJobBusyError as error:
+            typer.echo(str(error), err=True)
+            raise typer.Exit(code=HEAVY_JOB_BUSY_EXIT_CODE) from error
+        except (DataReadinessError, MemoryBudgetError, OSError, ValueError) as error:
+            typer.echo(str(error), err=True)
+            raise typer.Exit(code=2) from error
+        typer.echo(json.dumps({key: result[key] for key in ("status", "report_sha256")}, sort_keys=True))
+
     @app.command("compare-saved-swing-returns")
     def compare(root: Path = typer.Option(...), baseline: Path = typer.Option(...),
         baseline_sha256: str = typer.Option(...), candidate: Path = typer.Option(...),

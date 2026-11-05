@@ -55,6 +55,20 @@ did not fit. `_request.json` records the fitting recipe and source pins;
 `_manifest.json` identifies the resulting files by hash. A backtest report is a
 separate economic evaluation, not another training result.
 
+Use `market-predictor-research audit-saved-swing-outcomes --root <data-root>
+--directory <retained-run> --manifest-sha256 <run-manifest-hash> --output <new-report.json>`
+to explain unavailable saved outcomes before collecting replacement data or changing
+training. It reads four retained scoring folds without loading models. The default
+is Ridge temporal validation; `--family shallow_boosted_return` and
+`--scope security_transfer` select the other frozen learner or held-out-security
+scope. The output is immutable and retains source and implementation identities.
+Counts separate missing SPY targets from finite SPY targets rejected by the existing
+stock/SPY/QQQ/sector supervision requirement. Role-specific reasons can overlap;
+their counts must not be summed as unique rows. This audit does not change labels,
+calculate new performance metrics, authorize exclusions, refit or promote a model.
+The original data root also owns the shared heavy-job lease when code runs from an
+isolated worktree; the output may be an explicit absolute path in the review workspace.
+
 Training is complete. The accounting repairs are verified and funded backtests
 are running. Production acceptance is pending: the current production serving
 contract consumes classifier probabilities, while these models predict signed

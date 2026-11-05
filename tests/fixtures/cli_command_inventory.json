@@ -53,6 +53,7 @@
     "audit-alpaca-news-history",
     "audit-edge-rebuild-swing-ordering",
     "audit-promotion-readiness",
+    "audit-saved-swing-outcomes",
     "audit-swing-accounting-control",
     "audit-swing-holding-identity",
     "audit-swing-holding-observations",

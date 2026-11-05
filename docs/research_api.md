@@ -52,7 +52,7 @@ final model's training cutoff. Missing, stale or future inputs refuse the reques
 Current fresh-input publication is a separate data requirement; the HTTP request
 does not collect prices/news, build features or refit the model.
 
-The daily input job runs `market-predictor publish-observed-return-features
+The daily input job runs `market-predictor-research publish-observed-return-features
 --request <registration.json> --output-directory <new-generation>`. Its typed
 registration binds adjusted stock history, separate raw decision bars, benchmark
 history, observed membership and news authorities, the original research cohort,
@@ -71,6 +71,13 @@ population and implementation before inference. The current catalog intentionall
 has no registered observed generation: historical access is verified, while fresh
 requests return 503 until suitable observed sources are published. No current
 fresh-data or deployment proof has been completed.
+
+The service loads this catalog when it starts. After registering a new immutable
+generation, recreate or restart the service before requesting that generation;
+editing the catalog alone does not reload a running instance. Keep source collection
+ahead of the 18:00 America/New_York cutoff: information first observed later cannot
+be backdated into that decision. SPY remains required benchmark evidence regardless
+of any approved issuer exclusions from the research cohort.
 
 Requests accept model id, canonical US ticker symbols and the applicable date or
 cutoff only. They reject unknown fields, including raw prices/news, feature values
