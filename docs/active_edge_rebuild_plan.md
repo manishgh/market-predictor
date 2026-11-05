@@ -8,7 +8,7 @@ and canonical project paths; no one-off operational scripts, duplicate calculati
 new configuration families or broad naming cleanup. Work occurs on
 `codex/model-evidence-pipeline-20261105`, isolated from original data and models.
 
-Ordered checkpoints (only checkpoint 2 is in progress):
+Ordered checkpoints (checkpoint 2 awaits sufficient host memory):
 
 1. **Saved outcome availability (`implemented_verified_local`).** Explain the 102,370 unavailable
    outcomes among 289,802 scored temporal stock-date rows without changing the
@@ -24,7 +24,7 @@ Ordered checkpoints (only checkpoint 2 is in progress):
    focused unit/poison tests, Ruff, strict mypy, real retained-data diagnostic,
    independent Quant and code reviews pass. Input/model hashes stay unchanged.
    Failure publishes no report and grants no training or serving permission.
-2. **Economic recovery (`in_progress`).** Inspect retained completion/interruption
+2. **Economic recovery (`environment_pending`).** Inspect retained completion/interruption
    evidence and original request contracts. Preserve the twelve-policy comparison,
    models, costs, selected rows and prior receipts. Only a justified fresh request
    may execute; never resume the interrupted campaign blindly. Any unavailable
@@ -83,6 +83,19 @@ match current strategy/temporal settings; naming correspondence is not required 
 this arm. No old spool or campaign restart. A valid diagnostic publication with
 exit2 is not a failed process merely because it cannot authorize production.
 Record its true economic result separately from pending source admission.
+
+Actual bounded recovery exited2 at `2026-11-05T00:50:30.2914576Z` before creating
+its output directory. Six earlier pressure pauses recovered; the seventh timed
+out after120.1056seconds at94.8832% host RAM. This is host-memory exhaustion under
+the existing91% ceiling, not a source-admission verdict or failed economic result.
+Retained start/exit/stdout/stderr and their hashes are in task outputs; no duplicate
+attempt was launched. Fresh process inspection found no Python workers and no heavy
+owner. Original tracked worktree remains clean; all six final model payload hashes
+still match their original manifests. Resume only after demonstrably sufficient
+headroom, using a fresh receipt pair and canonical request; never overwrite this
+attempt's evidence or weaken memory/source gates. No data download or stock removal
+can resolve this host resource condition. Current observed-feature publication
+and model production admission remain incomplete.
 
 ### V1 API checkpoint — November 4 (fresh-data activation pending)
 
