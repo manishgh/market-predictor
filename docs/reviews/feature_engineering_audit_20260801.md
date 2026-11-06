@@ -1,5 +1,30 @@
 # Current Feature Engineering Audit
 
+### Investment fundamentals research checkpoint — November 6
+
+User approved the revised long-term feature/evaluation specification. This adds a
+separate research path; earlier swing source families and model columns are frozen.
+
+| Layer | Status | Evidence / remaining requirement |
+| --- | --- | --- |
+| SEC source collection | verified for one real issuer | Microsoft CompanyFacts immutable response and decoded payload; universe-wide coverage not established |
+| Historical availability | verified reconstruction, observed training blocked | Existing corrected SEC accession clocks; later retrieval remains distinct from historical publication |
+| Historical/snapshot feature construction | verified component | Shared pure kernel and pinned batch publication; actual Microsoft historical decisions |
+| Ordered model input contract | verified research contract | Six named metrics, definitions hash, constituent fact hashes, explicit null reasons |
+| Training/validation consumption | blocked | No admitted complete investment training/label corpus or fitted investment candidate |
+| Saved forecast evaluation | verified software only | Canonical target binding, pairing, strict fit/maturity clocks and date-aggregated metrics; no actual investment forecast metrics claimed |
+| Promotion/serving/API activation | blocked | No investment model approval or qualified prospective evidence; flags remain false |
+| Future poison, parity and tamper | verified unit scope | Focused feature, SEC adapter, evaluator and publication tests; fixture evidence distinct from real SEC replay |
+
+Core features are revenue growth, operating margin/change, FCF margin, CapEx to
+revenue and cash conversion. Total-debt leverage and market-cap yields are deferred
+until all necessary debt/share components are supported. DCF and specialised AI
+forecasts are deferred. Annual/YTD arithmetic assumes compatible accounting across
+filings; exact date matching can leave fiscal-calendar edge cases unavailable.
+This checkpoint does not establish improved returns, sufficiently trained models,
+historically observed source collection or full financial statement coverage.
+
+
 ### August saved; continuation active after transient host pressure — October19
 
 Ready-run PID104640 saved August2022 at12:08:41Z:38/59months and376,002/586,305

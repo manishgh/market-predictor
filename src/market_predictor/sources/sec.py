@@ -145,6 +145,16 @@ class SecSource:
     submissions_url = "https://data.sec.gov/submissions/CIK{cik}.json"
     historical_submission_url = "https://data.sec.gov/submissions/{name}"
 
+    def fetch_cik_company_facts(self, cik: str) -> tuple[Mapping[str, object], SecRawResponse]:
+        """Archive entity-wide XBRL facts; retrieval does not establish historical availability."""
+        if not cik.isascii() or not cik.isdigit() or len(cik) > 10:
+            raise ValueError("SEC CIK must contain one to ten ASCII digits")
+        payload, response = self._get_archived_json(
+            f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik.zfill(10)}.json")
+        if str(payload.get("cik", "")).zfill(10) != cik.zfill(10) or not isinstance(payload.get("facts"), Mapping):
+            raise ValueError("SEC Company Facts response differs from requested issuer")
+        return payload, response
+
     def __init__(
         self,
         settings: Settings,

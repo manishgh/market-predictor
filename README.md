@@ -1,5 +1,13 @@
 # Market Predictor
 
+Investment research now has a separate SEC fundamentals and saved-forecast
+evaluation path. `collect-investment-company-facts` archives one issuer's source;
+`build-investment-features` reconstructs six financial ratios using pinned filing
+clocks; `evaluate-investment-predictions` compares paired saved forecasts against
+canonical 63/252-session outcomes. These commands do not train, promote or serve
+an investment model. See the investment section in `docs/research_api.md` for
+request contracts, source requirements and limitations.
+
 Market Predictor builds causal prediction intelligence for long-only swing and a
 separate planned investment cohort. It owns data curation, feature construction, model training, temporal
 validation, outcome evaluation, and model governance.

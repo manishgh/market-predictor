@@ -1,5 +1,40 @@
 # Active Edge Rebuild Plan
 
+### Investment fundamentals and evaluation — November 6
+
+User explicitly authorizes the revised long-term specification. This is a separate
+investment research checkpoint (`in_progress`); the earlier swing recovery remains
+`environment_pending`. Primary horizon is 252 XNYS sessions; 63 is diagnostic.
+Preserve the existing next-open, marked-value, retained-cash dividend, prepaid
+20-bp and stock-net-minus-benchmark-gross target contract and all four holdings.
+
+Bounded scope: reusable filing-version financial facts and point-in-time core
+features; explicit standalone-quarter/YTD arithmetic and missingness; immutable
+research publication; paired saved-forecast evaluation with outcome availability
+and chronological fit boundaries. Reuse existing SEC client, evidence utilities,
+investment targets, shared memory guard and heavy-job lease. No new configuration
+family, scheduler, model promotion, alert delivery or trading/portfolio ownership.
+DCF forecasting, consensus history and specialised AI estimates are deferred until
+the smaller feature block has measured incremental value. Existing swing fits,
+data, cost rules and inspected test periods are unchanged.
+
+The canonical latest-metric fundamental join lacks duration boundaries and cannot
+reconstruct trailing statements. A narrowly scoped investment fact contract must
+retain security/issuer identity, units, duration boundaries, accession/version,
+source hash and separate publication/retrieval clocks. Resolve revisions within
+each reporting period before selecting current/trailing periods. No historical
+first-observed clock may be invented. Proxy reconstruction remains research-only.
+
+Exit gates: design review before implementation; focused future/amendment poison,
+period/units/missingness, batch/snapshot parity, maturity and paired-cohort tests;
+Ruff and strict mypy; independent senior Quant and code review; bounded real-source
+run distinguishing successful calculations from missing admitted training evidence.
+An actual-data inventory must identify absent financial/target inputs. Missing
+source authority prevents training and actionable predictions, not software checks.
+Failure must not publish partial feature/evaluation artifacts. No claim of model
+improvement follows from software tests or a small source smoke run.
+
+
 ### Evidence and daily forecast continuation — November 5
 
 User authorizes implementation with a design/plan reviewer, an ML engineer,

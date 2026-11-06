@@ -204,11 +204,13 @@ def test_required_benchmarks_and_policy_reject_unsupported_inputs() -> None:
 
 def test_pinned_swing_implementation_bytes_remain_unchanged() -> None:
     root = Path(__file__).resolve().parents[1] / "src/market_predictor"
+    # Freeze the current pre-investment-feature baseline. Earlier pins predated
+    # accounting commits 3a864e5 and 771d053; original and isolated trees match.
     expected = {
-        "swing/contracts/holding_accounting.py": "bb02f2a88b67f2f12820a3cd0223314ab1e8944aa2110d93fc662e374c766132",
-        "swing/evaluation/holding_accounting.py": "e01a99a6263e77452072b0498b71e7c80acca34f2520aa9ac21a7a51ee02f249",
+        "swing/contracts/holding_accounting.py": "0a9046c83ca152fcdd0ca5d10b2ade8ff865af8a5c162c2ab72a7170e1cdd94b",
+        "swing/evaluation/holding_accounting.py": "507f7d611b5c5e1039e32f570fb97bfdb04ec72671434d463159d0e8b1ce1dc3",
         "swing/labels/ordinary_holding.py": "caee56dfc5d679f2495124d2faa304cfdc21817c26cfd8280bf84415a4adb605",
-        "swing/evaluation/trade_simulation.py": "da75f7c8fe667b1d642cbe3cdaa02feee99aa83ae85e563d9cc697fda121acaf",
+        "swing/evaluation/trade_simulation.py": "9ab1820d596fa5ee1fcb5e2850ce9e25746f3624e43b5c95d2d98b55e587fd2a",
     }
     for name, digest in expected.items():
         assert hashlib.sha256((root / name).read_bytes()).hexdigest() == digest
