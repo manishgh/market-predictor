@@ -1,5 +1,66 @@
 # Active Edge Rebuild Handoff
 
+### Investment research implementation verified and pushed — November 6
+
+Current branch: `codex/investment-fundamentals-20261106`; implementation commit
+`3ff7612` is pushed to origin. Worktree remains
+`C:/Users/manis/Documents/Codex/2026-11-05/c-project-market-predictor/work/market-predictor`.
+Original project code remains on its prior branch; do not claim this branch was
+merged or that the investment model is trained. Earlier swing continuation below
+is retained history and remains pending, not the current implementation branch.
+
+User approved the revised attached investment specification. Implemented the
+bounded research layer: SEC CompanyFacts collection through the existing client;
+period/version-aware facts; shared six-feature snapshot/batch kernel; corrected
+retained accession-clock replay; immutable guarded publication; canonical-target
+paired saved-forecast evaluation with fit/label maturity checks. Existing investment
+target accounting and all swing model/candle/news artifacts are unchanged.
+
+Read `investment/fundamentals.py`, `investment/sec_facts.py`,
+`investment/evaluation.py`, `research/investment_features.py`,
+`commands/investment_research.py`, and investment CLI documentation in
+`docs/research_api.md`. No new configuration family or dependency was added.
+Design review, independent senior Quant verification and code review passed.
+Reviewer findings fixed: annual/YTD coverage, equal-value SEC aliases, latest
+versions masking unchanged earlier comparative pairs, expanded Parquet bounds.
+79 focused tests passed; Ruff passed; strict mypy passed 11 source files with
+silent imports. Logs: chat workspace `outputs/investment-{tests,lint,types}.log`.
+Full suite/deployment/model evaluation not run; this is a research component.
+The old investment byte-pin test was stale after earlier accounting commits;
+updated only expected hashes, verifying original/worktree bytes match beforehand.
+
+Actual inputs: original root
+`data/raw/investment_company_facts/0000789019/20261106/_manifest.json`, SHA256
+c8435cef8a60565107c12144d6cc2e04b7cb75e593f37b1a5e98d35a18516d39,
+plus existing corrected SEC acceptance authority. Pinned requests are original
+`data/research/investment_fundamentals_request_20261106.json` and
+`data/research/investment_fundamentals_observed_request_20261106.json`.
+Final reconstructed research output is chat workspace
+`outputs/investment-fundamentals-msft-verified`, manifest SHA256
+e9e22603e65c5a705eeec96ed8ce346e900bf3caf011e75fde6d657728ab7d1e.
+1,669 source facts; all six metrics available at each of three historical dates.
+Observed-mode output `outputs/investment-fundamentals-observed-check`, manifest
+SHA256 c72e5faec4cc2bdd1c7592079c40388a32c3f92df4182190c4e5fa3377d80c20,
+correctly has zero available metrics before actual collection. The earlier
+`outputs/investment-fundamentals-msft` records the pre-fix missingness discovery;
+retain it as immutable diagnostic evidence, not the final result.
+
+All new outputs are research-only. No full-universe fundamental coverage, admitted
+investment training/label corpus, fitted investment candidate or return improvement
+has been established. The inspected labels directory has only swing corpora.
+Debt, market-cap yields, DCF and AI features remain explicitly deferred. Annual/YTD
+bridges assume consistent accounting across filings; exact fiscal-date matching
+can leave calendar edge cases missing. Existing inspected periods are development
+evidence. No stock exclusions/deletions were made; SPY remains mandatory.
+
+Next investment checkpoint: qualify financial coverage across the declared
+nonfinancial cohort, materialize admitted canonical 63/252-session holding targets
+using retained raw candles/corporate events, then freeze and execute the paired
+price/news/fundamental experiment. Do not enable training by toggling false flags
+or substitute price ratios for unresolved holding outcomes. Swing economic
+recovery and prospective source admission remain separate pending work below.
+
+
 ### Verified diagnostic; recovery stopped on host RAM — November 5
 
 User requested autonomous implementation with design review, ML engineering,

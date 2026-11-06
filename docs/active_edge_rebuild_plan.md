@@ -3,7 +3,7 @@
 ### Investment fundamentals and evaluation — November 6
 
 User explicitly authorizes the revised long-term specification. This is a separate
-investment research checkpoint (`in_progress`); the earlier swing recovery remains
+investment research checkpoint (`implemented_verified`); the earlier swing recovery remains
 `environment_pending`. Primary horizon is 252 XNYS sessions; 63 is diagnostic.
 Preserve the existing next-open, marked-value, retained-cash dividend, prepaid
 20-bp and stock-net-minus-benchmark-gross target contract and all four holdings.
@@ -33,6 +33,37 @@ An actual-data inventory must identify absent financial/target inputs. Missing
 source authority prevents training and actionable predictions, not software checks.
 Failure must not publish partial feature/evaluation artifacts. No claim of model
 improvement follows from software tests or a small source smoke run.
+
+Implementation `3ff7612` is committed and pushed on
+`codex/investment-fundamentals-20261106` in the existing isolated worktree. Design,
+independent Sol senior Quant and code reviews passed after fixing annual/YTD
+arithmetic, equivalent aliases, unchanged historical comparative versions and
+Parquet expansion limits. Final verification: 79 focused UNIT/CLI/contract cases,
+Ruff and strict mypy over 11 source files passed; full release suite not run.
+The existing accounting-byte regression had stale expectations predating approved
+September/October changes. Only its pins were updated after confirming original
+and isolated accounting files match exactly; accounting code was not edited.
+
+Real source collection: Microsoft CIK0000789019, stable identity cik:0000789019,
+1,669 decoded eligible filing facts. Final actual reconstruction yielded all six
+metrics on all three development decision dates (2023-08-01, 2024-02-01,
+2024-05-01). Artifact `outputs/investment-fundamentals-msft-verified/_manifest.json`
+SHA256 e9e22603e65c5a705eeec96ed8ce346e900bf3caf011e75fde6d657728ab7d1e
+under the chat workspace. The same real source in observed mode yielded no
+historical feature values, as required: actual collection occurred after those
+dates. Observed-check manifest SHA256
+c72e5faec4cc2bdd1c7592079c40388a32c3f92df4182190c4e5fa3377d80c20.
+
+The first implementation contains six supported flow/growth/margin features.
+Debt and market-cap yields remain deferred because qualified total-debt/share
+inputs are absent, rather than publishing an always-null feature as implemented.
+Annual/YTD bridges explicitly assume unchanged accounting basis across filings;
+52/53-week and leap-year mismatch coverage remains visible. No investment fit,
+investment forecast performance, source admission or model promotion was performed.
+The inspected labels directory contains swing corpora only. Next investment work
+is systematic eligible-issuer coverage and admitted canonical 63/252 target
+materialization before a frozen price/news/fundamental comparison. Existing
+candles/news and all six swing models are retained. No exclusions or deletions.
 
 
 ### Evidence and daily forecast continuation — November 5
