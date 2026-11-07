@@ -33,10 +33,12 @@ their concept. Future issues do not alter earlier snapshots. No new exclusions.
 
 Source/feature research construction is verified across the declared population,
 with explicit missingness. Historical capture remains reconstructed research.
-Actual investment labels, training, promotion and serving remain pending: offline
-action-source reconstruction requires RAM below 85%, while the last host reading
-was 88.08%. No actual qualified-label count, model fit or predictive improvement is
-claimed. The older matrix below records the initial feature-kernel checkpoint.
+Actual investment future-return targets, training, promotion and serving remain
+pending. The November 7 memory amendment replaces the former 85% / 2 GiB rule
+with a 90% ceiling and no implicit free-memory floor. No actual source-validated
+target count, model fit or predictive improvement is claimed. Source validation
+means required price, benchmark and action data passed checks; it is not model
+approval. The older matrix below records the initial feature-kernel checkpoint.
 
 ### Investment fundamentals research checkpoint — November 6
 

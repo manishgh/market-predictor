@@ -1,6 +1,51 @@
 # Active Edge Rebuild Plan
 
-### Broader investment coverage and qualified labels — November 7
+### Shared 90% memory limit and descriptive return-target names — November 7
+
+Code status: `verified`; return-target run: `in_progress`. The user explicitly replaces stale 85% and 91% memory
+defaults with 90%, without an implicit free-memory floor. Preserve process budgets,
+unknown-measurement refusal and the shared heavy-job lease. Independent engineering
+and review run in parallel; dependent source replay, currency checks and future-return
+calculation remain ordered. The previous memory refusal below is historical.
+
+Scope: unify active memory defaults, test the 90% boundary, and replace investment
+source qualification terminology with source validation. A source-validated future-return
+target means the required stock, benchmark and corporate-action data passed checks;
+it does not imply training admission or a successful model. Existing roster evidence
+and completed financial producer bytes remain unchanged. Exit gates: focused tests,
+lint/types, independent design/Quant/code review, then an actual source replay using
+an immutable committed-code snapshot inside the original data root. Publish actual
+return-target counts or the specific remaining data failure; never infer missing inputs.
+
+Implementation `49355dd101ac6ac4820f925bcea34f9a11ebf135` is pushed on
+`codex/memory-limit-target-names-20261107`. All 493 selected tests passed (227 memory,
+action and investment checks; 116 saved-model consumers; 150 collection/CLI checks).
+Ruff, strict mypy over 21 changed source files, and design/Quant/code reviews passed.
+An initial funded-memory test expectation was updated from 91% to 90%; collection
+tests were rerun outside the sandbox after its NTFS-hard-link restriction. No full
+release suite or model fitting was run. The only remaining 91% comparison in source
+code reads immutable historical run metadata; it is not an execution threshold.
+
+The exact committed source was exported and byte-verified (451 files) under
+original-root `data/research/implementation_snapshots/49355dd101ac6ac4820f925bcea34f9a11ebf135`.
+The replay completed all 570 tickers into
+`data/raw/swing_corporate_action_sources_20261107`; audit semantic SHA256
+`ac876a96812caec1e1b42bae5b0d91abc3fa53100a958ce682e32582bd7e0d3b`.
+Quant independently verified checkpoint/proof/audit pins and all nine producer files.
+
+Exact-ID currency collection completed all 7,795 requested actions. All 7,795 still
+lack explicit USD currency evidence; zero were resolved by this refresh. Final
+manifest `data/research/investment_dividend_currencies_20261107/final/_manifest.json`
+has SHA256 `a84de425f57aa17ce4b5d60e1146cf4a81d130bb45a126c43746022ddfcafed0`.
+This is a source-data gap, not permission to infer currency or train a model.
+
+The full 63/252-session run started using
+`data/research/investment_return_target_request_20261107.json` (SHA256
+`25995005bb5cd1df59cd3651a2b7d54db6d01796b5eadac4eb45f115c5ff8c0d`).
+Output: `data/research/investment_return_targets_20261107`. No completed target
+counts are claimed while source verification and materialization remain active.
+
+### Financial recovery checkpoint before the memory amendment — November 7
 
 Status: `environment_pending` for actual label-source replay and label corpus.
 Financial coverage and its fact-isolation recovery are verified. Current branch is
@@ -72,10 +117,10 @@ May 28, 2024; later holding windows remain explicit gaps pending verified extens
 The original action archive's raw/source hashes match, but its reconstruction pins
 an older `resources.py` producer. The supported repair is offline reconstruction
 from the original archive into a new immutable archive, preserving old proofs.
-Attempts refused before loading at 85.6% and 87.1% RAM. After financial recovery,
-RAM was 88.08% used with 1.87 GiB free; the existing replay requires below 85% and
-at least 2 GiB free. Do not weaken this guard. The user has been asked whether to
-free RAM or save progress. No data job remains active.
+Earlier attempts refused before loading at 85.6% and 87.1% RAM under the former
+85% / 2 GiB rule. The November 7 user amendment above replaces that rule with
+90% and no implicit free-memory floor. These refusals are historical results,
+not the current execution policy.
 
 Next: run the existing action reconstruction when memory permits; collect exact-ID
 currency corroboration; run full label materialization; publish full-population

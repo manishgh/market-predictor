@@ -1,6 +1,60 @@
 # Active Edge Rebuild Handoff
 
-### Current state: financial recovery verified; labels await RAM — November 7
+### Current work: unify memory at 90% and resume return calculation — November 7
+
+Branch `codex/memory-limit-target-names-20261107`, worktree
+`work/market-predictor-memory-targets`. The latest user instruction supersedes the
+older 85%/2 GiB and 91% rules below. One shared percentage-only default must allow
+valid measurements below 90% even with less than 2 GiB free. Process budgets,
+unknown measurements and the shared heavy-job lease remain enforced.
+
+Parallel engineers completed memory defaults and investment source-validation naming.
+Independent senior Quant/design and code reviews approved implementation `49355dd`.
+Both older worktrees remain frozen because completed financial artifacts pin their
+source paths. Export the reviewed implementation commit into a new immutable
+`data/research/implementation_snapshots/<commit>/src` under the original root;
+verify bytes and imported module paths. This satisfies the existing reconstruction
+producer-path contract without modifying old proofs or old producer files.
+
+Implementation full commit: `49355dd101ac6ac4820f925bcea34f9a11ebf135`, pushed.
+493 selected tests passed; Ruff and strict mypy (21 changed source files) passed.
+Logs: chat-workspace `outputs/memory-targets-core-tests.log` (227 passed),
+`outputs/memory-targets-consumer-tests.log` (116 passed before sandbox hard-link
+refusal), and `outputs/memory-targets-collection-tests.log` (150 passed with host
+filesystem access). The first interrupted run had obsolete funded-memory test
+expectations, subsequently fixed and covered in the passing 227-test run.
+
+The source export exists at original-root
+`data/research/implementation_snapshots/49355dd101ac6ac4820f925bcea34f9a11ebf135/src`.
+Use that exact PYTHONPATH and original-root working directory with the existing
+virtualenv. `_export.json` pins 451 committed source files. Do not edit the snapshot.
+
+Completed action replay: `data/raw/swing_corporate_action_sources_20261107`, 570/570
+tickers. Audit semantic SHA256 `ac876a96812caec1e1b42bae5b0d91abc3fa53100a958ce682e32582bd7e0d3b`;
+checkpoint SHA256 `8101c75e8b6f9b7e48b69a6bb863b02567c411b3301fcb3a972011cd46d08ee9`;
+proof SHA256 `cd1a9a22a8452140db634b9e37f2637505a4e2eb1d39a466467baa7850728c60`.
+Senior Quant verified these and the nine actual producer hashes. No ownership,
+accounting or training admission follows from archive completion.
+
+Currency refresh completed 7,795 actions with zero explicit USD resolutions;
+all gaps are `currency_missing_or_not_USD`. Final manifest:
+`data/research/investment_dividend_currencies_20261107/final/_manifest.json`, SHA256
+`a84de425f57aa17ce4b5d60e1146cf4a81d130bb45a126c43746022ddfcafed0`.
+
+New target config `data/research/investment_return_sources_20261107.toml`, SHA256
+`cec2e246614d9c0c411d1c59ce1679d6a5aa401edacc31c76e429edae9460b68`, differs from
+`configs/swing_canonical_targets.toml` only in action archive/audit bindings.
+Typed request `data/research/investment_return_target_request_20261107.json`, SHA256
+`25995005bb5cd1df59cd3651a2b7d54db6d01796b5eadac4eb45f115c5ff8c0d`, uses the actual
+evaluation cutoff `2026-11-07T10:31:55.405755+00:00` and existing recovery roster.
+The live job writes `data/research/investment_return_targets_20261107`; monitor
+chat-workspace `outputs/investment-return-targets-90pct.log` and per-security
+checkpoints before any restart. At this documentation update, source verification
+was active and no security checkpoint existed. Do not launch a duplicate job.
+The worker itself used approximately 0.19 GiB; short system-memory pauses above
+90% resumed normally below 90%. No actual final target counts or model fit yet.
+
+### Financial recovery checkpoint before the memory amendment — November 7
 
 Current worktree: `work/market-predictor-fact-recovery`; branch
 `codex/investment-fact-isolation-20261107`; implementation `0d01e13` is pushed.
@@ -46,17 +100,15 @@ the original Microsoft source. Downloads were prohibited. The new roster matches
 the prior decision identities and all 37,229 population rows. Do not rerun completed
 output directories or rewrite job identities. No data process remains active.
 
-Remaining action-source replay was refused before loading at 85.6% and 87.1% RAM.
-After financial recovery, the host measured 88.08% used / 1.87 GiB free. The existing
-reconstructor requires below 85% and at least 2 GiB available. The user was asked
-whether to free RAM or save progress. Maintain this guard. Use about 3 GiB free as
-practical startup headroom; measure the actual state rather than treating time or
-an acknowledgment as proof of memory recovery.
+Earlier action-source replay attempts refused before loading at 85.6% and 87.1%
+RAM. The former 85% / 2 GiB rule is superseded by the explicit November 7 user
+amendment: below 90%, without an implicit free-memory floor. Measure actual RAM
+before execution; these earlier refusals do not define the current policy.
 
 All original raw corporate-action source hashes match. Only the canonical archive's
 historical `resources.py` producer pin differs. Reconstruct from the ORIGINAL archive
-into the new output below, preserving the old archive/proofs. Run from original-root
-modules (`C:/project/market-predictor/src` on PYTHONPATH), because this existing
+into the new output below, preserving the old archive/proofs. Run from the new
+immutable implementation snapshot described above, because this existing
 reconstructor binds implementation files beneath its supplied root. Use the existing
 virtualenv `C:/project/market-predictor/.venv/Scripts/python.exe`.
 
