@@ -1,5 +1,30 @@
 # Active Edge Rebuild Handoff
 
+### November 7 resumed run: completed coverage exposes fact-isolation defect
+
+The latest financial continuation exited0 and published final manifest SHA256
+5ba4afd64ac8cb2139000d981d969dffa4823e63865c1baa713ee746b4c8bb2a
+at original-root `data/research/investment_financial_coverage_20261107/final/_manifest.json`.
+All431 issuers were attempted:342 checkpointed,89 failed local SEC fact decoding
+(82 conflicting aliases;7 invalid fact records). Failed issuers cover4,576/22,346
+eligible monthly decisions. Provider sources are retained; do not redownload.
+Read the new bounded repair at the top of the active plan. Design/Quant approved
+structured causal rejection records and a fresh replay, not catch-and-drop.
+
+Preserve this worktree's source bytes: old artifact manifests pin their exact
+paths/hashes. Continue code changes only in new `work/market-predictor-fact-recovery`
+on `codex/investment-fact-isolation-20261107`, derived from this checkpoint. Reuse
+all source manifests in a fresh request, assert identical roster, and compare all
+342 prior successful issuer snapshots during the fresh rejection-aware replay.
+No tests need repeating until code changes. Previous128 tests remain baseline.
+
+No data job currently runs. Action reconstruction still refused before loading:
+CLI at85.6%RAM/2.26GiB free and minimal direct API at87.1%/2.03GiB free. Neither
+created an archive. Keep its85% threshold and original source proofs unchanged.
+Logs: outputs/investment-financial-coverage-continue.log,
+outputs/investment-action-reconstruction-continue.log and
+outputs/investment-action-reconstruction-api.log in chat workspace.
+
 ### Broader investment coverage and labels: RAM-limited actual runs — November 7
 
 Current branch is `codex/investment-coverage-labels-20261107`, based on main

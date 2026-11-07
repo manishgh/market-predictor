@@ -2,7 +2,41 @@
 
 ### Broader investment coverage and qualified labels — November 7
 
-User authorizes this checkpoint (`environment_pending`) on isolated branch
+Continuation evidence and bounded repair: financial collection now completed all
+431 issuer attempts. Final manifest SHA256
+5ba4afd64ac8cb2139000d981d969dffa4823e63865c1baa713ee746b4c8bb2a
+at `data/research/investment_financial_coverage_20261107/final/_manifest.json`.
+342 issuers produced snapshots; 89 failed local decoding (82 alias conflicts,
+two negative-value, two period-kind and three period-after-publication failures),
+affecting 4,576 of 22,346 eligible decisions. These are not failed downloads.
+Howmet's conflicting 2017 revenue aliases and Kellanova's negative 2008/2009
+CapEx currently discard every requested monthly snapshot for those issuers.
+
+Design and senior Quant approve reopening only SEC fact decoding and its feature
+consumer for structured, timestamped rejection evidence. Resolve valid and rejected
+versions together; visible invalid versions suppress older same-period facts,
+including quarter/annual/YTD constituents and the current reporting endpoint.
+Future invalid records cannot affect earlier decisions. Ambiguous tags remain
+ambiguous; no preferred-tag choice, sign repair, zero fill or issuer exclusion.
+Malformed period identity uses a conservative concept-level rule; unused balance
+concepts do not disable the six flow features. Source identity/hash/envelope damage
+remains a strict issuer failure. Publish rejection reasons and update the feature
+contract. Test future poison, rejected amendments, later resolution, alias-order
+invariance, stale-endpoint prevention and unrelated concepts/periods.
+
+Preserve this producer worktree and all old source/artifact bytes. Implement in new
+worktree `work/market-predictor-fact-recovery`, branch
+`codex/investment-fact-isolation-20261107`. New request reuses all retained source
+manifests; rebuild only the small identical roster and replay features under the
+new rejection-aware contract into a new immutable output. Verify all prior342
+successful issuer snapshots against new results (identity, values, missingness,
+consumed fact hashes, availability), reporting explicit differences. This replay
+is required to verify the changed rejection/version consumer contract; no raw
+redownload or relabeling of old checkpoints as a new producer is allowed. Historical
+code pins remain valid in the preserved producer worktree. No new exclusions or fit.
+Action replay still refused before loading at85.6% and87.1% RAM; its85% limit remains.
+
+User authorizes this checkpoint (`in_progress`) on isolated branch
 `codex/investment-coverage-labels-20261107`, based on main54c97b0. Extend the
 verified six-feature kernel to the declared historical nonfinancial population
 and materialize 252-primary/63-secondary investment targets. No new model fit,
