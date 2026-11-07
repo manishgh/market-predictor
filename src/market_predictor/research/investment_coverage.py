@@ -44,6 +44,7 @@ class InvestmentCoverageRequest(HoldingContract):
     identity_manifest: ArtifactReference
     acceptance_clock_manifest: ArtifactReference
     reused_company_facts: tuple[ArtifactReference, ...] = Field(default=(), max_length=1000)
+    prior_coverage_manifest: ArtifactReference | None = None
     source_policy: Literal["reconstructed_research"] = "reconstructed_research"
 
 
@@ -148,8 +149,42 @@ def _source(
     return source, payload
 
 
-def _save_feature_rows(directory: Path, *, rows: list[dict[str, Any]]) -> None:
+def _save_feature_rows(directory: Path, *, rows: list[dict[str, Any]], rejections: list[dict[str, Any]]) -> None:
     write_json_object(directory / "features.json", {"rows": rows})
+    write_json_object(directory / "rejections.json", {"rejections": rejections})
+
+
+def _verify_manifest_sources(root: Path, manifest: dict[str, Any], pins: dict[str, str]) -> None:
+    for name, digest in manifest["source_files"].items():
+        path = _source_pin_path(root, name)
+        if file_sha256(path) != digest:
+            raise DataReadinessError(f"investment prior artifact source changed: {name}")
+        pins[str(path)] = digest
+
+
+def _snapshot_parity(old: list[dict[str, Any]], new: list[dict[str, Any]]) -> dict[str, Any]:
+    previous = {row["decision_id"]: row for row in old}
+    current = {row["decision_id"]: row for row in new}
+    if len(previous) != len(old) or len(current) != len(new) or set(previous) != set(current):
+        raise DataReadinessError("investment recovery prior/new decision identities differ")
+    changed = []
+    for decision_id in sorted(previous):
+        before, after = previous[decision_id], current[decision_id]
+        differences = {}
+        for field in sorted(set(before) | set(after)):
+            if field == "snapshot":
+                fields = set(before["snapshot"]) | set(after["snapshot"])
+                for key in sorted(fields - {"feature_contract_sha256"}):
+                    old_value = before["snapshot"].get(key, [] if key == "consumed_rejection_sha256" else None)
+                    new_value = after["snapshot"].get(key)
+                    if old_value != new_value:
+                        differences[f"snapshot.{key}"] = {"before": old_value, "after": new_value}
+            elif before.get(field) != after.get(field):
+                differences[field] = {"before": before.get(field), "after": after.get(field)}
+        if differences:
+            changed.append({"decision_id": decision_id, "differences": differences})
+    return {"compared_rows": len(previous), "exact_rows": len(previous) - len(changed), "changed_rows": len(changed),
+        "row_differences": changed}
 
 
 def run_investment_coverage(
@@ -203,6 +238,32 @@ def run_investment_coverage(
         for row in rows:
             if row["status"] == "eligible":
                 groups.setdefault(row["cik"], []).append(row)
+        prior_issuers: dict[str, ArtifactReference] = {}
+        if request.prior_coverage_manifest is not None:
+            if set(sources) != set(groups):
+                raise DataReadinessError(
+                    "investment recovery requires exactly one retained source manifest for every eligible CIK; downloads forbidden")
+            prior = _object(root, request.prior_coverage_manifest, pins)
+            if (prior.get("schema") != "market_predictor.investment_coverage"
+                or prior.get("status") not in {"coverage_complete", "coverage_complete_with_gaps"}
+                or prior.get("roster_sha256") != roster_digest or prior.get("declared_rows") != len(rows)
+                or prior.get("eligible_rows") != sum(len(v) for v in groups.values())
+                or prior.get("eligible_issuers") != len(groups)
+                or prior.get("status_counts") != dict(sorted(Counter(r["status"] for r in rows).items()))):
+                raise DataReadinessError("investment recovery prior coverage population differs from frozen roster")
+            _verify_manifest_sources(root, prior, pins)
+            prior_parent = Path(request.prior_coverage_manifest.path).parent
+            prior_data = _object(root, ArtifactReference(path=str(prior_parent / "coverage.json"),
+                sha256=prior["files"]["coverage.json"]), pins)
+            for item in prior_data["issuer_artifacts"]:
+                ref = ArtifactReference(path=item["path"], sha256=item["sha256"])
+                if item["cik"] in prior_issuers or item["cik"] not in groups:
+                    raise DataReadinessError("investment recovery prior issuer inventory differs")
+                prior_issuers[item["cik"]] = ref
+            if len(prior_issuers) != prior["completed_issuers"]:
+                raise DataReadinessError("investment recovery prior successful issuer count differs")
+        parity: list[dict[str, Any]] = []
+        rejection_totals: Counter[str] = Counter()
         summary: Counter[tuple[str, str, str, str]] = Counter()
         failures: list[dict[str, str]] = []
         issuer_artifacts: list[dict[str, str]] = []
@@ -214,6 +275,8 @@ def run_investment_coverage(
                     local_pins = _implementation_pins()
                     reference = sources.get(cik)
                     if reference is None:
+                        if request.prior_coverage_manifest is not None:
+                            raise DataReadinessError("investment recovery cannot download a missing retained issuer")
                         collection = output / "sources" / cik
                         if not collection.exists():
                             collect_company_facts_unleased(
@@ -240,11 +303,14 @@ def run_investment_coverage(
                             )
                         snapshot = build_fundamental_snapshot(
                             decoded_by_security[security].facts,
+                            rejections=decoded_by_security[security].rejections,
                             security_id=security,
                             cik=cik,
                             decision_time=datetime.fromisoformat(row["decision_time_utc"]),
                         )
                         feature_rows.append({**row, "snapshot": snapshot.model_dump(mode="json")})
+                    rejections = [rejection.model_dump(mode="json") for decoded in decoded_by_security.values()
+                        for rejection in decoded.rejections]
                     issuer_report = {
                         "schema": "market_predictor.investment_issuer_coverage",
                         "status": "issuer_complete",
@@ -253,13 +319,16 @@ def run_investment_coverage(
                         "decision_count": len(decisions),
                         "source_files": local_pins,
                         "source_manifest": reference.model_dump(),
+                        "rejected_source_records": len(rejections),
+                        "rejection_count_unit": "security_bound_rejected_filing_versions",
+                        "rejection_counts": dict(sorted(Counter(r["reason"] for r in rejections).items())),
                         **FLAGS,
                     }
                     _publish(
                         checkpoint,
                         issuer_report,
                         local_pins,
-                        partial(_save_feature_rows, rows=feature_rows),
+                        partial(_save_feature_rows, rows=feature_rows, rejections=rejections),
                     )
                 checkpoint_ref = ArtifactReference(
                     path=str(checkpoint / "_manifest.json"), sha256=file_sha256(checkpoint / "_manifest.json")
@@ -275,8 +344,21 @@ def run_investment_coverage(
                     path=str(checkpoint / "features.json"), sha256=checkpoint_manifest["files"]["features.json"]
                 )
                 feature_rows = _object(root, feature_ref, pins)["rows"]
+                rejected = _object(root, ArtifactReference(path=str(checkpoint / "rejections.json"),
+                    sha256=checkpoint_manifest["files"]["rejections.json"]), pins)["rejections"]
+                rejected_counts = dict(sorted(Counter(r["reason"] for r in rejected).items()))
+                if (len(rejected) != checkpoint_manifest["rejected_source_records"]
+                    or rejected_counts != checkpoint_manifest["rejection_counts"]):
+                    raise DataReadinessError("investment rejection checkpoint counts differ")
+                rejection_totals.update(rejected_counts)
                 if [r["decision_id"] for r in feature_rows] != [r["decision_id"] for r in decisions]:
                     raise DataReadinessError("investment issuer checkpoint roster differs")
+                if cik in prior_issuers:
+                    previous = _object(root, prior_issuers[cik], pins)
+                    _verify_manifest_sources(root, previous, pins)
+                    old_features = _object(root, ArtifactReference(path=str(Path(prior_issuers[cik].path).parent / "features.json"),
+                        sha256=previous["files"]["features.json"]), pins)["rows"]
+                    parity.append({"cik": cik, **_snapshot_parity(old_features, feature_rows)})
                 for row in feature_rows:
                     for feature in FEATURE_NAMES:
                         state = "available" if row["snapshot"]["metrics"][feature] is not None else "missing"
@@ -313,10 +395,20 @@ def run_investment_coverage(
             "status_counts": dict(sorted(Counter(r["status"] for r in rows).items())),
             "source_files": pins,
             "availability_basis": "reconstructed_research",
+            "rejected_source_records": sum(rejection_totals.values()),
+            "rejection_count_unit": "security_bound_rejected_filing_versions",
+            "rejection_counts": dict(sorted(rejection_totals.items())),
+            "prior_coverage_manifest": None if request.prior_coverage_manifest is None else request.prior_coverage_manifest.model_dump(),
+            "parity": {"prior_successful_issuers": len(prior_issuers), "compared_issuers": len(parity),
+                "compared_rows": sum(p["compared_rows"] for p in parity), "exact_rows": sum(p["exact_rows"] for p in parity),
+                "changed_rows": sum(p["changed_rows"] for p in parity),
+                "missing_new_issuers": sorted(set(prior_issuers) - {p["cik"] for p in parity})},
             **FLAGS,
         }
 
         def save(directory: Path) -> None:
+            write_json_object(directory / "parity.json", {"issuer_comparisons": parity,
+                "missing_new_issuers": report["parity"]["missing_new_issuers"]})
             write_json_object(
                 directory / "coverage.json",
                 {

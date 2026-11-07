@@ -160,6 +160,59 @@ def fake_collection(root, cik, security_id, output, settings=None):
     )
 
 
+def recovery_roster(tmp_path, prior, sources):
+    original = json.loads((tmp_path / "roster/request.json").read_text())
+    request = write(tmp_path / "recovery-roster/request.json", {**original,
+        "prior_coverage_manifest": prior, "reused_company_facts": sources})
+    rows = write(tmp_path / "recovery-roster/roster.json", json.loads((tmp_path / "roster/roster.json").read_text()))
+    manifest = json.loads((tmp_path / "roster/_manifest.json").read_text())
+    manifest["files"] = {"request.json": request["sha256"], "roster.json": rows["sha256"]}
+    return write(tmp_path / "recovery-roster/_manifest.json", manifest)
+
+
+def test_recovery_requires_all_retained_issuers_before_any_download(tmp_path, monkeypatch):
+    job_fixture(tmp_path, monkeypatch)
+    prior = write(tmp_path / "prior.json", {})
+    roster = recovery_roster(tmp_path, prior, [])
+    monkeypatch.setattr(coverage, "collect_company_facts_unleased", lambda **_: pytest.fail("recovery attempted download"))
+    with pytest.raises(DataReadinessError, match="downloads forbidden"):
+        coverage.run_investment_coverage(root=tmp_path, roster_manifest=tmp_path / "recovery-roster/_manifest.json",
+            roster_manifest_sha256=roster["sha256"], output=tmp_path / "recovery")
+
+
+def test_recovery_verifies_prior_rows_and_reuses_sources_without_download(tmp_path, monkeypatch):
+    manifest, _ = job_fixture(tmp_path, monkeypatch)
+    monkeypatch.setattr(coverage, "collect_company_facts_unleased", fake_collection)
+    coverage.run_investment_coverage(root=tmp_path, roster_manifest=tmp_path / "roster/_manifest.json",
+        roster_manifest_sha256=manifest["sha256"], output=tmp_path / "original")
+    prior_path = tmp_path / "original/final/_manifest.json"
+    prior = {"path": str(prior_path), "sha256": coverage.file_sha256(prior_path)}
+    sources = [{"path": str(path), "sha256": coverage.file_sha256(path)} for path in
+        sorted((tmp_path / "original/sources").glob("*/_manifest.json"))]
+    roster = recovery_roster(tmp_path, prior, sources)
+    monkeypatch.setattr(coverage, "collect_company_facts_unleased", lambda **_: pytest.fail("recovery attempted download"))
+    coverage.run_investment_coverage(root=tmp_path, roster_manifest=tmp_path / "recovery-roster/_manifest.json",
+        roster_manifest_sha256=roster["sha256"], output=tmp_path / "recovery")
+    final = json.loads((tmp_path / "recovery/final/_manifest.json").read_text())
+    assert final["parity"]["prior_successful_issuers"] == 2
+    assert final["parity"]["exact_rows"] == 2 and final["parity"]["changed_rows"] == 0
+    assert final["parity"]["missing_new_issuers"] == []
+    assert all((path.parent / "rejections.json").exists() for path in (tmp_path / "recovery/issuers").glob("*/_manifest.json"))
+
+
+def test_recovery_parity_ignores_only_contract_hash_and_exposes_rejection_effects():
+    original = [{"decision_id": "d", "security_id": "issuer", "snapshot": {"feature_contract_sha256": "old",
+        "metrics": {"revenue": 1.0}, "consumed_fact_sha256": ["fact"], "missing_reasons": {}, "available_at": "clock"}}]
+    new = json.loads(json.dumps(original))
+    new[0]["snapshot"].update(feature_contract_sha256="new", consumed_rejection_sha256=[])
+    assert coverage._snapshot_parity(original, new)["exact_rows"] == 1
+    new[0]["snapshot"]["consumed_rejection_sha256"] = ["rejection"]
+    new[0]["snapshot"]["metrics"]["revenue"] = None
+    parity = coverage._snapshot_parity(original, new)
+    assert parity["changed_rows"] == 1
+    assert set(parity["row_differences"][0]["differences"]) == {"snapshot.metrics", "snapshot.consumed_rejection_sha256"}
+
+
 def test_serial_failures_preserve_full_denominator_and_success_checkpoint(tmp_path, monkeypatch):
     manifest, leases = job_fixture(tmp_path, monkeypatch)
     calls = []

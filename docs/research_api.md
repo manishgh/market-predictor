@@ -162,6 +162,22 @@ It collects once per issuer and retains each security class separately. Resume
 uses the same request, code and source identities; completed issuer checkpoints
 are immutable. Missing issuers and features remain explicit coverage rows.
 
+SEC fact conflicts and invalid records are retained in `rejections.json` with
+source locators, periods and availability clocks. Rejected versions suppress older
+values for the same period, including equivalent arithmetic reconstructions.
+Independent valid periods remain usable. Rejections with unidentifiable periods
+conservatively block their affected concept; they never become zero or a preferred
+tag value. Future rejections do not change earlier snapshots.
+
+For recovery, the request may pin `prior_coverage_manifest`. This requires retained
+CompanyFacts manifests for every eligible issuer and prohibits downloads. Create a
+new roster and output directory under the corrected feature contract. The roster
+must preserve the prior decision identities and population counts. `parity.json`
+compares prior successful snapshots with the replayed results, recording exact
+matches or field-level differences; the expected contract-hash change is separate.
+Preserve historical artifacts and their pinned producer files. Never rewrite old
+job identities or claim old checkpoints were produced by new code.
+
 ```powershell
 market-predictor-research plan-investment-coverage --root C:/project/market-predictor --request <request.json> --request-sha256 <sha256> --output <new-roster-directory>
 market-predictor-collect collect-investment-coverage --root C:/project/market-predictor --roster-manifest <roster-directory/_manifest.json> --roster-manifest-sha256 <sha256> --output <coverage-directory>

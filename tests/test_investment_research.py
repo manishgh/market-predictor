@@ -61,6 +61,35 @@ def test_missing_financials_publish_explicit_missing_values(source: Path, tmp_pa
         jobs.build_investment_features(root=tmp_path, request=request, request_sha256=file_sha256(request), output=output)
 
 
+def test_single_issuer_threads_and_publishes_structured_rejections(source: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from market_predictor.investment.fundamentals import FilingFactRejection
+    from market_predictor.investment.sec_facts import SecFactsResult
+
+    request = _request(tmp_path, source)
+    monkeypatch.setattr(jobs, "_retained_clocks", lambda *args: {})
+    rejection = FilingFactRejection(security_id="security:one", cik="0000000001", accession="rejected-accession", form="10-Q",
+        source_sha256="a" * 64, source_locator="facts.us-gaap.CapEx.units.USD[0]", concept="capex", tag="CapEx",
+        period_scope="exact", start=datetime(2025, 1, 1).date(), end=datetime(2025, 3, 31).date(),
+        reason="invalid_fact", detail="negative capital expenditure source value",
+        published_at=datetime(2025, 5, 1, tzinfo=UTC), retrieved_at=datetime(2025, 6, 1, tzinfo=UTC),
+        availability_basis="observed", first_observed_at=datetime(2025, 6, 1, tzinfo=UTC))
+    monkeypatch.setattr(jobs, "adapt_sec_company_facts", lambda *_, **__: SecFactsResult(facts=(), skipped=(), rejections=(rejection,)))
+    batch = jobs.build_fundamental_batch
+    passed = []
+
+    def capture(facts, decisions, *, rejections):
+        passed.extend(rejections)
+        return batch(facts, decisions, rejections=rejections)
+
+    monkeypatch.setattr(jobs, "build_fundamental_batch", capture)
+    output = tmp_path / "rejected-features"
+    jobs.build_investment_features(root=tmp_path, request=request, request_sha256=file_sha256(request), output=output)
+    assert passed == [rejection]
+    manifest = json.loads((output / "_manifest.json").read_text())
+    assert manifest["rejected_source_records"] == 1 and manifest["rejection_counts"] == {"invalid_fact": 1}
+    assert json.loads((output / "rejections.json").read_text())["rejections"] == [rejection.model_dump(mode="json")]
+
+
 def test_tampered_source_and_request_publish_nothing(source: Path, tmp_path: Path) -> None:
     request = _request(tmp_path, source)
     output = tmp_path / "features"

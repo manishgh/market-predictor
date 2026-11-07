@@ -6,6 +6,7 @@ import json
 import os
 import tempfile
 import zipfile
+from collections import Counter
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -255,7 +256,7 @@ def build_investment_features(*, root: Path, request: Path, request_sha256: str,
         for decision in parsed.decisions:
             guard("investment feature snapshot")
             snapshots.extend(build_fundamental_batch(decoded.facts,
-                [(decision.security_id, decision.cik, decision.decision_time)]))
+                [(decision.security_id, decision.cik, decision.decision_time)], rejections=decoded.rejections))
         report = {"schema": "market_predictor.investment_fundamental_features", "status": "research_features_complete",
                   "request_sha256": request_sha256, "source_files": pins, "feature_names": list(FEATURE_NAMES),
                   "feature_contract_sha256": FEATURE_CONTRACT_SHA256, "availability_basis": parsed.availability_basis,
@@ -263,11 +264,15 @@ def build_investment_features(*, root: Path, request: Path, request_sha256: str,
                   "fact_count": len(decoded.facts), "decision_count": len(snapshots),
                   "available_counts": {name: sum(s.metrics[name] is not None for s in snapshots) for name in FEATURE_NAMES},
                   "skipped_source_records": list(decoded.skipped),
+                  "rejected_source_records": len(decoded.rejections),
+                  "rejection_count_unit": "security_bound_rejected_filing_versions",
+                  "rejection_counts": dict(sorted(Counter(rejection.reason for rejection in decoded.rejections).items())),
                   "source_admission": "not_granted_by_research_publication", **FLAGS}
 
         def save(directory: Path) -> None:
             write_json_object(directory / "request.json", parsed.model_dump(mode="json"))
             write_json_object(directory / "facts.json", decoded.model_dump(mode="json"))
+            write_json_object(directory / "rejections.json", {"rejections": [r.model_dump(mode="json") for r in decoded.rejections]})
             write_json_object(directory / "features.json", {"snapshots": [s.model_dump(mode="json") for s in snapshots]})
 
         return _publish(output, report, pins, save)
