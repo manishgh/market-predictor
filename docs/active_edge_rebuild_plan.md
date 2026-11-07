@@ -42,8 +42,10 @@ This is a source-data gap, not permission to infer currency or train a model.
 The full 63/252-session run started using
 `data/research/investment_return_target_request_20261107.json` (SHA256
 `25995005bb5cd1df59cd3651a2b7d54db6d01796b5eadac4eb45f115c5ff8c0d`).
-Output: `data/research/investment_return_targets_20261107`. No completed target
-counts are claimed while source verification and materialization remain active.
+Output: `data/research/investment_return_targets_20261107`. Source verification
+completed and the monthly calculation loop published its first three security
+checkpoints. The job remains active; no final population-wide target counts are
+claimed before final publication.
 
 ### Financial recovery checkpoint before the memory amendment — November 7
 

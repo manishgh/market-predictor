@@ -49,10 +49,14 @@ Typed request `data/research/investment_return_target_request_20261107.json`, SH
 evaluation cutoff `2026-11-07T10:31:55.405755+00:00` and existing recovery roster.
 The live job writes `data/research/investment_return_targets_20261107`; monitor
 chat-workspace `outputs/investment-return-targets-90pct.log` and per-security
-checkpoints before any restart. At this documentation update, source verification
-was active and no security checkpoint existed. Do not launch a duplicate job.
-The worker itself used approximately 0.19 GiB; short system-memory pauses above
-90% resumed normally below 90%. No actual final target counts or model fit yet.
+checkpoints before any restart. Source verification completed and the monthly
+calculation loop is active; the first three security checkpoints were published
+at the latest inspection. Do not launch a duplicate job. Active exec session is
+`99338`; host Python worker PID was `53916` (verify process identity before acting).
+The worker itself used approximately 0.19 GiB during source verification; short
+system-memory pauses above 90% resumed normally below 90%. No actual final target
+counts or model fit yet. This run is intentionally continuing the user's request
+to start the pipeline; completed test workers have exited.
 
 ### Financial recovery checkpoint before the memory amendment — November 7
 
