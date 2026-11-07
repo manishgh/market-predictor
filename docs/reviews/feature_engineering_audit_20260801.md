@@ -1,5 +1,24 @@
 # Current Feature Engineering Audit
 
+### Broad investment component verified; actual corpus incomplete — November 7
+
+Monthly roster, issuer-isolated collection, currency corroboration and 63/252-session
+label materialization are implemented and independently reviewed. 128 focused tests,
+Ruff and strict mypy pass. Actual roster: 37,229 security-months, 22,346 eligible
+decisions, 431 issuers. Financial collection saved 116 issuer checkpoints before
+repeated host-memory stops; full feature coverage is not yet established. Label
+materialization has no completed actual corpus: corporate-action reconstruction
+requires a new producer proof after a prior memory-code change, and its supported
+offline replay also stopped on host RAM before loading inputs. Original provider
+bytes remain preserved and match their pins. No additional securities were excluded.
+
+The current source/coverage/label layers are therefore `verified component,
+actual corpus pending`; training, promotion and serving remain blocked. Nominal
+unpaid claims are explicit research valuations, not proof of payment. Currency
+must be explicitly evidenced. Reconstructed membership is verified now, not claimed
+observed historically. Unit qualification cases are not actual qualified-label
+counts. The November 6 matrix below remains the baseline feature-kernel evidence.
+
 ### Investment fundamentals research checkpoint — November 6
 
 User approved the revised long-term feature/evaluation specification. This adds a

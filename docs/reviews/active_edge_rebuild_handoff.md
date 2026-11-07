@@ -1,5 +1,88 @@
 # Active Edge Rebuild Handoff
 
+### Broader investment coverage and labels: RAM-limited actual runs — November 7
+
+Current branch is `codex/investment-coverage-labels-20261107`, based on main
+`54c97b0`, in the isolated worktree below. This section supersedes the historical
+checkout state. Implementation `f4e6485` is committed and pushed to origin on that
+branch; actual corpus completion is pending. It is not merged into main.
+No investment model has been fitted or promoted.
+
+Implemented monthly roster, serial resumable issuer coverage, exact raw-source
+investment label compiler, nominal unpaid dividend receivables, explicit currency
+corroboration, and per-security label materialization. Shared holding accounting
+is unchanged. Decision-time index membership does not force liquidation at index
+exit; full holding identity and corporate-action coverage remain required. Source
+qualification, economic maturity and availability by evaluation time are separate.
+Membership has unknown original capture time and explicit current verification;
+historical reconstruction is not observed historical availability.
+
+Design reviewer and senior Quant approved the bounded research semantics. Code
+review approved after fixing cross-worktree pins, null-sector admission, currency
+response references, newly revised/cancelled distributions and pre-read memory
+admission. 128 focused tests pass (121 investment/CLI + 7 orchestration); Ruff
+passes and strict mypy passes 15 source files. Logs are in the chat workspace
+`outputs/investment-coverage-tests.log` and `outputs/investment-label-job-tests.log`.
+Broader release tests and model evaluation were not run.
+
+Actual roster: original-root
+`data/research/investment_monthly_roster_20261107/_manifest.json`, SHA256
+78a998fad62efa1441740e9aa327de1d771476de7d043de4e23f587641fcd62f.
+37,229 rows = 631 identities x 59 monthly decisions; 22,346 eligible rows across
+431 issuers. Other rows: 2,655 approved exclusions, 6,464 membership unavailable,
+5,764 outside the financial-feature sector scope. No new exclusions were added.
+Financial output is `data/research/investment_financial_coverage_20261107`.
+First run stopped with 105 immutable issuer checkpoints after host RAM remained
+above 91% for 120 seconds (96.09% at timeout). A matching-request resume was started;
+the resumed run subsequently stopped with 116 checkpoints after another 120-second
+timeout (92.92%). Both runs exited code 2; neither remains running. Reuse these
+checkpoints with the same request and implementation. No final coverage manifest
+exists; 116 checkpoints must not be presented as 431 completed issuers.
+
+The first dividend-currency run stopped before network collection because the
+canonical corporate-action reconstruction pins an older `resources.py` producer.
+All original raw/source pins match; only that implementation pin differs. Preserve
+the canonical archive. Use the existing offline reconstruction command against
+`data/raw/swing_full_cohort_corporate_actions`, original request file SHA256
+1e4ef8efff3c8e60accdf1462baddcd133a60ddb9b6730fc035133e67d18650d,
+original audit semantic SHA256
+04553f69998bd4a6034c04ffef95238aad9b516eaa0cf0ad6849dc034fedf40c,
+unchanged `configs/swing_corporate_action_sources.toml` SHA256
+c883953e51df99990523be95504e34c6ae7d5ff48ba20e3951d2d7e8d0262554,
+and new output `data/raw/swing_corporate_action_sources_20261107`.
+Run reconstruction from original-root modules, serially after financial work.
+Its existing memory policy requires below 85% and at least 2 GiB available.
+The actual reconstruction attempt refused before loading sources at 89.0% used /
+1.72 GiB available. It exited code 1 and created no new public archive. Log:
+chat workspace `outputs/investment-action-reconstruction.log`. No job remains active.
+Then pin the new archive/audit in new currency and label requests; never rewrite
+old proofs. Current retained raw price selections end May 28, 2024. Later daily
+archives inspected are adjusted, while raw incremental history starts July 2026;
+later holding windows therefore remain explicit gaps until a verified extension.
+
+Next: finish financial coverage; reconstruct action transport; collect exact-ID
+currency corroboration; run full label materialization; report actual qualification
+and gap counts; commit/push the verified implementation and factual closure.
+All new artifacts retain false training, promotion and production flags.
+
+Resume financial collection from original root with worktree `src` on PYTHONPATH:
+
+```powershell
+python -B -m market_predictor.collection_cli collect-investment-coverage --root C:/project/market-predictor --roster-manifest data/research/investment_monthly_roster_20261107/_manifest.json --roster-manifest-sha256 78a998fad62efa1441740e9aa327de1d771476de7d043de4e23f587641fcd62f --output C:/project/market-predictor/data/research/investment_financial_coverage_20261107
+```
+
+For reconstruction, use original-root `src` on PYTHONPATH and the existing CLI:
+
+```powershell
+python -B -m market_predictor.collection_cli reconstruct-swing-corporate-action-sources --root C:/project/market-predictor --original-archive data/raw/swing_full_cohort_corporate_actions --original-request-sha256 1e4ef8efff3c8e60accdf1462baddcd133a60ddb9b6730fc035133e67d18650d --original-audit-sha256 04553f69998bd4a6034c04ffef95238aad9b516eaa0cf0ad6849dc034fedf40c --config configs/swing_corporate_action_sources.toml --expected-config-sha256 c883953e51df99990523be95504e34c6ae7d5ff48ba20e3951d2d7e8d0262554 --output data/raw/swing_corporate_action_sources_20261107
+```
+
+Then use worktree CLI `collect-investment-dividend-currencies` with that new archive
+and emitted audit hash. Create a new hash-pinned target-source request using the
+existing corrected-outcome schema and only the new archive/audit bindings; leave
+the original swing configuration unchanged. Pass its hash, the roster and currency
+manifest to `materialize-investment-labels`. Do not substitute a historical clock.
+
 ### Current checkout integrated into main — November 7
 
 User requested main as the merge and remote push target. Current working checkout

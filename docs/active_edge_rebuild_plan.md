@@ -1,5 +1,60 @@
 # Active Edge Rebuild Plan
 
+### Broader investment coverage and qualified labels — November 7
+
+User authorizes this checkpoint (`environment_pending`) on isolated branch
+`codex/investment-coverage-labels-20261107`, based on main54c97b0. Extend the
+verified six-feature kernel to the declared historical nonfinancial population
+and materialize 252-primary/63-secondary investment targets. No new model fit,
+source-clock backdating, changed swing horizon or promotion is authorized here.
+
+Freeze the roster before downloading: last XNYS decision session of each month
+within 2019-07-09..2024-05-28, including the truncated final month on May28.
+Use historical membership/sector and SEC identity intervals. Financials and Real
+Estate are outside this feature-definition scope, separately counted from data
+exclusions. Preserve the original631-identity denominator, existing45 exclusions,
+10% cumulative ceiling and at most18 further exclusions; no new exclusions are
+selected in this checkpoint. Missing CIKs, failed issuers, incomplete windows and
+unsupported corporate events remain explicit rows. SPY/QQQ/sector are required.
+
+Collection is serial, independently checkpointed per issuer, reusable and bounded
+by the shared memory guard/lease. Verify common SEC archive and acceptance clocks
+once per job; reuse the existing Microsoft archive. Publish six-feature coverage
+by issuer, date, year and sector with actual source hashes and nullable values.
+Historical reconstruction is research evidence, not actual past collection.
+
+Investment source/label compilation is separate from ten-session swing readers
+but uses the same holding contracts, replay kernel and investment projector.
+Check raw SIP share identity, every requested session, ownership continuity,
+corporate-action query coverage and each entitled component. Preserve marked
+terminal holdings, dividend cash/claims, exact cost once and all benchmarks.
+Actual capture clocks may qualify a label for current research; they cannot
+qualify that label for a simulated earlier fit. Economic maturity, source
+qualification, current availability and training admission are separate outputs.
+No adjusted-price fallback or ordinary-sale simulation may replace missing claims.
+
+Exit evidence: frozen full-population accounting, immutable resumable issuer
+coverage, actual label qualification/gap counts by horizon, exact prioritized
+missing-source records, independent design/Quant/code review, focused causality,
+accounting/coverage/tamper tests, Ruff/strict mypy, and actual retained/provider
+runs. Failures preserve completed issuer artifacts and publish no partial final
+dataset. Training remains unavailable until its independent admission checks pass.
+
+Implementation `f4e6485` is pushed on the isolated branch, not merged into main.
+Consolidated design/Quant/code reviews are verified; 128 focused
+tests, Ruff and strict mypy (15 source files) pass. Actual roster covers 37,229
+security-months, with 22,346 eligible decisions across 431 issuers. Financial
+collection preserved 116 immutable issuer checkpoints after two host-RAM timeouts;
+no final full-coverage artifact was published. Source replay found one stale
+historical producer pin (`resources.py`); raw corporate-action source hashes match.
+The existing offline reconstruction into a new archive is the approved repair, but
+its actual attempt refused at 89.0% RAM / 1.72 GiB free (requires below 85% and
+at least 2 GiB). No label corpus, currency refresh, fit or promotion completed.
+Preserve all completed checkpoints and resume after host memory recovers; exact
+source pins and next operations are in the current handoff. This checkpoint's
+actual-data exit gates remain unmet, not converted to a software-only pass.
+
+
 ### Main integration — November 7
 
 User explicitly requested merging all completed work into remote main. The original
