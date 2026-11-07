@@ -1,23 +1,42 @@
 # Current Feature Engineering Audit
 
-### Broad investment component verified; actual corpus incomplete — November 7
+### Broad financial coverage verified; investment labels pending — November 7
 
-Monthly roster, issuer-isolated collection, currency corroboration and 63/252-session
-label materialization are implemented and independently reviewed. 128 focused tests,
-Ruff and strict mypy pass. Actual roster: 37,229 security-months, 22,346 eligible
-decisions, 431 issuers. Financial collection saved 116 issuer checkpoints before
-repeated host-memory stops; full feature coverage is not yet established. Label
-materialization has no completed actual corpus: corporate-action reconstruction
-requires a new producer proof after a prior memory-code change, and its supported
-offline replay also stopped on host RAM before loading inputs. Original provider
-bytes remain preserved and match their pins. No additional securities were excluded.
+Implementation `0d01e13` fixes whole-issuer rejection caused by isolated historical
+SEC fact conflicts. All 431 eligible issuers produced 22,346 monthly snapshots;
+zero issuer failures remain. The prior 342 successful issuers / 17,770 snapshots
+match exactly, excluding the expected feature-contract hash change. Final manifest
+SHA256 is ddb5021e1daba62d9fde8fc5fc9bec7bb8170c46889f9455f5b6cd341aaadf4d at
+`data/research/investment_financial_recovery_20261107/final/_manifest.json`.
+All raw sources were reused; old producer/artifact bytes remain preserved.
+147 focused tests, Ruff, strict mypy and independent design/Quant/code reviews pass.
+Quant also checked actual manifest, coverage/parity hashes and interpretation.
 
-The current source/coverage/label layers are therefore `verified component,
-actual corpus pending`; training, promotion and serving remain blocked. Nominal
-unpaid claims are explicit research valuations, not proof of payment. Currency
-must be explicitly evidenced. Reconstructed membership is verified now, not claimed
-observed historically. Unit qualification cases are not actual qualified-label
-counts. The November 6 matrix below remains the baseline feature-kernel evidence.
+Availability denominator: 22,346 eligible security-months. All six metrics exist on
+6,017 rows (26.93%), at least one on 15,485 (69.30%), and none on 6,861. Source
+completion must not be reported as complete feature coverage or training admission.
+
+| Feature | Available security-months |
+| --- | ---: |
+| Revenue growth TTM | 13,301 |
+| Operating margin TTM | 13,192 |
+| Operating margin change | 10,872 |
+| FCF margin TTM | 10,443 |
+| CapEx / revenue TTM | 10,976 |
+| Cash conversion TTM | 10,877 |
+
+The 4,712 rejected security-bound filing versions (4,682 alias conflicts, 30 invalid
+facts) span retained source history, not excluded stocks or decision rows. Causal
+invalidity blocks exact inputs and derived intervals without stale fallback;
+independent valid periods survive. Unknown-period issues conservatively block only
+their concept. Future issues do not alter earlier snapshots. No new exclusions.
+
+Source/feature research construction is verified across the declared population,
+with explicit missingness. Historical capture remains reconstructed research.
+Actual investment labels, training, promotion and serving remain pending: offline
+action-source reconstruction requires RAM below 85%, while the last host reading
+was 88.08%. No actual qualified-label count, model fit or predictive improvement is
+claimed. The older matrix below records the initial feature-kernel checkpoint.
 
 ### Investment fundamentals research checkpoint — November 6
 

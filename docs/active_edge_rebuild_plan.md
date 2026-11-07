@@ -2,91 +2,86 @@
 
 ### Broader investment coverage and qualified labels — November 7
 
-Continuation evidence and bounded repair: financial collection now completed all
-431 issuer attempts. Final manifest SHA256
-5ba4afd64ac8cb2139000d981d969dffa4823e63865c1baa713ee746b4c8bb2a
-at `data/research/investment_financial_coverage_20261107/final/_manifest.json`.
-342 issuers produced snapshots; 89 failed local decoding (82 alias conflicts,
-two negative-value, two period-kind and three period-after-publication failures),
-affecting 4,576 of 22,346 eligible decisions. These are not failed downloads.
-Howmet's conflicting 2017 revenue aliases and Kellanova's negative 2008/2009
-CapEx currently discard every requested monthly snapshot for those issuers.
+Status: `environment_pending` for actual label-source replay and label corpus.
+Financial coverage and its fact-isolation recovery are verified. Current branch is
+`codex/investment-fact-isolation-20261107`, worktree
+`work/market-predictor-fact-recovery`; implementation `0d01e13` is pushed, not merged
+into main. Preserve the previous producer worktree `work/market-predictor`: existing
+artifacts pin its exact source files. The sections below are historical checkpoints.
 
-Design and senior Quant approve reopening only SEC fact decoding and its feature
-consumer for structured, timestamped rejection evidence. Resolve valid and rejected
-versions together; visible invalid versions suppress older same-period facts,
-including quarter/annual/YTD constituents and the current reporting endpoint.
-Future invalid records cannot affect earlier decisions. Ambiguous tags remain
-ambiguous; no preferred-tag choice, sign repair, zero fill or issuer exclusion.
-Malformed period identity uses a conservative concept-level rule; unused balance
-concepts do not disable the six flow features. Source identity/hash/envelope damage
-remains a strict issuer failure. Publish rejection reasons and update the feature
-contract. Test future poison, rejected amendments, later resolution, alias-order
-invariance, stale-endpoint prevention and unrelated concepts/periods.
+The frozen population remains 631 identities, 59 monthly decisions per identity,
+last XNYS session from July 2019 through May 28, 2024, including the truncated final
+month. Historical nonfinancial scope excludes Financials and Real Estate separately
+from the existing 45 whole-security exclusions. No new exclusion was added; the
+10% cumulative ceiling and 18 remaining slots are unchanged. The full roster has
+37,229 security-months; 22,346 are eligible across 431 issuers. Other rows retain
+explicit membership, scope or exclusion reasons. SPY, QQQ and sector remain required.
 
-Preserve this producer worktree and all old source/artifact bytes. Implement in new
-worktree `work/market-predictor-fact-recovery`, branch
-`codex/investment-fact-isolation-20261107`. New request reuses all retained source
-manifests; rebuild only the small identical roster and replay features under the
-new rejection-aware contract into a new immutable output. Verify all prior342
-successful issuer snapshots against new results (identity, values, missingness,
-consumed fact hashes, availability), reporting explicit differences. This replay
-is required to verify the changed rejection/version consumer contract; no raw
-redownload or relabeling of old checkpoints as a new producer is allowed. Historical
-code pins remain valid in the preserved producer worktree. No new exclusions or fit.
-Action replay still refused before loading at85.6% and87.1% RAM; its85% limit remains.
+The first complete coverage artifact is retained at original-root
+`data/research/investment_financial_coverage_20261107/final/_manifest.json`, SHA256
+5ba4afd64ac8cb2139000d981d969dffa4823e63865c1baa713ee746b4c8bb2a.
+It accounted for all 431 issuers but failed 89 locally: 82 conflicting SEC aliases
+and seven invalid fact histories. These were not provider download failures.
+Howmet's 2017/2018 revenue conflicts and Kellanova's negative 2008/2009 CapEx
+previously discarded every requested monthly snapshot for those issuers.
 
-User authorizes this checkpoint (`in_progress`) on isolated branch
-`codex/investment-coverage-labels-20261107`, based on main54c97b0. Extend the
-verified six-feature kernel to the declared historical nonfinancial population
-and materialize 252-primary/63-secondary investment targets. No new model fit,
-source-clock backdating, changed swing horizon or promotion is authorized here.
+Design, senior Quant and code reviews approved a narrow causal rejection contract.
+Invalid versions are source-bound records with periods, locators and availability
+clocks. Visible rejected exact periods suppress older inputs and intermediate/final
+arithmetic results for the same interval; independent valid periods remain usable.
+Malformed period identities conservatively block their concept. Future rejections
+cannot change earlier snapshots. No arbitrary alias precedence, sign correction,
+zero fill, stale-period fallback or 380-day numerical blanket is used. Unused
+balance-sheet concepts do not disable the six implemented flow features.
 
-Freeze the roster before downloading: last XNYS decision session of each month
-within 2019-07-09..2024-05-28, including the truncated final month on May28.
-Use historical membership/sector and SEC identity intervals. Financials and Real
-Estate are outside this feature-definition scope, separately counted from data
-exclusions. Preserve the original631-identity denominator, existing45 exclusions,
-10% cumulative ceiling and at most18 further exclusions; no new exclusions are
-selected in this checkpoint. Missing CIKs, failed issuers, incomplete windows and
-unsupported corporate events remain explicit rows. SPY/QQQ/sector are required.
+Recovery reused all 431 retained CompanyFacts sources with downloads prohibited.
+It reconstructed the identical roster under the new contract and replayed features
+into a fresh immutable artifact. Historical source and producer bytes were preserved.
+The final recovery manifest is
+`data/research/investment_financial_recovery_20261107/final/_manifest.json`, SHA256
+ddb5021e1daba62d9fde8fc5fc9bec7bb8170c46889f9455f5b6cd341aaadf4d.
+All 431 issuers completed, with zero issuer failures and 22,346 published eligible
+security-months. All 17,770 prior snapshots across 342 issuers matched exactly,
+excluding the expected feature-contract hash change; changed rows and missing prior
+issuers are both zero. This is actual retained-data evidence, not fixture evidence.
 
-Collection is serial, independently checkpointed per issuer, reusable and bounded
-by the shared memory guard/lease. Verify common SEC archive and acceptance clocks
-once per job; reuse the existing Microsoft archive. Publish six-feature coverage
-by issuer, date, year and sector with actual source hashes and nullable values.
-Historical reconstruction is research evidence, not actual past collection.
+Feature availability remains partial: 15,485 eligible months have at least one
+metric, versus 13,703 before; 6,017 have all six, versus 5,512 before. 6,861 have no
+available metric. The 4,712 rejected security-bound filing versions (4,682 alias
+conflicts and 30 invalid facts) span the retained source history; they are not
+excluded stocks or a count of missing decision rows. Reasons and source locators
+remain in per-issuer `rejections.json`. Source reconstruction remains research-only.
 
-Investment source/label compilation is separate from ten-session swing readers
-but uses the same holding contracts, replay kernel and investment projector.
-Check raw SIP share identity, every requested session, ownership continuity,
-corporate-action query coverage and each entitled component. Preserve marked
-terminal holdings, dividend cash/claims, exact cost once and all benchmarks.
-Actual capture clocks may qualify a label for current research; they cannot
-qualify that label for a simulated earlier fit. Economic maturity, source
-qualification, current availability and training admission are separate outputs.
-No adjusted-price fallback or ordinary-sale simulation may replace missing claims.
+Verification: 147 focused tests, Ruff and strict mypy over 15 source files passed.
+Independent design, code and senior Quant reviews approved the repair; Quant also
+verified the final manifest, coverage/parity hashes and actual aggregate results.
+Full release tests, investment fitting and predictive-performance evaluation were
+not run. Logs and a hash-verified before/after summary are in the chat workspace
+`outputs/investment-fact-isolation-tests.log` and
+`outputs/investment-financial-recovery-summary.json`.
 
-Exit evidence: frozen full-population accounting, immutable resumable issuer
-coverage, actual label qualification/gap counts by horizon, exact prioritized
-missing-source records, independent design/Quant/code review, focused causality,
-accounting/coverage/tamper tests, Ruff/strict mypy, and actual retained/provider
-runs. Failures preserve completed issuer artifacts and publish no partial final
-dataset. Training remains unavailable until its independent admission checks pass.
+Remaining label work uses the unchanged shared holding evaluator for 63/252-session
+investment targets. Preserve raw SIP prices, exact identity/ownership, explicit
+corporate actions, marked terminal holdings and prepaid 20-bp stock cost. Ordinary
+USD entitlements may use the reviewed nominal unpaid-claim valuation policy; no
+payment, cash availability or reinvestment may be inferred. Source qualification,
+economic maturity and current availability remain separate. No adjusted-price
+fallback or backdated capture clock is allowed. Existing raw selections end
+May 28, 2024; later holding windows remain explicit gaps pending verified extension.
 
-Implementation `f4e6485` is pushed on the isolated branch, not merged into main.
-Consolidated design/Quant/code reviews are verified; 128 focused
-tests, Ruff and strict mypy (15 source files) pass. Actual roster covers 37,229
-security-months, with 22,346 eligible decisions across 431 issuers. Financial
-collection preserved 116 immutable issuer checkpoints after two host-RAM timeouts;
-no final full-coverage artifact was published. Source replay found one stale
-historical producer pin (`resources.py`); raw corporate-action source hashes match.
-The existing offline reconstruction into a new archive is the approved repair, but
-its actual attempt refused at 89.0% RAM / 1.72 GiB free (requires below 85% and
-at least 2 GiB). No label corpus, currency refresh, fit or promotion completed.
-Preserve all completed checkpoints and resume after host memory recovers; exact
-source pins and next operations are in the current handoff. This checkpoint's
-actual-data exit gates remain unmet, not converted to a software-only pass.
+The original action archive's raw/source hashes match, but its reconstruction pins
+an older `resources.py` producer. The supported repair is offline reconstruction
+from the original archive into a new immutable archive, preserving old proofs.
+Attempts refused before loading at 85.6% and 87.1% RAM. After financial recovery,
+RAM was 88.08% used with 1.87 GiB free; the existing replay requires below 85% and
+at least 2 GiB free. Do not weaken this guard. The user has been asked whether to
+free RAM or save progress. No data job remains active.
+
+Next: run the existing action reconstruction when memory permits; collect exact-ID
+currency corroboration; run full label materialization; publish full-population
+qualification and gap counts. The handoff contains exact source pins and commands.
+No actual qualified-label corpus, investment fit or promotion is claimed. All
+training, promotion and production flags remain false.
 
 
 ### Main integration — November 7
