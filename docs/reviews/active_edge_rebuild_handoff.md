@@ -1,5 +1,17 @@
 # Active Edge Rebuild Handoff
 
+### Current checkout integrated into main — November 7
+
+User requested main as the merge and remote push target. Current working checkout
+is C:/project/market-predictor on main. It fast-forwarded from 9f02b97 to
+3f05941, incorporating completed API, diagnostics and investment work. The source
+and tests are identical to codex/investment-fundamentals-20261106; no conflicts or
+code edits occurred during integration. The isolated worktree is retained.
+The November 6 section below is the historical pre-merge handoff, including its
+then-current branch and unmerged status. Use main for subsequent work.
+No new fit or promotion was performed. Existing verification and data limitations
+remain exactly as recorded below. Unrelated experimental branches remain separate.
+
 ### Investment research implementation verified and pushed — November 6
 
 Current branch: `codex/investment-fundamentals-20261106`; implementation commit

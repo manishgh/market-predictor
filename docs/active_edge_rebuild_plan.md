@@ -1,5 +1,17 @@
 # Active Edge Rebuild Plan
 
+### Main integration — November 7
+
+User explicitly requested merging all completed work into remote main. The original
+checkout at C:/project/market-predictor is now on main, fast-forwarded from
+9f02b97 to 3f05941. This includes the completed API, saved-outcome diagnostics and
+investment work and their ancestor commits. Source and test trees exactly match
+the reviewed investment branch; no conflict resolution or implementation change
+was needed. Prior 79-test, lint and type-check evidence remains applicable to
+the investment checkpoint. Unrelated experimental branches are not merged.
+The November 6 branch-isolation statements below describe the pre-merge state.
+Model training, source admission and promotion limitations remain unchanged.
+
 ### Investment fundamentals and evaluation — November 6
 
 User explicitly authorizes the revised long-term specification. This is a separate
