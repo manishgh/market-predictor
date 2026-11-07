@@ -118,37 +118,38 @@ def _publish(output: Path, report: dict[str, Any], pins: dict[str, str],
 
 def collect_investment_company_facts(*, root: Path, cik: str, security_id: str,
                                      output: Path, settings: Settings | None = None) -> dict[str, Any]:
-    """One issuer per immutable collection; another issuer's failure cannot corrupt it."""
     with heavy_job_lease("collect-investment-company-facts", runtime_dir=root / "data/runtime"):
-        guard("investment Company Facts collection")
-        if output.exists():
-            raise FileExistsError(f"immutable investment artifact already exists: {output}")
-        if not security_id.strip() or security_id != security_id.strip():
-            raise ValueError("a stable security identity is required")
-        implementation = _implementation()
-        payload, response = SecSource(settings or Settings()).fetch_cik_company_facts(cik)
-        report = {"schema": "market_predictor.investment_company_facts", "status": "collected_research_only",
-                  "security_id": security_id, "cik": cik.zfill(10),
-                  "retrieved_at": response.retrieved_at_utc.isoformat(), "url": response.final_url,
-                  "response_sha256": response.body_sha256, "implementation_files": implementation, **FLAGS}
-
-        def save(directory: Path) -> None:
-            (directory / "response.bin").write_bytes(response.body)
-            write_json_object(directory / "company_facts.json", payload)
-
-        return _publish(output, report, implementation, save)
+        return collect_company_facts_unleased(root=root, cik=cik, security_id=security_id, output=output, settings=settings)
 
 
-def _retained_clocks(root: Path, reference: ArtifactReference, cik: str,
-                     pins: dict[str, str]) -> dict[str, datetime]:
-    """Replay only this issuer's archived submission bytes with the existing clock authority."""
+def collect_company_facts_unleased(*, root: Path, cik: str, security_id: str,
+                                     output: Path, settings: Settings | None = None) -> dict[str, Any]:
+    """One issuer per immutable collection; another issuer's failure cannot corrupt it."""
+    guard("investment Company Facts collection")
+    if output.exists():
+        raise FileExistsError(f"immutable investment artifact already exists: {output}")
+    if not security_id.strip() or security_id != security_id.strip():
+        raise ValueError("a stable security identity is required")
+    implementation = _implementation()
+    payload, response = SecSource(settings or Settings()).fetch_cik_company_facts(cik)
+    report = {"schema": "market_predictor.investment_company_facts", "status": "collected_research_only",
+              "security_id": security_id, "cik": cik.zfill(10),
+              "retrieved_at": response.retrieved_at_utc.isoformat(), "url": response.final_url,
+              "response_sha256": response.body_sha256, "implementation_files": implementation, **FLAGS}
+
+    def save(directory: Path) -> None:
+        (directory / "response.bin").write_bytes(response.body)
+        write_json_object(directory / "company_facts.json", payload)
+
+    return _publish(output, report, implementation, save)
+
+
+def _clock_sources(root: Path, reference: ArtifactReference,
+                   pins: dict[str, str]) -> tuple[dict[str, str], Path, Path]:
     local_pins: dict[str, str] = {}
     conventions, clock = load_sec_acceptance_clock(root, reference.model_dump(), local_pins)
     for name, digest in local_pins.items():
         pins[str(inside(root, name))] = digest
-    convention = conventions.get(cik)
-    if convention not in CONVENTIONS:
-        raise DataReadinessError(f"SEC acceptance convention unavailable for CIK {cik}")
     authority_ref = ArtifactReference.model_validate_json(json.dumps(clock["sec_collection"]))
     authority = _object(root, authority_ref, pins)
     parent = Path(authority_ref.path).parent
@@ -159,11 +160,39 @@ def _retained_clocks(root: Path, reference: ArtifactReference, cik: str,
                                     sha256=artifacts["raw_archive"]["sha256"])
     inventory_ref = ArtifactReference(path=str(parent / artifacts["raw_inventory"]["path"]),
                                       sha256=artifacts["raw_inventory"]["sha256"])
-    _read(root, archive_ref, pins)
+    archive_path = inside(root, archive_ref.path)
+    if file_sha256(archive_path) != archive_ref.sha256:
+        raise DataReadinessError("SEC archive hash differs")
+    pins[str(archive_path)] = archive_ref.sha256
     _read(root, inventory_ref, pins)
-    inventory = _bounded_inventory(inside(root, inventory_ref.path), cik)
+    return conventions, inside(root, archive_ref.path), inside(root, inventory_ref.path)
+
+
+class RetainedClockIndex:
+    """Verify the shared archive once; decode and cache only requested issuers."""
+
+    def __init__(self, root: Path, reference: ArtifactReference, pins: dict[str, str]) -> None:
+        self.conventions, self.archive_path, self.inventory_path = _clock_sources(root, reference, pins)
+        self.cache: dict[str, dict[str, datetime]] = {}
+
+    def get(self, cik: str) -> dict[str, datetime]:
+        if cik not in self.cache:
+            convention = self.conventions.get(cik)
+            if convention not in CONVENTIONS:
+                raise DataReadinessError(f"SEC acceptance convention unavailable for CIK {cik}")
+            self.cache[cik] = _issuer_clocks(self.archive_path, self.inventory_path, cik, convention)
+        return self.cache[cik]
+
+
+def _retained_clocks(root: Path, reference: ArtifactReference, cik: str,
+                     pins: dict[str, str]) -> dict[str, datetime]:
+    return RetainedClockIndex(root, reference, pins).get(cik)
+
+
+def _issuer_clocks(archive_path: Path, inventory_path: Path, cik: str, convention: str) -> dict[str, datetime]:
+    inventory = _bounded_inventory(inventory_path, cik)
     clocks: dict[str, datetime] = {}
-    with zipfile.ZipFile(inside(root, archive_ref.path)) as archive:
+    with zipfile.ZipFile(archive_path) as archive:
         for item in inventory:
             guard("investment retained filing clocks")
             info = archive.getinfo(item["archive_member"])

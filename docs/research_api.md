@@ -151,6 +151,49 @@ an HTTP model activation. Complete historical source/label coverage, an admitted
 training pipeline and prospective evaluation are still required; every generated
 artifact explicitly retains false training/promotion/production flags.
 
+### Broad investment coverage and label qualification
+
+`plan-investment-coverage` freezes monthly decisions, historical sector scope and
+issuer identities before collection. Its `InvestmentCoverageRequest` pins the
+approved cohort, membership, SEC identity relations and identity manifest,
+corrected acceptance-clock manifest, and optional reused CompanyFacts manifests.
+`collect-investment-coverage` consumes the resulting roster manifest and its hash.
+It collects once per issuer and retains each security class separately. Resume
+uses the same request, code and source identities; completed issuer checkpoints
+are immutable. Missing issuers and features remain explicit coverage rows.
+
+```powershell
+market-predictor-research plan-investment-coverage --root C:/project/market-predictor --request <request.json> --request-sha256 <sha256> --output <new-roster-directory>
+market-predictor-collect collect-investment-coverage --root C:/project/market-predictor --roster-manifest <roster-directory/_manifest.json> --roster-manifest-sha256 <sha256> --output <coverage-directory>
+market-predictor-collect collect-investment-dividend-currencies --root C:/project/market-predictor --action-config configs/swing_corporate_action_sources.toml --action-config-sha256 <sha256> --action-archive <action-archive> --action-audit-sha256 <sha256> --output <currency-directory>
+market-predictor-research materialize-investment-labels --root C:/project/market-predictor --request <label-request.json> --request-sha256 <sha256> --output <label-directory>
+```
+
+The currency collector requests existing dividend action IDs and preserves raw
+responses. Qualification requires explicit USD and unchanged entitlement terms.
+Missing currency, cancellations, revisions and unsupported distributions remain
+unresolved. Neither an issuer's domicile nor its stock's trading currency proves
+the currency of a distribution.
+
+The label request is `InvestmentLabelMaterializationRequest` in
+`research/investment_labels.py`. It pins `roster_manifest`, `target_config` and
+optional `currency_manifest`, each with `path` and `sha256`. It also requires
+`nominal_unpaid_claim_valuation: true` and an aware `evaluation_as_of_utc`.
+Source qualification and availability by that frozen evaluation cutoff are
+reported separately. Verification performed after the cutoff cannot be claimed
+available before it. Per-security checkpoints retain all requested decisions and
+horizons; the final artifact indexes them without loading the whole target corpus
+into memory.
+
+Investment labels use raw SIP prices and the shared holding evaluator over exact
+63/252-session windows. Ordinary verified dividend entitlements may be valued as
+unpaid, nontradable receivables under an explicit nominal-value research policy.
+That valuation does not establish payment, spendable cash or reinvestment. Source
+capture and membership verification clocks constrain label availability now;
+reconstructed historical membership does not establish historical observation.
+All required stock, SPY, QQQ and sector components must qualify. Incomplete paths
+retain reasons; adjusted prices and ten-session swing labels cannot replace them.
+
 ## Results and errors
 
 `predicted_excess_return` is the signed ten-session stock net return minus SPY
