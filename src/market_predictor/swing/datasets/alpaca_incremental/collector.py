@@ -26,7 +26,7 @@ from market_predictor.swing.datasets.alpaca_incremental.storage import Integrity
 
 
 def guard_memory() -> None:
-    assert_system_memory_available(minimum_available_gib=2.0, maximum_used_percent=85.0)
+    assert_system_memory_available()
     assert_memory_budget(hard_budget_gib=5.0, headroom_gib=0.25, stage="alpaca incremental page")
 
 

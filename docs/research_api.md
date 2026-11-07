@@ -151,7 +151,12 @@ an HTTP model activation. Complete historical source/label coverage, an admitted
 training pipeline and prospective evaluation are still required; every generated
 artifact explicitly retains false training/promotion/production flags.
 
-### Broad investment coverage and label qualification
+### Broad investment coverage and future-return target source checks
+
+A label is the standard machine-learning term for the outcome a model learns to
+predict. Here it is a measured future investment return over 63 or 252 sessions,
+including costs and comparisons with SPY, QQQ and the sector benchmark. Validating
+its source data does not approve model training or establish forecast performance.
 
 `plan-investment-coverage` freezes monthly decisions, historical sector scope and
 issuer identities before collection. Its `InvestmentCoverageRequest` pins the
@@ -186,7 +191,7 @@ market-predictor-research materialize-investment-labels --root C:/project/market
 ```
 
 The currency collector requests existing dividend action IDs and preserves raw
-responses. Qualification requires explicit USD and unchanged entitlement terms.
+responses. Source validation requires explicit USD and unchanged entitlement terms.
 Missing currency, cancellations, revisions and unsupported distributions remain
 unresolved. Neither an issuer's domicile nor its stock's trading currency proves
 the currency of a distribution.
@@ -195,11 +200,20 @@ The label request is `InvestmentLabelMaterializationRequest` in
 `research/investment_labels.py`. It pins `roster_manifest`, `target_config` and
 optional `currency_manifest`, each with `path` and `sha256`. It also requires
 `nominal_unpaid_claim_valuation: true` and an aware `evaluation_as_of_utc`.
-Source qualification and availability by that frozen evaluation cutoff are
+Source validation and availability by that frozen evaluation cutoff are
 reported separately. Verification performed after the cutoff cannot be claimed
 available before it. Per-security checkpoints retain all requested decisions and
 horizons; the final artifact indexes them without loading the whole target corpus
 into memory.
+
+Each target row reports `status: source_validated` when its required prices,
+security identities and corporate-action evidence pass the source checks, or
+`status: unresolved` with specific missing reasons. Reports count these rows as
+`source_validated_rows`. `available_by_evaluation_as_of` separately records whether
+the evidence was available by the requested cutoff. All training, promotion and
+production flags remain false. The existing roster input field
+`qualification_reasons` describes population eligibility, such as an excluded
+security or an out-of-scope sector; it does not certify a future-return target.
 
 Investment labels use raw SIP prices and the shared holding evaluator over exact
 63/252-session windows. Ordinary verified dividend entitlements may be valued as
@@ -207,7 +221,7 @@ unpaid, nontradable receivables under an explicit nominal-value research policy.
 That valuation does not establish payment, spendable cash or reinvestment. Source
 capture and membership verification clocks constrain label availability now;
 reconstructed historical membership does not establish historical observation.
-All required stock, SPY, QQQ and sector components must qualify. Incomplete paths
+All required stock, SPY, QQQ and sector components must pass the source checks. Incomplete paths
 retain reasons; adjusted prices and ten-session swing labels cannot replace them.
 
 ## Results and errors

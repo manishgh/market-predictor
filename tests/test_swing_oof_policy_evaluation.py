@@ -412,7 +412,7 @@ def test_publication_uses_one_provider_lease_and_preserves_every_selected_gap(
         assert report["corporate_action_assumptions"]["production_eligible"] is False
     else:
         assert report["corporate_action_assumptions"] is None
-    assert request["memory_policy"] == {"maximum_system_used_percent": 91.0,
+    assert request["memory_policy"] == {"maximum_system_used_percent": 90.0,
         "maximum_system_pause_seconds": 120.0, "system_memory_poll_seconds": 5.0,
         "minimum_system_free_gib": None, "maximum_process_memory_gib": 5.0,
         "process_headroom_gib": 0.75, "historical_training_policy_unchanged": True}

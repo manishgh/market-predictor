@@ -150,7 +150,7 @@ def load_config(path: Path, *, root: Path | None = None) -> SecIncrementalConfig
 
 def guard_memory() -> None:
     assert_memory_budget(stage="SEC incremental", hard_budget_gib=4.0, headroom_gib=0.75)
-    assert_system_memory_available(minimum_available_gib=2.0, maximum_used_percent=85.0)
+    assert_system_memory_available()
 
 
 class _RequestGate:

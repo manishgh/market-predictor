@@ -1,4 +1,4 @@
-"""Dedicated 63/252-session compiler over the unchanged shared holding kernel."""
+"""Build 63/252-session future-return targets using the shared holding kernel."""
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
@@ -32,8 +32,8 @@ from market_predictor.swing.contracts.holding_accounting import (
 
 
 @dataclass(frozen=True)
-class InvestmentSourceQualification:
-    """Independent membership/action replay result, including actual source clocks."""
+class InvestmentSourceValidation:
+    """Membership/action source-check results and clocks; never training approval."""
     evidence: tuple[EvidenceReference, ...]
     missing_reasons: tuple[str, ...] = ()
     events: tuple[CorporateActionEvent | PaymentEvent | CashAvailabilityEvent, ...] = ()
@@ -42,14 +42,14 @@ class InvestmentSourceQualification:
     valuation_basis: str = "observed_raw_prices_and_action_absence"
 
 
-ActionQualification = Callable[[str, str, tuple[date, ...], str], InvestmentSourceQualification]
+ActionSourceValidation = Callable[[str, str, tuple[date, ...], str], InvestmentSourceValidation]
 
 
 def _identities(evidence: tuple[EvidenceReference, ...]) -> tuple[InvestmentSourceIdentity, ...]:
     sources: dict[str, InvestmentSourceIdentity] = {}
     for item in evidence:
         if isinstance(item, SimulationReference):
-            raise ValueError("investment qualification cannot use simulation provenance")
+            raise ValueError("investment source validation cannot use simulation provenance")
         if item.available_at is not None and item.available_at > item.retrieved_at:
             raise ValueError("investment source availability cannot follow capture")
         source = InvestmentSourceIdentity(reference=item.reference, artifact_sha256=item.artifact_sha256,
@@ -61,11 +61,11 @@ def _identities(evidence: tuple[EvidenceReference, ...]) -> tuple[InvestmentSour
 
 
 def compile_investment_label(*, decision: Mapping[str, Any], horizon: Literal[63, 252],
-    reader: InvestmentSourceReader, membership: InvestmentSourceQualification,
-    action_qualification: ActionQualification) -> dict[str, Any]:
-    """Keep every requested row; economics require all four independently qualified lots.
+    reader: InvestmentSourceReader, membership: InvestmentSourceValidation,
+    action_source_validation: ActionSourceValidation) -> dict[str, Any]:
+    """Keep every requested row; economics require all four lots with independently validated sources.
 
-    The action qualifier must prove complete coverage and account for owned actions
+    The corporate-action source validator must prove complete coverage and account for owned actions
     over the exact interval. Any unresolved distribution, successor or claim stays
     unavailable; no event-free return is reported as an economic diagnostic for it.
     """
@@ -95,38 +95,38 @@ def compile_investment_label(*, decision: Mapping[str, Any], horizon: Literal[63
         observations = reader.read(identity, symbol, sessions, benchmark=role != "stock")
         gaps = list(observations.missing_reasons)
         position = f"{decision['decision_id']}:{role}:shares"
-        qualification = action_qualification(identity, observations.provider_symbol or symbol, sessions, position)
-        gaps.extend(qualification.missing_reasons)
-        if not qualification.evidence:
+        source_validation = action_source_validation(identity, observations.provider_symbol or symbol, sessions, position)
+        gaps.extend(source_validation.missing_reasons)
+        if not source_validation.evidence:
             gaps.append("corporate_action_coverage_evidence_missing")
-        if any(item.available_at is None for item in qualification.evidence):
+        if any(item.available_at is None for item in source_validation.evidence):
             gaps.append("corporate_action_source_availability_unknown")
-        _identities(qualification.evidence)
-        if qualification.share_position_ids and len(qualification.share_position_ids) != len(sessions):
+        _identities(source_validation.evidence)
+        if source_validation.share_position_ids and len(source_validation.share_position_ids) != len(sessions):
             raise ValueError("investment share-position marks must cover exact horizon")
-        action_refs = tuple(item for event in qualification.events for item in event.evidence)
-        mark_refs = tuple(item for mark in qualification.non_share_marks if isinstance(mark, KnownMark) for item in mark.evidence)
+        action_refs = tuple(item for event in source_validation.events for item in event.evidence)
+        mark_refs = tuple(item for mark in source_validation.non_share_marks if isinstance(mark, KnownMark) for item in mark.evidence)
         if any(item.available_at is None for item in (*action_refs, *mark_refs)):
             gaps.append("corporate_action_economics_availability_unknown")
-        all_evidence = (*membership.evidence, *qualification.evidence, *observations.evidence.values(), *action_refs, *mark_refs)
+        all_evidence = (*membership.evidence, *source_validation.evidence, *observations.evidence.values(), *action_refs, *mark_refs)
         sources = _identities(all_evidence)
         component_reports.append({"role": role, "security_id": identity, "symbol": symbol,
-            "missing_reasons": sorted(set(gaps)), "valuation_basis": qualification.valuation_basis,
+            "missing_reasons": sorted(set(gaps)), "valuation_basis": source_validation.valuation_basis,
             "sources": [source.model_dump(mode="json") for source in sources]})
         reasons.extend(f"{role}:{gap}" for gap in gaps)
         if gaps or not membership_sources:
             continue
-        context = (*membership.evidence, *qualification.evidence)
+        context = (*membership.evidence, *source_validation.evidence)
         spec = HoldingSpecification(research_contract_sha256=policy.sha256(), decision_id=str(decision["decision_id"]),
             security_id=identity, sector=str(decision["sector"]), initial_position_id=position,
             initial_entry_price=float(observations.frame.loc[sessions[0], "open"]), initial_entry_timestamp=entry,
             price_basis="raw_with_no_adjustment", currency="USD",
             entry_evidence=(*context, observations.evidence[sessions[0]]), session_end_timestamps=ends,
-            cost_prepaid_fraction=0.002, policy="fixed_horizon", events=qualification.events,
+            cost_prepaid_fraction=0.002, policy="fixed_horizon", events=source_validation.events,
             marks=(*tuple(KnownMark(position_id=share_position,
                 mark_at=end, value_per_unit=float(observations.frame.loc[stamp, "close"]), currency="USD",
                 evidence=(*context, observations.evidence[stamp])) for stamp, end, share_position in zip(sessions, ends,
-                    qualification.share_position_ids or (position,) * len(sessions), strict=True)), *qualification.non_share_marks))
+                    source_validation.share_position_ids or (position,) * len(sessions), strict=True)), *source_validation.non_share_marks))
         specs[role] = spec
         bindings.append(InvestmentHoldingBinding(role=role, security_id=identity, symbol=symbol,
             specification_sha256=json_sha256(spec.model_dump(mode="json")), sources=sources))
@@ -142,7 +142,7 @@ def compile_investment_label(*, decision: Mapping[str, Any], horizon: Literal[63
         "decision_session": day.isoformat(), "horizon_sessions": horizon, "policy_sha256": policy.sha256(),
         "entry_time_utc": entry.isoformat(), "economic_maturity_utc": ends[-1].isoformat(),
         "label_available_at_utc": None if result is None else result.model_dump(mode="json")["label_available_at_utc"],
-        "status": "qualified" if not reasons else "unresolved", "label_eligible": not reasons,
+        "status": "source_validated" if not reasons else "unresolved", "label_eligible": not reasons,
         "missing_reasons": sorted(set(reasons)), "components": component_reports,
         "request": None if request is None else request.model_dump(mode="json"),
         "target": None if result is None else result.model_dump(mode="json"),

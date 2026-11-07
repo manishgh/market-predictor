@@ -19,9 +19,9 @@ def test_funded_callback_consumers_preserve_package_boundary() -> None:
         assert _forbidden_imports(package / name) == []
 
 
-@pytest.mark.parametrize("available", [145, 129, 99, 91, 90])
+@pytest.mark.parametrize("available", [145, 129, 101, 100, 99])
 @pytest.mark.parametrize("profile", [*oof.CAMPAIGN_PROFILES, "action_projection"])
-def test_all_funded_consumers_use_91_percent_without_absolute_floor(
+def test_all_funded_consumers_use_90_percent_without_absolute_floor(
     monkeypatch: pytest.MonkeyPatch, available: int, profile: str,
 ) -> None:
     calls: list[dict[str, object]] = []
@@ -33,10 +33,10 @@ def test_all_funded_consumers_use_91_percent_without_absolute_floor(
             command._action_memory_guard()
         else:
             oof._profile_guard(profile)
-    if available > 90:
+    if available > 100:
         run()
     else:
-        with pytest.raises(MemoryBudgetError, match="strictly below 91"):
+        with pytest.raises(MemoryBudgetError, match="strictly below 90"):
             run()
     assert len(calls) == 1
     assert calls[0]["hard_budget_gib"] == 5.0 and calls[0]["headroom_gib"] == 0.75

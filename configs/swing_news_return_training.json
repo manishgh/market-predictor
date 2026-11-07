@@ -36,7 +36,7 @@
   },
   "readiness_config": {
     "path": "configs/swing_news_training_readiness.json",
-    "sha256": "6adb5ef757d396200296bf66cb29ababc15ad4117c3def06350e6b4bba797fc0"
+    "sha256": "d8eab1398cd0f39e9e91fdeeb8f1fc2de0c2e41353048028be3d8f9e30df4503"
   },
   "schema_version": "market_predictor.swing_return_training",
   "scope": "initial_fit_research_only",

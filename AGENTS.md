@@ -486,20 +486,15 @@ separate request. Model/data admission invariants elsewhere in this file still a
   non-queueing workspace lease before loading inputs. Do not bypass the lease
   from scripts, tests, notebooks, or deployment wrappers.
 
-User memory amendment (October18, superseding October9): new source-link indexing and monthly
-parent/news feature jobs use the
-user-approved percentage-only system ceiling: strictly below91% RAM used,
-without an independent2GiB free-memory floor. Keep the5GiB process budget,
-0.75GiB process headroom and shared non-queueing heavy-job lease. Unknown memory
-measurements still stop work. Preserve completed corpus/sentiment producer bytes
-that immutable requests pin; use the new runtime for current bridge/monthly work.
-At valid system usage at/above91%, the new runtime may pause all data work for
-at most120seconds (monotonic deadline; polling at most every5seconds), keeping
-the lease and transaction; it resumes only below91% or raises on timeout.
-Invalid/unknown readings and process-budget failures still raise immediately.
-The pause must emit actual UTC pressure/recovery/timeout records. It does not
-permit work above91%, commit partial results or resume a failed old stage.
-Other workloads retain their configured limits.
+User memory amendment (November 7, superseding previous 85% and 91% defaults):
+use the shared percentage-only ceiling of strictly below 90% system RAM used.
+Do not add an implicit absolute free-memory floor. Preserve process memory budgets,
+process headroom, unknown-measurement refusal and the shared heavy-job lease.
+The bounded runtime may pause at or above 90% for at most 120 seconds, polling
+at most every 5 seconds with UTC pressure/recovery/timeout records. Resume only
+below 90%; invalid measurements and process-budget failures stop immediately.
+Explicit workload-specific stricter limits remain possible. Preserve historical
+producer files and artifacts; apply the policy through a new immutable producer.
 
 ## 6. Change Workflow
 

@@ -1,5 +1,5 @@
 {
-  "maximum_system_used_percent": 91.0,
+  "maximum_system_used_percent": 90.0,
   "publication": {
     "path": "data/features/swing_news_decision_features/_manifest.json",
     "sha256": "4112d3255ef57e598ced47401cbedabf4d40200be46dd50d6490dc04dbd056ec"

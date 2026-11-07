@@ -50,7 +50,7 @@ from market_predictor.swing.features.research_join import DECISION_KEYS
 
 def _guard() -> None:
     assert_memory_budget(stage="research predictor publication", hard_budget_gib=5.0, headroom_gib=0.75)
-    assert_system_memory_available(minimum_available_gib=2.0)
+    assert_system_memory_available()
 
 
 def _write(path: Path, value: dict[str, Any]) -> None:

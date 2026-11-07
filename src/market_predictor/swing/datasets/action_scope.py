@@ -24,7 +24,7 @@ def verify_action_scope_documents(root: Path, scopes: tuple[ReviewedCashDistribu
     reports: dict[tuple[str, str, str], dict[str, Any]] = {}
     for scope in scopes:
         if memory_guard is None:
-            assert_system_memory_available(minimum_available_gib=2.0)
+            assert_system_memory_available()
         else:
             memory_guard()
         inventory_path = inside(root, scope.inventory.path)

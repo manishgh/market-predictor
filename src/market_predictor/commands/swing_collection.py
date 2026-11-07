@@ -12,7 +12,7 @@ from market_predictor.catalysts.issuer_events.alpaca_news_collection import (
 from market_predictor.commands.swing_symbol_corrections import register_symbol_correction_commands
 from market_predictor.config import get_settings
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.core.system_memory import assert_system_memory_available
+from market_predictor.core.system_memory import MAXIMUM_SYSTEM_USED_PERCENT, assert_system_memory_available
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError, serialized_heavy_job
 from market_predictor.sources.alpaca import AlpacaNewsPage, AlpacaSource
 from market_predictor.sources.alpaca_corporate_actions import fetch_corporate_actions_page
@@ -235,8 +235,8 @@ def register_swing_collection_commands(app: typer.Typer, console: Any) -> None:
             help="Hash-verified point-in-time membership artifact with security IDs.",
         ),
         query_scope: Path | None = typer.Option(None, help="Evidence-pinned issuer query intervals; not membership."),
-        minimum_system_free_gib: float = typer.Option(2.0, min=0.1),
-        maximum_system_used_percent: float = typer.Option(85.0, min=1.0, max=99.0),
+        minimum_system_free_gib: float = typer.Option(0.0, min=0.0),
+        maximum_system_used_percent: float = typer.Option(MAXIMUM_SYSTEM_USED_PERCENT, min=1.0, max=MAXIMUM_SYSTEM_USED_PERCENT),
         start_date: str = typer.Option(
             ...,
             help="Inclusive first publication date YYYY-MM-DD.",

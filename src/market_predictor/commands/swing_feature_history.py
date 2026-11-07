@@ -27,7 +27,7 @@ from market_predictor.swing.datasets.symbol_corrections import pinned_object
 
 def _guard() -> None:
     assert_memory_budget(stage="corrected adjusted feature history", hard_budget_gib=4.0, headroom_gib=0.75)
-    assert_system_memory_available(minimum_available_gib=2.0)
+    assert_system_memory_available()
 
 
 class _GuardedDailySource(AlpacaSwingDailyPageSource):

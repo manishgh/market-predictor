@@ -15,7 +15,7 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import resolve_inside_authority
-from market_predictor.investment.label_materialization import InvestmentSourceQualification
+from market_predictor.investment.label_materialization import InvestmentSourceValidation
 from market_predictor.swing.contracts.corrected_outcomes import OfficialWindow
 from market_predictor.swing.contracts.holding_accounting import CorporateActionEvent, EvidenceReference, KnownMark, PositionLeg
 from market_predictor.swing.datasets.action_evidence import CorporateActionEvidence
@@ -194,7 +194,7 @@ class InvestmentCorporateActions:
             if file_sha256(resolve_inside_authority(self.root, name)) != digest:
                 raise DataReadinessError("investment corporate-action source changed")
 
-    def qualify(self, identity: str, symbol: str, sessions: tuple[date, ...], position_id: str) -> InvestmentSourceQualification:
+    def validate_sources(self, identity: str, symbol: str, sessions: tuple[date, ...], position_id: str) -> InvestmentSourceValidation:
         first, last = sessions[0], sessions[-1]
         reasons = list(self.global_gaps)
         refs = (*self.coverage.get(symbol, ()), self.policy_reference)
@@ -253,7 +253,7 @@ class InvestmentCorporateActions:
             for claim, evidence in claims:
                 marks.append(KnownMark(position_id=claim, mark_at=calendar.session_close(day.isoformat()).to_pydatetime(),
                     value_per_unit=1.0, currency="USD", evidence=evidence))
-        return InvestmentSourceQualification(evidence=refs, missing_reasons=tuple(sorted(set(reasons))), events=tuple(events),
+        return InvestmentSourceValidation(evidence=refs, missing_reasons=tuple(sorted(set(reasons))), events=tuple(events),
             non_share_marks=tuple(marks), share_position_ids=tuple(positions),
             valuation_basis=("source_verified_entitlement_policy_valued_unpaid_receivable" if claims
                 else "observed_raw_prices_and_split_units"))

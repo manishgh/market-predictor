@@ -74,7 +74,7 @@ class SpecificationStream(Protocol):
 
 def _guard() -> None:
     assert_memory_budget(stage="corrected outcome publication", hard_budget_gib=5.0, headroom_gib=0.75)
-    assert_system_memory_available(minimum_available_gib=2.0)
+    assert_system_memory_available()
 
 
 def _json(value: Any) -> bytes:

@@ -1,4 +1,4 @@
-"""Resumable full-roster investment labels from independently replayed sources."""
+"""Build resumable full-roster future-return targets from validated source data."""
 from __future__ import annotations
 
 import json
@@ -18,7 +18,7 @@ from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.investment.corporate_actions import InvestmentCorporateActions
-from market_predictor.investment.label_materialization import InvestmentSourceQualification, compile_investment_label
+from market_predictor.investment.label_materialization import InvestmentSourceValidation, compile_investment_label
 from market_predictor.investment.label_sources import InvestmentSourceReader
 from market_predictor.research.investment_currencies import load_investment_currency_evidence
 from market_predictor.research.investment_features import FLAGS, ArtifactReference, _object, _publish, _read
@@ -72,8 +72,8 @@ def _outside_row(row: dict[str, Any], horizon: Literal[63, 252]) -> dict[str, An
         "request": None, "request_sha256": None, "target": None, **FLAGS}
 
 
-def _membership_qualification(*, sources: dict[str, Any], row: dict[str, Any], horizon: Literal[63, 252],
-    evidence: EvidenceReference) -> InvestmentSourceQualification:
+def _validate_membership_sources(*, sources: dict[str, Any], row: dict[str, Any], horizon: Literal[63, 252],
+    evidence: EvidenceReference) -> InvestmentSourceValidation:
     members = sources["memberships"]
     cutoff = pd.Timestamp(row["decision_time_utc"])
     start = pd.to_datetime(members.effective_from_utc, utc=True)
@@ -87,7 +87,7 @@ def _membership_qualification(*, sources: dict[str, Any], row: dict[str, Any], h
     # Universe membership determines admission at the decision only. The reader's
     # independently reconstructed exact source-plan segment owns the entire outcome
     # interval; leaving the index never creates a sale or an automatic label gap.
-    return InvestmentSourceQualification((evidence,), missing)
+    return InvestmentSourceValidation((evidence,), missing)
 
 
 def _counts(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -97,9 +97,9 @@ def _counts(rows: list[dict[str, Any]]) -> dict[str, Any]:
         result[str(horizon)] = {"population_rows": len(selected),
             "scope_eligible_rows": sum(row["roster_status"] == "eligible" for row in selected),
             "economically_mature_rows": sum(row["economically_mature_at_evaluation"] for row in selected),
-            "source_qualified_rows": sum(row["status"] == "qualified" for row in selected),
+            "source_validated_rows": sum(row["status"] == "source_validated" for row in selected),
             "currently_available_rows": sum(row["available_by_evaluation_as_of"] for row in selected),
-            "unresolved_rows": sum(row["status"] != "qualified" for row in selected),
+            "unresolved_rows": sum(row["status"] != "source_validated" for row in selected),
             "missing_reason_counts": dict(sorted(Counter(reason for row in selected for reason in row["missing_reasons"]).items()))}
     return result
 
@@ -196,8 +196,8 @@ def materialize_investment_labels(*, root: Path, request: Path, request_sha256: 
                         guard("investment monthly horizon label")
                         if row["status"] == "eligible":
                             result = compile_investment_label(decision=row, horizon=horizon, reader=reader,
-                                membership=_membership_qualification(sources=sources, row=row, horizon=horizon,
-                                    evidence=membership_ref), action_qualification=actions.qualify)
+                                membership=_validate_membership_sources(sources=sources, row=row, horizon=horizon,
+                                    evidence=membership_ref), action_source_validation=actions.validate_sources)
                             result.pop("specifications", None)
                             result["request_sha256"] = None if result["request"] is None else json_sha256(result["request"])
                         else:
@@ -239,7 +239,7 @@ def materialize_investment_labels(*, root: Path, request: Path, request_sha256: 
                 reasons_by_horizon[horizon_key].update(counts.pop("missing_reason_counts"))
                 totals[horizon_key].update(counts)
             for record in records:
-                if record["status"] == "qualified" and record["label_available_at_utc"] is not None:
+                if record["status"] == "source_validated" and record["label_available_at_utc"] is not None:
                     availability_clocks[str(record["horizon_sessions"])][record["label_available_at_utc"]] += 1
             checkpoints.append(checkpoint_ref.model_dump(mode="json"))
         reader.recheck()

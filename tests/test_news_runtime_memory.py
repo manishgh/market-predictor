@@ -19,17 +19,17 @@ from market_predictor.core.system_memory import SystemMemory
 from market_predictor.research import news_runtime_memory as runtime
 
 
-@pytest.mark.parametrize("available,allowed", [(200, True), (150, True), (101, True), (100, True), (91, True), (90, False), (89, False)])
+@pytest.mark.parametrize("available,allowed", [(200, True), (150, True), (101, True), (100, False), (91, False), (90, False), (89, False)])
 def test_percentage_only_requested_boundary(monkeypatch: pytest.MonkeyPatch, available: int, allowed: bool) -> None:
     monkeypatch.setattr(memory, "MAXIMUM_SYSTEM_PAUSE_SECONDS", 0.0)
     calls: list[dict[str, object]] = []
     monkeypatch.setattr(memory, "assert_memory_budget", lambda **kwargs: calls.append(kwargs))
-    # Even this tiny synthetic available byte count is admitted below91: no2GiB floor.
+    # Even this tiny synthetic available byte count is admitted below90: no2GiB floor.
     monkeypatch.setattr(memory, "system_memory_snapshot", lambda: SystemMemory(1000, available))
     if allowed:
         memory.guard(stage="unit")
     else:
-        with pytest.raises(MemoryBudgetError, match="strictly below 91"):
+        with pytest.raises(MemoryBudgetError, match="strictly below 90"):
             memory.guard(stage="unit")
     assert calls == [{"stage": "unit", "hard_budget_gib": 5.0, "headroom_gib": 0.75}]
 
@@ -99,7 +99,7 @@ def clock(monkeypatch: pytest.MonkeyPatch) -> FakeClock:
 
 def test_healthy_guard_does_not_sleep_or_log(clock: FakeClock, monkeypatch: pytest.MonkeyPatch,
                                            capsys: pytest.CaptureFixture[str]) -> None:
-    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: SystemMemory(10000, 901))
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: SystemMemory(10000, 1001))
     memory.guard()
     assert clock.sleeps == []
     assert capsys.readouterr().err == ""
@@ -107,7 +107,7 @@ def test_healthy_guard_does_not_sleep_or_log(clock: FakeClock, monkeypatch: pyte
 
 def test_exact_boundary_recovers_and_logs_actual_facts(clock: FakeClock, monkeypatch: pytest.MonkeyPatch,
                                                      capsys: pytest.CaptureFixture[str]) -> None:
-    snapshots = iter([SystemMemory(10000, 900), SystemMemory(10000, 901)])
+    snapshots = iter([SystemMemory(10000, 1000), SystemMemory(10000, 1001)])
     calls: list[dict[str, object]] = []
     monkeypatch.setattr(memory, "system_memory_snapshot", lambda: next(snapshots))
     monkeypatch.setattr(memory, "assert_memory_budget", lambda **kwargs: calls.append(kwargs))
@@ -116,11 +116,11 @@ def test_exact_boundary_recovers_and_logs_actual_facts(clock: FakeClock, monkeyp
     assert calls == [{"stage": "unit recovery", "hard_budget_gib": 5.0, "headroom_gib": 0.75}] * 2
     events = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
     assert [event["event"] for event in events] == ["pause", "resume"]
-    assert [event["used_percent"] for event in events] == pytest.approx([91.0, 90.99])
+    assert [event["used_percent"] for event in events] == pytest.approx([90.0, 89.99])
     assert [event["elapsed_seconds"] for event in events] == [0.0, 5.0]
     for event in events:
         assert event["stage"] == "unit recovery"
-        assert event["ceiling_percent"] == 91.0
+        assert event["ceiling_percent"] == 90.0
         assert event["maximum_wait_seconds"] == 120.0
         assert datetime.fromisoformat(event["timestamp_utc"]).utcoffset().total_seconds() == 0
 
@@ -196,7 +196,7 @@ def test_data_io_does_not_start_while_paused_and_results_unchanged(
 
     clock.during_sleep = during_pause
     snapshots = iter([SystemMemory(100, 8)])
-    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: next(snapshots, SystemMemory(100, 10)))
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: next(snapshots, SystemMemory(100, 11)))
     monkeypatch.setattr(Path, "open", tracked_open)
     monkeypatch.setattr(runtime.pq, "ParquetFile", tracked_parquet)
     if kind == "hash":

@@ -355,7 +355,7 @@ def _verify_normalized_archive(root: Path, plan: Path, plan_pin: str, directory:
 
 def _guard() -> None:
     assert_memory_budget(stage="initial-fit adjusted history", hard_budget_gib=4.0, headroom_gib=0.75)
-    assert_system_memory_available(minimum_available_gib=2.0)
+    assert_system_memory_available()
 
 
 def run_initial_fit_adjusted_history(*, mode: Literal["publish-plan", "collect", "offline"], root: Path,

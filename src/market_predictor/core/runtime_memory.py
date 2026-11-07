@@ -1,39 +1,31 @@
 """Shared bounded memory-pressure policy for news and saved-return workloads.
 
-System memory must be strictly below 91 percent, with no absolute free-memory
+System memory must be strictly below 90 percent, with no absolute free-memory
 floor. Preserve the 5 GiB process budget, 0.75 GiB headroom, 120-second maximum
 pause and 5-second polling used by these workloads.
 """
 from __future__ import annotations
 
 import json
-import math
 import sys
 import time
 from datetime import UTC, datetime
 
 from market_predictor.core.errors import MemoryBudgetError
-from market_predictor.core.system_memory import system_memory_snapshot
+from market_predictor.core.system_memory import (
+    MAXIMUM_SYSTEM_USED_PERCENT,
+    system_memory_snapshot,
+    validate_system_memory_snapshot,
+)
 from market_predictor.resources import assert_memory_budget
 
-MAXIMUM_SYSTEM_USED_PERCENT = 91.0
 MAXIMUM_SYSTEM_PAUSE_SECONDS = 120.0
 SYSTEM_MEMORY_POLL_SECONDS = 5.0
 
 
 def _used_percent(stage: str) -> float:
     assert_memory_budget(stage=stage, hard_budget_gib=5.0, headroom_gib=0.75)
-    snapshot = system_memory_snapshot()
-    if (snapshot is None
-            or type(snapshot.total_bytes) is not int
-            or type(snapshot.available_bytes) is not int
-            or snapshot.total_bytes <= 0
-            or not 0 <= snapshot.available_bytes <= snapshot.total_bytes):
-        raise MemoryBudgetError(f"memory guard stopped {stage}: system memory measurement unavailable")
-    used = snapshot.used_percent
-    if not math.isfinite(used) or not 0 <= used <= 100:
-        raise MemoryBudgetError(f"memory guard stopped {stage}: system memory measurement unavailable")
-    return used
+    return validate_system_memory_snapshot(system_memory_snapshot()).used_percent
 
 
 def _event(event: str, stage: str, used: float, elapsed: float) -> None:

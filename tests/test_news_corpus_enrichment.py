@@ -285,7 +285,7 @@ def test_full_job_memory_guard_uses_canonical_thresholds(monkeypatch: pytest.Mon
     monkeypatch.setattr(c, "assert_system_memory_available", lambda **kwargs: calls.append(kwargs))
     c._guard()
     assert calls[0]["hard_budget_gib"] == 5.0
-    assert calls[1] == {"minimum_available_gib": 2.0, "maximum_used_percent": 85.0}
+    assert calls[1] == {}
 
 
 def test_progress_fires_only_after_durable_checkpoint_and_resume_reconstructs(

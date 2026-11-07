@@ -65,7 +65,7 @@ def _require(condition: bool, message: str) -> None:
 
 def _guard() -> None:
     assert_memory_budget(stage="saved issuer candidate derivative", hard_budget_gib=5.0, headroom_gib=0.75)
-    assert_system_memory_available(minimum_available_gib=0.75, maximum_used_percent=90.0)
+    assert_system_memory_available()
 
 
 def _json(value: Any) -> str:

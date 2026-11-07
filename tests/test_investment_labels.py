@@ -51,15 +51,15 @@ def setup_job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, st
     monkeypatch.setattr(module, "heavy_job_lease", sources)
     monkeypatch.setattr(module, "verified_corrected_research_sources", sources)
     monkeypatch.setattr(module, "InvestmentCorporateActions",
-        lambda *_, **__: SimpleNamespace(qualify=lambda *_: None, recheck=lambda: None))
+        lambda *_, **__: SimpleNamespace(validate_sources=lambda *_: None, recheck=lambda: None))
     monkeypatch.setattr(module, "InvestmentSourceReader", lambda *_: SimpleNamespace(recheck=lambda: None))
-    monkeypatch.setattr(module, "_membership_qualification", lambda **_: None)
+    monkeypatch.setattr(module, "_validate_membership_sources", lambda **_: None)
 
     def compile_row(**kwargs: Any) -> dict[str, Any]:
         row = kwargs["decision"]
         return {"decision_id": row["decision_id"], "security_id": row["security_id"], "horizon_sessions": kwargs["horizon"],
             "economic_maturity_utc": "2024-06-01T20:00:00Z", "label_available_at_utc": "2026-11-07T00:00:00Z",
-            "status": "qualified", "label_eligible": True, "missing_reasons": [], "components": [],
+            "status": "source_validated", "label_eligible": True, "missing_reasons": [], "components": [],
             "request": {"fixture": "exact request"}, "target": {"fixture": "accounting result"}, "specifications": {"large": "drop"}}
 
     monkeypatch.setattr(module, "compile_investment_label", compile_row)
@@ -74,7 +74,7 @@ def test_full_population_horizons_and_asof_are_separate(tmp_path: Path, monkeypa
     assert len(rows) == 4
     for horizon in ("63", "252"):
         counts = report["counts_by_horizon"][horizon]
-        assert counts["population_rows"] == 2 and counts["source_qualified_rows"] == 1
+        assert counts["population_rows"] == 2 and counts["source_validated_rows"] == 1
         assert counts["currently_available_rows"] == 0 and counts["unresolved_rows"] == 1
     assert all("specifications" not in row for row in rows)
     assert all(row["membership_source_capture_at_utc"] is None for row in rows)
@@ -100,8 +100,8 @@ def test_resume_reuses_security_artifacts_and_detects_tampering(tmp_path: Path, 
         module.materialize_investment_labels(root=tmp_path, request=request, request_sha256=digest, output=output)
 
 
-@pytest.mark.parametrize("variant,qualified", [("index_exit", True), ("future_available", False), ("competing_owner", False)])
-def test_decision_membership_cutoff_and_index_exit(variant: str, qualified: bool) -> None:
+@pytest.mark.parametrize("variant,source_validated", [("index_exit", True), ("future_available", False), ("competing_owner", False)])
+def test_decision_membership_cutoff_and_index_exit(variant: str, source_validated: bool) -> None:
     row = {"security_id": "issuer:one", "ticker": "ONE", "sector": "Technology", "sector_benchmark": "XLK",
         "decision_time_utc": "2023-05-31T20:00:00Z"}
     member = {"security_id": "issuer:one", "ticker": "ONE", "sector": "Technology", "primary_benchmark": "XLK",
@@ -115,8 +115,8 @@ def test_decision_membership_cutoff_and_index_exit(variant: str, qualified: bool
     reference = EvidenceReference(reference="membership", artifact_sha256="a" * 64, record_locator="current verification",
         interpretation_policy_sha256="b" * 64, retrieved_at=datetime(2026, 11, 7, tzinfo=UTC),
         available_at=datetime(2026, 11, 7, tzinfo=UTC))
-    result = module._membership_qualification(sources={"memberships": pd.DataFrame(records)}, row=row, horizon=252, evidence=reference)
-    assert (not result.missing_reasons) == qualified
+    result = module._validate_membership_sources(sources={"memberships": pd.DataFrame(records)}, row=row, horizon=252, evidence=reference)
+    assert (not result.missing_reasons) == source_validated
 
 
 @pytest.mark.parametrize("failure", ["lease", "pressure"])

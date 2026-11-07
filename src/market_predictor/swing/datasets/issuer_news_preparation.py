@@ -71,7 +71,7 @@ def _implementation_identity() -> dict[str, str]:
 
 
 def _guard() -> None:
-    assert_system_memory_available(minimum_available_gib=3.0, maximum_used_percent=82.0)
+    assert_system_memory_available()
     assert_memory_budget(hard_budget_gib=5.0, headroom_gib=0.75, stage="monthly issuer preparation")
 
 

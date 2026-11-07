@@ -10,6 +10,8 @@ from typing import Any
 
 from market_predictor.core.errors import MemoryBudgetError
 
+MAXIMUM_SYSTEM_USED_PERCENT = 90.0
+
 
 @dataclass(frozen=True)
 class SystemMemory:
@@ -57,17 +59,26 @@ def system_memory_snapshot() -> SystemMemory | None:
         return None
 
 
-def assert_system_memory_available(*, minimum_available_gib: float = 2.0,
-    maximum_used_percent: float = 85.0) -> SystemMemory:
-    if (not math.isfinite(minimum_available_gib) or minimum_available_gib <= 0
-            or not math.isfinite(maximum_used_percent) or not 0 < maximum_used_percent < 100):
-        raise ValueError("invalid system memory thresholds")
-    snapshot = system_memory_snapshot()
-    if snapshot is None:
+def validate_system_memory_snapshot(snapshot: SystemMemory | None) -> SystemMemory:
+    """Reject unknown or incoherent measurements before applying any threshold."""
+    if (snapshot is None or type(snapshot.total_bytes) is not int or type(snapshot.available_bytes) is not int
+            or snapshot.total_bytes <= 0 or not 0 <= snapshot.available_bytes <= snapshot.total_bytes
+            or not math.isfinite(snapshot.used_percent) or not 0 <= snapshot.used_percent <= 100):
         raise MemoryBudgetError("system memory measurement unavailable; no new data request permitted")
+    return snapshot
+
+
+def assert_system_memory_available(*, minimum_available_gib: float = 0.0,
+    maximum_used_percent: float = MAXIMUM_SYSTEM_USED_PERCENT) -> SystemMemory:
+    """Percentage-only by default; explicitly stricter caller limits remain supported."""
+    if (not math.isfinite(minimum_available_gib) or minimum_available_gib < 0
+            or not math.isfinite(maximum_used_percent) or not 0 < maximum_used_percent <= MAXIMUM_SYSTEM_USED_PERCENT):
+        raise ValueError("invalid system memory thresholds")
+    snapshot = validate_system_memory_snapshot(system_memory_snapshot())
     if (snapshot.available_bytes < minimum_available_gib * 1024**3
             or snapshot.used_percent >= maximum_used_percent):
+        floor = f" and at least {minimum_available_gib:.2f} GiB free" if minimum_available_gib > 0 else ""
         raise MemoryBudgetError(f"system memory pressure: {snapshot.used_percent:.1f}% used, "
             f"{snapshot.available_bytes / 1024**3:.2f} GiB available; "
-            f"requires below {maximum_used_percent:.1f}% and at least {minimum_available_gib:.2f} GiB free")
+            f"requires strictly below {maximum_used_percent:.1f}%{floor}")
     return snapshot

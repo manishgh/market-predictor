@@ -32,7 +32,7 @@ DECISION_METADATA_COLUMNS = (*DECISION_COLUMNS, "parent_ticker", "parent_decisio
 
 def _guard() -> None:
     assert_memory_budget(stage="monthly research join", hard_budget_gib=5.0, headroom_gib=0.75)
-    assert_system_memory_available(minimum_available_gib=2.0)
+    assert_system_memory_available()
 
 
 def _check(root: Path, files: Mapping[str, str]) -> None:

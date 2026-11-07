@@ -652,7 +652,7 @@ def test_guard_thresholds_fail_closed(tmp_path: Path, monkeypatch: pytest.Monkey
     monkeypatch.setattr(collector, "assert_system_memory_available", system)
     monkeypatch.setattr(collector, "assert_memory_budget", process)
     MEMORY_GUARD()
-    system.assert_called_once_with(minimum_available_gib=2.0, maximum_used_percent=85.0)
+    system.assert_called_once_with()
     process.assert_called_once_with(hard_budget_gib=5.0, headroom_gib=0.25, stage="alpaca incremental page")
     system.side_effect = MemoryBudgetError("unknown system measurement")
     with pytest.raises(MemoryBudgetError):

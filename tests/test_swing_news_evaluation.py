@@ -206,7 +206,7 @@ def test_news_receipt_consumption_binds_current_evidence(tmp_path: Path, monkeyp
     config["published_profile"] = oof.NEWS_PROFILE
     receipt = _json(tmp_path, "receipt.json", {"source_link_index": {"path": "index.json", "sha256": "c" * 64}})
     config["saved_row_verification"] = receipt.model_dump(mode="json")
-    config["maximum_system_used_percent"] = 91.0
+    config["maximum_system_used_percent"] = 90.0
     policy = TrainingReadinessPolicy.model_validate(config)
     source = _json(tmp_path, "consumed.json", {"unit": True})
     verified = SimpleNamespace(request={"profile_sha256": "p", "policy": {"source_link_index": {"path": "index.json", "sha256": "c" * 64}}},

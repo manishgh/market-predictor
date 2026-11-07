@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from market_predictor.investment.label_materialization import (
-    InvestmentSourceQualification,
+    InvestmentSourceValidation,
     compile_investment_label,
 )
 from market_predictor.investment.label_sources import InvestmentObservations, InvestmentSourceReader
@@ -46,9 +46,9 @@ def decision() -> dict[str, Any]:
 @pytest.mark.parametrize("horizon", [63, 252])
 def test_horizon_extends_swing_boundary_without_liquidation(horizon: Any) -> None:
     row = compile_investment_label(decision=decision(), horizon=horizon, reader=Reader(),
-        membership=InvestmentSourceQualification((reference("membership"),)),
-        action_qualification=lambda *_: InvestmentSourceQualification((reference("action-absence"),)))
-    assert row["status"] == "qualified"
+        membership=InvestmentSourceValidation((reference("membership"),)),
+        action_source_validation=lambda *_: InvestmentSourceValidation((reference("action-absence"),)))
+    assert row["status"] == "source_validated"
     assert row["label_available_at_utc"] == "2026-11-07T00:00:00Z"
     assert row["economic_maturity_utc"] < row["label_available_at_utc"]
     assert len(row["specifications"]["stock"]["session_end_timestamps"]) == horizon
@@ -60,8 +60,8 @@ def test_horizon_extends_swing_boundary_without_liquidation(horizon: Any) -> Non
 
 def test_unresolved_dividend_does_not_publish_price_only_return() -> None:
     row = compile_investment_label(decision=decision(), horizon=63, reader=Reader(),
-        membership=InvestmentSourceQualification((reference("membership"),)),
-        action_qualification=lambda *_: InvestmentSourceQualification((reference("actions"),),
+        membership=InvestmentSourceValidation((reference("membership"),)),
+        action_source_validation=lambda *_: InvestmentSourceValidation((reference("actions"),),
             ("dividend_payment_and_claim_valuation_unproven",)))
     assert row["status"] == "unresolved"
     assert len(row["components"]) == 4
@@ -69,16 +69,16 @@ def test_unresolved_dividend_does_not_publish_price_only_return() -> None:
     assert any("spy:dividend" in gap for gap in row["missing_reasons"])
 
 
-def test_simulation_reference_cannot_become_observed_qualification() -> None:
+def test_simulation_reference_cannot_become_observed_source_validation() -> None:
     simulated = SimulationReference(**{**reference("assumption").model_dump(), "available_at": None}, basis="research_assumption")
     with pytest.raises(ValueError, match="simulation provenance"):
         compile_investment_label(decision=decision(), horizon=63, reader=Reader(),
-            membership=InvestmentSourceQualification((reference("membership"),)),
-            action_qualification=lambda *_: InvestmentSourceQualification((simulated,)))
+            membership=InvestmentSourceValidation((reference("membership"),)),
+            action_source_validation=lambda *_: InvestmentSourceValidation((simulated,)))
 
 
 def test_nominal_dividend_claim_is_retained_without_fake_payment() -> None:
-    def qualify(identity: str, symbol: str, sessions: tuple[date, ...], position: str) -> InvestmentSourceQualification:
+    def validate_sources(identity: str, symbol: str, sessions: tuple[date, ...], position: str) -> InvestmentSourceValidation:
         calendar = xcals.get_calendar("XNYS")
         ex_day = sessions[2]
         claim = position + ":dividend"
@@ -89,12 +89,12 @@ def test_nominal_dividend_claim_is_retained_without_fake_payment() -> None:
                 security_id=identity, units_per_owned_unit=2.0, currency="USD", face_value_per_unit=1.0),))
         marks = tuple(KnownMark(position_id=claim, mark_at=calendar.session_close(day.isoformat()).to_pydatetime(),
             value_per_unit=1.0, currency="USD", evidence=(ref,)) for day in sessions[2:])
-        return InvestmentSourceQualification((ref,), events=(event,), non_share_marks=marks,
+        return InvestmentSourceValidation((ref,), events=(event,), non_share_marks=marks,
             valuation_basis="source_verified_entitlement_policy_valued_unpaid_receivable")
 
     row = compile_investment_label(decision=decision(), horizon=63, reader=Reader(),
-        membership=InvestmentSourceQualification((reference("membership"),)), action_qualification=qualify)
-    assert row["status"] == "qualified"
+        membership=InvestmentSourceValidation((reference("membership"),)), action_source_validation=validate_sources)
+    assert row["status"] == "source_validated"
     assert row["target"]["holdings"][0]["net_return"] == pytest.approx(0.118)
     assert all([event["kind"] for event in spec["events"]] == ["corporate_action"]
         for spec in row["specifications"].values())

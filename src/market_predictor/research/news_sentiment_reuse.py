@@ -62,7 +62,7 @@ def _require(condition: bool, message: str) -> None:
 
 def _guard() -> None:
     assert_memory_budget(stage="saved sentiment binding", hard_budget_gib=5.0, headroom_gib=0.75)
-    assert_system_memory_available(minimum_available_gib=2.0, maximum_used_percent=85.0)
+    assert_system_memory_available()
 
 
 def _hash(path: Path) -> str:

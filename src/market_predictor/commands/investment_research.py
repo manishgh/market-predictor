@@ -61,7 +61,7 @@ def register_investment_research_commands(app: typer.Typer) -> None:
     @app.command("materialize-investment-labels")
     def materialize_labels(root: Path = typer.Option(...), request: Path = typer.Option(...),
                            request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
-        """Qualify monthly investment holding outcomes with full population and source-gap accounting."""
+        """Calculate monthly future-return targets and report missing price or action data."""
         _run(lambda: materialize_investment_labels(root=root, request=request,
             request_sha256=request_sha256, output=output))
 

@@ -54,7 +54,7 @@ def test_news_profile_cannot_substitute_another_publication(feature: str, publis
         ReturnTrainingPolicy.model_validate({**payload, "feature_profile": feature, "published_profile": published})
 
 
-@pytest.mark.parametrize("profile,ceiling,allowed", [(PROFILE, 91, True), (PROFILE, 90, False),
+@pytest.mark.parametrize("profile,ceiling,allowed", [(PROFILE, 90, True), (PROFILE, 89, False),
     (PROFILE, 91.01, False), ("technical_market", 90, True), ("technical_market", 91, False),
     ("technical_relationships", 91, False), ("technical_relationships_issuer_reaction", 91, False)])
 def test_memory_policy_is_profile_specific(profile: str, ceiling: float, allowed: bool) -> None:
@@ -70,7 +70,7 @@ def test_memory_policy_is_profile_specific(profile: str, ceiling: float, allowed
 def test_news_guard_delegates_to_bounded_news_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = json.loads((REPO / "configs/swing_training_readiness.json").read_text())
     policy = TrainingReadinessPolicy.model_validate({**payload, "published_profile": PROFILE,
-                                                   "maximum_system_used_percent": 91})
+                                                   "maximum_system_used_percent": 90})
     guard = Mock()
     old = Mock(side_effect=AssertionError("old immediate memory owner called"))
     monkeypatch.setattr(readiness.runtime_memory, "guard", guard)
@@ -149,7 +149,7 @@ def news_unit(publication: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
         "profiles": {PROFILE: {"rows": 3, "feature_eligible": 3, "complete_model_rows": 2, "clock_violations": 0}}, **CLOSED}
     receipt_path = root / "data/reports/news-unit-receipt.json"
     receipt_hash = metadata_json(receipt_path, receipt)
-    state["policy"].update(published_profile=PROFILE, maximum_system_used_percent=91,
+    state["policy"].update(published_profile=PROFILE, maximum_system_used_percent=90,
         publication={"path": manifest_path.relative_to(root).as_posix(), "sha256": manifest_hash},
         saved_row_verification={"path": receipt_path.relative_to(root).as_posix(), "sha256": receipt_hash})
     state["config_sha256"] = _json(state["config"], state["policy"])
