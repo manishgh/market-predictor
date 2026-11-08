@@ -51,7 +51,7 @@ def setup_job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, st
     monkeypatch.setattr(module, "heavy_job_lease", sources)
     monkeypatch.setattr(module, "verified_corrected_research_sources", sources)
     monkeypatch.setattr(module, "InvestmentCorporateActions",
-        lambda *_, **__: SimpleNamespace(validate_sources=lambda *_: None, recheck=lambda: None))
+        lambda *_, **__: SimpleNamespace(validate_sources=lambda *_: None, recheck=lambda: None, source_files={}))
     monkeypatch.setattr(module, "InvestmentSourceReader", lambda *_: SimpleNamespace(recheck=lambda: None))
     monkeypatch.setattr(module, "_validate_membership_sources", lambda **_: None)
 
@@ -146,3 +146,56 @@ def test_preparation_refusal_precedes_all_input_reads(tmp_path: Path, monkeypatc
         module.materialize_investment_labels(root=tmp_path, request=tmp_path / "unread.json", request_sha256="a" * 64,
             output=tmp_path / "output")
     assert events == (["lease"] if failure == "lease" else ["lease", "guard"])
+
+
+
+def test_selected_decisions_retain_full_roster_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    request, _, output = setup_job(tmp_path, monkeypatch)
+    parsed = json.loads(request.read_text())
+    parsed["decision_ids"] = ["eligible"]
+    pin = write(request, parsed)
+    module.materialize_investment_labels(root=tmp_path, request=request, request_sha256=pin["sha256"], output=output)
+    report = json.loads((output / "final/_manifest.json").read_text())
+    assert report["scope"] == "selected_decisions"
+    assert report["frozen_roster_rows"] == 2
+    assert report["roster_rows"] == 1 and report["label_rows"] == 2
+    assert report["selected_decision_ids"] == ["eligible"]
+    assert report["training_ready"] is False
+    assert len(report["security_checkpoints"]) == 1
+
+
+@pytest.mark.parametrize("selection", [[], ["eligible", "eligible"], ["unknown"]])
+def test_invalid_decision_selection_refuses_before_source_replay(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, selection: list[str]
+) -> None:
+    request, _, output = setup_job(tmp_path, monkeypatch)
+    parsed = json.loads(request.read_text())
+    parsed["decision_ids"] = selection
+    pin = write(request, parsed)
+
+    def forbidden(**_: Any) -> Any:
+        pytest.fail("invalid selection reached independent source replay")
+
+    monkeypatch.setattr(module, "load_corporate_action_evidence", forbidden)
+    with pytest.raises((DataReadinessError, ValueError)):
+        module.materialize_investment_labels(root=tmp_path, request=request, request_sha256=pin["sha256"], output=output)
+    assert not output.exists()
+
+
+def test_changed_selection_cannot_reuse_old_checkpoints(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    request, digest, output = setup_job(tmp_path, monkeypatch)
+    original_publish = module._publish
+
+    def interrupted(directory: Path, *args: Any, **kwargs: Any) -> Any:
+        if directory.name == "final":
+            raise RuntimeError("fixture interruption")
+        return original_publish(directory, *args, **kwargs)
+
+    monkeypatch.setattr(module, "_publish", interrupted)
+    with pytest.raises(RuntimeError, match="fixture interruption"):
+        module.materialize_investment_labels(root=tmp_path, request=request, request_sha256=digest, output=output)
+    parsed = json.loads(request.read_text())
+    parsed["decision_ids"] = ["eligible"]
+    pin = write(request, parsed)
+    with pytest.raises(DataReadinessError, match="resume request or implementation differs"):
+        module.materialize_investment_labels(root=tmp_path, request=request, request_sha256=pin["sha256"], output=output)

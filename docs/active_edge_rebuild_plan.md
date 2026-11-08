@@ -1,5 +1,42 @@
 # Active Edge Rebuild Plan
 
+### Historical dividend currency evidence and IDXX pilot — November 8
+
+Status: `in_progress`. Supersedes the interrupted November 7 return-target run.
+Its 19 checkpoints contain 2,242 rows and zero usable targets. All 59 monthly SPY
+windows fail currency evidence at both horizons, so resuming unchanged would give
+zero usable targets throughout the full roster. Preserve the old inputs and outputs.
+
+Frozen scope: a reusable independent dividend-currency validator and a real IDXX
+July 31, 2019 pilot at 63 and 252 sessions, using existing source verification and
+holding accounting. IDXX was selected by earliest eligible month, six available
+financial features, continuous raw bars, no stock actions and identity tie-break;
+no future returns were inspected. Inventory SHA256:
+c5f4ffde40afebe9d3bc055dc038045d6b8e341f1b4b55695c255839b34582fe.
+
+Senior Quant reviewed all thirteen required benchmark events. Seven have exact
+ICTax gross-amount matches. Five more have exact issuer-workbook amounts and a
+unique same-ISIN/ex-date ICTax USD distribution entry. These are explicitly a
+currency-only bridge, not tax/issuer amount agreement. One remains unresolved:
+SPY June 19, 2020 is 1.3662419 at the provider versus issuer 1.366242. Do not round
+or silently override it. The 63-session pilot's three events are supportable.
+
+Affected contracts: typed independent currency evidence, action resolution and
+bounded research orchestration. Closed methods are exact_tax_event and
+issuer_rate_tax_currency_bridge. Require original action hash, exact identity,
+ex-date, gross per-share units, source/receipt hashes and actual capture clocks.
+Retain provider rates, separate tax values and every missing/conflict reason.
+No fabricated provider response, inferred USD or discretionary tolerance.
+
+Exit gates: focused source-tamper, identity/date/amount/clock and direct-consumer
+tests, Ruff/strict mypy, independent code and senior Quant review, then actual
+63/252-session outputs with honest unavailable results where evidence conflicts.
+Reuse the same stock/SPY/QQQ/sector holding kernel and 20bp stock cost once. All
+training/promotion/production flags stay false. No new exclusions or model fits.
+Only a useful pilot permits broader coverage preflight. Memory remains below90%.
+Rollback is refusal on missing/conflicting evidence; old artifacts stay immutable.
+Work only on canonical main. Earlier checkpoint sections are historical.
+
 ### Single canonical checkout — November 8
 
 Status: `verified`. Canonical `C:/project/market-predictor` on `main` was
@@ -22,7 +59,7 @@ checkpoints remain available. Cleanup did not restart that data job or fit a mod
 
 ### Shared 90% memory limit and descriptive return-target names — November 7
 
-Code status: `verified`; return-target run: `in_progress`. The user explicitly replaces stale 85% and 91% memory
+Historical code status: `verified`; return-target run: `interrupted`. The user explicitly replaces stale 85% and 91% memory
 defaults with 90%, without an implicit free-memory floor. Preserve process budgets,
 unknown-measurement refusal and the shared heavy-job lease. Independent engineering
 and review run in parallel; dependent source replay, currency checks and future-return

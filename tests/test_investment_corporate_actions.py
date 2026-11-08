@@ -7,27 +7,32 @@ from typing import Any
 import pytest
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.investment.corporate_actions import InvestmentCorporateActions
+from market_predictor.investment.dividend_currencies import CurrencyCorroboration
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference
 from market_predictor.swing.datasets.action_evidence import CorporateActionEvidence
 from market_predictor.swing.datasets.corrected_outcome_admission import reconcile_actions
+from tests.test_investment_dividend_currencies import fixture as currency_fixture
+from tests.test_investment_dividend_currencies import model as currency_model
 
 
-def build(tmp_path: Path, records: dict[str, list[dict[str, Any]]], *, refresh_rate: float | None = None) -> InvestmentCorporateActions:
+def build(tmp_path: Path, records: dict[str, list[dict[str, Any]]], *, refresh_rate: float | None = None,
+          symbol: str = "TEST", corroborations: dict[str, CurrencyCorroboration] | None = None) -> InvestmentCorporateActions:
     def write(name: str, data: dict[str, Any]) -> str:
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(data), encoding="utf-8")
         return file_sha256(path)
-    body_name = "archive/tickers/TEST/attempt/000.bin"
-    metadata_name = "archive/tickers/TEST/attempt/000.json"
-    receipt_name = "archive/tickers/TEST/attempt/receipt.json"
+    body_name = f"archive/tickers/{symbol}/attempt/000.bin"
+    metadata_name = f"archive/tickers/{symbol}/attempt/000.json"
+    receipt_name = f"archive/tickers/{symbol}/attempt/receipt.json"
     body_hash = write(body_name, {"corporate_actions": records})
     metadata_hash = write(metadata_name, {"sha256": body_hash, "body_length": (tmp_path / body_name).stat().st_size,
         "retrieved_at_utc": "2026-11-07T00:00:00Z"})
     request_hash = "a" * 64
-    receipt_hash = write(receipt_name, {"request_sha256": request_hash, "state": "acquired", "ticker": "TEST",
+    receipt_hash = write(receipt_name, {"request_sha256": request_hash, "state": "acquired", "ticker": symbol,
         "pages": [{"body_path": "000.bin", "metadata_path": "000.json", "body_sha256": body_hash,
             "metadata_sha256": metadata_hash}]})
     request_digest = write("archive/_request.json", {"request_sha256": request_hash,
@@ -35,7 +40,7 @@ def build(tmp_path: Path, records: dict[str, list[dict[str, Any]]], *, refresh_r
     policy_hash = write("policy.json", {"nominal_unpaid_claim_valuation": True})
     source_files = {body_name: body_hash, metadata_name: metadata_hash, receipt_name: receipt_hash,
         "archive/_request.json": request_digest}
-    projected = {"TEST": records}
+    projected = {symbol: records}
     projection = json_sha256({"records": projected, "unavailable": [], "source_files": source_files, "replay": {}})
     evidence = CorporateActionEvidence("b" * 64, request_hash, projected, (), source_files, {}, projection)
     policy = EvidenceReference(reference="policy.json", artifact_sha256=policy_hash, record_locator="approved nominal unpaid claims",
@@ -50,8 +55,8 @@ def build(tmp_path: Path, records: dict[str, list[dict[str, Any]]], *, refresh_r
             record_locator="exact refreshed USD provider record", interpretation_policy_sha256="c" * 64,
             retrieved_at=datetime(2026, 11, 7, tzinfo=UTC), available_at=datetime(2026, 11, 7, tzinfo=UTC))
         refreshed[original["id"]] = ({**record, "original_record_sha256": json_sha256(original)}, ref)
-    return InvestmentCorporateActions(tmp_path, evidence, reconcile_actions(evidence, {"TEST"}), (), policy,
-        date(2024, 5, 28), currency_evidence=refreshed)
+    return InvestmentCorporateActions(tmp_path, evidence, reconcile_actions(evidence, {symbol}), (), policy,
+        date(2024, 5, 28), currency_evidence=refreshed, currency_corroborations=corroborations)
 
 
 def dividend(identity: str = "div", ex: str = "2024-05-23") -> dict[str, Any]:
@@ -121,3 +126,35 @@ def test_currency_refresh_cannot_change_amount(tmp_path: Path) -> None:
     result = build(tmp_path, {"cash_dividends": [record]}, refresh_rate=3.0).validate_sources(
         "issuer:test", "TEST", SESSIONS, "owned")
     assert result.missing_reasons
+
+
+
+def test_independent_currency_sources_reach_unpaid_holding_terms(tmp_path: Path) -> None:
+    original, item = currency_fixture(tmp_path, bridge=True)
+    currency = currency_model(item)
+    actions = build(tmp_path, {"cash_dividends": [original]}, symbol="SPY", corroborations={original["id"]: currency})
+    sessions = (date(2019, 9, 19), date(2019, 9, 20), date(2019, 9, 23))
+    result = actions.validate_sources("benchmark:SPY", "SPY", sessions, "owned")
+    assert not result.missing_reasons
+    assert len(result.events) == 1
+    leg = result.events[0].legs[0]
+    assert leg.kind == "unpaid_proceeds" and leg.units_per_owned_unit == original["rate"]
+    assert "currency" not in original
+    assert set(ref.reference for ref in currency.evidence).issubset(actions.source_files)
+    assert any(ref.available_at == datetime(2026, 11, 8, 20, 5, 42, tzinfo=UTC) for ref in result.events[0].evidence)
+    Path(item["tax"]["source"]["body"]["path"]).write_text("{}")
+    with pytest.raises(DataReadinessError, match="source changed"):
+        actions.recheck()
+
+
+def test_independent_currency_cannot_contradict_explicit_provider_currency(tmp_path: Path) -> None:
+    original, item = currency_fixture(tmp_path)
+    original["currency"] = "EUR"
+    with pytest.raises(DataReadinessError, match="contradicts provider currency"):
+        build(tmp_path, {"cash_dividends": [original]}, symbol="SPY", corroborations={original["id"]: currency_model(item)})
+
+
+def test_unused_independent_currency_action_cannot_be_silently_ignored(tmp_path: Path) -> None:
+    original, item = currency_fixture(tmp_path)
+    with pytest.raises(DataReadinessError, match="unused or unsupported"):
+        build(tmp_path, {}, symbol="SPY", corroborations={original["id"]: currency_model(item)})

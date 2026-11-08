@@ -1,5 +1,30 @@
 # Active Edge Rebuild Handoff
 
+### Current work: dividend currency validation and IDXX pilot — November 8
+
+Canonical main HEAD is 9e57548. The current checkpoint is not yet committed.
+No full target worker or model fit is running. Do not resume the unchanged old job:
+its 19 checkpoints / 2,242 rows have zero targets, and all 59 SPY windows failUSD
+currency evidence at both horizons. Preserve its request and frozen implementation.
+
+Read the leading frozen scope in the active plan. IDXX July31,2019 is selected
+before returns; entryAug1, endsOct29,2019/July30,2020. Six financial features and
+no stock actions. Frozen inventory lives in chat outputs:
+`C:/Users/manis/Documents/Codex/2026-11-05/c-project-market-predictor/outputs/investment-idxx-pilot-source-inventory-20261108.json`,
+SHA256 c5f4ffde40afebe9d3bc055dc038045d6b8e341f1b4b55695c255839b34582fe.
+
+Official raw ICTax responses: data/research/investment_currency_ictax_20261108.
+Senior Quant approved seven exact-event matches and five exact-issuer-rate /
+ICTax currency-only bridges, subject to byte/identity checks in code. SPY June19,
+2020 rate conflict remains unresolved (provider1.3662419; issuer1.366242).
+All three events needed for63sessions are supportable;252still has this gap.
+
+Sol engineer owns new investment/dividend_currencies.py and its tests; root owns
+existing-module integration and pilot orchestration. No extra checkouts. Actual
+source receipts and hashes must be checked, not simulated. Focused tests and
+independent code/Quant reviews precede actual replay and publication. No new test
+or model result is claimed yet. Old chronology below is superseded by this section.
+
 ### Current checkout: canonical main only — November 8
 
 Work only in `C:/project/market-predictor` on the current `main` branch.

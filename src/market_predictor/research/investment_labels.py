@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 import exchange_calendars as xcals
 import pandas as pd
+from pydantic import Field
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
@@ -18,6 +19,7 @@ from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.investment.corporate_actions import InvestmentCorporateActions
+from market_predictor.investment.dividend_currencies import load_currency_corroborations
 from market_predictor.investment.label_materialization import InvestmentSourceValidation, compile_investment_label
 from market_predictor.investment.label_sources import InvestmentSourceReader
 from market_predictor.research.investment_currencies import load_investment_currency_evidence
@@ -32,6 +34,8 @@ class InvestmentLabelMaterializationRequest(HoldingContract):
     roster_manifest: ArtifactReference
     target_config: ArtifactReference
     currency_manifest: ArtifactReference | None = None
+    currency_corroboration_manifest: ArtifactReference | None = None
+    decision_ids: tuple[str, ...] | None = Field(default=None, min_length=1)
     nominal_unpaid_claim_valuation: Literal[True]
     evaluation_as_of_utc: Timestamp
 
@@ -50,6 +54,7 @@ def _implementation() -> dict[str, str]:
     package = Path(__file__).resolve().parents[1]
     names = ("research/investment_labels.py", "research/investment_currencies.py", "research/investment_features.py",
         "investment/label_sources.py", "investment/label_materialization.py", "investment/corporate_actions.py",
+        "investment/dividend_currencies.py",
         "investment/contracts.py", "investment/targets.py", "swing/contracts/holding_accounting.py",
         "swing/evaluation/holding_accounting.py", "swing/labels/holding_paths.py", "swing/labels/holding_identity.py",
         "swing/datasets/action_evidence.py", "swing/datasets/corrected_outcomes.py")
@@ -131,6 +136,14 @@ def materialize_investment_labels(*, root: Path, request: Path, request_sha256: 
         rows = _object(root, rows_file, pins)["rows"]
         if len(rows) != roster["declared_rows"] or len({row["decision_id"] for row in rows}) != len(rows):
             raise DataReadinessError("investment roster population count or unique decisions differ")
+        frozen_roster_rows = len(rows)
+        if parsed.decision_ids is not None:
+            requested_ids = set(parsed.decision_ids)
+            if len(requested_ids) != len(parsed.decision_ids) or not requested_ids.issubset(
+                {row["decision_id"] for row in rows}
+            ):
+                raise DataReadinessError("selected decision IDs must be unique and present in the full frozen roster")
+            rows = [row for row in rows if row["decision_id"] in requested_ids]
         coverage_request = _object(root, ArtifactReference(path=str(parent / "request.json"),
             sha256=roster["files"]["request.json"]), pins)
         membership_pin = ArtifactReference.model_validate_json(json.dumps(coverage_request["membership"]))
@@ -163,8 +176,15 @@ def materialize_investment_labels(*, root: Path, request: Path, request_sha256: 
             interpretation_policy_sha256=request_sha256, retrieved_at=verified_at, available_at=verified_at)
         currencies = {} if parsed.currency_manifest is None else load_investment_currency_evidence(root,
             Path(parsed.currency_manifest.path), parsed.currency_manifest.sha256, pins, interpretation_policy_sha256=request_sha256)
+        corroborations = {}
+        if parsed.currency_corroboration_manifest is not None:
+            corroboration_pin = parsed.currency_corroboration_manifest
+            _read(root, corroboration_pin, pins)
+            corroborations = load_currency_corroborations(root, Path(corroboration_pin.path),
+                corroboration_pin.sha256, policy_sha256=request_sha256)
         actions = InvestmentCorporateActions(root, evidence, sources["action_index"], policy.official_windows,
-            policy_ref, policy.numerical_end, currency_evidence=currencies)
+            policy_ref, policy.numerical_end, currency_evidence=currencies, currency_corroborations=corroborations)
+        pins.update({str(_path(root, name)): digest for name, digest in actions.source_files.items()})
         common_path = output / "_verified_sources.json"
         common_sources = {name: digest for name, digest in pins.items() if name != str(common_path)}
         if common_path.exists():
@@ -253,6 +273,8 @@ def materialize_investment_labels(*, root: Path, request: Path, request_sha256: 
             for horizon, counts in totals.items()}
         report = {"schema": "market_predictor.investment_label_corpus", "status": "labels_complete_with_explicit_gaps",
             "request_sha256": request_sha256, "job_identity": job_identity, "source_files": pins,
+            "scope": "full_roster" if parsed.decision_ids is None else "selected_decisions",
+            "frozen_roster_rows": frozen_roster_rows, "selected_decision_ids": parsed.decision_ids,
             "roster_rows": len(rows), "label_rows": sum(counts["population_rows"] for counts in totals.values()),
             "counts_by_horizon": counts_by_horizon,
             "security_checkpoints": checkpoints, "evaluation_as_of_utc": parsed.evaluation_as_of_utc.isoformat(),
