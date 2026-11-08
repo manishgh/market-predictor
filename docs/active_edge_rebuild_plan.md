@@ -1,5 +1,25 @@
 # Active Edge Rebuild Plan
 
+### Single canonical checkout — November 8
+
+Status: `verified`. Canonical `C:/project/market-predictor` on `main` was
+fast-forwarded from `54c97b0` to the latest reviewed `6b7d5e3`. No code conflicts
+or implementation edits were needed; the 493-test verification remains applicable.
+The user requires this to be the only active checkout going forward.
+
+The obsolete merge folder and sibling backup folder were removed from `C:/project`.
+Their contents are retained inside `.git/archives`; the old detached merge commit
+is preserved by `archive/merge-checkout-20261031`. All redundant worktree
+registrations are retired. Historical Codex producer files stay at their pinned
+paths as frozen source evidence, with their Git pointer files retired.
+
+Verification: canonical source/test/config trees match the reviewed branch,
+archived bundle and retained report checksums match, frozen producer source bytes
+remain unchanged, and only the canonical main worktree remains registered.
+The prior return-target worker exited on its bounded memory timeout; its saved
+checkpoints remain available. Cleanup did not restart that data job or fit a model.
+
+
 ### Shared 90% memory limit and descriptive return-target names — November 7
 
 Code status: `verified`; return-target run: `in_progress`. The user explicitly replaces stale 85% and 91% memory

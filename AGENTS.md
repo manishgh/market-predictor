@@ -3,6 +3,16 @@
 This file is mandatory guidance for every human or automated coding agent working in
 this repository. It exists to make the system converge. Read it before changing code.
 
+## Single Active Checkout — User Instruction, November 8
+
+Use `C:/project/market-predictor` as the only active project checkout. Keep the latest
+reviewed work merged into `main` there, and keep `main` checked out. Do not
+create additional clones, Git worktrees, sibling merge folders or sibling
+backup folders. Parallel agents must coordinate file ownership in this checkout.
+Git history and internal archives are retained inside the canonical repository.
+Historical source files referenced by immutable data remain frozen evidence, not
+additional editable project checkouts. Do not delete or modify their pinned bytes.
+
 ## 1. Mission And Boundary
 
 `market-predictor` produces evidence-backed prediction intelligence for long-only

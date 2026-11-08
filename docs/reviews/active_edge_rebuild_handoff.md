@@ -1,5 +1,31 @@
 # Active Edge Rebuild Handoff
 
+### Current checkout: canonical main only — November 8
+
+Work only in `C:/project/market-predictor` on the current `main` branch.
+It includes reviewed implementation `49355dd` and all work through `6b7d5e3`.
+The former Codex worktrees below are historical source snapshots, not active
+checkouts; do not edit or create branches in them. No more clones, worktrees,
+sibling merge folders or sibling backup folders: this is an explicit user rule.
+
+Only `market-predictor` remains among matching project folders in `C:/project`.
+Old contents are retained internally under `.git/archives`:
+`retired-merge-checkout-20261031` and the original all-branches Git bundle.
+Bundle SHA256: `991618e829bedbc3eb44d0822b830de411e6ad7e022dc522e6506a3a3486cc2c`.
+The retired merge's tracked acceptance report SHA256 remains
+`659584f71ccc0a395be71ca46fb00f5f3885bddd23ce012aa2ed639e304c60e6`.
+Its old detached commit is retained by `archive/merge-checkout-20261031`.
+The whole old copy was preserved because automatic approval review rejected
+irreversible deletion of unarchived nested files. No source data was discarded.
+
+The return-target job described below is no longer running: its log ends with
+the bounded 120-second memory timeout. Check existing per-security artifacts
+before resuming with the same immutable request and implementation snapshot.
+No final target corpus, model training or promotion is claimed by this cleanup.
+Runtime code was not changed; 493 selected tests were already passed. This
+consolidation needs Git/tree/hash checks and documentation checks, not a new fit.
+
+
 ### Current work: unify memory at 90% and resume return calculation — November 7
 
 Branch `codex/memory-limit-target-names-20261107`, worktree
