@@ -2,7 +2,8 @@
 
 ### Historical dividend currency evidence and IDXX pilot — November 8
 
-Status: `in_progress`. Supersedes the interrupted November 7 return-target run.
+Status: `verified` for the currency adapter and bounded target pilot. The full
+investment target corpus remains pending. Supersedes the interrupted November 7 run.
 Its 19 checkpoints contain 2,242 rows and zero usable targets. All 59 monthly SPY
 windows fail currency evidence at both horizons, so resuming unchanged would give
 zero usable targets throughout the full roster. Preserve the old inputs and outputs.
@@ -33,9 +34,32 @@ tests, Ruff/strict mypy, independent code and senior Quant review, then actual
 63/252-session outputs with honest unavailable results where evidence conflicts.
 Reuse the same stock/SPY/QQQ/sector holding kernel and 20bp stock cost once. All
 training/promotion/production flags stay false. No new exclusions or model fits.
-Only a useful pilot permits broader coverage preflight. Memory remains below90%.
+Only a useful pilot permits broader coverage preflight. Memory remains below 90%.
 Rollback is refusal on missing/conflicting evidence; old artifacts stay immutable.
 Work only on canonical main. Earlier checkpoint sections are historical.
+
+
+
+Actual replay completed under committed producer 88f6327f1573ca9efc37e5e62939e28cefe69139.
+One frozen IDXX decision produced two horizon rows: 63 sessions source-validated;
+252 sessions unresolved. The final manifest is
+`data/research/investment_idxx_return_pilot_20261108/final/_manifest.json`, SHA256
+3286a1456a83bd9fcc2076cdf33c203379bf0687b18e356eae7fb83b648d5a3f.
+The complete 37,229-row roster was verified before selecting the single decision.
+Actual 252-session reasons: ["spy:action:cash_dividends:a6587d80-e08a-4b1a-aa94-857549880c59:dividend_usd_currency_unproven"].
+This is one source-selected integration observation, not investment performance
+evidence or model approval. Training, promotion and production remain false.
+
+The twelve currency assertions passed actual replay of 28 source/receipt files:
+seven exact ICTax matches and five exact-issuer-rate currency bridges. Manifest
+SHA256 d5b574f91eb8a48db06b47d9a229ab755619416012f320c6051454d436dc617f.
+Independent senior Quant/source and code reviews passed. All 170 selected tests
+passed, along with Ruff and strict mypy on the three changed source modules.
+Windows denied the shared system pytest temp directory on the first run; the
+same tests passed using a fresh writable workspace temp directory. One import
+ordering lint issue was fixed. No full suite, model fit or promotion was run.
+The exact 452-file committed producer is retained as immutable data evidence;
+no extra Git checkout or worktree was created.
 
 ### Single canonical checkout — November 8
 
@@ -3305,7 +3329,7 @@ feature acceptance/freeze, two remaining fits and SPY assessment remain pending.
 The user explicitly requested "lets make that90% and start" after the85.2%
 source-link failure. Use the established swing percentage-only policy for the current source-link
 and monthly parent/news projection jobs:
-system RAM for the new bridge and monthly jobs must remain strictly below90%;
+system RAM for the new bridge and monthly jobs must remain strictly below 90%;
 no additional absolute2GiB floor. Completed producer code stays pinned unchanged.
 The separate5GiB process budget,0.75GiB process headroom, shared non-queueing
 lease and source/code/output checks remain mandatory. Other callers retain their

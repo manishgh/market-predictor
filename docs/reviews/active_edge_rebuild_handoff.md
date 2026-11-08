@@ -1,5 +1,123 @@
 # Active Edge Rebuild Handoff
 
+## Current state — November 8, 2026
+
+Work only in `C:/project/market-predictor`, with `main` checked out. Implementation
+88f6327f1573ca9efc37e5e62939e28cefe69139 is committed and pushed. This documentation
+closure follows it. No extra clones, Git worktrees, sibling merge folders or backup
+folders are permitted. Parallel agents must share this checkout with file ownership.
+The user requests Sol 6.1 engineers/reviewers and Astra for deep source research.
+
+The currency-source adapter and actual IDXX pilot are complete. One July 31, 2019
+decision produced one source-validated 63-session target and one unavailable
+252-session target. These are integration outcomes, not model accuracy evidence.
+No model was trained, promoted or activated. No new security exclusions were added.
+
+## Actual pilot and source evidence
+
+- Final: `data/research/investment_idxx_return_pilot_20261108/final/_manifest.json`.
+  SHA256 `3286a1456a83bd9fcc2076cdf33c203379bf0687b18e356eae7fb83b648d5a3f`.
+- Request: `data/research/investment_idxx_return_pilot_request_20261108.json`.
+  SHA256 `4ffd17c8f41b262708fc31c665c9a20f3a45bd20098b94257ab018e799980834`.
+- Currency manifest: `data/research/investment_currency_ictax_20261108/pilot-currency-corroborations.json`.
+  SHA256 `d5b574f91eb8a48db06b47d9a229ab755619416012f320c6051454d436dc617f`.
+- Twelve original action bindings and 28 unique body/receipt files independently
+  checked and replayed: seven exact tax-event matches, five issuer-rate/currency
+  bridges. Exact provider rates remain unchanged; tax amounts stay separately named.
+- QQQ's January 2019 issuer SEC prospectus explicitly binds ticker and CUSIP.
+  SPY/XLV identities and bridge rates are bound to the issuer distribution workbook.
+- SPY June 19, 2020 remains unadmitted: provider 1.3662419 versus issuer 1.366242.
+  `pilot-currency-conflicts.json` retains the source-bound amount conflict.
+- Actual 252-session reasons: `["spy:action:cash_dividends:a6587d80-e08a-4b1a-aa94-857549880c59:dividend_usd_currency_unproven"]`.
+- IDXX selection was frozen before returns: earliest eligible month with all six
+  financial features, continuous raw prices and no stock actions, identity tie-break.
+  Entry August 1, 2019; ends October 29, 2019 / July 30, 2020; mandatory SPY/QQQ/XLV.
+- The complete 37,229-row roster was verified; explicit decision selection produced
+  two target rows. The 20bp stock cost and nominal unpaid-claim accounting are shared
+  with the existing holding kernel. Currency evidence is not proof of payment.
+- Current capture and verification clocks remain distinct from historical dates.
+  `available_by_completion_rows_by_horizon` is {"252": 0, "63": 1}.
+  Research-only flags remain false for training, promotion and production.
+
+## Verification
+
+Senior Quant approved the design and actual source evidence; independent Sol code
+review found no supported remaining finding. Root ran 170 focused tests covering
+currency sources, action consumption, materialization/selection/resume, price-source
+admission, targets, investment evaluation and holding accounting. All passed.
+Ruff and strict mypy passed for investment/dividend_currencies.py,
+investment/corporate_actions.py and research/investment_labels.py. Full release
+suite, model training and promotion were deliberately not run.
+
+The first test attempt hit Windows access denial in the shared system pytest temp
+directory; a fresh workspace basetemp resolved it. One import-order lint issue was
+fixed. Logs are in chat-workspace outputs/dividend-currency-tests.log and
+outputs/investment-idxx-return-pilot.log. The earlier Ruff log records the initial
+finding; the final rerun passed. Actual source and target runs used real retained
+data without mocked readers or accounting. Fixture tests prove only unit behavior.
+
+Independent senior Quant also verified the actual final/checkpoint/label hashes,
+four mandatory holdings, one-time stock cost and gross-benchmark excess arithmetic.
+The target became available at 20:29:13.793708 UTC, after the requested evaluation
+timestamp (20:23:25.020253 UTC) and before completion (20:29:52.760231 UTC).
+Thus it is unavailable at the frozen evaluation cutoff and available by completion.
+The local operational wrapper initially errored while printing the materializer's
+publication receipt as a report, after successful final publication. Its print logic
+was corrected; no data or producer code was changed and no materialization rerun.
+
+## Next bounded step
+
+Explicitly resolve the SPY issuer/provider amount conflict before admitting that
+annual target: either obtain exact additional primary evidence or review a separate,
+source-bound issuer correction contract and produce a new derived artifact. Never
+silently round the provider, relax comparison tolerance, or rewrite old records.
+Then preflight wider benchmark event coverage and raw-price windows before starting
+the whole roster. Do not select later pilot rows based on this observed return.
+No amount correction or broad collection is claimed by this checkpoint.
+
+The new validator is reusable; the actual ICTax endpoint was observed in the
+first-party public client, not a verified stable documented API. Broader collection
+must archive actual receipts and retain missing/conflicting events. Missing SPY
+forces unavailable results. Missing stocks do not stop unrelated securities; retain
+the existing cumulative exclusion policy (45/631, maximum 63, eighteen slots left).
+
+## Protected prior evidence and operating rules
+
+Memory must be strictly below 90%, with no implicit free-GiB floor. Preserve process
+budgets, unknown-measurement refusal and the shared non-queueing heavy-job lease.
+No heavy worker remains after the completed pilot. Never run simultaneous tests,
+source jobs and training jobs. The old full target run is stopped, not resumable with
+the new request/producer: nineteen checkpoints / 2,242 rows have zero targets, and
+every one of its 59 monthly SPY windows lacks currency evidence at both horizons.
+Do not restart unchanged. Preserve `investment_return_targets_20261107` and its
+request and original immutable implementation.
+
+Financial recovery remains complete for 431 issuers/22,346 eligible security-months:
+6,017 have all six features; 15,485 at least one; 6,861 none. Manifest
+`data/research/investment_financial_recovery_20261107/final/_manifest.json`, SHA256
+ddb5021e1daba62d9fde8fc5fc9bec7bb8170c46889f9455f5b6cd341aaadf4d.
+Full roster manifest SHA256 98bf8ae6de31f8816fdaf622909038548751e803dd2aa77f381ea86651822061.
+These are reconstructed research artifacts, not training admission.
+
+Keep immutable producer exports under data/research/implementation_snapshots:
+49355dd101ac6ac4820f925bcea34f9a11ebf135 and
+88f6327f1573ca9efc37e5e62939e28cefe69139 (452 byte-verified committed files).
+Former Codex work directories are frozen source evidence, not editable checkouts.
+Their retired Git-pointer files and pinned source bytes must remain unchanged.
+Only the canonical main Git worktree is registered. Retired merge content and the
+Git bundle remain under .git/archives. Never delete raw or hash-bound evidence as
+routine cleanup. Read the leading active-plan section and current feature audit
+before continuing; no new active plan or handoff file is permitted.
+
+---
+
+## Preserved historical handoff
+
+All text below is retained historical continuity. Its former current-status and
+next-step statements are superseded by the verified November 8 summary above.
+No previous branch/worktree instruction overrides the sole canonical main checkout.
+
+
 ### Current work: dividend currency validation and IDXX pilot — November 8
 
 Canonical main HEAD is 9e57548. The current checkpoint is not yet committed.

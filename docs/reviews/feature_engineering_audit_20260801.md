@@ -1,5 +1,20 @@
 # Current Feature Engineering Audit
 
+### First actual investment target pilot — November 8
+
+The independent dividend-currency adapter and explicit selected-decision materializer
+are verified under implementation 88f6327. Actual IDXX July 31, 2019 yields one
+source-validated 63-session target; 252 sessions remains unavailable because SPY
+June 2020 provider/issuer dividend amounts differ. Full 37,229-row roster verification
+preceded selecting this one decision; no model fit or population coverage is claimed.
+Final pilot manifest SHA256 3286a1456a83bd9fcc2076cdf33c203379bf0687b18e356eae7fb83b648d5a3f.
+Twelve currency events passed real-source replay; 170 targeted tests, Ruff, strict
+mypy and independent code/Quant reviews passed. Historical feature/target data remain
+research-only: training, promotion and serving are still pending. Existing six-feature
+coverage counts below are unchanged. See the active handoff for exact source pins,
+the explicit amount conflict and the next bounded step.
+
+
 ### Broad financial coverage verified; investment labels pending — November 7
 
 Implementation `0d01e13` fixes whole-issuer rejection caused by isolated historical
