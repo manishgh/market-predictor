@@ -1,6 +1,23 @@
 # Active Edge Rebuild Handoff
 
 
+## Active XLY and broader coverage work — November 9
+
+Canonical main starts at 86f81ae. The user requests XLY and broader coverage gaps
+with Sol agents and no additional checkout. Read the leading active-plan scope.
+Sol engineering prepares the four retained XLY event assertions and twelve frozen
+XLY decisions. Sol collector engineering owns sources/http.py, sources/ictax.py
+and their focused tests; root owns the thin CLI, source requests, execution and
+current documentation. Senior Quant and an independent code reviewer verify it.
+
+Prior 32 XLV targets and their source artifacts remain unchanged. The existing
+13b5e6f committed producer can run the XLY 24 without any accounting-code change.
+Collector tests and actual jobs must not overlap the XLY heavy-job lease. No new
+collection, target or coverage result is claimed before actual publication.
+Earlier completed summaries and history below remain preserved.
+
+
+
 ## Current completed checkpoint — November 9, 2026
 
 Use only C:/project/market-predictor on main. No clones or additional worktrees.

@@ -18,6 +18,7 @@ from market_predictor.research.investment_features import (
     evaluate_investment_predictions,
 )
 from market_predictor.research.investment_labels import materialize_investment_labels
+from market_predictor.sources.ictax import collect_ictax_archive, verify_ictax_archive
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 
 
@@ -34,6 +35,12 @@ def _run(action: Callable[[], dict[str, Any]]) -> None:
 
 
 def register_investment_collection_commands(app: typer.Typer) -> None:
+    @app.command("collect-ictax-distributions")
+    def collect_tax_distributions(root: Path = typer.Option(...), request: Path = typer.Option(...),
+                                  request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
+        """Archive official fund distribution responses with resumable source checkpoints."""
+        _run(lambda: collect_ictax_archive(root=root, request=request, request_sha256=request_sha256, output=output))
+
     @app.command("collect-investment-dividend-currencies")
     def collect_currencies(root: Path = typer.Option(...), action_config: Path = typer.Option(...),
                            action_config_sha256: str = typer.Option(...), action_archive: Path = typer.Option(...),
@@ -58,6 +65,12 @@ def register_investment_collection_commands(app: typer.Typer) -> None:
 
 
 def register_investment_research_commands(app: typer.Typer) -> None:
+    @app.command("verify-ictax-distributions")
+    def verify_tax_distributions(root: Path = typer.Option(...), manifest: Path = typer.Option(...),
+                                 manifest_sha256: str = typer.Option(...)) -> None:
+        """Replay archived fund-year source bytes and receipts without admitting training data."""
+        _run(lambda: verify_ictax_archive(root=root, manifest=manifest, manifest_sha256=manifest_sha256))
+
     @app.command("materialize-investment-labels")
     def materialize_labels(root: Path = typer.Option(...), request: Path = typer.Option(...),
                            request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:

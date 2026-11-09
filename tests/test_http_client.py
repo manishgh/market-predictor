@@ -13,6 +13,54 @@ from market_predictor.sources.http import HttpClient, _retry_delay
 
 
 class HttpClientTests(unittest.TestCase):
+    def test_post_preserves_original_bytes_and_excludes_session_headers(self) -> None:
+        client = HttpClient(timeout=9)
+        client.session = Mock()
+        client.session.post.return_value = _Response(
+            200, body=b"raw\xff\r\n", headers={"Set-Cookie": "secret", "Content-Type": "application/json"})
+        result = client.post_bytes_with_metadata("https://example.test/data", payload={"year": 2020},
+                                                 headers={"X-CSRF-TOKEN": "secret"}, allow_redirects=False)
+        self.assertEqual(result.body, b"raw\xff\r\n")
+        self.assertEqual(result.sha256, sha256(result.body).hexdigest())
+        self.assertEqual(dict(result.safe_headers), {"content-type": "application/json"})
+        options = client.session.post.call_args.kwargs
+        self.assertEqual(options["json"], {"year": 2020})
+        self.assertEqual(options["timeout"], 9)
+        self.assertIs(options["stream"], True)
+        self.assertIs(options["allow_redirects"], False)
+
+    @patch("market_predictor.sources.http.time.sleep")
+    def test_post_retries_are_bounded_and_terminal_failure_can_be_archived(self, sleep: Mock) -> None:
+        client = HttpClient()
+        client.session = Mock()
+        client.session.post.side_effect = [
+            _Response(503, headers={"Retry-After": "0"}), _Response(503, body=b"last body")]
+        result = client.post_bytes_with_metadata("https://example.test/data", retries=2, raise_for_status=False)
+        self.assertEqual(result.status_code, 503)
+        self.assertEqual(result.body, b"last body")
+        self.assertEqual(client.session.post.call_count, 2)
+        self.assertEqual(sleep.call_count, 1)
+
+    def test_post_closes_oversized_response(self) -> None:
+        client = HttpClient()
+        client.session = Mock()
+        response = _Response(200, body=b"too large")
+        response.close = Mock()  # type: ignore[method-assign]
+        client.session.post.return_value = response
+        with self.assertRaisesRegex(RuntimeError, "maximum_body_bytes"):
+            client.post_bytes_with_metadata("https://example.test/data", maximum_body_bytes=1)
+        response.close.assert_called_once()
+
+    @patch("market_predictor.sources.http.time.sleep")
+    def test_post_timeout_attempt_limit(self, sleep: Mock) -> None:
+        client = HttpClient()
+        client.session = Mock()
+        client.session.post.side_effect = requests.Timeout("fixture timeout")
+        with self.assertRaisesRegex(RuntimeError, "POST failed"):
+            client.post_bytes_with_metadata("https://example.test/data", retries=2, pause=0)
+        self.assertEqual(client.session.post.call_count, 2)
+        self.assertEqual(sleep.call_count, 1)
+
     def test_get_bytes_preserves_non_utf8_and_crlf_body(self) -> None:
         body = b"\xff\xfeheader\r\nvalue\x80\r\n"
         client = HttpClient()

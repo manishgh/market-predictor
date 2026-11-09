@@ -156,22 +156,61 @@ class HttpClient:
         allow_redirects: bool = True,
         raise_for_status: bool = True,
     ) -> HttpByteResponse:
+        return self._request_bytes_with_metadata(
+            "GET", url, params=params, headers=headers, retries=retries, pause=pause,
+            maximum_body_bytes=maximum_body_bytes, allow_redirects=allow_redirects,
+            raise_for_status=raise_for_status,
+        )
+
+    def post_bytes_with_metadata(
+        self,
+        url: str,
+        *,
+        payload: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        retries: int = 3,
+        pause: float = 1.0,
+        maximum_body_bytes: int = _DEFAULT_MAXIMUM_BODY_BYTES,
+        allow_redirects: bool = True,
+        raise_for_status: bool = True,
+    ) -> HttpByteResponse:
+        """Capture original JSON POST response bytes using the shared HTTP policy."""
+        return self._request_bytes_with_metadata(
+            "POST", url, payload=payload, headers=headers, retries=retries, pause=pause,
+            maximum_body_bytes=maximum_body_bytes, allow_redirects=allow_redirects,
+            raise_for_status=raise_for_status,
+        )
+
+    def _request_bytes_with_metadata(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        payload: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        retries: int,
+        pause: float,
+        maximum_body_bytes: int,
+        allow_redirects: bool,
+        raise_for_status: bool,
+    ) -> HttpByteResponse:
         if maximum_body_bytes < 1:
             raise ValueError("maximum_body_bytes must be positive")
+        if retries < 1:
+            raise ValueError("retries must be positive")
         last_error: Exception | None = None
         for attempt in range(retries):
             response: requests.Response | None = None
             try:
                 request_headers = {"Accept-Encoding": "identity", **(headers or {})}
                 self._before_request()
-                response = self.session.get(
-                    url,
-                    params=params,
-                    headers=request_headers,
-                    timeout=self.timeout,
-                    stream=True,
-                    allow_redirects=allow_redirects,
-                )
+                options: dict[str, Any] = {"headers": request_headers, "timeout": self.timeout,
+                                           "stream": True, "allow_redirects": allow_redirects}
+                if method == "POST":
+                    response = self.session.post(url, json=payload or {}, **options)
+                else:
+                    response = self.session.get(url, params=params, **options)
                 self._after_response(response)
                 if self._is_retriable(response.status_code) and attempt < retries - 1:
                     time.sleep(
@@ -219,7 +258,7 @@ class HttpClient:
             finally:
                 if response is not None:
                     response.close()
-        raise RuntimeError(_http_error_message("GET", url, last_error)) from last_error
+        raise RuntimeError(_http_error_message(method, url, last_error)) from last_error
 
     def post_json_with_headers(
         self,

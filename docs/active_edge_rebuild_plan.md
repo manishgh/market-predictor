@@ -1,6 +1,50 @@
 # Active Edge Rebuild Plan
 
 
+### XLY targets and broader benchmark source coverage — November 9
+
+Status: `in_progress`. User explicitly requests XLY and broader coverage gaps,
+using Sol agents and canonical main only. Preserve all completed evidence.
+
+Frozen outputs, in order: (1) validate four retained XLY distributions and publish
+24 targets for the twelve previously selected July 2019 XLY decisions, without
+rebuilding the completed 32 XLV targets; (2) collect missing official ICTax source
+responses for eleven benchmarks across payment years 2019–2025, bounded to 77
+security-years and separate structured/HTML response pairs; (3) replay candidate
+event assertions against the existing 213-event inventory and report remaining
+gaps by event and window. Reuse the eight already retained fund-year pairs.
+
+XLY uses three issuer-rate/currency bridges and one exact tax-event match, with
+no new amount correction. Keep the existing SPY correction and prior thirteen
+currency assertions unchanged. Financial feature completeness does not filter
+the frozen twelve decisions. Source coverage, not future returns, selected them.
+
+Collector scope: reuse canonical requests-based HTTP transport with a bounded
+POST byte-response method, actual safe response metadata, typed request, immutable
+unit checkpoints, hash-verified resume, sequential rate-limited retries and explicit
+unavailable-unit results. Anonymous session/CSRF values stay in memory, never raw
+archives or logs. Collection supplies evidence, not currency or training admission.
+Identity/hash/receipt corruption fails; missing provider years/events remain local
+gaps so unrelated collection continues. SPY remains mandatory for every target.
+
+The evidence builder must use existing exact CurrencyCorroboration and explicit
+IssuerDividendAmountCorrection contracts, preserving original action hashes and
+current capture clocks. No inferred USD, tolerance, special-action fallback,
+capital-gain substitution or rewritten old producer/evidence. New amount corrections
+require issuer gross-column evidence and independent review under the accepted
+authority policy; unsupported events remain unavailable.
+
+Exit gates: independent Quant/design/code review; focused HTTP/collector/consumer
+and source-tamper tests plus Ruff/strict typing for changed code; actual 24-target
+XLY publication; actual bounded collection report and event/window coverage counts.
+Raw-tail work first inventories exact missing required sessions and usable retained
+raw sources. Any investment-specific extension must bind prices, identity and
+corporate actions together; never relax the frozen swing end date in place.
+No training/promotion/production claim. Keep strict 90% RAM policy and the shared
+heavy-job lease; data jobs and tests remain sequential despite parallel engineering.
+
+
+
 ### Issuer dividend amount correction and coverage preflight — November 9
 
 Status: `verified`. This checkpoint resolved the previously remaining SPY

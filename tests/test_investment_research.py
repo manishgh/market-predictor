@@ -172,3 +172,37 @@ def test_sec_company_facts_identity_validation(monkeypatch: pytest.MonkeyPatch) 
             source.fetch_cik_company_facts(cik)
     with pytest.raises(ValueError, match="differs"):
         source.fetch_cik_company_facts("2")
+
+
+@pytest.mark.parametrize("command,attribute,app,arguments", [
+    ("collect-ictax-distributions", "collect_ictax_archive", collection_app,
+     ["--request", "request.json", "--request-sha256", "a" * 64, "--output", "out"]),
+    ("verify-ictax-distributions", "verify_ictax_archive", research_app,
+     ["--manifest", "manifest.json", "--manifest-sha256", "b" * 64]),
+])
+def test_ictax_command_arguments_and_refusal(monkeypatch, command, attribute, app, arguments):
+    from market_predictor.commands import investment_research as commands
+
+    captured = {}
+
+    def run(**kwargs):
+        captured.update(kwargs)
+        return {"status": "unit_fixture"}
+
+    monkeypatch.setattr(commands, attribute, run)
+    result = CliRunner().invoke(app, [command, "--root", ".", *arguments])
+    assert result.exit_code == 0, result.output
+    assert captured["root"] == Path(".")
+    if attribute == "collect_ictax_archive":
+        assert captured == {"root": Path("."), "request": Path("request.json"),
+                            "request_sha256": "a" * 64, "output": Path("out")}
+        assert command not in command_names(research_app)
+    else:
+        assert captured == {"root": Path("."), "manifest": Path("manifest.json"), "manifest_sha256": "b" * 64}
+        assert command not in command_names(collection_app)
+
+    def busy(**kwargs):
+        raise HeavyJobBusyError("unit fixture owner")
+
+    monkeypatch.setattr(commands, attribute, busy)
+    assert CliRunner().invoke(app, [command, "--root", ".", *arguments]).exit_code == 75
