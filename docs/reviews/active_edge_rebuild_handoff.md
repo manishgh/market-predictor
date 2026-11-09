@@ -1,5 +1,56 @@
 # Active Edge Rebuild Handoff
 
+## Active QQQ and raw-candle extension — November 9
+
+Implementation review notes (component checkpoint): the investment collector
+requires every planned benchmark session, including on resume; stock source gaps
+remain local and all new stock identities remain quarantined. The usable selection
+adds only the eleven planned benchmark extensions and preserves parent segments.
+The parent contains thirteen funds; XLF/XLRE are outside this frozen investment
+scope. Acquisition evidence retains all stock candidates, including eighteen runs
+overlapping old selected spans; these cannot acquire ownership or stop unrelated
+benchmark composition. The reader refuses ambiguous overlapping owners and retains
+each original capture clock. Extension and ICTax public operations share the
+configured runtime lease. Independent Sol Quant/design and code review findings
+were consolidated into these fixes and targeted regressions.
+
+Standard PDF dependency is optional collection/research `pypdf>=6.14.2,<7`,
+resolved and tested at 6.21.4. The three affected locks also now include the
+already-declared pytest development dependency; existing dependency pins did not
+change. Production and training locks remain unchanged.
+
+Source execution is still pending at this implementation checkpoint. Raw request
+data/research/investment_raw_extension_20261109/request.json binds the original
+855-source gap inventory and exact 446-unit / 111,661-session plan. The QQQ pilot
+was selected from metadata before prices: IDXX November 30, 2023, decision
+ef6402ee56c734ffb0a5dca750c4350fe5e2d54c61570947ae21c3e19dcba442.
+Both 63/252 horizons remain requested; no claim of annual completion is made.
+Final implementation checks: 333 focused/consumer tests passed in 61.16 seconds,
+including the final planned-scope/raw tests and PDF parser 6.21.4. Ruff and strict
+mypy passed for six root/integration source files; raw/shared archive checks had
+190 passes plus final focused16, and source/holding checks had 113+143 passes.
+These sets overlap and are not additive. Raw archive and QQQ source modules also
+passed their affected Ruff/strict mypy checks. Full suite and model training were
+deliberately not run for this source/component checkpoint.
+Actual-source results remain pending until the frozen producer runs below.
+
+
+
+Canonical main starts at 7aa5b87. Read the leading active-plan scope for the approved
+QQQ evidence and exact 446-unit investment-only acquisition. Sol engineers own
+disjoint source modules; root owns integration/docs/execution. Senior Quant approved
+explicit special-cash evidence with the unpaid-claim boundary and all-stock raw
+quarantine. No new outcome/collection result is claimed until actual publication.
+Preserve previous completed checkpoint evidence below; use no additional checkout.
+
+Official notice reuse: OCC53848 returned HTTP403 and its failed receipt is
+preserved. Reuse the already retained official MIAX mirror of OCC53847 if full
+PDF/receipt replay passes. Both are public official exchange/OCC source authorities;
+the generic notice contract binds exact symbol, notice number, source URL and bytes.
+No download is needed when the original retained source proves the required facts.
+
+
+
 ## Current completed XLY and benchmark source checkpoint — November 9
 
 This current summary supersedes status/next-step statements retained below.

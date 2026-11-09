@@ -219,6 +219,41 @@ existing exact event validators. Payment year can differ from ex-date year;
 neither fund domicile, tax rounding nor capital-gain totals can replace those
 checks. Collection and verification cannot authorize training or predictions.
 
+The investment raw-candle request uses schema
+`market_predictor.investment_raw_acquisition_request`. It pins the gap inventory,
+source selection, roster rows, parent plan authority and retained action query
+with `path`/`sha256`, and sets `outcome_end` to `2025-05-30`. The plan reconstructs
+exact missing XNYS sessions from those authorities before collection.
+
+```powershell
+market-predictor-research plan-investment-raw-candles --root C:/project/market-predictor --request <request.json> --output <new-plan-directory>
+market-predictor-collect collect-investment-raw-candles --root C:/project/market-predictor --request <request.json> --plan <plan-directory> --plan-authority-sha256 <sha256> --output <archive-directory>
+market-predictor-research verify-investment-raw-candles --root C:/project/market-predictor --request <request.json> --plan <plan-directory> --plan-authority-sha256 <sha256> --archive <archive-directory>
+```
+
+Collection reuses the serial raw SIP daily transport and retained action queries.
+Unavailable stock units remain local gaps while other units continue. A benchmark
+must contain every required session before its unit is complete. Interrupted
+archives retain immutable attempts and verified completed units for resume.
+The report distinguishes requested, captured and missing sessions; collection
+does not grant stock identity, accounting, label or model admission.
+
+The optional label-request `raw_source_extension` binds `acquisition_request`,
+`plan_directory`, `plan_authority_sha256`, `archive_directory` and
+`benchmark_tax_archive` (the two source references include `path`/`sha256`).
+It replays transport, official benchmark identities, terminal-year tax identity
+and retained actions before composing nonoverlapping benchmark sources. Capture
+clocks remain per source. All new stock artifacts stay in the acquisition audit
+and outside usable segments; missing stock outcomes remain unresolved. The
+frozen swing end of May 28, 2024 and existing source selections remain unchanged.
+
+An exact special-cash distribution can use the generic
+`occ_special_cash_distribution` contract: retained official PDF and collector
+receipt, exact fund/CUSIP/amount/dates, and independent USD-per-share proof.
+Any payable-date disagreement stays explicit. Its supported economic treatment
+is only the existing nominal unpaid, nontradable entitlement; this does not
+establish payment or reinvestment or waive other action conflicts.
+
 The label request is `InvestmentLabelMaterializationRequest` in
 `research/investment_labels.py`. It pins `roster_manifest`, `target_config` and
 optional `currency_manifest`, each with `path` and `sha256`. It also requires

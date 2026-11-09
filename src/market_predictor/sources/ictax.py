@@ -20,7 +20,7 @@ from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, read_json_object, write_json_object
-from market_predictor.heavy_jobs import heavy_job_lease
+from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.research.investment_features import FLAGS, _publish
 from market_predictor.sources.http import HttpClient
 from market_predictor.swing.contracts.holding_accounting import HoldingContract
@@ -379,7 +379,7 @@ def collect_ictax_archive(*, root: Path, request: Path, request_sha256: str, out
     """Archive requested fund-years serially; failures never admit currency facts."""
     root = root.resolve()
     request, output = inside(root, request), inside(root, output)
-    with heavy_job_lease("collect-ictax-distribution-sources", runtime_dir=root / "data/runtime"):
+    with heavy_job_lease("collect-ictax-distribution-sources", runtime_dir=root / heavy_job_runtime_dir()):
         guard("ICTax archive inputs")
         if (output / "final").exists():
             raise FileExistsError("completed ICTax archive is immutable")
@@ -419,7 +419,7 @@ def verify_ictax_archive(*, root: Path, manifest: Path, manifest_sha256: str) ->
     """Verify immutable request, response bytes and receipts without admitting events."""
     root = root.resolve()
     manifest = inside(root, manifest)
-    with heavy_job_lease("verify-ictax-distribution-sources", runtime_dir=root / "data/runtime"):
+    with heavy_job_lease("verify-ictax-distribution-sources", runtime_dir=root / heavy_job_runtime_dir()):
         guard("ICTax archive verification")
         pins: dict[str, str] = {}
         report = _json(_read_pin(root, SourcePin(path=manifest.relative_to(root).as_posix(), sha256=manifest_sha256), pins))

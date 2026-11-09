@@ -1,5 +1,67 @@
 # Active Edge Rebuild Plan
 
+### QQQ special cash distribution and investment raw candles — November 9
+
+Status: `in_progress`. User authorizes the QQQ special distribution and missing
+raw candles through May 2025, using Sol agents, existing evidence and canonical main.
+The preceding XLY/benchmark checkpoint remains verified and unchanged.
+
+Official notice reuse: OCC53848 returned HTTP403 and its failed receipt is
+preserved. Reuse the already retained official MIAX mirror of OCC53847 if full
+PDF/receipt replay passes. Both are public official exchange/OCC source authorities;
+the generic notice contract binds exact symbol, notice number, source URL and bytes.
+No download is needed when the original retained source proves the required facts.
+
+
+Frozen scope: (1) admit the single reviewed QQQ special-cash event only through a
+reusable typed official-notice contract and exact independent currency replay;
+(2) collect 446 exact missing raw SIP daily units: 435 stock runs / 108,889 nominal
+security-sessions and 11 benchmark runs / 2,772 sessions; (3) verify archive and
+report actual observed/missing units and sessions, then demonstrate investment-only
+segment composition and explicit refusal of unreviewed stock identity extensions.
+Use May 30, 2025 as the exact investment acquisition bound. Never alter the frozen
+swing end May 28, 2024, original selections, old producers or 56 published targets.
+
+QQQ source admission preserves action ID/hash and special=true. The source contract
+is named for official special-cash evidence, not a ticker/date-specific code branch.
+Replay bounded original OCC PDF with a declared standard PDF parser; require exact
+symbol/CUSIP, special-cash classification, amount, ex-date and record date, together
+with independent USD/per-share evidence. January 15 versus January 16 payable dates
+remain explicit source disagreement. Only the existing nominal unpaid, nontradable
+entitlement can be valued; no payment or reinvestment claim. Foreign, revision,
+cancellation, due-bill, capital-gain substitutions and conflicting economic terms
+remain unsupported. The investment action window may be narrowed only after exact
+typed evidence replay. Ordinary/swing behavior remains unchanged.
+
+Raw collection reuses the existing daily archive transport/writer and exact-unit
+plan publisher. Add an investment-owned plan verifier, serial execution for this
+scope and exact per-owner benchmark ranges; preserve existing stock-unavailable
+limits and mandatory benchmark completion checks. Missing stock responses remain
+local records and do not prevent collecting unrelated units. Never recast an
+incomplete collection as complete or turn collection failure into cohort exclusion.
+All new stock runs are quarantined provider candidates until separate positive
+identity/action continuity is replayed; membership coverage alone grants nothing.
+The 24 tail identity cautions and 47 earlier-ended source identities stay explicit.
+Retained action queries through September 2026 are reused, not downloaded again.
+
+Any consuming extension binds parent target config/roster/selection, source request,
+raw SIP feed, exact identity plan and action authority. Require exactly one selected
+source per security/session; preserve per-source capture clocks, reject overlapping
+ownership and unsupported ticker/provider transitions. Benchmarks need explicit
+stable identity evidence. New observations do not imply complete targets or training.
+
+Ownership: Sol raw engineer owns investment/raw_acquisition.py, its tests and narrow
+history_archive.py integration. Sol distribution engineer owns dividend_currencies.py,
+corporate_actions.py and their focused tests. Root owns dependencies, command surfaces,
+investment source-reader/materializer integration, docs and serialized execution.
+Senior Sol Quant/design review precedes implementation; independent Sol code review
+and Quant verification precede closure. Exit gates: affected regression/poison tests,
+Ruff/strict typing, actual source captures/replay, QQQ event and selected real-target
+audit, actual acquisition coverage with explicit gaps, immutable prior-data parity,
+main push and no orphan workers. No model training/promotion/serving in this step.
+All heavy jobs/tests are serialized with the shared lease and strictly-below-90% RAM.
+
+
 
 ### XLY targets and broader benchmark source coverage — November 9
 

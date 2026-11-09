@@ -22,9 +22,15 @@ from market_predictor.investment.corporate_actions import InvestmentCorporateAct
 from market_predictor.investment.dividend_currencies import load_currency_corroborations, load_dividend_amount_corrections
 from market_predictor.investment.label_materialization import InvestmentSourceValidation, compile_investment_label
 from market_predictor.investment.label_sources import InvestmentSourceReader
+from market_predictor.investment.source_extensions import (
+    InvestmentRawSourceExtension,
+    compose_investment_raw_extension,
+    verify_investment_raw_extension,
+)
 from market_predictor.research.investment_currencies import load_investment_currency_evidence
 from market_predictor.research.investment_features import FLAGS, ArtifactReference, _object, _publish, _read
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference, HoldingContract, Timestamp
+from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.action_evidence import load_corporate_action_evidence
 from market_predictor.swing.datasets.corrected_outcome_admission import corrected_ticker
 from market_predictor.swing.datasets.corrected_outcomes import load_corrected_outcome_policy, verified_corrected_research_sources
@@ -36,6 +42,7 @@ class InvestmentLabelMaterializationRequest(HoldingContract):
     currency_manifest: ArtifactReference | None = None
     currency_corroboration_manifest: ArtifactReference | None = None
     dividend_amount_corrections_manifest: ArtifactReference | None = None
+    raw_source_extension: InvestmentRawSourceExtension | None = None
     decision_ids: tuple[str, ...] | None = Field(default=None, min_length=1)
     nominal_unpaid_claim_valuation: Literal[True]
     evaluation_as_of_utc: Timestamp
@@ -55,7 +62,7 @@ def _implementation() -> dict[str, str]:
     package = Path(__file__).resolve().parents[1]
     names = ("research/investment_labels.py", "research/investment_currencies.py", "research/investment_features.py",
         "investment/label_sources.py", "investment/label_materialization.py", "investment/corporate_actions.py",
-        "investment/dividend_currencies.py",
+        "investment/dividend_currencies.py", "investment/raw_acquisition.py", "investment/source_extensions.py",
         "investment/contracts.py", "investment/targets.py", "swing/contracts/holding_accounting.py",
         "swing/evaluation/holding_accounting.py", "swing/labels/holding_paths.py", "swing/labels/holding_identity.py",
         "swing/datasets/action_evidence.py", "swing/datasets/corrected_outcomes.py")
@@ -150,6 +157,8 @@ def materialize_investment_labels(*, root: Path, request: Path, request_sha256: 
         membership_pin = ArtifactReference.model_validate_json(json.dumps(coverage_request["membership"]))
         _read(root, membership_pin, pins)
         policy = load_corrected_outcome_policy(root, Path(parsed.target_config.path), parsed.target_config.sha256)
+    raw_extension = (None if parsed.raw_source_extension is None
+        else verify_investment_raw_extension(root, parsed.raw_source_extension))
     evidence = load_corporate_action_evidence(root=root, config=Path(policy.action_config.path), archive=Path(policy.action_archive),
         expected_audit_sha256=policy.action_audit_sha256, memory_guard=lambda: guard("investment action evidence"))
     with verified_corrected_research_sources(root, Path(parsed.target_config.path), parsed.target_config.sha256,
@@ -190,9 +199,23 @@ def materialize_investment_labels(*, root: Path, request: Path, request_sha256: 
             corrections = load_dividend_amount_corrections(root, Path(correction_pin.path),
                 correction_pin.sha256, policy_sha256=request_sha256)
         actions = InvestmentCorporateActions(root, evidence, sources["action_index"], policy.official_windows,
-            policy_ref, policy.numerical_end, currency_evidence=currencies, currency_corroborations=corroborations,
+            policy_ref, policy.numerical_end if raw_extension is None else raw_extension.outcome_end,
+            currency_evidence=currencies, currency_corroborations=corroborations,
             dividend_amount_corrections=corrections)
         pins.update({str(_path(root, name)): digest for name, digest in actions.source_files.items()})
+        selection = sources["selection"]
+        if raw_extension is not None:
+            action_request = inside(root, policy.action_archive) / "_request.json"
+            selection = compose_investment_raw_extension(root=root, extension=raw_extension,
+                parent_selection=selection, parent_selection_pin=policy.source_selection,
+                roster_rows_pin=SourcePin(path=rows_file.path, sha256=rows_file.sha256),
+                action_query_pin=SourcePin(path=action_request.relative_to(root).as_posix(),
+                    sha256=sources["source_files"][action_request.relative_to(root).as_posix()]),
+                corroborations=corroborations)
+            for name, digest in raw_extension.source_files.items():
+                if name in pins and pins[name] != digest:
+                    raise DataReadinessError("investment raw extension conflicts with parent source pins")
+                pins[name] = digest
         common_path = output / "_verified_sources.json"
         common_sources = {name: digest for name, digest in pins.items() if name != str(common_path)}
         if common_path.exists():
@@ -202,7 +225,7 @@ def materialize_investment_labels(*, root: Path, request: Path, request_sha256: 
             write_json_object(common_path, common_sources)
         common_digest = file_sha256(common_path)
         pins[str(common_path)] = common_digest
-        reader = InvestmentSourceReader(root, sources["selection"], request_sha256)
+        reader = InvestmentSourceReader(root, selection, request_sha256)
         groups: dict[str, list[dict[str, Any]]] = {}
         for row in rows:
             groups.setdefault(row["security_id"], []).append(row)

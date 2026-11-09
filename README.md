@@ -13,6 +13,12 @@ with retained-source reuse and resumable fund-year checkpoints.
 `verify-ictax-distributions` checks their immutable requests, responses and receipts;
 exact dividend-event validation remains a separate requirement for return targets.
 
+`plan-investment-raw-candles`, `collect-investment-raw-candles` and
+`verify-investment-raw-candles` fill exact raw SIP daily gaps through May 2025
+using the retained roster and source authorities. Complete benchmark extensions
+can be composed after identity checks; new stock candles remain quarantined
+until their security continuity is verified.
+
 Market Predictor builds causal prediction intelligence for long-only swing and a
 separate planned investment cohort. It owns data curation, feature construction, model training, temporal
 validation, outcome evaluation, and model governance.

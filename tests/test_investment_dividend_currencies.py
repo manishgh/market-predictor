@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import io
 import json
 import zipfile
 from datetime import date, datetime, timedelta
@@ -231,6 +232,116 @@ def test_isin_must_derive_from_source_cusip(tmp_path: Path) -> None:
     original, item = fixture(tmp_path)
     item["tax"]["isin"] = "US78462F1031"
     with pytest.raises(DataReadinessError, match="CUSIP/ISIN identity"):
+        model(item).validates_against(original, tmp_path, POLICY)
+
+
+def special_cash_fixture(tmp_path: Path, *, notice_replace: tuple[str, str] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Synthetic alternate fund demonstrates source-driven, reusable admission."""
+    from pypdf import PdfWriter
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+
+    original, item = fixture(tmp_path)
+    original.update(special=True, cusip="78462F103", record_date="2019-09-23", payable_date="2019-10-02")
+    item["original_record_sha256"] = json_sha256(original)
+    text = ("#12345 Fund (SPY) has announced a Special Cash Dividend of $1.383619 per SPY share. "
+        "The record date is September 23, 2019; the payable date is October 1, 2019. "
+        "The ex-distribution date for this distribution will be September 20, 2019. CUSIP: 78462F103")
+    if notice_replace is not None:
+        text = text.replace(*notice_replace)
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=612, height=792)
+    page[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject({
+        NameObject("/F1"): DictionaryObject({NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"), NameObject("/BaseFont"): NameObject("/Helvetica")})})})
+    stream = DecodedStreamObject()
+    escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    stream.set_data(("BT /F1 10 Tf 10 700 Td (" + escaped + ") Tj ET").encode("ascii"))
+    page[NameObject("/Contents")] = writer._add_object(stream)
+    output = io.BytesIO()
+    writer.write(output)
+    raw = output.getvalue()
+    digest = hashlib.sha256(raw).hexdigest()
+    path = tmp_path / f"body-{digest}.bin"
+    path.write_bytes(raw)
+    receipt = {"schema_version": "market_predictor.official_document_attempt", "inventory_sha256": "a" * 64,
+        "document_id": "test_special_cash", "attempt_id": "b" * 32, "started_at_utc": CAPTURE,
+        "completed_at_utc": CAPTURE, "state": "archived_unreviewed", "body_path": path.name,
+        "error_type": None, "failure_status_code": None, "interpretation_status": "not_reviewed",
+        "historical_availability_proven": False, "accounting_eligible": False,
+        "response": {"requested_url": "https://infomemo.theocc.com/infomemos?number=12345",
+            "final_url": "https://infomemo.theocc.com/infomemos?number=12345", "redirect_chain": [],
+            "status_code": 200, "retrieved_at_utc": CAPTURE, "content_type": "application/pdf",
+            "content_encoding": None, "etag": None, "last_modified": None, "body_length": len(raw),
+            "sha256": digest, "body_representation": "http_entity_encoded", "safe_headers": []}}
+    receipt["receipt_sha256"] = json_sha256(receipt)
+    source = {"body": pin(path), "receipt": write_json(tmp_path / "_receipt.json", receipt)}
+    item["special_cash_distribution"] = {"kind": "occ_special_cash_distribution", "source": source,
+        "notice_number": 12345, "fund_name": "Fund", "record_date": "2019-09-23",
+        "announced_payable_date": "2019-10-01", "provider_payable_date": "2019-10-02",
+        "payable_date_conflict": True, "economic_treatment": "nominal_unpaid_nontradable_entitlement"}
+    return original, item
+
+
+def test_special_cash_source_preserves_raw_class_and_payable_conflict(tmp_path: Path) -> None:
+    original, item = special_cash_fixture(tmp_path)
+    before = copy.deepcopy(original)
+    proof = model(item)
+    refs = proof.validates_against(original, tmp_path, POLICY)
+    assert original == before and original["special"] is True
+    assert len(refs) == 8
+    assert sum("payable_date_conflict=True" in ref.record_locator for ref in refs) == 2
+    assert proof.special_cash_distribution is not None
+    assert proof.special_cash_distribution.announced_payable_date != proof.special_cash_distribution.provider_payable_date
+
+
+@pytest.mark.parametrize("change", [{"foreign": True}, {"special": False}, {"rate": 1.38},
+    {"record_date": "2019-09-24"}, {"payable_date": "2019-10-03"}, {"revision": True},
+    {"cancelled": True}, {"due_bill_redemption_date": "2019-10-03"}, {"due_bill_redemption_date": False}])
+def test_special_cash_cannot_repair_unsupported_or_conflicting_terms(tmp_path: Path, change: dict[str, Any]) -> None:
+    original, item = special_cash_fixture(tmp_path)
+    original.update(change)
+    # Rebinding a declaration cannot authorize changed economic terms.
+    item["original_record_sha256"] = json_sha256(original)
+    with pytest.raises(DataReadinessError):
+        model(item).validates_against(original, tmp_path, POLICY)
+
+
+@pytest.mark.parametrize("field,value", [("notice_number", 12346), ("fund_name", "Other"),
+    ("payable_date_conflict", False), ("announced_payable_date", "2019-10-03")])
+def test_special_cash_assertion_fields_must_replay_source(tmp_path: Path, field: str, value: Any) -> None:
+    original, item = special_cash_fixture(tmp_path)
+    item["special_cash_distribution"][field] = value
+    with pytest.raises(DataReadinessError):
+        model(item).validates_against(original, tmp_path, POLICY)
+
+
+def test_special_cash_requires_separate_exact_usd_proof_and_source_hash(tmp_path: Path) -> None:
+    original, item = special_cash_fixture(tmp_path)
+    replace_tax(item, lambda payload: payload["data"]["calculationDetails"]["entries"][0]["currency"].update(shortName="EUR"))
+    with pytest.raises(DataReadinessError, match="tax currency"):
+        model(item).validates_against(original, tmp_path, POLICY)
+    Path(item["special_cash_distribution"]["source"]["body"]["path"]).write_bytes(b"changed")
+    with pytest.raises(DataReadinessError, match="hash differs"):
+        model(item).validates_against(original, tmp_path, POLICY)
+
+
+def test_special_cash_does_not_enable_ordinary_or_issuer_bridge_fallback(tmp_path: Path) -> None:
+    original, item = special_cash_fixture(tmp_path)
+    admission = item.pop("special_cash_distribution")
+    with pytest.raises(DataReadinessError, match="original record binding"):
+        model(item).validates_against(original, tmp_path, POLICY)
+    item.update(special_cash_distribution=admission, method="issuer_rate_tax_currency_bridge",
+        issuer_rate={"source": item["identity"]["source"], "row": 2})
+    with pytest.raises(ValidationError, match="requires exact tax"):
+        model(item)
+
+
+@pytest.mark.parametrize("replacement", [("$1.383619", "$1.383618"), ("CUSIP: 78462F103", "CUSIP: 78462F104"),
+    ("September 20, 2019.", "September 19, 2019."), ("September 23, 2019;", "September 24, 2019;"),
+    ("Special Cash Dividend", "Capital Gain Distribution"), ("CUSIP:", "Due-bill period applies. CUSIP:")])
+def test_special_cash_notice_cannot_supply_conflicting_or_different_distribution(tmp_path: Path, replacement: tuple[str, str]) -> None:
+    original, item = special_cash_fixture(tmp_path, notice_replace=replacement)
+    with pytest.raises(DataReadinessError):
         model(item).validates_against(original, tmp_path, POLICY)
 
 

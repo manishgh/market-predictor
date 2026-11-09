@@ -13,8 +13,9 @@ from market_predictor.investment.corporate_actions import InvestmentCorporateAct
 from market_predictor.investment.dividend_currencies import CurrencyCorroboration, IssuerDividendAmountCorrection
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference
 from market_predictor.swing.datasets.action_evidence import CorporateActionEvidence
+from market_predictor.swing.datasets.action_windows import ActionWindow
 from market_predictor.swing.datasets.corrected_outcome_admission import reconcile_actions
-from tests.test_investment_dividend_currencies import captured, workbook
+from tests.test_investment_dividend_currencies import captured, special_cash_fixture, workbook
 from tests.test_investment_dividend_currencies import fixture as currency_fixture
 from tests.test_investment_dividend_currencies import model as currency_model
 
@@ -206,3 +207,42 @@ def test_unused_amount_correction_refuses(tmp_path: Path) -> None:
     original, _, correction = corrected_dividend_fixture(tmp_path)
     with pytest.raises(DataReadinessError, match="unused or unsupported"):
         build(tmp_path, {}, symbol="SPY", amount_corrections={original["id"]: correction})
+
+
+def test_reviewed_special_cash_is_unpaid_with_ex_date_ownership_cutoff(tmp_path: Path) -> None:
+    original, item = special_cash_fixture(tmp_path)
+    saved = dict(original)
+    actions = build(tmp_path, {"cash_dividends": [original]}, symbol="SPY",
+        corroborations={original["id"]: currency_model(item)})
+    sessions = (date(2019, 9, 19), date(2019, 9, 20), date(2019, 9, 23), date(2019, 10, 3))
+    result = actions.validate_sources("benchmark:SPY", "SPY", sessions, "owned")
+    assert not result.missing_reasons and len(result.events) == 1
+    assert result.events[0].legs[0].kind == "unpaid_proceeds"
+    assert result.events[0].legs[0].units_per_owned_unit == original["rate"]
+    assert all(mark.value_per_unit == 1 for mark in result.non_share_marks)
+    assert original == saved
+    for holding in (sessions[1:], sessions[2:]):
+        entered_ex_or_later = actions.validate_sources("benchmark:SPY", "SPY", holding, "new")
+        assert not entered_ex_or_later.events and not entered_ex_or_later.missing_reasons
+    # The shared swing index is unchanged and remains conservative.
+    assert actions.actions["SPY"][0].first_relevant_date is None
+
+
+@pytest.mark.parametrize("reason", ["invalid_action_participant", "unsupported_action_participant_field",
+    "conflicting_action_record_identity", "invalid_action_economic_date"])
+def test_special_cash_override_preserves_reconciliation_failures(tmp_path: Path, reason: str) -> None:
+    original, item = special_cash_fixture(tmp_path)
+    actions = build(tmp_path, {"cash_dividends": [original]}, symbol="SPY",
+        corroborations={original["id"]: currency_model(item)})
+    actions.actions["SPY"] = (*actions.actions["SPY"], ActionWindow(original["id"], "cash_dividends", None, None, reason))
+    result = actions.validate_sources("benchmark:SPY", "SPY", (date(2019, 9, 19), date(2019, 9, 20)), "owned")
+    assert any(reason in missing for missing in result.missing_reasons)
+
+
+def test_special_cash_with_simultaneous_split_still_requires_distribution_basis(tmp_path: Path) -> None:
+    original, item = special_cash_fixture(tmp_path)
+    actions = build(tmp_path, {"cash_dividends": [original], "forward_splits": [{
+        "id": "split", "symbol": "SPY", "new_rate": 2, "old_rate": 1, "ex_date": original["ex_date"]}]},
+        symbol="SPY", corroborations={original["id"]: currency_model(item)})
+    result = actions.validate_sources("benchmark:SPY", "SPY", (date(2019, 9, 19), date(2019, 9, 20)), "owned")
+    assert any("simultaneous_split_distribution_basis_unproven" in reason for reason in result.missing_reasons)

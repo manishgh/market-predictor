@@ -8,8 +8,14 @@ from typing import Any
 
 import typer
 
+from market_predictor.config import get_settings
 from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError
+from market_predictor.investment.raw_acquisition import (
+    collect_investment_raw_acquisition,
+    publish_investment_raw_acquisition_plan,
+    verify_investment_raw_acquisition,
+)
 from market_predictor.research.investment_coverage import plan_investment_coverage, run_investment_coverage
 from market_predictor.research.investment_currencies import collect_investment_dividend_currencies
 from market_predictor.research.investment_features import (
@@ -18,8 +24,10 @@ from market_predictor.research.investment_features import (
     evaluate_investment_predictions,
 )
 from market_predictor.research.investment_labels import materialize_investment_labels
+from market_predictor.sources.alpaca import AlpacaSource
 from market_predictor.sources.ictax import collect_ictax_archive, verify_ictax_archive
 from market_predictor.swing.contracts.holding_materialization import SourcePin
+from market_predictor.swing.datasets.history_archive import AlpacaSwingDailyPageSource
 
 
 def _run(action: Callable[[], dict[str, Any]]) -> None:
@@ -35,6 +43,15 @@ def _run(action: Callable[[], dict[str, Any]]) -> None:
 
 
 def register_investment_collection_commands(app: typer.Typer) -> None:
+    @app.command("collect-investment-raw-candles")
+    def collect_raw_candles(root: Path = typer.Option(...), request: Path = typer.Option(...),
+                            plan: Path = typer.Option(...), plan_authority_sha256: str = typer.Option(...),
+                            output: Path = typer.Option(...)) -> None:
+        """Resume exact missing raw SIP candles; preserve missing units and unreviewed stock identities."""
+        _run(lambda: collect_investment_raw_acquisition(root, request, plan, output,
+            expected_plan_authority_sha256=plan_authority_sha256,
+            source_factory=lambda: AlpacaSwingDailyPageSource(AlpacaSource(get_settings()))))
+
     @app.command("collect-ictax-distributions")
     def collect_tax_distributions(root: Path = typer.Option(...), request: Path = typer.Option(...),
                                   request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
@@ -65,6 +82,20 @@ def register_investment_collection_commands(app: typer.Typer) -> None:
 
 
 def register_investment_research_commands(app: typer.Typer) -> None:
+    @app.command("plan-investment-raw-candles")
+    def plan_raw_candles(root: Path = typer.Option(...), request: Path = typer.Option(...),
+                        output: Path = typer.Option(...)) -> None:
+        """Reconstruct exact missing sessions from pinned roster and retained sources."""
+        _run(lambda: publish_investment_raw_acquisition_plan(root, request, output))
+
+    @app.command("verify-investment-raw-candles")
+    def verify_raw_candles(root: Path = typer.Option(...), request: Path = typer.Option(...),
+                          plan: Path = typer.Option(...), plan_authority_sha256: str = typer.Option(...),
+                          archive: Path = typer.Option(...)) -> None:
+        """Replay raw transport and report observations, missing sessions and identity quarantine."""
+        _run(lambda: verify_investment_raw_acquisition(root, request, plan, archive,
+            expected_plan_authority_sha256=plan_authority_sha256))
+
     @app.command("verify-ictax-distributions")
     def verify_tax_distributions(root: Path = typer.Option(...), manifest: Path = typer.Option(...),
                                  manifest_sha256: str = typer.Option(...)) -> None:

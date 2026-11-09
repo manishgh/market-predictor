@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.resources import (
     assert_memory_budget,
@@ -45,6 +45,7 @@ TIMEFRAME: Final = "1Day"
 PRICE_FEED: Final = "sip"
 SUPPORTED_ADJUSTMENTS: Final = frozenset({"raw", "all"})
 MAXIMUM_WORKERS: Final = 2
+INVESTMENT_RAW_SCOPE: Final = "investment_horizon_raw_acquisition"
 MAXIMUM_MEMORY_GIB: Final = 4.0
 MEMORY_HEADROOM_GIB: Final = 0.75
 MAXIMUM_PAGES_PER_UNIT: Final = 100
@@ -177,7 +178,7 @@ def collect_swing_history_plan(
         "price_feed": PRICE_FEED,
         "adjustment": plan.adjustment,
         "transport_receipts_required": True,
-        "workers": MAXIMUM_WORKERS,
+        "workers": _workers_for_scope(plan.scope),
         "maximum_memory_gib": MAXIMUM_MEMORY_GIB,
     }
     request_sha256 = _json_sha256(request_payload)
@@ -201,6 +202,8 @@ def collect_swing_history_plan(
         if existing is None:
             pending.append(unit)
         else:
+            if plan.scope == INVESTMENT_RAW_SCOPE and unit["role"] == "benchmark":
+                _assert_exact_benchmark_sessions(output_directory, unit, existing)
             completed[str(unit["unit_id"])] = existing
 
     scheduled = pending if maximum_units_this_run is None else pending[:maximum_units_this_run]
@@ -220,12 +223,14 @@ def collect_swing_history_plan(
             source=get_source(),
             request_sha256=request_sha256,
             adjustment=plan.adjustment,
+            exact_benchmark_sessions=plan.scope == INVESTMENT_RAW_SCOPE,
         )
 
     failures = _run_bounded(
         units=scheduled,
         collect_unit=collect_unit,
         completed=completed,
+        workers=_workers_for_scope(plan.scope),
     )
     if file_sha256(plan_directory / "_authority.json") != plan.hashes["authority_sha256"]:
         raise DataReadinessError("acquisition plan changed during collection")
@@ -360,7 +365,7 @@ def load_complete_swing_history_collection(
         or type(request.get("transport_receipts_required", False)) is not bool
         or ((plan.adjustment == "raw" or plan.scope == "initial_fit_adjusted_history")
             and request.get("transport_receipts_required") is not True)
-        or int(request.get("workers", -1)) != MAXIMUM_WORKERS
+        or int(request.get("workers", -1)) != _workers_for_scope(plan.scope)
         or float(request.get("maximum_memory_gib", -1.0)) != MAXIMUM_MEMORY_GIB
         or manifest.get("schema") != COLLECTION_SCHEMA
         or manifest.get("status") not in {"complete", "complete_with_unavailable"}
@@ -404,6 +409,8 @@ def load_complete_swing_history_collection(
             raise DataReadinessError(f"swing history unit does not verify: {unit_id}")
         if actual["status"] == "unavailable" and not bool(actual["unavailable_allowed"]):
             raise DataReadinessError(f"non-allowed unavailable unit was authorized: {unit_id}")
+        if plan.scope == INVESTMENT_RAW_SCOPE and expected["role"] == "benchmark":
+            _assert_exact_benchmark_sessions(directory, expected, actual)
         verified.append(actual)
     unit_set_sha256 = _unit_artifact_set_sha256(verified)
     unavailable_records = [record for record in verified if record["status"] == "unavailable"]
@@ -453,7 +460,7 @@ def _load_verified_plan(directory: Path, *, expected_plan_authority_sha256: str 
         raise DataReadinessError("feature plan snapshot cannot authorize another acquisition scope")
     if scope != manifest.get("scope") or scope not in {
         None, "initial_fit_raw_share_acquisition", "historical_symbol_correction", "corrected_adjusted_feature_history",
-        "initial_fit_adjusted_history",
+        "initial_fit_adjusted_history", INVESTMENT_RAW_SCOPE,
     }:
         raise DataReadinessError("swing acquisition request/manifest scope differs or is unsupported")
     if scope is not None and expected_plan_authority_sha256 is None:
@@ -503,7 +510,7 @@ def _load_verified_plan(directory: Path, *, expected_plan_authority_sha256: str 
         raise DataReadinessError("swing history acquisition plan authority is invalid")
     units = _load_plan_units(units_path, payload=units_bytes)
     provider_symbols: dict[str, str] | None = None
-    if scope in {"initial_fit_raw_share_acquisition", "historical_symbol_correction"}:
+    if scope in {"initial_fit_raw_share_acquisition", "historical_symbol_correction", INVESTMENT_RAW_SCOPE}:
         raw_symbols = request.get("provider_symbols")
         if (not isinstance(raw_symbols, dict) or set(raw_symbols) != set(units.ticker)
                 or any(not isinstance(value, str) or not value.strip() for value in raw_symbols.values())
@@ -524,6 +531,10 @@ def _load_verified_plan(directory: Path, *, expected_plan_authority_sha256: str 
         validate_feature_history_collection_plan(directory=directory, request=request, manifest=manifest, units=units,
             implementation_snapshot=feature_plan_snapshot)
         provider_symbols = dict(cast(dict[str, str], request["provider_symbols"]))
+    if scope == INVESTMENT_RAW_SCOPE:
+        from market_predictor.investment.raw_acquisition import validate_investment_raw_acquisition_plan
+
+        validate_investment_raw_acquisition_plan(directory=directory, request=request, manifest=manifest, units=units)
     if scope == "initial_fit_adjusted_history":
         from market_predictor.swing.datasets.initial_fit_adjusted_history import (
             validate_initial_fit_adjusted_history_collection_plan,
@@ -633,6 +644,11 @@ def _validate_plan_unit_coverage(
         # The owner replay reproduces each independently pinned benchmark start;
         # an accepted pre-inception prefix is outside its acquisition window.
         return
+    if manifest.get("scope") == INVESTMENT_RAW_SCOPE:
+        # The investment owner independently reconstructs exact missing sessions
+        # for each stock and benchmark; historical stock gaps do not require
+        # downloading already retained benchmark observations again.
+        return
     benchmark_units = units[units["role"].eq("benchmark")]
     benchmark_tickers = set(benchmark_units["ticker"].astype(str))
     if not {"SPY", "QQQ"}.issubset(benchmark_tickers):
@@ -685,6 +701,7 @@ def _collect_unit(
     source: SwingDailyPageSource,
     request_sha256: str,
     adjustment: str,
+    exact_benchmark_sessions: bool = False,
 ) -> dict[str, Any]:
     unit_id = str(unit["unit_id"])
     unit_directory = root / "units" / unit_id
@@ -757,6 +774,8 @@ def _collect_unit(
         unavailable_allowed = status != "unavailable" or str(unit["role"]) == "stock"
         if status == "unavailable" and not unavailable_allowed:
             raise DataReadinessError(f"benchmark unit is unavailable: {unit_id}")
+        if exact_benchmark_sessions and unit["role"] == "benchmark":
+            _assert_benchmark_dates(unit, set(bars["session_date"].astype(str)))
         bars_path = unit_directory / "bars.parquet"
         _atomic_parquet(bars, bars_path)
         unit_manifest: dict[str, Any] = {
@@ -816,6 +835,24 @@ def _collect_unit(
             },
         )
         raise
+
+
+def _assert_benchmark_dates(unit: Mapping[str, Any], observed: set[str]) -> None:
+    from market_predictor.swing.labels.holding_paths import holding_calendar
+
+    required = {day.isoformat() for day in holding_calendar(
+        date.fromisoformat(str(unit["start_date"])), date.fromisoformat(str(unit["end_date"])),
+    )}
+    if observed != required:
+        raise DataReadinessError(
+            f"investment benchmark {unit['ticker']} lacks exact XNYS coverage: "
+            f"missing={len(required - observed)}, unexpected={len(observed - required)}"
+        )
+
+
+def _assert_exact_benchmark_sessions(root: Path, unit: Mapping[str, Any], record: Mapping[str, Any]) -> None:
+    frame = pd.read_parquet(_resolve_inside(root, str(record["bars_path"])), columns=["session_date"])
+    _assert_benchmark_dates(unit, set(frame["session_date"].astype(str)))
 
 
 def _validate_page_contract(
@@ -1147,13 +1184,14 @@ def _run_bounded(
     units: list[dict[str, Any]],
     collect_unit: Callable[[Mapping[str, Any]], dict[str, Any]],
     completed: dict[str, dict[str, Any]],
+    workers: int = MAXIMUM_WORKERS,
 ) -> dict[str, dict[str, Any]]:
     failures: dict[str, dict[str, Any]] = {}
     rows = iter(units)
     futures: dict[Future[dict[str, Any]], dict[str, Any]] = {}
-    executor = ThreadPoolExecutor(max_workers=MAXIMUM_WORKERS)
+    executor = ThreadPoolExecutor(max_workers=workers)
     try:
-        for _ in range(MAXIMUM_WORKERS):
+        for _ in range(workers):
             unit = next(rows, None)
             if unit is not None:
                 futures[executor.submit(collect_unit, unit)] = unit
@@ -1164,6 +1202,8 @@ def _run_bounded(
                 unit_id = str(unit["unit_id"])
                 try:
                     completed[unit_id] = future.result()
+                except MemoryBudgetError:
+                    raise
                 except Exception as exc:
                     failures[unit_id] = {
                         **_unit_identity_record(unit),
@@ -1178,6 +1218,10 @@ def _run_bounded(
     finally:
         executor.shutdown(wait=True, cancel_futures=True)
     return failures
+
+
+def _workers_for_scope(scope: str | None) -> int:
+    return 1 if scope == INVESTMENT_RAW_SCOPE else MAXIMUM_WORKERS
 
 
 def _unit_identity_record(unit: Mapping[str, Any]) -> dict[str, Any]:

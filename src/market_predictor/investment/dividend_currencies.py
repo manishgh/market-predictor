@@ -20,6 +20,7 @@ from pydantic import Field, PrivateAttr, model_validator
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import resolve_inside_authority
+from market_predictor.sources.official_documents import _Receipt
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference, HoldingContract, Identifier, Sha256
 
 SCHEMA = "market_predictor.investment_dividend_currency_corroborations"
@@ -69,6 +70,112 @@ class OfficialDocumentIdentity(HoldingContract):
 class IssuerDistributionRate(HoldingContract):
     source: CapturedCurrencySource
     row: Annotated[int, Field(ge=2, le=100_000)]
+
+
+class OccSpecialCashDistribution(HoldingContract):
+    """An announced cash entitlement; neither a tax classification nor payment proof."""
+
+    kind: Literal["occ_special_cash_distribution"]
+    source: CapturedCurrencySource
+    notice_number: Annotated[int, Field(gt=0)]
+    fund_name: Identifier
+    record_date: date
+    announced_payable_date: date
+    provider_payable_date: date
+    payable_date_conflict: bool
+    economic_treatment: Literal["nominal_unpaid_nontradable_entitlement"]
+
+    def validates_against(self, original: Mapping[str, Any], root: Path, policy_sha256: str, *,
+                          action_id: str, digest: str, symbol: str, ex_date: date,
+                          cusip: str) -> tuple[EvidenceReference, ...]:
+        if (json_sha256(original) != digest or original.get("id") != action_id
+            or original.get("symbol") != symbol or original.get("ex_date") != ex_date.isoformat()
+            or original.get("special") is not True or original.get("foreign") is not False
+            or original.get("cusip") != cusip or original.get("currency") not in (None, "", "USD")
+            or original.get("record_date") != self.record_date.isoformat()
+            or original.get("payable_date") != self.provider_payable_date.isoformat()
+            or any(original.get(key) not in (None, "", False) for key in
+                ("cancelled", "canceled", "revised", "revision"))
+            or original.get("due_bill_redemption_date") not in (None, "")
+            or not ex_date <= self.record_date <= min(self.announced_payable_date, self.provider_payable_date)
+            or self.payable_date_conflict != (self.announced_payable_date != self.provider_payable_date)):
+            raise DataReadinessError("special cash distribution original terms or payable conflict differ")
+        raw = _read(root, self.source.body)
+        payload = _json(_read(root, self.source.receipt, MAX_MANIFEST_BYTES))
+        if payload.pop("receipt_sha256", None) != json_sha256(payload):
+            raise DataReadinessError("special cash distribution official receipt hash differs")
+        try:
+            receipt = _Receipt.model_validate(payload)
+        except ValueError as exc:
+            raise DataReadinessError("special cash distribution official receipt unsupported") from exc
+        response = receipt.response
+        urls = {f"https://infomemo.theocc.com/infomemos?number={self.notice_number}",
+            f"https://www.miaxglobal.com/sites/default/files/alert-files/{symbol}_Distribution_{self.notice_number}.pdf"}
+        if (response is None or receipt.state != "archived_unreviewed"
+            or response.requested_url not in urls or response.final_url != response.requested_url or response.redirect_chain
+            or response.status_code != 200 or response.sha256 != self.source.body.sha256
+            or response.body_length != len(raw) or not raw.startswith(b"%PDF-")
+            or (response.content_type or "").split(";", 1)[0].strip().lower() != "application/pdf"
+            or receipt.error_type is not None or receipt.failure_status_code is not None
+            or receipt.body_path != f"body-{self.source.body.sha256}.bin"
+            or receipt.body_path != Path(self.source.body.path).name
+            or not receipt.started_at_utc <= response.retrieved_at_utc <= receipt.completed_at_utc <= datetime.now(UTC)):
+            raise DataReadinessError("special cash distribution official source binding differs")
+        # Ordinary currency replay has no PDF dependency. Special admission always
+        # re-extracts the pinned original document, never an operator text summary.
+        from pypdf import PdfReader
+        from pypdf.errors import PyPdfError
+
+        try:
+            reader = PdfReader(io.BytesIO(raw), strict=True)
+            if reader.is_encrypted or not 1 <= len(reader.pages) <= 4:
+                raise DataReadinessError("special cash distribution PDF exceeds supported layout")
+            parts: list[str] = []
+            for page in reader.pages:
+                content = page.get_contents()
+                if content is not None and len(content.get_data()) > 2 * 1024**2:
+                    raise DataReadinessError("special cash distribution PDF content exceeds bound")
+                parts.append(page.extract_text() or "")
+            text = " ".join(" ".join(parts).split())
+            if len(text) > 65_536:
+                raise DataReadinessError("special cash distribution PDF text exceeds bound")
+        except (ValueError, TypeError, KeyError, OSError, PyPdfError) as exc:
+            raise DataReadinessError("special cash distribution PDF cannot be replayed") from exc
+        declaration = re.compile(
+            re.escape(self.fund_name) + r" \((?P<symbol>[A-Z][A-Z0-9.\-]{0,15})\) has announced a Special Cash Dividend of "
+            r"\$(?P<amount>[0-9]+(?:\.[0-9]+)?) per (?P=symbol) [Ss]hare\. "
+            r"The record date is (?P<record>[A-Z][a-z]+ [0-9]{1,2}, [0-9]{4}); (?:the )?payable date is "
+            r"(?P<payable>[A-Z][a-z]+ [0-9]{1,2}, [0-9]{4})\. The ex-distribution "
+            r"date for this distribution will be (?P<ex>[A-Z][a-z]+ [0-9]{1,2}, [0-9]{4})\."
+        )
+        matches = list(declaration.finditer(text))
+        if (len(matches) != 1 or re.search(r"#" + str(self.notice_number) + r"\b", text) is None
+            or re.findall(r"\bCUSIP:\s*([A-Z0-9]{9})\b", text) != [cusip]
+            or re.search(r"\bdue[ -]?bills?\b|\bcapital gains?\b", text, re.IGNORECASE)):
+            raise DataReadinessError("special cash distribution declaration or identity unsupported")
+        match = matches[0]
+        if (match["symbol"] != symbol or _decimal(match["amount"]) != _decimal(original.get("rate"))
+            or _decimal(match["amount"]) <= 0
+            or _notice_date(match["record"]) != self.record_date
+            or _notice_date(match["payable"]) != self.announced_payable_date
+            or _notice_date(match["ex"]) != ex_date):
+            raise DataReadinessError("special cash distribution source economic terms differ")
+        locator = (f"OCC#{self.notice_number};Special Cash Dividend;symbol={symbol};CUSIP={cusip};"
+            f"ex={ex_date};record={self.record_date};amount={match['amount']};"
+            f"announced_payable={self.announced_payable_date};provider_payable={self.provider_payable_date};"
+            f"payable_date_conflict={self.payable_date_conflict};{self.economic_treatment}")
+        return tuple(EvidenceReference(reference=pin.path, artifact_sha256=pin.sha256, record_locator=locator,
+            interpretation_policy_sha256=policy_sha256, retrieved_at=receipt.completed_at_utc,
+            available_at=receipt.completed_at_utc) for pin in (self.source.body, self.source.receipt))
+
+
+def _notice_date(value: str) -> date:
+    months = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
+    month, day, year = value.replace(",", "").split()
+    try:
+        return date(int(year), months.index(month) + 1, int(day))
+    except ValueError as exc:
+        raise DataReadinessError("special cash distribution notice date unsupported") from exc
 
 
 class _HtmlText(HTMLParser):
@@ -343,12 +450,15 @@ class CurrencyCorroboration(HoldingContract):
     issuer_rate: IssuerDistributionRate | None = None
     tax_value_difference: Identifier
     tax_resolved_value_difference: Identifier | None = None
+    special_cash_distribution: OccSpecialCashDistribution | None = None
     _validated_evidence: tuple[EvidenceReference, ...] = PrivateAttr(default=())
 
     @model_validator(mode="after")
     def method_sources(self) -> Self:
         if (self.method == "exact_tax_event") != (self.issuer_rate is None):
             raise ValueError("currency method and issuer rate source differ")
+        if self.special_cash_distribution is not None and self.method != "exact_tax_event":
+            raise ValueError("special cash distribution requires exact tax event currency proof")
         return self
 
     @property
@@ -357,12 +467,20 @@ class CurrencyCorroboration(HoldingContract):
 
     def validates_against(self, original: Mapping[str, Any], root: Path, policy_sha256: str, *,
                           amount_correction: IssuerDividendAmountCorrection | None = None) -> tuple[EvidenceReference, ...]:
-        """Replay pinned sources; only currency is supplied, never provider economic fields."""
-        _original_action(original, self.action_id, self.original_record_sha256, self.symbol, self.ex_date)
+        """Replay separate currency and optional cash-class evidence; retain provider terms."""
+        special_refs: tuple[EvidenceReference, ...] = ()
+        if self.special_cash_distribution is None:
+            _original_action(original, self.action_id, self.original_record_sha256, self.symbol, self.ex_date)
+        else:
+            if amount_correction is not None:
+                raise DataReadinessError("special cash distribution cannot use an amount correction")
+            special_refs = self.special_cash_distribution.validates_against(original, root, policy_sha256,
+                action_id=self.action_id, digest=self.original_record_sha256, symbol=self.symbol,
+                ex_date=self.ex_date, cusip=self.identity.cusip)
         cusip = self.identity.cusip
         if _isin(cusip) != self.tax.isin or original.get("cusip") not in (None, "", cusip):
             raise DataReadinessError("independent currency CUSIP/ISIN identity differs")
-        refs: list[EvidenceReference] = []
+        refs: list[EvidenceReference] = list(special_refs)
         effective_amount = _decimal(original.get("rate"))
         if amount_correction is not None:
             if amount_correction.cusip != cusip or amount_correction.isin != self.tax.isin:

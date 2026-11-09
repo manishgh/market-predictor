@@ -49,7 +49,7 @@ def _contains_record(value: object, expected: dict[str, Any]) -> bool:
 
 
 class InvestmentCorporateActions:
-    """Resolve only ordinary USD dividends and exact proportional share splits.
+    """Resolve source-verified USD cash entitlements and proportional share splits.
 
     Nominal receivables remain unpaid/nontradable forever in this marked-value
     research policy. A payable date never manufactures payment or spendable cash.
@@ -70,6 +70,7 @@ class InvestmentCorporateActions:
         self.terms: dict[tuple[str, str], _Term] = {}
         self.invalid: set[tuple[str, str]] = set()
         self.unresolved_terms: dict[tuple[str, str], str] = {}
+        self.special_cash_entitlements: set[tuple[str, str]] = set()
         self.coverage: dict[str, tuple[EvidenceReference, ...]] = {}
         self.process_first: date | None = None
         self.process_last: date | None = None
@@ -145,7 +146,11 @@ class InvestmentCorporateActions:
                         corroboration_refs: tuple[EvidenceReference, ...] = ()
                         amount_refs: tuple[EvidenceReference, ...] = ()
                         if family == "cash_dividends":
-                            if record.get("special") is not False or record.get("foreign") is not False:
+                            corroboration = independent_currencies.get(action_id)
+                            special_assertion = (corroboration is not None
+                                and corroboration.special_cash_distribution is not None)
+                            if (record.get("foreign") is not False
+                                or record.get("special") is not False and not special_assertion):
                                 self.unresolved_terms[identity] = "ordinary_domestic_cash_entitlement_unproven"
                                 continue
                             amount_correction = amount_corrections.get(action_id)
@@ -157,7 +162,6 @@ class InvestmentCorporateActions:
                                 dividend_amount = _positive(float(resolved.gross_amount))
                                 amount_refs = resolved.evidence
                             currency = record.get("currency")
-                            corroboration = independent_currencies.get(action_id)
                             if corroboration is not None:
                                 observed_corroborations.add(action_id)
                                 if currency not in (None, "", "USD"):
@@ -165,6 +169,8 @@ class InvestmentCorporateActions:
                                 corroboration_refs = corroboration.validates_against(
                                     record, self.root, policy_reference.interpretation_policy_sha256,
                                     amount_correction=amount_correction)
+                                if special_assertion:
+                                    self.special_cash_entitlements.add(identity)
                             for source_ref in (*amount_refs, *corroboration_refs):
                                 if (source_ref.reference in self.source_files
                                     and self.source_files[source_ref.reference] != source_ref.artifact_sha256):
@@ -238,6 +244,15 @@ class InvestmentCorporateActions:
             reasons.append("corporate_action_query_interval_unproven")
         selected: dict[str, _Term] = {}
         for window in self.actions.get(symbol, ()):
+            # The shared swing window remains conservative. Only a successfully
+            # replayed investment cash assertion supplies this ex-date cutoff.
+            special_term = self.terms.get((symbol, window.action_id))
+            if ((symbol, window.action_id) in self.special_cash_entitlements and special_term is not None
+                and window.family == special_term.family == "cash_dividends"
+                and window.unavailable_reason in {"unbounded_entitlement_or_due_bill_dates",
+                    "reviewed_cash_distribution_resolution_unavailable", "corporate_terms_require_replay"}):
+                window = ActionWindow(window.action_id, window.family, special_term.day, special_term.day,
+                    "corporate_terms_require_replay", requires_ownership_before_first_date=True)
             if not window.intersects(first, last):
                 continue
             term = self.terms.get((symbol, window.action_id))

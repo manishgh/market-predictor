@@ -206,3 +206,33 @@ def test_ictax_command_arguments_and_refusal(monkeypatch, command, attribute, ap
 
     monkeypatch.setattr(commands, attribute, busy)
     assert CliRunner().invoke(app, [command, "--root", ".", *arguments]).exit_code == 75
+
+
+@pytest.mark.parametrize("command,attribute,app,extra", [
+    ("plan-investment-raw-candles", "publish_investment_raw_acquisition_plan", research_app, ["--output", "plan"]),
+    ("collect-investment-raw-candles", "collect_investment_raw_acquisition", collection_app,
+     ["--plan", "plan", "--plan-authority-sha256", "a" * 64, "--output", "archive"]),
+    ("verify-investment-raw-candles", "verify_investment_raw_acquisition", research_app,
+     ["--plan", "plan", "--plan-authority-sha256", "a" * 64, "--archive", "archive"]),
+])
+def test_raw_candle_command_passes_paths_and_refuses_busy_job(monkeypatch, command, attribute, app, extra):
+    from market_predictor.commands import investment_research as commands
+
+    captured = []
+
+    def run(*args, **kwargs):
+        captured.append((args, kwargs))
+        return {"status": "unit_fixture"}
+
+    monkeypatch.setattr(commands, attribute, run)
+    result = CliRunner().invoke(app, [command, "--root", ".", "--request", "request.json", *extra])
+    assert result.exit_code == 0, result.output
+    assert captured[0][0][:2] == (Path("."), Path("request.json"))
+    if attribute != "publish_investment_raw_acquisition_plan":
+        assert captured[0][1]["expected_plan_authority_sha256"] == "a" * 64
+
+    def busy(*args, **kwargs):
+        raise HeavyJobBusyError("unit fixture")
+
+    monkeypatch.setattr(commands, attribute, busy)
+    assert CliRunner().invoke(app, [command, "--root", ".", "--request", "request.json", *extra]).exit_code == 75

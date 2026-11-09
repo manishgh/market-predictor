@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from hashlib import sha256
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -350,3 +351,25 @@ def test_request_population_is_explicit_sorted_and_unique(years):
     with pytest.raises(ValidationError):
         ictax.ICTaxArchiveRequest.model_validate_json(json.dumps({"schema": "market_predictor.ictax_archive_request",
                                                                  "funds": [{"symbol": "SPY", "isin": ISIN, "years": years}]}))
+
+
+
+@pytest.mark.parametrize("operation", ["collect", "verify"])
+def test_custom_runtime_lease_refuses_before_ictax_input_reads(setup, monkeypatch, operation):
+    kwargs = setup()
+    runtime = kwargs["root"] / "custom-runtime"
+    monkeypatch.setenv("MARKET_PREDICTOR_RUNTIME_DIR", str(runtime))
+    client = Client()
+
+    def forbidden(*args, **options):
+        pytest.fail("ICTax read inputs before obtaining the configured lease")
+
+    monkeypatch.setattr(ictax, "_read_pin", forbidden)
+    with heavy_job_lease("unit custom runtime owner", runtime_dir=runtime):
+        with pytest.raises(HeavyJobBusyError):
+            if operation == "collect":
+                ictax.collect_ictax_archive(**kwargs, client=client)
+            else:
+                ictax.verify_ictax_archive(root=kwargs["root"], manifest=Path("missing/_manifest.json"),
+                                           manifest_sha256="a" * 64)
+    assert client.calls == [] and client.gets == 0
