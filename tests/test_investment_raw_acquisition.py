@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, urlsplit
 
 import pandas as pd
 import pytest
@@ -290,3 +292,60 @@ def test_investment_scope_does_not_change_legacy_workers() -> None:
     assert archive._workers_for_scope(None) == archive.MAXIMUM_WORKERS == 2
     assert archive._workers_for_scope("initial_fit_raw_share_acquisition") == 2
     assert archive._workers_for_scope(raw.SCOPE) == 1
+
+
+def test_system_memory_pressure_prevents_raw_input_read(acquisition: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+
+    def pressure(stage: str) -> None:
+        calls.append(stage)
+        raise MemoryBudgetError("fixture system RAM pressure")
+
+    def forbidden_read(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("raw acquisition read source inputs before the system-memory guard")
+
+    monkeypatch.setattr(raw, "runtime_memory_guard", pressure)
+    monkeypatch.setattr(raw, "_object", forbidden_read)
+    with pytest.raises(MemoryBudgetError, match="system RAM pressure"):
+        raw.prepare_investment_raw_acquisition(acquisition["root"], acquisition["request"])
+    assert calls == ["investment raw acquisition"]
+
+
+def test_transport_system_memory_guard_prevents_next_provider_page(acquisition: dict[str, Any]) -> None:
+    pin = _publish(acquisition)
+
+    class PagedSource(_Source):
+        def fetch_daily_page(self, *args: Any, **kwargs: Any) -> archive.SwingDailyPage:
+            page = super().fetch_daily_page(*args, **kwargs)
+            assert page.transport_response is not None
+            payload = {"bars": {page.response_symbol: list(page.bars)}, "next_page_token": "continued"}
+            params = dict(parse_qsl(urlsplit(page.transport_response.requested_url).query))
+            return replace(page, next_page_token="continued", raw_payload=payload,
+                transport_response=_test_transport_response(payload, params))
+
+    source = PagedSource()
+    calls = []
+
+    def pressure_before_page() -> None:
+        calls.append("guard")
+        if len(calls) == 3:
+            raise MemoryBudgetError("fixture system RAM pressure before page")
+
+    with pytest.raises(MemoryBudgetError, match="before page"):
+        archive.collect_swing_history_plan(plan_directory=acquisition["plan"], output_directory=acquisition["archive"],
+            source_factory=lambda: source, provider_symbol_for=lambda symbol: symbol,
+            expected_plan_authority_sha256=pin, memory_guard=pressure_before_page)
+    # Guard 1 precedes plan loading, guard 2 permits page one, and guard 3
+    # refuses page two after retaining the first original response/failed attempt.
+    assert len(calls) == 3 and len(source.calls) == 1
+    assert list(acquisition["archive"].glob("units/*/raw/*/*.bin"))
+    assert not (acquisition["archive"] / "_authority.json").exists()
+
+
+def test_investment_transport_cannot_omit_system_memory_guard(acquisition: dict[str, Any]) -> None:
+    pin = _publish(acquisition)
+    source = _Source()
+    with pytest.raises(DataReadinessError, match="requires its system-memory guard"):
+        archive.collect_swing_history_plan(plan_directory=acquisition["plan"], output_directory=acquisition["archive"],
+            source_factory=lambda: source, provider_symbol_for=lambda symbol: symbol, expected_plan_authority_sha256=pin)
+    assert source.calls == [] and not acquisition["archive"].exists()

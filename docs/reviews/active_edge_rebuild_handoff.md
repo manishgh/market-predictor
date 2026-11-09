@@ -2,6 +2,64 @@
 
 ## Active QQQ and raw-candle extension — November 9
 
+Actual metadata-selected IDXX November 30, 2023 target pilot completed with
+c36b883: one of one 63-session targets source-validated; the requested 252-session
+row remains unresolved for old raw-boundary and dividend-currency/action interval
+gaps. Its full roster remains 37,229 rows, selected decisions one. The 63-session
+interval is December 1, 2023 through March 4, 2024. Independent actual raw-SIP
+arithmetic checked stock/SPY/QQQ/XLV holdings, costs and excess returns, including
+the exact QQQ special amount 0.21584, with no payment/reinvestment assertion.
+Source evidence became available at 2026-11-09T16:56:45.163968Z, not at the
+historical decision or the earlier frozen evaluation cutoff. All flags remain false.
+Prior 56 target rows and the pilot audit's 60 pinned artifact files were hash-preserved.
+
+Pilot final data/research/investment_qqq_special_return_pilot_20261109/final/_manifest.json
+SHA256 f098a5b4ce4d4053a542c75a7d6562682c407425842ce8ab581befe9c0ea00c1.
+Input request SHA256 c4f192b20cd8a7a38f7523df12b81f9048392ed6027a5aeb0503c84197c02ed0.
+Independent audit in chat outputs/qq-special-pilot-audit-20261109.json
+SHA256 d040671ed59dd98de81201cce4a786fd71923afa9bbf12aecb6040b2bd6e1b5f.
+This adds one integration example to the previous 56 validated rows; it is not
+an investment training-corpus or model-performance claim.
+
+
+
+Independent Sol post-publication metadata check passed: all ten output hashes
+and helper hash match; prior 212 assertions and other 212 event objects match;
+two corrections remain byte-identical; exactly the expected 15 window objects
+changed. Original special=true, payable disagreement and unpaid/nontradable
+treatment remain explicit. This was a bounded consistency check, not a claim
+that the previous 212 assertions were semantically replayed again.
+
+Actual QQQ delta completed with producer c36b88356a6c9fc0aef47edaa62bb89d09068fba.
+Final data/research/investment_special_cash_distribution_20261109/final/_manifest.json
+SHA256 2da12ce189915f93aab35d709042fff001e6a4cd8cad3e94c0fab3690a30e74c:
+213/213 distinct required benchmark cash events supported, zero remaining within
+the original inventory. One new assertion was semantically replayed; the prior
+212 objects and unrelated events remain unchanged, and two correction files are
+byte-identical. Fifteen of 118 monthly horizon windows lost the QQQ currency gap;
+all 118 now have retained-event currency coverage, 101 also fall inside the old
+raw end, for each of nine SPY/QQQ/sector triples. These are source counts, not
+complete price paths or newly available training labels.
+
+The first raw operational wrapper failed before reading sources or creating a
+plan because it imported undeclared psutil. It now uses the existing system-memory
+reader. Inspection also demonstrated the raw API checked process RSS but not
+system pressure between provider pages. The follow-up changes only raw collection:
+the investment guard invokes the shared strictly-below-90% policy, and the shared
+transport accepts a guard callback before plan loading and every provider page.
+Investment scope requires that callback; existing unrelated scopes keep their
+default behavior. Poison tests cover input/provider refusal, and a new immutable
+raw producer is required after verification. The original c36b883 snapshot and
+QQQ delta remain unchanged. Actual raw acquisition has not begun at this note.
+Final follow-up verification: 63 tests passed in 174.61 seconds (19 investment
+raw and 44 shared archive tests); affected Ruff and strict mypy on both modules
+passed. Independent Sol code review approved the narrow guard change. The
+paginated poison test preserves page one and refuses the second network request
+under memory pressure. No model fit was run.
+
+
+
+
 Implementation review notes (component checkpoint): the investment collector
 requires every planned benchmark session, including on resume; stock source gaps
 remain local and all new stock identities remain quarantined. The usable selection

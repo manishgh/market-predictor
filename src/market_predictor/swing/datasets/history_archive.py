@@ -147,12 +147,17 @@ def collect_swing_history_plan(
     provider_symbol_for: ProviderSymbol,
     maximum_units_this_run: int | None = None,
     expected_plan_authority_sha256: str | None = None,
+    memory_guard: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     """Collect every exact plan unit with immutable per-unit resume."""
 
     if maximum_units_this_run is not None and maximum_units_this_run < 1:
         raise ValueError("maximum_units_this_run must be positive")
+    if memory_guard is not None:
+        memory_guard()
     plan = _load_verified_plan(plan_directory, expected_plan_authority_sha256=expected_plan_authority_sha256)
+    if plan.scope == INVESTMENT_RAW_SCOPE and memory_guard is None:
+        raise DataReadinessError("investment raw collection requires its system-memory guard")
     units = _bind_provider_symbols(plan.units, provider_symbol_for)
     if plan.provider_symbols is not None and any(
         row.provider_symbol != plan.provider_symbols[row.ticker] for row in units.itertuples(index=False)
@@ -224,6 +229,7 @@ def collect_swing_history_plan(
             request_sha256=request_sha256,
             adjustment=plan.adjustment,
             exact_benchmark_sessions=plan.scope == INVESTMENT_RAW_SCOPE,
+            memory_guard=memory_guard,
         )
 
     failures = _run_bounded(
@@ -702,6 +708,7 @@ def _collect_unit(
     request_sha256: str,
     adjustment: str,
     exact_benchmark_sessions: bool = False,
+    memory_guard: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     unit_id = str(unit["unit_id"])
     unit_directory = root / "units" / unit_id
@@ -721,6 +728,8 @@ def _collect_unit(
     rows: list[dict[str, Any]] = []
     try:
         while True:
+            if memory_guard is not None:
+                memory_guard()
             page = source.fetch_daily_page(
                 provider_symbol,
                 start,

@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
+from market_predictor.core.runtime_memory import guard as runtime_memory_guard
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import resolve_inside_authority
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
@@ -60,6 +61,7 @@ def _object(path: Path) -> dict[str, Any]:
 def _guard() -> None:
     assert_memory_budget(hard_budget_gib=4.0, headroom_gib=0.75, stage="investment raw acquisition")
     assert_peak_memory_budget(hard_budget_gib=4.0, headroom_gib=0.75, stage="investment raw acquisition")
+    runtime_memory_guard("investment raw acquisition")
 
 
 def _inside(root: Path, path: Path) -> Path:
@@ -339,7 +341,8 @@ def collect_investment_raw_acquisition(root: Path, request_path: Path, plan_dire
         if not (output / "_authority.json").exists():
             archive.collect_swing_history_plan(plan_directory=plan, output_directory=output, source_factory=source_factory,
                 provider_symbol_for=lambda ticker: str(request["provider_symbols"][ticker]),
-                expected_plan_authority_sha256=expected_plan_authority_sha256, maximum_units_this_run=maximum_units_this_run)
+                expected_plan_authority_sha256=expected_plan_authority_sha256, maximum_units_this_run=maximum_units_this_run,
+                memory_guard=_guard)
         return _verify(root, request_path, plan, output, expected_plan_authority_sha256)
 
 
