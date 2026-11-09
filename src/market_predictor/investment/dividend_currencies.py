@@ -1,4 +1,4 @@
-"""Replay independent dividend-currency evidence without replacing provider terms."""
+"""Replay dividend currency evidence and explicit source-bound issuer corrections."""
 from __future__ import annotations
 
 import hashlib
@@ -23,6 +23,7 @@ from market_predictor.evidence.io import resolve_inside_authority
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference, HoldingContract, Identifier, Sha256
 
 SCHEMA = "market_predictor.investment_dividend_currency_corroborations"
+AMOUNT_CORRECTION_SCHEMA = "market_predictor.investment_dividend_amount_corrections"
 MAX_SOURCE_BYTES = 16 * 1024**2
 MAX_MANIFEST_BYTES = 4 * 1024**2
 MAX_ZIP_EXPANDED_BYTES = 64 * 1024**2
@@ -264,6 +265,72 @@ def _date_ms(value: object) -> date:
     return datetime.fromtimestamp(value / 1000, UTC).date()
 
 
+def _original_action(original: Mapping[str, Any], action_id: str, digest: str, symbol: str, ex_date: date) -> None:
+    if (json_sha256(original) != digest or original.get("id") != action_id
+        or original.get("symbol") != symbol or original.get("ex_date") != ex_date.isoformat()
+        or original.get("foreign") is not False or original.get("special") is not False
+        or original.get("currency") not in (None, "", "USD")):
+        raise DataReadinessError("independent dividend original record binding differs")
+    if any(original.get(k) not in (None, "", False) for k in
+           ("cancelled", "canceled", "revised", "revision", "due_bill_redemption_date")):
+        raise DataReadinessError("independent dividend cannot repair unsupported action terms")
+
+
+def _issuer_gross_amount(root: Path, issuer: IssuerDistributionRate, symbol: str, cusip: str, ex_date: date,
+                         policy_sha256: str) -> tuple[Decimal, tuple[EvidenceReference, ...]]:
+    row, refs = _issuer_row(root, issuer.source, issuer.row, symbol, cusip, ex_date, policy_sha256)
+    amount = _decimal(row.get("G"))
+    if amount <= 0 or any(row.get(col, "") and _decimal(row[col]) != 0 for col in ("H", "I")):
+        raise DataReadinessError("issuer gross distribution amount is nonpositive or contains capital gains")
+    return amount, refs
+
+
+class ResolvedDividendAmount(HoldingContract):
+    """An issuer amount with source clocks; this record supplies no currency proof."""
+    action_id: Identifier
+    original_record_sha256: Sha256
+    symbol: Identifier
+    ex_date: date
+    original_rate: Annotated[Decimal, Field(gt=0)]
+    gross_amount: Annotated[Decimal, Field(gt=0)]
+    evidence: Annotated[tuple[EvidenceReference, ...], Field(min_length=1)]
+
+
+class IssuerDividendAmountCorrection(HoldingContract):
+    """Explicit reviewed issuer correction; never a tolerance or an altered provider record."""
+    method: Literal["issuer_gross_amount_correction"]
+    action_id: Identifier
+    original_record_sha256: Sha256
+    symbol: Identifier
+    ex_date: date
+    cusip: Annotated[str, Field(pattern=r"^[A-Z0-9]{9}$")]
+    isin: Annotated[str, Field(pattern=r"^US[A-Z0-9]{9}[0-9]$")]
+    original_rate: Identifier
+    corrected_gross_amount: Identifier
+    issuer_rate: IssuerDistributionRate
+
+    @model_validator(mode="after")
+    def distinct_positive_amounts(self) -> Self:
+        original, corrected = _decimal(self.original_rate), _decimal(self.corrected_gross_amount)
+        if original <= 0 or corrected <= 0 or original == corrected:
+            raise ValueError("issuer correction requires distinct positive original and corrected amounts")
+        return self
+
+    def resolve_against(self, original: Mapping[str, Any], root: Path, policy_sha256: str) -> ResolvedDividendAmount:
+        _original_action(original, self.action_id, self.original_record_sha256, self.symbol, self.ex_date)
+        original_amount, corrected = _decimal(self.original_rate), _decimal(self.corrected_gross_amount)
+        if original_amount != _decimal(original.get("rate")):
+            raise DataReadinessError("issuer correction declared original rate differs from provider")
+        if _isin(self.cusip) != self.isin or original.get("cusip") not in (None, "", self.cusip):
+            raise DataReadinessError("issuer correction CUSIP/ISIN identity differs")
+        issuer_amount, refs = _issuer_gross_amount(root, self.issuer_rate, self.symbol, self.cusip,
+            self.ex_date, policy_sha256)
+        if issuer_amount != corrected:
+            raise DataReadinessError("issuer correction amount differs from exact issuer gross distribution")
+        return ResolvedDividendAmount(action_id=self.action_id, original_record_sha256=self.original_record_sha256,
+            symbol=self.symbol, ex_date=self.ex_date, original_rate=original_amount, gross_amount=corrected, evidence=refs)
+
+
 class CurrencyCorroboration(HoldingContract):
     method: Literal["exact_tax_event", "issuer_rate_tax_currency_bridge"]
     action_id: Identifier
@@ -275,6 +342,7 @@ class CurrencyCorroboration(HoldingContract):
     identity: Annotated[IssuerWorkbookIdentity | OfficialDocumentIdentity, Field(discriminator="kind")]
     issuer_rate: IssuerDistributionRate | None = None
     tax_value_difference: Identifier
+    tax_resolved_value_difference: Identifier | None = None
     _validated_evidence: tuple[EvidenceReference, ...] = PrivateAttr(default=())
 
     @model_validator(mode="after")
@@ -287,20 +355,25 @@ class CurrencyCorroboration(HoldingContract):
     def evidence(self) -> tuple[EvidenceReference, ...]:
         return self._validated_evidence
 
-    def validates_against(self, original: Mapping[str, Any], root: Path, policy_sha256: str) -> tuple[EvidenceReference, ...]:
+    def validates_against(self, original: Mapping[str, Any], root: Path, policy_sha256: str, *,
+                          amount_correction: IssuerDividendAmountCorrection | None = None) -> tuple[EvidenceReference, ...]:
         """Replay pinned sources; only currency is supplied, never provider economic fields."""
-        if (json_sha256(original) != self.original_record_sha256 or original.get("id") != self.action_id
-            or original.get("symbol") != self.symbol or original.get("ex_date") != self.ex_date.isoformat()
-            or original.get("foreign") is not False or original.get("special") is not False
-            or original.get("currency") not in (None, "", "USD")):
-            raise DataReadinessError("independent currency original record binding differs")
-        if any(original.get(k) not in (None, "", False) for k in
-               ("cancelled", "canceled", "revised", "revision", "due_bill_redemption_date")):
-            raise DataReadinessError("independent currency cannot repair unsupported action terms")
+        _original_action(original, self.action_id, self.original_record_sha256, self.symbol, self.ex_date)
         cusip = self.identity.cusip
         if _isin(cusip) != self.tax.isin or original.get("cusip") not in (None, "", cusip):
             raise DataReadinessError("independent currency CUSIP/ISIN identity differs")
         refs: list[EvidenceReference] = []
+        effective_amount = _decimal(original.get("rate"))
+        if amount_correction is not None:
+            if amount_correction.cusip != cusip or amount_correction.isin != self.tax.isin:
+                raise DataReadinessError("currency and amount correction security identities differ")
+            resolved = amount_correction.resolve_against(original, root, policy_sha256)
+            effective_amount = resolved.gross_amount
+            refs.extend(resolved.evidence)
+            if self.tax_resolved_value_difference is None:
+                raise DataReadinessError("corrected dividend currency requires tax-minus-resolved comparison")
+        elif self.tax_resolved_value_difference is not None:
+            raise DataReadinessError("tax-minus-resolved comparison requires an explicit amount correction")
         if isinstance(self.identity, IssuerWorkbookIdentity):
             _, found = _issuer_row(root, self.identity.source, self.identity.row, self.symbol, cusip, self.ex_date, policy_sha256)
         else:
@@ -345,6 +418,9 @@ class CurrencyCorroboration(HoldingContract):
             or tax_amount <= 0 or provider_amount <= 0 or tax_amount != _decimal(self.tax.gross_amount)
             or tax_amount - provider_amount != _decimal(self.tax_value_difference)):
             raise DataReadinessError("tax currency/gross value/per-share comparison differs")
+        if (amount_correction is not None
+            and tax_amount - effective_amount != _decimal(self.tax_resolved_value_difference)):
+            raise DataReadinessError("tax-minus-resolved distribution amount comparison differs")
         html_raw, html_receipt, found = _captured(root, self.tax.gross_context, policy_sha256,
             {"www.ictax.admin.ch", "ictax.admin.ch"})
         html_payload = _json(html_raw)
@@ -366,12 +442,11 @@ class CurrencyCorroboration(HoldingContract):
             if provider_amount != tax_amount:
                 raise DataReadinessError("independent distribution amount differs from provider rate")
         else:
-            issuer, found = _issuer_row(root, self.issuer_rate.source, self.issuer_rate.row,
+            issuer_amount, found = _issuer_gross_amount(root, self.issuer_rate,
                 self.symbol, cusip, self.ex_date, policy_sha256)
             refs.extend(found)
-            if (_decimal(issuer.get("G")) != provider_amount
-                or any(issuer.get(col, "") and _decimal(issuer[col]) != 0 for col in ("H", "I"))):
-                raise DataReadinessError("issuer gross distribution rate differs or contains capital gains")
+            if issuer_amount != effective_amount:
+                raise DataReadinessError("issuer gross distribution rate differs from resolved economic amount")
         unique: dict[str, EvidenceReference] = {}
         for ref in refs:
             previous = unique.get(ref.reference)
@@ -400,4 +475,25 @@ def load_currency_corroborations(root: Path, manifest: Path, sha256: str, *, pol
         if re.fullmatch(r"[0-9a-f]{64}", policy_sha256) is None:
             raise DataReadinessError("independent currency interpretation policy hash differs")
         result[item.action_id] = item
+    return result
+
+
+class DividendAmountCorrectionManifest(HoldingContract):
+    schema_name: Literal["market_predictor.investment_dividend_amount_corrections"] = Field(alias="schema")
+    corrections: Annotated[tuple[IssuerDividendAmountCorrection, ...], Field(min_length=1, max_length=10_000)]
+
+
+def load_dividend_amount_corrections(root: Path, manifest: Path, sha256: str, *,
+                                    policy_sha256: str) -> dict[str, IssuerDividendAmountCorrection]:
+    """Load explicit amount corrections; each consuming action must replay its actual issuer sources."""
+    raw = _read(root, CurrencyArtifactPin(path=manifest.as_posix(), sha256=sha256), MAX_MANIFEST_BYTES)
+    _json(raw)
+    parsed = DividendAmountCorrectionManifest.model_validate_json(raw)
+    if re.fullmatch(r"[0-9a-f]{64}", policy_sha256) is None:
+        raise DataReadinessError("issuer amount correction interpretation policy hash differs")
+    result: dict[str, IssuerDividendAmountCorrection] = {}
+    for correction in parsed.corrections:
+        if correction.action_id in result:
+            raise DataReadinessError("issuer amount correction manifest repeats action ID")
+        result[correction.action_id] = correction
     return result

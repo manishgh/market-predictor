@@ -19,7 +19,9 @@ from market_predictor.evidence.hashing import json_sha256
 from market_predictor.investment.dividend_currencies import (
     HEADERS,
     CurrencyCorroboration,
+    IssuerDividendAmountCorrection,
     load_currency_corroborations,
+    load_dividend_amount_corrections,
 )
 
 POLICY = "a" * 64
@@ -52,8 +54,8 @@ def captured(path: Path, raw: bytes, *, authority: str = "tax") -> dict[str, Any
 
 
 def workbook(path: Path, *, rate: str = "1.383619", capital_gain: str = "", duplicate: bool = False,
-             formula: bool = False) -> bytes:
-    strings = list(HEADERS) + ["Fund", "SPY", "78462F103", "09/20/2019", "09/23/2019", "10/31/2019",
+             formula: bool = False, ex_date: str = "09/20/2019") -> bytes:
+    strings = list(HEADERS) + ["Fund", "SPY", "78462F103", ex_date, "09/23/2019", "10/31/2019",
                              rate, capital_gain, "", "Quarterly"]
     shared = ET.Element(f"{{{NS}}}sst")
     for text in strings:
@@ -268,3 +270,162 @@ def test_manifest_is_closed_hash_bound_and_duplicate_actions_fail(tmp_path: Path
     reference = write_json(path, content)
     with pytest.raises(ValidationError):
         load_currency_corroborations(tmp_path, path, reference["sha256"], policy_sha256=POLICY)
+
+
+def correction_fixture(tmp_path: Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Synthetic unit source with the observed conflict's exact numerical values."""
+    original, currency = fixture(tmp_path, bridge=True)
+    original.update(id="a6587d80-e08a-4b1a-aa94-857549880c59", ex_date="2020-06-19", rate=1.3662419, cusip="78462F103")
+    path = tmp_path / "corrected-issuer.xlsx"
+    issuer = captured(path, workbook(path, rate="1.366242", ex_date="06/19/2020"), authority="issuer")
+    currency.update(action_id=original["id"], original_record_sha256=json_sha256(original), ex_date=original["ex_date"],
+        identity={"kind": "issuer_workbook", "source": issuer, "row": 2, "cusip": "78462F103"},
+        issuer_rate={"source": issuer, "row": 2}, tax_value_difference="-0.0002419",
+        tax_resolved_value_difference="-0.000242")
+    currency["tax"]["gross_amount"] = "1.366"
+
+    def update_event(payload: dict[str, Any]) -> None:
+        entry = payload["data"]["calculationDetails"]["entries"][0]
+        entry.update(exDate=1592524800000, value=1.366)
+
+    replace_tax(currency, update_event)
+    html = json.loads(Path(currency["tax"]["gross_context"]["body"]["path"]).read_text())
+    html["data"]["html"] = html["data"]["html"].replace("20.09.", "19.06.").replace("1.383", "1.366")
+    currency["tax"]["gross_context"] = captured(tmp_path / "corrected-gross.json", json.dumps(html).encode())
+    correction = {"method": "issuer_gross_amount_correction", "action_id": original["id"],
+        "original_record_sha256": json_sha256(original), "symbol": original["symbol"], "ex_date": original["ex_date"],
+        "cusip": "78462F103", "isin": "US78462F1030", "original_rate": "1.3662419",
+        "corrected_gross_amount": "1.366242", "issuer_rate": {"source": issuer, "row": 2}}
+    return original, currency, correction
+
+
+def correction_model(item: dict[str, Any]) -> IssuerDividendAmountCorrection:
+    return IssuerDividendAmountCorrection.model_validate_json(json.dumps(item))
+
+
+def test_explicit_issuer_correction_preserves_raw_amount_and_supplies_no_currency(tmp_path: Path) -> None:
+    original, _, item = correction_fixture(tmp_path)
+    saved = copy.deepcopy(original)
+    resolved = correction_model(item).resolve_against(original, tmp_path, POLICY)
+    assert resolved.original_rate == Decimal("1.3662419")
+    assert resolved.gross_amount == Decimal("1.366242")
+    assert resolved.original_record_sha256 == json_sha256(saved)
+    assert original == saved and "currency" not in resolved.model_dump()
+    assert all(r.available_at == datetime.fromisoformat(CAPTURE) for r in resolved.evidence)
+    assert all("dividend!A2:J2" == r.record_locator for r in resolved.evidence)
+
+
+def test_corrected_amount_and_usd_proof_are_separate_and_keep_both_tax_comparisons(tmp_path: Path) -> None:
+    original, currency, item = correction_fixture(tmp_path)
+    saved = copy.deepcopy(original)
+    proof = model(currency)
+    refs = proof.validates_against(original, tmp_path, POLICY, amount_correction=correction_model(item))
+    assert len(refs) == 6 and original == saved
+    assert proof.tax_value_difference == "-0.0002419"
+    assert proof.tax_resolved_value_difference == "-0.000242"
+    replace_tax(currency, lambda p: p["data"]["calculationDetails"]["entries"][0]["currency"].update(shortName="CHF"))
+    with pytest.raises(DataReadinessError, match="tax currency"):
+        model(currency).validates_against(original, tmp_path, POLICY, amount_correction=correction_model(item))
+
+
+def test_old_currency_bridge_still_rejects_amount_conflict_without_explicit_correction(tmp_path: Path) -> None:
+    original, currency, _ = correction_fixture(tmp_path)
+    currency.pop("tax_resolved_value_difference")
+    with pytest.raises(DataReadinessError, match="issuer gross distribution rate differs"):
+        model(currency).validates_against(original, tmp_path, POLICY)
+
+
+@pytest.mark.parametrize("variant", ["missing", "original_difference_reused", "provider_difference_changed", "unused"])
+def test_resolved_and_original_tax_comparisons_cannot_be_reinterpreted(tmp_path: Path, variant: str) -> None:
+    original, currency, item = correction_fixture(tmp_path)
+    correction = correction_model(item)
+    if variant == "missing":
+        currency.pop("tax_resolved_value_difference")
+    elif variant == "original_difference_reused":
+        currency["tax_resolved_value_difference"] = currency["tax_value_difference"]
+    elif variant == "provider_difference_changed":
+        currency["tax_value_difference"] = currency["tax_resolved_value_difference"]
+    with pytest.raises(DataReadinessError):
+        model(currency).validates_against(original, tmp_path, POLICY,
+            amount_correction=None if variant == "unused" else correction)
+
+
+@pytest.mark.parametrize("field,value", [("original_record_sha256", "b" * 64), ("action_id", "other-action"),
+    ("symbol", "OTHER"), ("ex_date", "2020-06-18"), ("original_rate", "1.3662418"),
+    ("corrected_gross_amount", "1.3662419999999999999999"), ("isin", "US78462F1031"), ("cusip", "46090E103")])
+def test_correction_requires_exact_original_identity_rate_and_issuer_amount(tmp_path: Path, field: str, value: str) -> None:
+    original, _, item = correction_fixture(tmp_path)
+    item[field] = value
+    with pytest.raises(DataReadinessError):
+        correction_model(item).resolve_against(original, tmp_path, POLICY)
+
+
+@pytest.mark.parametrize("field,value", [("special", True), ("foreign", True), ("revision", True),
+    ("due_bill_redemption_date", "2020-06-20"), ("currency", "EUR")])
+def test_even_rebound_correction_cannot_repair_unsupported_original_terms(tmp_path: Path, field: str, value: Any) -> None:
+    original, _, item = correction_fixture(tmp_path)
+    original[field] = value
+    item["original_record_sha256"] = json_sha256(original)
+    with pytest.raises(DataReadinessError):
+        correction_model(item).resolve_against(original, tmp_path, POLICY)
+
+
+@pytest.mark.parametrize("value", ["1.3662419", "0", "-1", "NaN", "Infinity", 1.366242])
+def test_correction_is_positive_decimal_string_and_must_change_amount(tmp_path: Path, value: Any) -> None:
+    _, _, item = correction_fixture(tmp_path)
+    item["corrected_gross_amount"] = value
+    with pytest.raises((ValidationError, DataReadinessError)):
+        correction_model(item)
+
+
+@pytest.mark.parametrize("variant", ["body_tamper", "receipt_tamper", "future", "wrong_row", "gains", "duplicate"])
+def test_correction_replays_pinned_issuer_source_and_actual_clock(tmp_path: Path, variant: str) -> None:
+    original, _, item = correction_fixture(tmp_path)
+    source = item["issuer_rate"]["source"]
+    if variant == "body_tamper":
+        Path(source["body"]["path"]).write_bytes(b"wrong workbook")
+    elif variant == "receipt_tamper":
+        Path(source["receipt"]["path"]).write_text("{}")
+    elif variant == "future":
+        path = Path(source["receipt"]["path"])
+        receipt = json.loads(path.read_text())
+        receipt["retrieved_at_utc"] = "2126-11-08T20:05:42+00:00"
+        source["receipt"] = write_json(path, receipt)
+    elif variant == "wrong_row":
+        item["issuer_rate"]["row"] = 3
+    else:
+        path = tmp_path / "unsupported-issuer.xlsx"
+        item["issuer_rate"]["source"] = captured(path, workbook(path, rate="1.366242", ex_date="06/19/2020",
+            capital_gain="0.1" if variant == "gains" else "", duplicate=variant == "duplicate"), authority="issuer")
+    with pytest.raises(DataReadinessError):
+        correction_model(item).resolve_against(original, tmp_path, POLICY)
+
+
+@pytest.mark.parametrize("conflicting", [False, True])
+def test_duplicate_or_conflicting_amount_corrections_for_same_action_refused(tmp_path: Path, conflicting: bool) -> None:
+    _, _, item = correction_fixture(tmp_path)
+    second = copy.deepcopy(item)
+    if conflicting:
+        second["corrected_gross_amount"] = "1.366243"
+    path = tmp_path / "amount-corrections.json"
+    reference = write_json(path, {"schema": "market_predictor.investment_dividend_amount_corrections",
+        "corrections": [item, second]})
+    with pytest.raises(DataReadinessError, match="repeats action ID"):
+        load_dividend_amount_corrections(tmp_path, path, reference["sha256"], policy_sha256=POLICY)
+
+
+def test_correction_manifest_uses_separate_closed_hash_bound_schema(tmp_path: Path) -> None:
+    original, _, item = correction_fixture(tmp_path)
+    path = tmp_path / "amount-corrections.json"
+    payload = {"schema": "market_predictor.investment_dividend_amount_corrections", "corrections": [item]}
+    reference = write_json(path, payload)
+    loaded = load_dividend_amount_corrections(tmp_path, path, reference["sha256"], policy_sha256=POLICY)
+    assert loaded[original["id"]].resolve_against(original, tmp_path, POLICY).gross_amount == Decimal("1.366242")
+    with pytest.raises(DataReadinessError, match="hash differs"):
+        load_dividend_amount_corrections(tmp_path, path, "b" * 64, policy_sha256=POLICY)
+    with pytest.raises(ValidationError):
+        load_currency_corroborations(tmp_path, path, reference["sha256"], policy_sha256=POLICY)
+    payload["corrections"][0]["provider_response"] = {"currency": "USD", "rate": 1.366242}
+    reference = write_json(path, payload)
+    with pytest.raises(ValidationError):
+        load_dividend_amount_corrections(tmp_path, path, reference["sha256"], policy_sha256=POLICY)

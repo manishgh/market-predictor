@@ -15,7 +15,7 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import resolve_inside_authority
-from market_predictor.investment.dividend_currencies import CurrencyCorroboration
+from market_predictor.investment.dividend_currencies import CurrencyCorroboration, IssuerDividendAmountCorrection
 from market_predictor.investment.label_materialization import InvestmentSourceValidation
 from market_predictor.swing.contracts.corrected_outcomes import OfficialWindow
 from market_predictor.swing.contracts.holding_accounting import CorporateActionEvent, EvidenceReference, KnownMark, PositionLeg
@@ -59,7 +59,8 @@ class InvestmentCorporateActions:
         action_index: tuple[dict[str, tuple[ActionWindow, ...]], tuple[str, ...]],
         official_windows: tuple[OfficialWindow, ...], policy_reference: EvidenceReference, numeric_end: date,
         currency_evidence: Mapping[str, tuple[dict[str, Any], EvidenceReference]] | None = None,
-        currency_corroborations: Mapping[str, CurrencyCorroboration] | None = None) -> None:
+        currency_corroborations: Mapping[str, CurrencyCorroboration] | None = None,
+        dividend_amount_corrections: Mapping[str, IssuerDividendAmountCorrection] | None = None) -> None:
         self.root, self.evidence = root.resolve(), evidence
         self.actions, self.global_gaps = action_index
         self.official = official_windows
@@ -80,6 +81,8 @@ class InvestmentCorporateActions:
         refreshed_currencies = currency_evidence or {}
         independent_currencies = currency_corroborations or {}
         observed_corroborations: set[str] = set()
+        amount_corrections = dividend_amount_corrections or {}
+        observed_corrections: set[str] = set()
         for name in evidence.source_files:
             if not name.endswith("/_request.json"):
                 continue
@@ -140,10 +143,19 @@ class InvestmentCorporateActions:
                             raise ValueError("unresolved action revision or due bill")
                         currency_ref: EvidenceReference | None = None
                         corroboration_refs: tuple[EvidenceReference, ...] = ()
+                        amount_refs: tuple[EvidenceReference, ...] = ()
                         if family == "cash_dividends":
                             if record.get("special") is not False or record.get("foreign") is not False:
                                 self.unresolved_terms[identity] = "ordinary_domestic_cash_entitlement_unproven"
                                 continue
+                            amount_correction = amount_corrections.get(action_id)
+                            dividend_amount = _positive(record["rate"])
+                            if amount_correction is not None:
+                                observed_corrections.add(action_id)
+                                resolved = amount_correction.resolve_against(
+                                    record, self.root, policy_reference.interpretation_policy_sha256)
+                                dividend_amount = _positive(float(resolved.gross_amount))
+                                amount_refs = resolved.evidence
                             currency = record.get("currency")
                             corroboration = independent_currencies.get(action_id)
                             if corroboration is not None:
@@ -151,12 +163,13 @@ class InvestmentCorporateActions:
                                 if currency not in (None, "", "USD"):
                                     raise DataReadinessError("independent USD evidence contradicts provider currency")
                                 corroboration_refs = corroboration.validates_against(
-                                    record, self.root, policy_reference.interpretation_policy_sha256)
-                                for source_ref in corroboration_refs:
-                                    if (source_ref.reference in self.source_files
-                                        and self.source_files[source_ref.reference] != source_ref.artifact_sha256):
-                                        raise DataReadinessError("independent currency source hash conflicts")
-                                    self.source_files[source_ref.reference] = source_ref.artifact_sha256
+                                    record, self.root, policy_reference.interpretation_policy_sha256,
+                                    amount_correction=amount_correction)
+                            for source_ref in (*amount_refs, *corroboration_refs):
+                                if (source_ref.reference in self.source_files
+                                    and self.source_files[source_ref.reference] != source_ref.artifact_sha256):
+                                    raise DataReadinessError("independent dividend source hash conflicts")
+                                self.source_files[source_ref.reference] = source_ref.artifact_sha256
                             if currency != "USD" and not corroboration_refs:
                                 refreshed = refreshed_currencies.get(action_id)
                                 if currency not in (None, "") or refreshed is None:
@@ -191,16 +204,19 @@ class InvestmentCorporateActions:
                                     and self.source_files[currency_ref.reference] != currency_ref.artifact_sha256):
                                     raise DataReadinessError("refreshed currency source hash conflicts")
                                 self.source_files[currency_ref.reference] = currency_ref.artifact_sha256
-                            value = _positive(record["rate"])
+                            value = dividend_amount
                         elif family in ("forward_splits", "reverse_splits", "unit_splits"):
                             value = _positive(record["new_rate"]) / _positive(record["old_rate"])
                         else:
                             continue
                         term_ref = ref(name, f"family={family};action_id={action_id};record_sha256={record_hash}")
-                        extra = (*corroboration_refs, *((currency_ref,) if currency_ref is not None else ()))
+                        references = (*amount_refs, *corroboration_refs, *((currency_ref,) if currency_ref is not None else ()))
+                        extra = tuple({(item.reference, item.artifact_sha256, item.record_locator): item for item in references}.values())
                         self.terms[identity] = _Term(action_id, symbol, family, ex, value, (term_ref, *coverage[1:], *extra))
                     except (KeyError, TypeError, ValueError):
                         self.invalid.add(identity)
+        if observed_corrections != set(amount_corrections):
+            raise DataReadinessError("dividend amount corrections contain unused or unsupported action IDs")
         if observed_corroborations != set(independent_currencies):
             raise DataReadinessError("independent currency evidence contains unused or unsupported action IDs")
         if observed != accepted:

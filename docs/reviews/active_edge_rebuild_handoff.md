@@ -1,5 +1,46 @@
 # Active Edge Rebuild Handoff
 
+
+## Active November 9 continuation
+
+Canonical main starts at f6ccacf. The leading active-plan step freezes an explicit
+issuer amount correction and metadata-only wider coverage preflight. Senior Quant
+approved the contract. Sol engineering owns investment/dividend_currencies.py and
+its unit tests; root owns action-consumer/request integration, actual replay and
+documentation. Independent Sol code review follows the stable implementation.
+All agents share canonical main; no additional checkouts or heavy jobs in parallel.
+
+Preserve the completed November 8 pilot below. Build new correction/currency
+manifests and new target output; never rewrite its request, evidence or producer.
+The correction is 1.3662419 provider to 1.366242 issuer, not a rounding tolerance.
+No new tests, annual target or broader population result is claimed yet for this step.
+Earlier completed and historical summaries below remain retained for continuity.
+
+
+
+Quant-approved execution scope: one combined July 31, 2019 Health Care batch of
+16 decisions / 32 requested horizon rows, including the original IDXX pilot.
+Selection uses source coverage and no stock-action exposure, not realized returns;
+all selected rows remain even if a later source check fails. Four of sixteen have
+all six financial features; completeness is reported and never filters this batch.
+Tickers: REGN, IDXX, VRTX, INCY, BSX, DVA, HSIC, ISRG, MTD, CNC, ALGN, IQV,
+MYL, VAR, HOLX and ABMD. This is selected integration coverage, not representative
+forecast validation or a training-ready population.
+
+Frozen evidence under data/research/investment_dividend_resolution_20261109:
+- selected-decisions.json: bbcc31cd14870506a7d0b4f3ed28d6f0e624ab2104cae429c052002c9f2756ae.
+- target-request.json: 31598fbeab8133914900d8c49d8e3ecd79b4b43e06761001646ae1cba621fcf3.
+- amount-corrections.json: 975cf1663c553480825827b9059de9a111bb94cf4bca732d55e551f38b5709f2.
+- currency-corroborations.json: 7a86dd13aaa6328f8556c68cb431828e21b985b8b87e7aa5369382e18986cafd.
+- coverage-preflight.json: 90ee65dd9d446bda887f5471bad06ec2d4a6ee0415d9cfae7071cc09fd8d25cd.
+
+The source-only preflight finds 213 distinct benchmark cash events across retained
+portions of all 59 monthly windows. Thirteen are addressed by this new evidence set;
+eleven more have candidate matches in retained tax pages; 189 lack such matches.
+These are candidate-source counts, not admitted events or stock label coverage.
+The raw-price end also leaves four 63-session and thirteen 252-session monthly
+windows incomplete. Next expansion must address those measured gaps explicitly.
+
 ## Current state — November 8, 2026
 
 Work only in `C:/project/market-predictor`, with `main` checked out. Implementation

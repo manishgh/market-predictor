@@ -10,16 +10,18 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.investment.corporate_actions import InvestmentCorporateActions
-from market_predictor.investment.dividend_currencies import CurrencyCorroboration
+from market_predictor.investment.dividend_currencies import CurrencyCorroboration, IssuerDividendAmountCorrection
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference
 from market_predictor.swing.datasets.action_evidence import CorporateActionEvidence
 from market_predictor.swing.datasets.corrected_outcome_admission import reconcile_actions
+from tests.test_investment_dividend_currencies import captured, workbook
 from tests.test_investment_dividend_currencies import fixture as currency_fixture
 from tests.test_investment_dividend_currencies import model as currency_model
 
 
 def build(tmp_path: Path, records: dict[str, list[dict[str, Any]]], *, refresh_rate: float | None = None,
-          symbol: str = "TEST", corroborations: dict[str, CurrencyCorroboration] | None = None) -> InvestmentCorporateActions:
+          symbol: str = "TEST", corroborations: dict[str, CurrencyCorroboration] | None = None,
+          amount_corrections: dict[str, IssuerDividendAmountCorrection] | None = None) -> InvestmentCorporateActions:
     def write(name: str, data: dict[str, Any]) -> str:
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -56,7 +58,8 @@ def build(tmp_path: Path, records: dict[str, list[dict[str, Any]]], *, refresh_r
             retrieved_at=datetime(2026, 11, 7, tzinfo=UTC), available_at=datetime(2026, 11, 7, tzinfo=UTC))
         refreshed[original["id"]] = ({**record, "original_record_sha256": json_sha256(original)}, ref)
     return InvestmentCorporateActions(tmp_path, evidence, reconcile_actions(evidence, {symbol}), (), policy,
-        date(2024, 5, 28), currency_evidence=refreshed, currency_corroborations=corroborations)
+        date(2024, 5, 28), currency_evidence=refreshed, currency_corroborations=corroborations,
+        dividend_amount_corrections=amount_corrections)
 
 
 def dividend(identity: str = "div", ex: str = "2024-05-23") -> dict[str, Any]:
@@ -158,3 +161,48 @@ def test_unused_independent_currency_action_cannot_be_silently_ignored(tmp_path:
     original, item = currency_fixture(tmp_path)
     with pytest.raises(DataReadinessError, match="unused or unsupported"):
         build(tmp_path, {}, symbol="SPY", corroborations={original["id"]: currency_model(item)})
+
+
+
+def corrected_dividend_fixture(tmp_path: Path) -> tuple[dict[str, Any], CurrencyCorroboration, IssuerDividendAmountCorrection]:
+    original, item = currency_fixture(tmp_path, bridge=True)
+    path = tmp_path / "corrected-issuer.xlsx"
+    source = captured(path, workbook(path, rate="1.383620"), authority="issuer")
+    item["issuer_rate"] = {"source": source, "row": 2}
+    item["tax_resolved_value_difference"] = "-0.000620"
+    correction = IssuerDividendAmountCorrection.model_validate_json(json.dumps({
+        "method": "issuer_gross_amount_correction", "action_id": original["id"],
+        "original_record_sha256": json_sha256(original), "symbol": "SPY", "ex_date": original["ex_date"],
+        "cusip": "78462F103", "isin": "US78462F1030", "original_rate": "1.383619",
+        "corrected_gross_amount": "1.383620", "issuer_rate": {"source": source, "row": 2}}))
+    return original, currency_model(item), correction
+
+
+def test_issuer_correction_changes_only_evidenced_entitlement_amount(tmp_path: Path) -> None:
+    original, currency, correction = corrected_dividend_fixture(tmp_path)
+    original_hash = json_sha256(original)
+    actions = build(tmp_path, {"cash_dividends": [original]}, symbol="SPY",
+        corroborations={original["id"]: currency}, amount_corrections={original["id"]: correction})
+    result = actions.validate_sources("benchmark:SPY", "SPY", (date(2019, 9, 19), date(2019, 9, 20)), "owned")
+    assert not result.missing_reasons
+    assert result.events[0].legs[0].units_per_owned_unit == 1.383620
+    assert result.events[0].legs[0].kind == "unpaid_proceeds"
+    assert original_hash == json_sha256(original) and original["rate"] == 1.383619
+    assert correction.issuer_rate.source.body.path in actions.source_files
+    Path(correction.issuer_rate.source.body.path).write_bytes(b"changed")
+    with pytest.raises(DataReadinessError, match="source changed"):
+        actions.recheck()
+
+
+def test_amount_correction_does_not_supply_missing_currency(tmp_path: Path) -> None:
+    original, _, correction = corrected_dividend_fixture(tmp_path)
+    actions = build(tmp_path, {"cash_dividends": [original]}, symbol="SPY", amount_corrections={original["id"]: correction})
+    result = actions.validate_sources("benchmark:SPY", "SPY", (date(2019, 9, 19), date(2019, 9, 20)), "owned")
+    assert any("dividend_usd_currency_unproven" in reason for reason in result.missing_reasons)
+    assert not result.events
+
+
+def test_unused_amount_correction_refuses(tmp_path: Path) -> None:
+    original, _, correction = corrected_dividend_fixture(tmp_path)
+    with pytest.raises(DataReadinessError, match="unused or unsupported"):
+        build(tmp_path, {}, symbol="SPY", amount_corrections={original["id"]: correction})

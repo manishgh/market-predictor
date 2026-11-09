@@ -19,7 +19,7 @@ from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.investment.corporate_actions import InvestmentCorporateActions
-from market_predictor.investment.dividend_currencies import load_currency_corroborations
+from market_predictor.investment.dividend_currencies import load_currency_corroborations, load_dividend_amount_corrections
 from market_predictor.investment.label_materialization import InvestmentSourceValidation, compile_investment_label
 from market_predictor.investment.label_sources import InvestmentSourceReader
 from market_predictor.research.investment_currencies import load_investment_currency_evidence
@@ -35,6 +35,7 @@ class InvestmentLabelMaterializationRequest(HoldingContract):
     target_config: ArtifactReference
     currency_manifest: ArtifactReference | None = None
     currency_corroboration_manifest: ArtifactReference | None = None
+    dividend_amount_corrections_manifest: ArtifactReference | None = None
     decision_ids: tuple[str, ...] | None = Field(default=None, min_length=1)
     nominal_unpaid_claim_valuation: Literal[True]
     evaluation_as_of_utc: Timestamp
@@ -182,8 +183,15 @@ def materialize_investment_labels(*, root: Path, request: Path, request_sha256: 
             _read(root, corroboration_pin, pins)
             corroborations = load_currency_corroborations(root, Path(corroboration_pin.path),
                 corroboration_pin.sha256, policy_sha256=request_sha256)
+        corrections = {}
+        if parsed.dividend_amount_corrections_manifest is not None:
+            correction_pin = parsed.dividend_amount_corrections_manifest
+            _read(root, correction_pin, pins)
+            corrections = load_dividend_amount_corrections(root, Path(correction_pin.path),
+                correction_pin.sha256, policy_sha256=request_sha256)
         actions = InvestmentCorporateActions(root, evidence, sources["action_index"], policy.official_windows,
-            policy_ref, policy.numerical_end, currency_evidence=currencies, currency_corroborations=corroborations)
+            policy_ref, policy.numerical_end, currency_evidence=currencies, currency_corroborations=corroborations,
+            dividend_amount_corrections=corrections)
         pins.update({str(_path(root, name)): digest for name, digest in actions.source_files.items()})
         common_path = output / "_verified_sources.json"
         common_sources = {name: digest for name, digest in pins.items() if name != str(common_path)}
