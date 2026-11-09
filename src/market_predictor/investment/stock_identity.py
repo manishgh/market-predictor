@@ -33,7 +33,11 @@ from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference, HoldingContract, Sha256
 from market_predictor.swing.contracts.holding_materialization import SourcePin
-from market_predictor.universe.security_class_evidence import SecurityClassEvidence, extract_security_class_evidence
+from market_predictor.universe.security_class_evidence import (
+    SecurityClassEvidence,
+    SecurityClassIssuerMismatch,
+    extract_security_class_evidence,
+)
 
 
 class SecClassAnchor(HoldingContract):
@@ -194,8 +198,8 @@ def _class_anchor(root: Path, proof: StockIdentityProof, files: MutableMapping[s
             or row["status_code"] != 200 or row["url"] != row["final_url"] or row["redirect_chain_json"] != "[]"):
         raise DataReadinessError("stock class SEC document binding differs")
     parsed_url = urlsplit(str(row["url"]))
-    if (parsed_url.scheme != "https" or parsed_url.hostname != "www.sec.gov"
-            or not parsed_url.path.startswith(f"/Archives/edgar/data/{int(proof.sec_cik)}/") or parsed_url.query):
+    if (parsed_url.scheme != "https" or parsed_url.netloc != "www.sec.gov"
+            or parsed_url.query or parsed_url.fragment):
         raise DataReadinessError("stock class source is not its official SEC issuer URL")
     zip_path = _child(root, receipt_path.parent, shard + ".zip", manifest["shards"][shard]["zip_sha256"], files)
     body = _zip_body(zip_path, row)
@@ -247,14 +251,23 @@ def _class_anchor(root: Path, proof: StockIdentityProof, files: MutableMapping[s
         raise DataReadinessError("stock class SEC detail page contradicts filing metadata")
     documents = selected_documents(index, str(item["primary_document"]))
     selected_row = parse_strict_json_object(str(row["index_row_json"]), label="SEC selected document row")
-    if len([document for document in documents if document.row() == selected_row
-            and document.filename == item["primary_document"]]) != 1:
+    primary = [document for document in documents if document.row() == selected_row
+               and document.filename == item["primary_document"]]
+    if len(primary) != 1:
         raise DataReadinessError("stock class is not the bound primary filing document")
+    # EDGAR detail pages may link a joint filing's primary document under a
+    # co-registrant folder. The shared parser enforces the exact accession and
+    # numeric folder; its selected link, rather than folder/issuer equality,
+    # determines the only permitted primary source URL.
+    if row["url"] != "https://www.sec.gov" + primary[0].path:
+        raise DataReadinessError("stock class source differs from the exact listed primary URL")
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "body.htm"
         path.write_bytes(body)
         try:
             facts = extract_security_class_evidence(path, anchor.body_sha256, proof.sec_cik, proof.ticker)
+        except SecurityClassIssuerMismatch:
+            raise
         except DataReadinessError as exc:
             raise StockIdentityUnavailable("retained SEC class facts are unsupported: " + str(exc)) from exc
     if facts.security_title.value != proof.security_title:

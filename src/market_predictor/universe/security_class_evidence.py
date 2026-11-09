@@ -20,6 +20,10 @@ _CONCEPTS = {"TradingSymbol", "Security12bTitle", "SecurityExchangeName", "Entit
 _MAX_BODY_BYTES = 16 * 1024 * 1024
 
 
+class SecurityClassIssuerMismatch(DataReadinessError):
+    """An explicit source issuer contradicts the requested issuer identity."""
+
+
 @dataclass(frozen=True)
 class InlineSourceFact:
     """Whitespace-normalized displayed text; format is recorded, not evaluated."""
@@ -252,7 +256,7 @@ def _extract(soup: BeautifulSoup, digest: str, expected_cik: str, target_ticker:
     if name_context.dimensions != cik_context.dimensions:
         raise DataReadinessError("issuer name/CIK context dimensions mismatch")
     if _cik(ciks[0].value) != expected_cik:
-        raise DataReadinessError("explicit issuer CIK differs from expected CIK")
+        raise SecurityClassIssuerMismatch("explicit issuer CIK differs from expected CIK")
     selected = {item.contextref for item in (ticker, title, exchange, names[0], ciks[0])}
     return SecurityClassEvidence(
         digest, ticker, title, exchange, names[0], ciks[0], tuple(contexts[key] for key in sorted(selected)),

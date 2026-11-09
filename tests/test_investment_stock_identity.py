@@ -138,18 +138,22 @@ def test_mutated_authority_file_is_rejected_before_source_facts(scope):
     assert not scope["calls"]
 
 
-def test_real_receipt_and_primary_body_chain_replays_and_rejects_body_pin(tmp_path, monkeypatch):
+def _real_class_proof(tmp_path, monkeypatch, *, cofolder=False, body_cik="0000001800"):
     from market_predictor.catalysts.sec_filings import document_collection as documents
     from market_predictor.research import sec_page_collection as runner
-    from tests.test_sec_filing_documents import ABT, ABT_CIK, _collect, _Edgar, _ok, _scripts, _url
+    from tests.test_sec_filing_documents import ABT, ABT_CIK, _collect, _Edgar, _ok, _page, _scripts, _url
 
     monkeypatch.setattr(identity, "guard", lambda *args: None)
     monkeypatch.setattr(runner, "_guard", lambda: None)
     monkeypatch.setattr(documents, "RETRY_WAITS_SECONDS", (0.0, 0.0))
     monkeypatch.delenv("MARKET_PREDICTOR_RUNTIME_DIR", raising=False)
-    body = _document(_context("base", entity="1800"), _issuer("base", cik=ABT_CIK), _row("base", ticker="ABT")).encode()
+    body = _document(_context("base", entity="1800"), _issuer("base", cik=body_cik), _row("base", ticker="ABT")).encode()
     scripts = _scripts()
     scripts[_url(ABT_CIK, ABT, "a19-12883_18k.htm")] = [_ok(body)]
+    if cofolder:
+        scripts[documents.index_url(ABT_CIK, ABT)] = [_ok(_page(ABT, ABT_CIK).replace(b"/data/1800/", b"/data/1801/"))]
+        for filename in ("a19-12883_18k.htm", "a19-12883_1ex99d1.htm"):
+            scripts[_url("0000001801", ABT, filename)] = scripts.pop(_url(ABT_CIK, ABT, filename))
     _collect(tmp_path, _Edgar(scripts), monkeypatch, name="class")
     folder = tmp_path / "data/raw/class"
     paths = sorted((folder / "shards").glob("*.parquet"))
@@ -163,9 +167,62 @@ def test_real_receipt_and_primary_body_chain_replays_and_rejects_body_pin(tmp_pa
         membership_authority=pin(folder / "_manifest.json"), anchor=identity.SecClassAnchor(
             collection_manifest=pin(folder / "_manifest.json"), receipt_artifact=pin(path), unit_id=row["unit_id"],
             body_sha256=row["body_sha256"], filing_metadata=pin(tmp_path / "data/research/sec_inventory/filings.parquet")))
+    return proof
+
+
+@pytest.mark.parametrize("cofolder", [False, True])
+def test_real_receipt_and_primary_body_chain_replays_and_rejects_body_pin(tmp_path, monkeypatch, cofolder):
+    proof = _real_class_proof(tmp_path, monkeypatch, cofolder=cofolder)
     files: dict[str, str] = {}
     facts, accepted, captured, reference = identity._class_anchor(tmp_path, proof, files, {})
     assert facts.trading_symbol.value == "ABT" and accepted < captured and Path(reference).is_file()
     changed = proof.model_copy(update={"anchor": proof.anchor.model_copy(update={"body_sha256": "0" * 64})})
     with pytest.raises(DataReadinessError, match="document binding differs"):
         identity._class_anchor(tmp_path, changed, {}, {})
+
+
+@pytest.mark.parametrize("poison", ["wrong_accession", "unlisted_filename", "unlisted_cofolder", "redirect", "selected_row"])
+def test_primary_source_poison_is_fatal_even_with_consistent_synthetic_receipt_hashes(tmp_path, monkeypatch, poison):
+    from market_predictor.catalysts.sec_filings import document_collection as documents
+
+    proof = _real_class_proof(tmp_path, monkeypatch)
+    path = Path(proof.anchor.receipt_artifact.path)
+    receipts = pd.read_parquet(path)
+    selected = receipts.index[receipts.unit_id.eq(proof.anchor.unit_id)][0]
+    row = receipts.loc[selected].to_dict()
+    if poison == "wrong_accession":
+        row["url"] = row["url"].replace("000110465919040664", "000110465919040665")
+        row["final_url"] = row["url"]
+    elif poison == "unlisted_filename":
+        row["url"] = row["url"].replace("a19-12883_18k.htm", "unlisted.htm")
+        row["final_url"] = row["url"]
+    elif poison == "unlisted_cofolder":
+        row["url"] = row["url"].replace("/data/1800/", "/data/1802/")
+        row["final_url"] = row["url"]
+    elif poison == "redirect":
+        row["final_url"] = row["url"] + "?redirected=1"
+    else:
+        selected_row = json.loads(row["index_row_json"])
+        selected_row["path"] = selected_row["path"].replace("a19-12883_18k.htm", "unlisted.htm")
+        row["index_row_json"] = json.dumps(selected_row, sort_keys=True)
+    refreshed = documents._receipt(row)
+    for field, value in refreshed.items():
+        receipts.loc[selected, field] = value
+    receipts.to_parquet(path, index=False)
+    manifest_path = Path(proof.anchor.collection_manifest.path)
+    manifest = json.loads(manifest_path.read_bytes())
+    manifest["shards"][path.stem]["parquet_sha256"] = file_sha256(path)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    anchor = proof.anchor.model_copy(update={"collection_manifest": SourcePin(path=str(manifest_path), sha256=file_sha256(manifest_path)),
+        "receipt_artifact": SourcePin(path=str(path), sha256=file_sha256(path))})
+    poisoned = proof.model_copy(update={"anchor": anchor})
+    with pytest.raises(DataReadinessError) as exc:
+        identity._class_anchor(tmp_path, poisoned, {}, {})
+    assert not isinstance(exc.value, identity.StockIdentityUnavailable)
+
+
+def test_explicit_body_issuer_mismatch_remains_fatal(tmp_path, monkeypatch):
+    proof = _real_class_proof(tmp_path, monkeypatch, cofolder=True, body_cik="0000001802")
+    with pytest.raises(identity.SecurityClassIssuerMismatch, match="explicit issuer CIK") as exc:
+        identity._class_anchor(tmp_path, proof, {}, {})
+    assert not isinstance(exc.value, identity.StockIdentityUnavailable)

@@ -1,5 +1,20 @@
 # Current Feature Engineering Audit
 
+### Full investment source and target build in progress - November 9
+
+The additional benchmark coverage adds 44 independently audited distributions to the
+213 preserved assertions: 257 supported benchmark events, with both existing amount
+corrections unchanged. Stock tax capture is complete for 1,564 of 1,696 requested
+identity-year pairs (one reused pair, 1,563 new pairs); 132 pairs retain source gaps.
+Captured responses are not admitted stock dividends. The full 6,717-event stock
+resolution has not published: actual replay exposed a co-registrant SEC document
+path that the new identity consumer refused despite existing collector support.
+The leading plan freezes its narrow correction and all-391-proof source preflight.
+All 57 previous target examples and frozen source bytes remain preserved. Full
+74,458-row target publication, independent arithmetic audit, dataset admission and
+investment fitting remain pending. No model or prediction activation is claimed.
+The authoritative hashes and next command remain in the current handoff.
+
 ### QQQ event resolved and raw-source coverage measured — November 9
 
 The original benchmark inventory now has 213/213 supported events. Actual QQQ

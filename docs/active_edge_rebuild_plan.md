@@ -86,6 +86,24 @@ fatal tampering. The exploratory cache profile is not source-admission evidence;
 no stock identity or ICTax verifier optimization is authorized. Independent Sol
 code review and a new committed immutable producer precede the actual rerun.
 
+Bounded SEC consumer amendment: actual 5020c51 full-event replay stopped on a
+co-registrant filing path. Thirteen of the 293 selected stock proofs have official
+SEC primary documents under another registrant numeric folder within the same
+accession (CEG issuer 1868275, folder 1168165, accession 0001868275-24-000010).
+The retained collector already supports this exact SEC detail-page structure;
+stock_identity's new issuer-folder equality contradicts that consumer contract.
+Replace only that equality with exact primary-document URL binding to the replayed
+SEC detail row and existing same-accession numeric-folder parser. Preserve official
+HTTPS host/no redirects, exact detail request issuer, body issuer/class contexts,
+source hashes and clocks. Wrong accession, unlisted path, wrong issuer and redirects
+must still fail. Senior Quant confirmed the exact CEG retained source. An explicit
+body issuer mismatch uses a narrow typed exception that bypasses unsupported-class
+handling and remains fatal; unsupported class interpretation stays a local gap.
+Independent code review and focused identity/consumer tests precede a new producer.
+Replay all 391 candidate stock proofs on actual retained source bytes before another
+full event run; record local ownership gaps and fatal failures distinctly. No source
+bytes or proof requests may be rewritten into a successful result.
+
 Ownership: Sol stock engineer owns stock_identity/source_extensions and tests;
 Sol distribution engineer owns dividend_resolution/research investment_currencies
 and tests; root owns integration, materializer, command surfaces and continuity.

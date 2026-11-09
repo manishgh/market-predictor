@@ -3,11 +3,26 @@
 ## Active stock identity and full-target checkpoint — November 9
 
 The leading active plan freezes the authorized implementation and exit gates.
-Implementation 7cf10c3f86578568f82c192089318469e7248181 is committed and pushed
-on main. Immutable producer export contains 457 source files at
- data/research/implementation_snapshots/7cf10c3f86578568f82c192089318469e7248181/src.
-Code verification is complete; actual source resolution, remaining collection,
-full target publication and independent audit are still in progress.
+Implementation 5020c51be637cb294838ce6fb54d59c63863cee4 is committed and pushed
+on main, including the narrow actual-source date and guard amendment. Immutable
+producer export contains 457 source files at
+ data/research/implementation_snapshots/5020c51be637cb294838ce6fb54d59c63863cee4/src.
+Code verification and all eleven collection batches are complete. Actual stock
+source resolution, full target publication and independent audit remain in progress.
+Actual 5020c51 replay passed all eleven archive checks, then stopped before publication
+on a fatal stock class SEC URL/issuer binding check. No source-resolution or full-target
+artifact was published. Exact retained-source diagnosis found 13 of 293 selected
+proofs use legitimate co-registrant SEC folders. CEG body SHA256
+742cd105ec029516cfcfb81560ad55a661a563fb2df096612fe53feb216b240e
+and its exact listed primary document were independently checked by Senior Quant.
+The narrow consumer fix binds that exact listed URL rather than folder/issuer equality;
+explicit body-issuer mismatch stays fatal. Independent code review approved the fix;
+80 affected identity/source/currency/class tests passed in 9.05s, Ruff and strict mypy
+passed. Full suite/model checks were deliberately not run for this component change.
+Commit/export this amendment, then replay all 391 candidate proofs from the immutable
+producer before another full event run. A prematurely started editable-source diagnostic
+was stopped without publication; its interrupted log is retained and is not admission.
+Original captures, requests, prior producers and the 257 benchmark seed remain unchanged.
 Canonical main starts at f7d9af02490010decd607121cb41b9e74cc92972. Prior completed
 QQQ/raw work below is historical evidence and remains preserved. New source work
 and full target publication are in progress; no new target/model success claimed.
