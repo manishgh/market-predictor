@@ -1,5 +1,22 @@
 # Current Feature Engineering Audit
 
+
+### Thirty-two actual investment targets verified — November 9
+
+Implementation 13b5e6f adds explicit issuer amount correction with preserved raw
+provider evidence. The sixteen frozen July 2019 Health Care decisions produced
+32/32 valid historical targets (16 per 63/252-session horizon), zero unresolved,
+with mandatory stock/SPY/QQQ/sector accounting. Old IDXX 63 numerics match exactly;
+the annual SPY effect matches only the documented per-share dividend correction.
+Final manifest SHA256 26f58c8d3921b102f8a096e8d1fb11de60350204ad37a9ff8263f11c2ca3fa03.
+Actual audit SHA256 fd8d9c377312994d0a704d6268115010b3d8c5e30ce0d8d2d2d7ded967890bda.
+All 208 focused tests, Ruff, strict typing and independent Sol code/Quant reviews
+passed. Four of 16 decisions have all six financial features, 11 at least one,
+five none. This selected source-coverage batch is not model performance evidence;
+training/promotion/production remain false. Full feature counts below are unchanged.
+See the current handoff for evidence paths, denominator and the next source work.
+
+
 ### First actual investment target pilot — November 8
 
 The independent dividend-currency adapter and explicit selected-decision materializer

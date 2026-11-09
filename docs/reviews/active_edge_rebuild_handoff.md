@@ -1,7 +1,55 @@
 # Active Edge Rebuild Handoff
 
 
-## Active November 9 continuation
+## Current completed checkpoint — November 9, 2026
+
+Use only C:/project/market-predictor on main. No clones or additional worktrees.
+This summary supersedes all earlier status and next-step statements retained below.
+
+Completed implementation 13b5e6f139d47a873d4d134778b5f2afaa473b45 is pushed on main.
+The actual 16-decision Health Care batch published 32/32 source-validated targets:
+16 at 63 sessions and 16 at 252 sessions, with zero unresolved rows. Four mandatory
+holdings are present for every row. The full 37,229-row roster was verified before
+explicit selection; this is the 16-decision XLV subset of the 28 XLV/XLY candidates.
+
+Final manifest: data/research/investment_health_care_return_batch_20261109/final/_manifest.json.
+SHA256 26f58c8d3921b102f8a096e8d1fb11de60350204ad37a9ff8263f11c2ca3fa03.
+Independent actual audit: data/research/investment_dividend_resolution_20261109/batch-audit.json.
+SHA256 fd8d9c377312994d0a704d6268115010b3d8c5e30ce0d8d2d2d7ded967890bda.
+
+Old IDXX 63-session gross/net/excess values match exactly. Independent arithmetic
+checked all 32 stock returns against raw endpoints and the one-time 20bp cost.
+The annual SPY cash-claim sum uses the explicit 1.366242 issuer amount while the
+provider record remains 1.3662419. The return change equals 0.0000001/297.6 =
+3.3602150537634405e-10; floating subtraction residual is 1.50e-16. The calculation
+with the original amount is a sensitivity check, not an admitted alternative target.
+Current capture/verification clocks remain honest: available-by-completion is 16
+per horizon, while the earlier frozen evaluation cutoff has zero available targets.
+
+All 208 selected unit/consumer/accounting tests passed; Ruff and strict mypy passed
+on three changed source modules. Independent Sol design, code and senior Quant
+reviews passed, including actual evidence, source hashes, numerical parity and
+post-publication arithmetic. The real 13-event currency/one-event amount replay
+checked 28 unique source/receipt files. No full release suite or model fit was run.
+Four of 16 selected stock-months have all six financial metrics, 11 at least one,
+and five none; missingness was reported without filtering or filling values.
+Training, promotion and production flags remain false. No new security exclusion.
+
+Next bounded expansion: validate four retained XLY event assertions before adding
+the 12 Consumer Discretionary candidates, then collect the measured broader event
+gaps and extend missing raw-price horizons with independent source checks. Across
+the retained parts of all 59 windows, 213 benchmark cash events were counted: 13 now
+covered, 11 more with candidate retained matches, 189 without a retained match.
+Four 63-session and thirteen 252-session months extend beyond the current raw end.
+Do not restart the old zero-target full run or imply this selected batch certifies
+population-wide training coverage. Old requests, provider records and outputs stay
+unchanged. The 452-file committed producer snapshot is preserved under existing
+data/research/implementation_snapshots/13b5e6f139d47a873d4d134778b5f2afaa473b45.
+No active worker remains; the shared memory ceiling remains strictly below 90%.
+
+
+
+## November 9 implementation notes (historical)
 
 Canonical main starts at f6ccacf. The leading active-plan step freezes an explicit
 issuer amount correction and metadata-only wider coverage preflight. Senior Quant
