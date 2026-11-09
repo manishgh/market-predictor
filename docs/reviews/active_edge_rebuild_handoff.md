@@ -1,7 +1,108 @@
 # Active Edge Rebuild Handoff
 
+## Current completed XLY and benchmark source checkpoint — November 9
 
-## Active XLY and broader coverage work — November 9
+This current summary supersedes status/next-step statements retained below.
+
+Completed implementation: 15c99c256bf9c5d4d14414035de723bb0d5ce120
+(collector 3654cc93707bbe6e444ff9caa7ae58ae37a5c7f0 plus the actual-source QQQ
+identifier correction). Both are pushed on canonical main. No other checkout was
+created. Independent Sol design/Quant and code reviews passed; known review findings
+and the actual QQQ lookup failure were fixed with regressions. Final source tests:
+35 passed; CLI/shared-HTTP consumers: 345 passed. Ruff and strict mypy passed for
+the three changed source modules. This was a component/source checkpoint, not a
+release; no full suite, training, promotion or serving run was required or claimed.
+
+XLY actual publication: 24/24 targets across twelve frozen July 31, 2019 decisions,
+12 per 63/252-session horizon, zero unresolved. Preserve the earlier 32 XLV targets;
+combined source-selected evidence is 56 targets across 28 stock-months, not model
+performance. Full 37,229-row roster authority remained verified. XLY financial
+coverage is 2/12 all six ratios, 9/12 at least one, 3/12 none; no feature filter.
+Final: data/research/investment_xly_return_batch_20261109/final/_manifest.json
+SHA256 60e74b02bad985b5c56e8d3edca5d37bdaa947094f8ebdd0d9d72c7935116580.
+Independent actual audit: data/research/investment_xly_dividend_resolution_20261109/batch-audit.json
+SHA256 101d46de5c1741d82408ed5be44616878d797f6305d75ef2659be695860b368f.
+Audit checks all 24 stock/XLY values and costs, 48 exact SPY/QQQ comparisons with
+the prior batch, source hashes and current availability clocks. All 24 became
+available by completion, none by the earlier frozen evaluation cutoff. No new XLY
+amount correction. Nominal unpaid distributions remain nontradable policy-valued
+claims, not demonstrated cash payments or reinvestment.
+
+Actual official archive: 77/77 fund-years (11 benchmarks x payment years 2019–2025),
+zero missing structured/HTML pairs. Original eight retained pairs plus five SPY
+pairs from the first bounded run were reused; 64 remaining pairs were downloaded.
+The original partial archive is preserved. Final archive and replay verification:
+data/research/investment_benchmark_ictax_20261109/archive_verified_lookup/final/_manifest.json
+SHA256 77f20e03cf7d140f06e149d613ac7daff1cd6942c6600107d60c9b78e861f3b8.
+Request-reused-sources.json SHA256 04fa36ac96f6d81e594471f10a34c144f74702303984ea75a4f624f5f3ee34a5.
+Actual capture clocks and original source bytes are retained. Fund-years are
+collection units; they do not count as admitted dividend events or model examples.
+
+Reviewed event replay: 212/213 distinct required benchmark
+cash events supported, 1 unresolved; prior 17 assertions
+and prior one SPY correction preserved. Total explicit reviewed amount corrections:
+2. Pending correction candidates:
+0. Event reason counts:
+{"ordinary_domestic_cash_entitlement_unproven": 1}.
+Artifact: data/research/investment_benchmark_dividend_resolution_20261109/_manifest.json
+SHA256 fddb4b0068892db84c46a49360951f666baed120bad274318815bc1dd60d7e8e.
+Consumable evidence inputs in that artifact:
+currency-corroborations.json SHA256 ff1cc3556b3d18c34b704f638632980eaf1f32e172b48899047aa464558a9a87;
+amount-corrections.json SHA256 9a44ec36d97259d526dad5f3420b57e91c15e514ee9105677cc4ce2ace4a47bc.
+Independent final metadata/parity audit:
+data/research/investment_benchmark_ictax_20261109/final-coverage-audit.json
+SHA256 e774bbb9f53f57961106a09bfb7584de6db86b1a3e7ff2352848223397807a64. All 19 required SPY events are supported. The sole gap is QQQ
+special distribution 6e3ba6ba-8d29-42fd-8023-8928105fcd9b, ex-date December 27, 2023;
+no ordinary-distribution substitution was made. Senior Quant verified final file
+hashes, the one-event delta and unchanged evidence after publication. The 211 prior
+assertions were reused after hash checks; only XLC was newly replayed. No completed
+target batch was rebuilt. Current typed consumers still replay their evidence.
+The report retains all 213 events and 118 monthly horizon windows; each window
+reports eleven funds and nine mandatory SPY/QQQ/sector triples. Currency and date
+coverage does not establish stock action support, continuous raw paths or targets.
+Current triplet counts out of 118 windows each:
+{"XLB": {"currency_complete": 103, "within_raw_end_and_currency_complete": 93}, "XLC": {"currency_complete": 103, "within_raw_end_and_currency_complete": 93}, "XLE": {"currency_complete": 103, "within_raw_end_and_currency_complete": 93}, "XLI": {"currency_complete": 103, "within_raw_end_and_currency_complete": 93}, "XLK": {"currency_complete": 103, "within_raw_end_and_currency_complete": 93}, "XLP": {"currency_complete": 103, "within_raw_end_and_currency_complete": 93}, "XLU": {"currency_complete": 103, "within_raw_end_and_currency_complete": 93}, "XLV": {"currency_complete": 103, "within_raw_end_and_currency_complete": 93}, "XLY": {"currency_complete": 103, "within_raw_end_and_currency_complete": 93}}.
+Quant review: data/research/investment_benchmark_ictax_20261109/quant-review.json
+SHA256 61bfed4f12d7b6e48cd7205a52fb8edb1a2f577641e77bd779e32461affde273.
+
+Raw-price inventory: no usable retained raw extension found. There are 111,661
+nominal missing daily observations before corporate-transition checks: 108,889
+stock security-sessions plus 2,772 benchmark sessions. The full 22,346 eligible
+stock-months contain 435 security IDs across 431 issuers. Beyond the global raw
+end, 1,551 63-session and 5,021 252-session rows need prices; an additional 109 and
+420 within-end rows have earlier selected-source gaps. Required tail ends May 30,
+2025; adjusted candles cannot replace raw SIP prices. A future extension adds 44
+benchmark events to the current 213. Audit:
+data/research/investment_benchmark_ictax_20261109/raw-source-gaps.json
+SHA256 85fbc062d39f3d3f33d41e75784f048ce6471dfedc55c04bdbfd732cb4e1292f.
+
+Verification tier and commands: source/component checks, using a fresh writable
+pytest basetemp and one shared heavy-job lease. Source check: `python -m pytest -q
+tests/test_http_client.py tests/test_ictax_collection.py` (35 passed). Consumer
+check: `python -m pytest -q tests/test_investment_research.py
+tests/test_investment_currencies.py tests/test_official_document_collection.py
+tests/test_outcome_bar_collection.py tests/test_alpaca_corporate_actions.py
+tests/test_alpaca_source.py tests/test_sec_source.py tests/test_sec_filing_documents.py
+tests/test_spglobal_archive.py tests/test_swing_corporate_action_collection.py`
+(345 passed). Ruff covered changed source/tests; strict mypy covered sources/http.py,
+sources/ictax.py and commands/investment_research.py. Actual archive verification,
+213-event replay, delta validation and XLY audits are separate retained-data evidence,
+not synthetic tests. CLI usage/request semantics are in docs/research_api.md.
+Operational helper paths and hashes are recorded in the data artifact manifests;
+never edit those pinned helper files or rerun into an existing immutable output.
+
+Next bounded work: an investment-owned raw-source acquisition/selection authority,
+exact missing-run collection, ticker/merger continuity, strict segment composition,
+and investment action admission through May 30, 2025. Reuse existing action queries
+where sufficient. Do not edit frozen swing numerical_end=2024-05-28, source-selection
+bytes or old producers. Keep missing/unsupported securities explicit, SPY mandatory,
+45/631 existing whole-security exclusions unchanged, and the shared strictly-below-
+90% RAM policy. No investment training/promotion/production authorization exists.
+
+
+
+
+## Historical start of XLY and broader coverage work — November 9
 
 Canonical main starts at 86f81ae. The user requests XLY and broader coverage gaps
 with Sol agents and no additional checkout. Read the leading active-plan scope.

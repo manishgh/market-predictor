@@ -1,5 +1,19 @@
 # Current Feature Engineering Audit
 
+### Fifty-six targets and broader benchmark sources verified — November 9
+
+XLY adds 24 source-validated targets to the preserved 32 XLV targets, covering
+28 selected July 2019 stock-months across two horizons. They are integration
+evidence, not an accepted investment training corpus or model performance.
+The official benchmark archive now covers all 77 fund-years; exact event replay
+supports 212/213 required benchmark dividends with
+1 explicit gaps. Prior evidence remains unchanged.
+All training/promotion/production flags stay false. Raw-price, stock-action and
+financial-feature gaps remain; see the current handoff for exact evidence and
+next acquisition scope. Source/HTTP/CLI checks and independent Sol Quant/code
+reviews passed. The existing full financial coverage counts below are unchanged.
+
+
 
 ### Thirty-two actual investment targets verified — November 9
 

@@ -8,6 +8,11 @@ canonical 63/252-session outcomes. These commands do not train, promote or serve
 an investment model. See the investment section in `docs/research_api.md` for
 request contracts, source requirements and limitations.
 
+`collect-ictax-distributions` archives official benchmark distribution sources
+with retained-source reuse and resumable fund-year checkpoints.
+`verify-ictax-distributions` checks their immutable requests, responses and receipts;
+exact dividend-event validation remains a separate requirement for return targets.
+
 Market Predictor builds causal prediction intelligence for long-only swing and a
 separate planned investment cohort. It owns data curation, feature construction, model training, temporal
 validation, outcome evaluation, and model governance.

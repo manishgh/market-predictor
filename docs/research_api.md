@@ -187,6 +187,8 @@ job identities or claim old checkpoints were produced by new code.
 market-predictor-research plan-investment-coverage --root C:/project/market-predictor --request <request.json> --request-sha256 <sha256> --output <new-roster-directory>
 market-predictor-collect collect-investment-coverage --root C:/project/market-predictor --roster-manifest <roster-directory/_manifest.json> --roster-manifest-sha256 <sha256> --output <coverage-directory>
 market-predictor-collect collect-investment-dividend-currencies --root C:/project/market-predictor --action-config configs/swing_corporate_action_sources.toml --action-config-sha256 <sha256> --action-archive <action-archive> --action-audit-sha256 <sha256> --output <currency-directory>
+market-predictor-collect collect-ictax-distributions --root C:/project/market-predictor --request <ictax-request.json> --request-sha256 <sha256> --output <new-archive-directory>
+market-predictor-research verify-ictax-distributions --root C:/project/market-predictor --manifest <archive-directory/final/_manifest.json> --manifest-sha256 <sha256>
 market-predictor-research materialize-investment-labels --root C:/project/market-predictor --request <label-request.json> --request-sha256 <sha256> --output <label-directory>
 ```
 
@@ -195,6 +197,27 @@ responses. Source validation requires explicit USD and unchanged entitlement ter
 Missing currency, cancellations, revisions and unsupported distributions remain
 unresolved. Neither an issuer's domicile nor its stock's trading currency proves
 the currency of a distribution.
+
+The official ICTax collector uses `ICTaxArchiveRequest` in `sources/ictax.py`.
+The JSON schema is `market_predictor.ictax_archive_request`; `funds` identifies
+each symbol, exact ISIN and sorted payment-calendar `years`. Optional `retained`
+entries identify a symbol/year and `structured`/`gross_context` pairs, each with
+hash-pinned `body` and `receipt` sources. Retry count, timeout and retry pause are
+bounded request fields. Anonymous session credentials remain in memory.
+
+Structured and HTML responses have separate immutable checkpoints. Interrupted
+collection resumes with the same request and producer; verification replays the
+request, source bytes and receipts. Missing years remain local gaps and later
+years/funds continue. Conflicting identity, hashes or receipts stop the job. A
+completed archive is immutable; reuse successful pairs in a new pinned request
+when retrying remaining gaps or changing the producer. Preserved legacy receipts
+do not acquire invented HTTP status or historical capture clocks.
+
+These fund-year responses are source evidence, not admitted distribution events.
+Dividend currency and any explicit issuer amount correction still require the
+existing exact event validators. Payment year can differ from ex-date year;
+neither fund domicile, tax rounding nor capital-gain totals can replace those
+checks. Collection and verification cannot authorize training or predictions.
 
 The label request is `InvestmentLabelMaterializationRequest` in
 `research/investment_labels.py`. It pins `roster_manifest`, `target_config` and
