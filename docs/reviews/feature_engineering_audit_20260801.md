@@ -1,5 +1,20 @@
 # Current Feature Engineering Audit
 
+### QQQ event resolved and raw-source coverage measured — November 9
+
+The original benchmark inventory now has 213/213 supported events. Actual QQQ
+special-distribution accounting passed on one metadata-selected 63-session target;
+the annual row retains explicit gaps. Prior 56 examples are unchanged (57 validated
+integration examples in total). The raw acquisition captured 106,972
+of 111,661 requested sessions, with 4,689 explicit gaps.
+All eleven benchmarks have complete new raw coverage through May 30, 2025 and
+passed continuous old/new-source reads with capture-clock parity. All new stock
+captures remain quarantined outside usable selection. Financial feature counts
+below are unchanged. Broad targets, dataset admission, investment fitting and
+prediction activation remain pending; all eligibility flags are false.
+See the leading current handoff for exact reports, hashes and next steps.
+
+
 ### Fifty-six targets and broader benchmark sources verified — November 9
 
 XLY adds 24 source-validated targets to the preserved 32 XLV targets, covering

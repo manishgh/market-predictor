@@ -2,7 +2,79 @@
 
 ### QQQ special cash distribution and investment raw candles — November 9
 
-Status: `in_progress`. User authorizes the QQQ special distribution and missing
+Completed QQQ and investment raw-candle checkpoint — November 9
+
+Implementation c36b88356a6c9fc0aef47edaa62bb89d09068fba and per-page RAM fix
+c5884ffb11d2b1b65b6e0028963cb45604c2d669 are pushed on canonical main.
+Sol design/Quant and independent code reviews passed. Final source/consumer checks
+333 passed; final RAM/shared-archive checks 63 passed, plus affected Ruff/strict
+mypy. These are component checks, not a model release or full-suite claim.
+
+QQQ special distribution: 213/213 original required benchmark events now supported;
+one new special-cash assertion replayed, prior 212 unchanged, and two prior amount
+corrections preserved with a byte-identical correction manifest. Official retained
+MIAX notice and exact USD tax evidence were reused.
+Payable-date disagreement remains explicit; only nominal unpaid/nontradable value
+is supported. Final manifest SHA256
+2da12ce189915f93aab35d709042fff001e6a4cd8cad3e94c0fab3690a30e74c.
+Actual metadata-selected IDXX November 2023 pilot: one validated 63-session target,
+one unresolved 252-session row with fourteen price/action/currency reasons.
+Independent four-holding raw arithmetic passed, and all 56 prior targets survived.
+There are now 57 source-validated integration examples, not an admitted investment
+training corpus. Pilot manifest f098a5b4ce4d4053a542c75a7d6562682c407425842ce8ab581befe9c0ea00c1;
+audit d040671ed59dd98de81201cce4a786fd71923afa9bbf12aecb6040b2bd6e1b5f.
+
+Raw plan: 446 exact units (435 stock runs, 11 benchmarks), 111,661 nominal sessions.
+Plan authority 10e8b126d2468b8d1cff3c3ac68a8d865c411556b59ad774000dcfe5bfd53ab4.
+Actual acquisition: 446 completed unit checkpoints, 428
+with observed bars; 106,972 captured sessions and
+4,689 missing sessions. Archive status is `complete_with_unavailable`;
+this is reported honestly and does not grant a complete-corpus authority.
+All eleven benchmarks contain 2,772/2,772 requested new sessions. Stocks contain
+104,200/108,889 requested sessions. Every new stock artifact remains
+quarantined; none was added to usable source segments. Unavailable stocks did not
+stop unrelated collection, and no new cohort exclusion or raw-data deletion occurred.
+Empty stock runs (18/435): ABMD, AGN, ALXN, APC, ATVI, CERN, CXO, FBHS, FLIR, KSU, MXIM, MYL, PXD, RTN, TIF, TWTR, VAR, VIAB.
+Partially observed stock runs (missing session counts): {"CTLT": 111, "HFC": 53, "MRO": 128}.
+The remaining stock runs cover every requested session; source coverage alone
+still does not prove issuer identity or corporate-action accounting.
+
+Independent actual benchmark audit: eleven official identity assertions replayed,
+all eleven benchmark paths read continuously across the old/new boundary through
+May 30, 2025 (253 sessions per fund including the old boundary).
+Every per-source capture clock matched. Unreviewed stock future paths stayed
+unresolved. The audit preserved 56 prior targets across 64 pinned files. Frozen
+swing end remains May 28, 2024; existing source selections/producers stay unchanged.
+
+Acquisition report: data/research/investment_raw_extension_20261109/collect-result-4c327f5c19a748058acb65a42f71ad58.json
+SHA256 14505c0ae9bb45115860a68c5cb8e12323e23b454ba8c153ba4ccf13a807869a.
+Benchmark audit: data/research/investment_raw_extension_20261109/benchmark-audit-result-784863d3aed941f486ba01ece1ae37fa.json
+SHA256 51051ee99d258f1e0d15441f13840d6b3f31e590fea44b88824c453bd6c322d1.
+QQQ pilot audit lives in the chat outputs/qq-special-pilot-audit-20261109.json.
+All training, promotion and serving eligibility remains false. No model was fitted.
+Final independent Sol Quant review accepted the actual source exit gates. The
+combined benchmark reads contain 2,783 observations: eleven retained boundary
+observations plus the 2,772 new ones. The actual ABT future-path probe remains
+unresolved, proving no stock extension was silently admitted. The audit exited
+successfully; its shared lease was released and no project Python worker remains.
+
+
+Next bounded work: verify stock identity/action continuity for retained new bars,
+resolve remaining stock gaps and post-May-2024 benchmark distribution evidence,
+then materialize the broad investment target corpus. Join the existing candle/news
+and financial features only with verified timing and an explicit missing-data policy.
+After dataset admission, connect the reusable training/model-artifact path to the
+investment 63/252-session dataset, fit candidates and perform chronological
+SPY-relative evaluation. The present investment commands publish research data
+and evaluate saved forecasts; they do not provide an accepted trained investment
+model. Prediction activation follows model approval. Six fitted swing models are preserved;
+their remaining evaluation/fresh-data activation is separate from investment fitting.
+
+
+Historical frozen scope and implementation notes follow.
+
+
+Status: `verified`. User authorizes the QQQ special distribution and missing
 raw candles through May 2025, using Sol agents, existing evidence and canonical main.
 The preceding XLY/benchmark checkpoint remains verified and unchanged.
 
