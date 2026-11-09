@@ -465,7 +465,7 @@ def _issuer_row(root: Path, source: CapturedCurrencySource, row_number: int, sym
 
 def _date_ms(value: object) -> date:
     if isinstance(value, bool) or not isinstance(value, int) or value % 86_400_000:
-        raise DataReadinessError("tax distribution ex-date is not UTC midnight milliseconds")
+        raise DividendEvidenceUnavailable("tax distribution ex-date is not UTC midnight milliseconds")
     return datetime.fromtimestamp(value / 1000, UTC).date()
 
 

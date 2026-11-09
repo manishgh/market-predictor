@@ -3,6 +3,11 @@
 ## Active stock identity and full-target checkpoint — November 9
 
 The leading active plan freezes the authorized implementation and exit gates.
+Implementation 7cf10c3f86578568f82c192089318469e7248181 is committed and pushed
+on main. Immutable producer export contains 457 source files at
+ data/research/implementation_snapshots/7cf10c3f86578568f82c192089318469e7248181/src.
+Code verification is complete; actual source resolution, remaining collection,
+full target publication and independent audit are still in progress.
 Canonical main starts at f7d9af02490010decd607121cb41b9e74cc92972. Prior completed
 QQQ/raw work below is historical evidence and remains preserved. New source work
 and full target publication are in progress; no new target/model success claimed.
@@ -46,8 +51,63 @@ These are candidate/source checks; full target publication remains outstanding.
 First stock tax batch captured 160 of 175 identity-years and retained 15 source gaps;
 manifest data/research/investment_full_dividend_resolution_20261109/stock-tax-archives/batch-00/final/_manifest.json
 SHA256 ec77552d6ceafa0d196ba29f811239c6e5ee88d2bd6f02156bbbbcf5e9f8d5c6.
-Next serialize metadata audit-plan freeze, retained benchmark event resolution,
-remaining ten collection batches, final event resolution and full target build/audit.
+Actual frozen-producer benchmark resolution is complete: 44 of 44 tail events
+verified (seven exact tax events, 37 issuer-rate/currency bridges), zero unresolved,
+zero new amount corrections. The existing 213 assertions remain unchanged; total257.
+Artifact data/research/investment_full_dividend_resolution_20261109/benchmark-candidate/_manifest.json
+SHA256 cde7e4d1dc65fe9ec3459777ceea7b56aae05c3de751e9079fa2cd74125594c4;
+currency-corroborations.json SHA256 ae2aabd2433de8a6e8d9dca8ccf403387fcec37c3bf95f888ebc80903e4f660f.
+The two-correction manifest remains byte-identical (9a44ec36d97259d526dad5f3420b57e91c15e514ee9105677cc4ce2ace4a47bc).
+Independent Quant benchmark audit passed without the production dividend adapter:
+outputs/investment-benchmark44-independent-audit-20261109.json in the chat outputs,
+SHA256 95dbfb04744a6ccfdf403a5903b2656350dc80725d8fe1afcfcef47ac4bf5dff.
+Corrected audit sample plan is frozen before prices/targets, twelve candidates for
+each of twelve strata: outputs/investment-metadata-audit-plan-lifecycle-20261109.json
+SHA256 38ac10591c19eae36698689f5774e41a86aa3df9ee2b488658184d0d3268dbaf.
+Use the current independent audit helper SHA256
+7a65fc3b27aca49fe78cf5b66fcea465dbf089d97008f5105fdccbbc297c6a61.
+Actual stock cash integration probe passed 3 of 3 metadata-selected events:
+A 2020-03-30, AAP 2020-03-19, AAPL 2020-05-08; no price/target outcomes read.
+It replayed SEC class intervals, original provider CUSIP, exact tax ISIN/valor,
+USD gross event, paired request/receipt semantics and lookup classification.
+Probe manifest data/research/investment_full_dividend_resolution_20261109/stock-probe/_manifest.json
+SHA256 a5238db02870a10939719fa98aa7ef423f5eef65cfc8fb01962a9fecd458ea50;
+all 257 benchmark assertions and old corrections preserved, no new corrections.
+All eleven capture batches are now complete: 1,696 requested identity-years,
+1,564 complete requested-year response pairs (one retained pair reused; 1,563 newly
+captured), and 132 explicit source-gap years. Captures remain separate from currency
+admission. Original missing-source identities did not stop unrelated requests.
+The full stock source request retains all 6,717 event IDs and 257 benchmark seed
+assertions; it attaches 293 unambiguous candidate class-proof identity groups and
+records 36 unavailable groups. Request
+ data/research/investment_full_dividend_resolution_20261109/stock-request.json
+SHA256 62751925a9b8a7c3396d6f0176ed32ea9aa39b4301e2b8ed55b6f59a269eeddf.
+Frozen 7cf10c3 resolver verified all eleven source archives, then stopped before
+publication: a selected tax payload contains a PAYMENT exDate outside the currently
+supported UTC-midnight shape. No stock-resolution artifact or full targets were
+published. All captures and the 257 benchmark seed remain unchanged; lease released.
+The distribution engineer is identifying exact source pins and adding a typed local
+semantic-gap regression, without rounding or ignoring ambiguous PAYMENT rows.
+Exact diagnostic found 97 captured symbol/year units with unsupported PAYMENT dates;
+first AAP-2023 body f0acc7b5eab3c57135de71c1c975ccd83922a2c9a9df3dbbae189aa8b57289e2
+has null exDate and zero amounts alongside valid dividends. Senior Quant independently
+inspected that source and approved whole-selected-payload semantic unavailability,
+never inferred dates or ignored rows. Diagnostic SHA256
+703567b6945b79c82167950d4b8b074736007378b15c4f9c0bd548bc0d692084.
+The active plan freezes two resolver-only guard reductions: redundant outer index
+guard removal and final pure hash checks in <=32-file/8-MiB chunks. Global, per-event,
+read, identity and ICTax guard behavior stays unchanged. The exploratory manually
+seeded cache profile is CPU-only and is not actual source-replay evidence.
+The narrow date/guard amendment passed 147 focused resolver/currency/accounting tests
+in 14.76s, affected Ruff and strict mypy. Independent Sol code review approved it;
+Senior Quant approved the actual-source interpretation and guard scope. No full
+suite or model release is claimed. Commit/export this amendment, then rerun the
+unchanged 6,717-event request before preparing full targets.
+Chat outputs/stock-resolution-dividend-resolution-20261109.log records the attempt.
+After successful source resolution, prepare the full target request with
+outputs/prepare_full_investment_targets.py using final currency/correction pins,
+391-proof manifest and the new reviewed producer, then run the canonical full label
+materializer and independent audit with the corrected frozen metadata plan.
 Stock candidate tax collection plan: 329 identities, 1,696 exact ex/payable years,
 11 batches; covers 5,681 of 6,403 ordinary domestic events. Remaining 722 have no
 usable original-event CUSIP-to-ISIN; no substitution is permitted. Plan lives at

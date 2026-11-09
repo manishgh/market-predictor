@@ -98,6 +98,29 @@ def _semantic(value: Any) -> Any:
     raise DataReadinessError("unsupported tax PAYMENT scalar")
 
 
+def _recheck_publication_sources(root: Path, pins: dict[str, str]) -> None:
+    """Pure streaming hashes: guard <=32 files/8 MiB and every larger file.
+
+    No source is decoded or cached here. The shared publisher retains its own
+    global guard and independent complete second hash pass.
+    """
+    files_in_chunk = bytes_in_chunk = 0
+    for name, digest in pins.items():
+        path = inside(root, name)
+        size = path.stat().st_size
+        if (files_in_chunk == 0 or files_in_chunk >= 32
+            or bytes_in_chunk + size > 8 * 1024**2 or size > 8 * 1024**2):
+            guard("dividend publication source recheck")
+            files_in_chunk = bytes_in_chunk = 0
+        if file_sha256(path) != digest:
+            raise DataReadinessError("dividend source changed before publication")
+        if size > 8 * 1024**2:
+            files_in_chunk = bytes_in_chunk = 0
+        else:
+            files_in_chunk += 1
+            bytes_in_chunk += size
+
+
 def resolve_investment_dividends(*, root: Path, request: SourcePin, output: Path) -> dict[str, Any]:
     """Resolve each unique requested action; unsupported facts remain local gaps.
 
@@ -161,6 +184,7 @@ def resolve_investment_dividends(*, root: Path, request: SourcePin, output: Path
                 correction_json["corrections"].append(obj)
         identities = {(i.symbol, i.cusip): i for i in policy.identities}
         index: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+        unsupported_date_isins: set[str] = set()
         for manifest, archive in zip(policy.tax_archives, archives, strict=True):
             read(manifest)
             for name, digest in archive["source_files"].items():
@@ -168,7 +192,6 @@ def resolve_investment_dividends(*, root: Path, request: SourcePin, output: Path
                     raise DataReadinessError("tax archive source pin conflicts")
                 pins[name] = digest
             for unit in archive["records"]:
-                guard("dividend tax PAYMENT index")
                 if unit["status"] not in ("responses_archived", "retained_sources_verified"):
                     continue
                 tax_source = unit["sources"]["structured"]["body"]
@@ -181,6 +204,7 @@ def resolve_investment_dividends(*, root: Path, request: SourcePin, output: Path
                         continue
                     stamp = event.get("exDate")
                     if type(stamp) is not int or stamp % 86_400_000:
+                        unsupported_date_isins.add(unit["isin"])
                         continue
                     day = datetime.fromtimestamp(stamp / 1000, UTC).date().isoformat()
                     index[unit["isin"], day].append({"event": event, "entry_index": number,
@@ -223,7 +247,9 @@ def resolve_investment_dividends(*, root: Path, request: SourcePin, output: Path
             candidates = index.get((identity.isin, required.ex_date.isoformat()), [])
             groups = {x["signature"] for x in candidates}
             if len(groups) != 1:
-                row["reasons"] = ["tax_payment_absent" if not groups else "tax_payment_versions_conflict"]
+                row["reasons"] = [("tax distribution ex-date is not UTC midnight milliseconds"
+                    if identity.isin in unsupported_date_isins else "tax_payment_absent")
+                    if not groups else "tax_payment_versions_conflict"]
                 continue
             unique_payload_candidates = [c for c in candidates if c["same_exdate_count"] == 1]
             if not unique_payload_candidates:
@@ -320,10 +346,7 @@ def resolve_investment_dividends(*, root: Path, request: SourcePin, output: Path
             if name in pins and pins[name] != digest:
                 raise DataReadinessError("stock dividend identity source hash conflicts")
             pins[name] = digest
-        for name, digest in pins.items():
-            guard("dividend publication source recheck")
-            if file_sha256(inside(root, name)) != digest:
-                raise DataReadinessError("dividend source changed before publication")
+        _recheck_publication_sources(root, pins)
         for name, digest in implementations.items():
             if file_sha256(Path(name)) != digest:
                 raise DataReadinessError("dividend producer changed before publication")

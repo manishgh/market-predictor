@@ -63,6 +63,29 @@ a demonstrated source/consumer conflict without changing retained source bytes.
 ABT nested multi-listing facts require a separate interpretation and remain a gap.
 The stock engineer owns this narrow extractor change and its existing tests.
 
+Bounded actual-source amendment: full stock resolution found tax PAYMENT records
+with null exDate, including an AAP zero-amount row alongside valid dividends.
+After fatal source hash/receipt/request/security checks, treat the entire selected
+payload as unavailable evidence for the event. Never infer dates or skip ambiguous
+rows. Preserve unrelated securities and explicit unsupported-date reasons. Test the
+actual null/zero shape, non-midnight timestamps, unaffected security continuation
+and fatal source corruption.
+
+Clean actual-metadata guard profile: twenty real guard calls with the typed 6,717-
+event request and tax metadata resident took 0.679s, of which 0.677s was GC. No
+identity replay or cache seeding was used; this is guard cost, not measured production
+speedup (chat outputs/resolver-guard-only-profile-20261109.json).
+
+Resolver-only performance amendment: repeated memory guards trigger full GC. Remove
+only the redundant outer tax-index guard whose read already guards. For final pure
+hash rechecks, guard before the first file and each chunk of at most 32 files or
+8 MiB, and immediately before a larger single file. Hash every file; no parsing or
+cache growth in chunks. Preserve every per-event/read/identity/workbook guard and
+the global memory policy. Test refusal before first/next/large-file chunks and
+fatal tampering. The exploratory cache profile is not source-admission evidence;
+no stock identity or ICTax verifier optimization is authorized. Independent Sol
+code review and a new committed immutable producer precede the actual rerun.
+
 Ownership: Sol stock engineer owns stock_identity/source_extensions and tests;
 Sol distribution engineer owns dividend_resolution/research investment_currencies
 and tests; root owns integration, materializer, command surfaces and continuity.
