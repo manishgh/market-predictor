@@ -236,3 +236,54 @@ def test_raw_candle_command_passes_paths_and_refuses_busy_job(monkeypatch, comma
 
     monkeypatch.setattr(commands, attribute, busy)
     assert CliRunner().invoke(app, [command, "--root", ".", "--request", "request.json", *extra]).exit_code == 75
+
+
+def test_dividend_resolution_command_passes_pinned_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    from market_predictor.commands import investment_research as commands
+    from market_predictor.swing.contracts.holding_materialization import SourcePin
+
+    captured = {}
+
+    def run(**kwargs):
+        captured.update(kwargs)
+        return {"status": "unit_fixture"}
+
+    monkeypatch.setattr(commands, "resolve_investment_dividends", run)
+    args = ["resolve-investment-dividends", "--root", ".", "--request", "request.json",
+        "--request-sha256", "a" * 64, "--output", "out"]
+    result = CliRunner().invoke(research_app, args)
+    assert result.exit_code == 0, result.output
+    assert captured == {"root": Path("."), "request": SourcePin(path="request.json", sha256="a" * 64), "output": Path("out")}
+    assert "resolve-investment-dividends" not in command_names(collection_app)
+
+    def busy(**kwargs):
+        raise HeavyJobBusyError("unit fixture")
+
+    monkeypatch.setattr(commands, "resolve_investment_dividends", busy)
+    assert CliRunner().invoke(research_app, args).exit_code == 75
+
+
+@pytest.mark.parametrize("scope", [[], ["--required-events", "events.json"],
+    ["--required-events", "events.json", "--required-events-sha256", "b" * 64]])
+def test_dividend_collection_scope_is_pinned(monkeypatch: pytest.MonkeyPatch, scope: list[str]) -> None:
+    from market_predictor.commands import investment_research as commands
+
+    captured = {}
+
+    def run(**kwargs):
+        captured.update(kwargs)
+        return {"status": "unit_fixture"}
+
+    monkeypatch.setattr(commands, "collect_investment_dividend_currencies", run)
+    args = ["collect-investment-dividend-currencies", "--root", ".", "--action-config", "config.toml",
+        "--action-config-sha256", "a" * 64, "--action-archive", "archive", "--action-audit-sha256", "c" * 64,
+        "--output", "out", *scope]
+    result = CliRunner().invoke(collection_app, args)
+    if len(scope) == 2:
+        assert result.exit_code == 2 and not captured
+    else:
+        assert result.exit_code == 0, result.output
+        pin = captured["required_events"]
+        assert (pin is None) == (not scope)
+        if pin is not None:
+            assert pin.path == "events.json" and pin.sha256 == "b" * 64

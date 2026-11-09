@@ -232,3 +232,43 @@ def test_refresh_must_retain_all_original_terms():
     original = dividend(process_date="2024-05-01")
     resolved, gaps = currency._decode_response(payload(dividend(currency="USD")), {"a": original})
     assert not resolved and gaps["a"].endswith("process_date")
+
+
+def test_explicit_hashed_event_scope_collects_post_swing_end_without_changing_default(tmp_path, monkeypatch):
+    original = dividend(ex_date="2025-03-24")
+    kwargs, calls, _ = fixture(tmp_path, monkeypatch, [original])
+    scope = tmp_path / "scope.json"
+    scope.write_text(json.dumps({"schema": "market_predictor.investment_dividend_event_scope", "events": [{
+        "action_id": "a", "original_record_sha256": json_sha256(original)}]}))
+    kwargs["required_events"] = SourcePin(path=str(scope), sha256=currency.file_sha256(scope))
+    currency.collect_investment_dividend_currencies(**kwargs)
+    assert len(calls) == 1
+    report = json.loads((tmp_path / "currency/final/_manifest.json").read_text())
+    assert report["requested_actions"] == 1
+    assert report["request"]["required_events"]["sha256"] == currency.file_sha256(scope)
+
+
+def test_explicit_event_scope_rejects_wrong_original_before_provider_call(tmp_path, monkeypatch):
+    kwargs, calls, _ = fixture(tmp_path, monkeypatch)
+    scope = tmp_path / "scope.json"
+    scope.write_text(json.dumps({"schema": "market_predictor.investment_dividend_event_scope", "events": [{
+        "action_id": "a", "original_record_sha256": "f" * 64}]}))
+    kwargs["required_events"] = SourcePin(path=str(scope), sha256=currency.file_sha256(scope))
+    with pytest.raises(DataReadinessError, match="original hash"):
+        currency.collect_investment_dividend_currencies(**kwargs)
+    assert not calls
+
+
+def test_explicit_scope_collection_honors_configured_shared_runtime(tmp_path, monkeypatch):
+    configured = tmp_path / "shared-custom-runtime"
+    monkeypatch.setenv("MARKET_PREDICTOR_RUNTIME_DIR", str(configured))
+    kwargs, _, _ = fixture(tmp_path, monkeypatch)
+    observed = []
+
+    @contextmanager
+    def lease(*args, **values):
+        observed.append(values["runtime_dir"])
+        yield
+    monkeypatch.setattr(currency, "heavy_job_lease", lease)
+    currency.collect_investment_dividend_currencies(**kwargs)
+    assert observed == [configured]

@@ -1,5 +1,60 @@
 # Active Edge Rebuild Handoff
 
+## Active stock identity and full-target checkpoint — November 9
+
+The leading active plan freezes the authorized implementation and exit gates.
+Canonical main starts at f7d9af02490010decd607121cb41b9e74cc92972. Prior completed
+QQQ/raw work below is historical evidence and remains preserved. New source work
+and full target publication are in progress; no new target/model success claimed.
+Sol stock engineer owns identity/source composition; Sol distribution engineer
+owns unique-event resolution and explicit collection scope; root owns integration.
+Senior Sol Quant approved inside-interval reconstructed research identity using
+exact accepted relations plus official share-class anchors, competing-owner and
+transition checks. No future cover page is required, and no interval extrapolation
+is permitted. Independent code and actual Quant review follow implementation.
+Full expected row set is 74,458, of which 44,692 requests are scope eligible.
+Retain explicit local gaps, all 57 prior examples and the 90-percent RAM policy.
+New metadata inventory manifest is in
+ data/research/investment_full_target_preflight_20261109/dividend-metadata-manifest.json
+SHA256 9fbc29250021ff752a1a86be0340b663de849f0f614bd63ea3e4e6766430861a.
+Next: finish retained class anchors and benchmark issuer comparisons, implement
+reviewed contracts, test, run actual full target build and independently audit.
+No new stock collection/admission has yet been claimed. Existing cash evidence
+must be reused; stock collection follows explicit reviewed security identity.
+
+Active checkpoint updates: 376 candidate class proofs exported (not yet admitted)
+to data/research/investment_stock_identity_20261109/proofs.json, SHA256
+fbb11bee40f63cb6dea82a9f79f2af976e8ccfc814ef551e3d5df2cda9cb63a4.
+Root reader/report tests: 26 passed; Ruff/strict mypy passed before later CLI and
+identity integration edits. Distribution engineer reports 137 focused tests passed.
+These are synthetic component checks, not actual source/target publication.
+Independent Sol code review is underway. Prior snapshot has 57 validated rows and
+70 distinct unchanged files; chat outputs/investment-prior57-snapshot-20261109.json
+SHA256 24b857db092b1b3d6941b302984f1a41cae652d2ce5a64fdab6a94103aaec5bb.
+Independent audit helper outputs/audit_full_investment_targets.py is prepared;
+plan/audit execution remains pending final immutable producer and full corpus.
+Implementation verification completed: 439 affected component tests passed,
+followed by 225 affected tests after final review edits (overlapping, not additive).
+Affected Ruff and strict mypy passed for ten source modules. Independent Sol code
+review approved the final source contracts, including taxonomy/class contradictions
+and local gaps versus fatal source corruption. No full-suite/model-release claim.
+The improved parser produced 391 candidate proofs, 44 still unresolved, in
+ data/research/investment_stock_identity_classes_20261109/proofs.json
+SHA256 f80a960fe2b8738c33ebd2f5c60e9b627b047fb30514f4d486e4af65ef2d2c23.
+Actual IDXX proof replay passed three exact historical sessions without price reads.
+These are candidate/source checks; full target publication remains outstanding.
+First stock tax batch captured 160 of 175 identity-years and retained 15 source gaps;
+manifest data/research/investment_full_dividend_resolution_20261109/stock-tax-archives/batch-00/final/_manifest.json
+SHA256 ec77552d6ceafa0d196ba29f811239c6e5ee88d2bd6f02156bbbbcf5e9f8d5c6.
+Next serialize metadata audit-plan freeze, retained benchmark event resolution,
+remaining ten collection batches, final event resolution and full target build/audit.
+Stock candidate tax collection plan: 329 identities, 1,696 exact ex/payable years,
+11 batches; covers 5,681 of 6,403 ordinary domestic events. Remaining 722 have no
+usable original-event CUSIP-to-ISIN; no substitution is permitted. Plan lives at
+data/research/investment_full_dividend_resolution_20261109/stock-tax-collection-plan.json
+SHA256 3e458c05550a4faecebe2e362d04532ffee09f3a09458a15d74d877a00ae16e4.
+Existing frozen collector c5884ff captures candidates only; new admission pending.
+
 ## Completed QQQ and investment raw-candle checkpoint — November 9
 
 Implementation c36b88356a6c9fc0aef47edaa62bb89d09068fba and per-page RAM fix

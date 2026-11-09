@@ -1,5 +1,93 @@
 # Active Edge Rebuild Plan
 
+### Stock identity, distribution coverage and full investment targets — November 9
+
+Status: `in_progress`. This is the sole active checkpoint. User authorizes Sol
+agents, retained-data reuse, necessary missing-source collection and canonical main.
+
+Bounded problem: new stock bars remain quarantined and unique stock/benchmark cash
+events lack currency evidence, preventing broad 63/252-session target publication.
+Implement reusable typed evidence contracts and use the existing full materializer.
+No model fit, dataset admission, promotion or prediction activation in this step.
+
+Frozen scope and contracts:
+- Replay exact retained security/ticker intervals, official pre-boundary share-class
+  anchors, competing owners, known transitions and raw provider/asof/action bindings.
+  Admit only sessions inside proven intervals; never extrapolate a cover-page date,
+  infer continuity from CIK alone, or interpret index removal as a sale. Preserve
+  all 565 parent segments. Unsupported transitions and missing stock sessions stay
+  explicit local gaps; no new whole-security exclusion or raw deletion is planned.
+- Inventory and resolve distinct required cash action IDs across all eligible
+  holdings, with exact ex-date, gross amount, currency and security evidence.
+  Reuse 213 assertions, two amount corrections and 77 benchmark tax units. Resolve
+  44 tail benchmark events from retained records first. Stock collection uses
+  immutable bounded requests only after a reviewed identity contract; no implicit
+  USD, amount rounding waiver, payment or reinvestment inference. Preserve source
+  disagreement. The explicit investment event scope replaces the collector's
+  demonstrated hardcoded May 2024 restriction without changing the swing endpoint.
+- Publish exactly 74,458 rows (37,229 decisions times two horizons), including
+  44,692 eligible requests and explicit statuses for 29,766 out-of-scope requests.
+  Missing financial features do not filter targets. Report source-validated,
+  unresolved, economically mature and currently available counts separately.
+  Publication does not authorize unresolved rows for training. Preserve current
+  evidence clocks; do not backdate 2026 reconstruction into historical fits.
+- Preserve all 57 prior target examples, original producers/source bytes, frozen
+  swing end May 28, 2024 and investment outcome bound May 30, 2025. Reuse the
+  existing serial per-security checkpoints. Optimize repeated source reads only
+  with measured evidence and bounded hash-keyed caching plus publication rechecks.
+
+Reviewed stock cash identity contract: exact SEC class/ticker anchor and accepted
+relation bind the original provider action symbol/CUSIP; checksum-valid derived
+US ISIN binds one official tax response and exact ex-date USD gross per-share
+amount. CUSIP remains provider asserted, not independently issuer corroborated.
+Reject contradictory names/classes, ambiguous dual classes, unsupported special
+terms and amount mismatches. A cover anchor may postdate a historical session in
+this reconstructed research proof; its reporting date is not a lifetime bound.
+Preserve actual source clocks and current verification separately.
+
+Measured source-reader hotspot: twenty retained 252-session SPY reads took 2.39s,
+with repeated scalar pandas lookups dominating. Vectorized evidence extraction
+reduced this to 1.04s in the same small diagnostic; no cache or source semantics
+changed. Focused source/target tests 26 passed; affected Ruff/strict mypy passed.
+Consolidated component checks: 439 passed; final review-edit checks: 225 passed
+(overlapping counts). Ruff/strict mypy passed for ten affected source modules.
+Independent Sol code review approved final code. Actual source/target publication
+remains in progress; no investment fit or release is authorized by these checks.
+
+Bounded parser amendment: actual retained GOOGL/FOX/FOXA/GOOG covers use explicit
+CommonClassAMember/B and CapitalClassCMember paired with exact Class A/B Common
+Stock or Class C Capital Stock titles. Extend the existing class extractor only
+for matching class letter/type in bound contexts; preserve CIK, namespace, row,
+ambiguity and non-equity rejection. Test mismatched classes/types. This resolves
+a demonstrated source/consumer conflict without changing retained source bytes.
+ABT nested multi-listing facts require a separate interpretation and remain a gap.
+The stock engineer owns this narrow extractor change and its existing tests.
+
+Ownership: Sol stock engineer owns stock_identity/source_extensions and tests;
+Sol distribution engineer owns dividend_resolution/research investment_currencies
+and tests; root owns integration, materializer, command surfaces and continuity.
+Senior Sol Quant completed design review; independent Sol code review and Quant
+actual-result verification are required before closure. All heavy jobs serialize
+through the shared lease and strictly-below-90-percent system RAM guard.
+
+Component exit gates: focused tests and affected consumers, source/identity/amount/
+clock poison tests, Ruff and strict mypy; actual source replay and full row-set
+accounting; independent four-holding arithmetic across metadata-selected clean,
+split, ordinary cash, benchmark-tail, entry-ex-date and unresolved lifecycle cases;
+prior evidence parity; main implementation push and factual documentation closure.
+Source failures stay explicit and unrelated securities continue. Missing or
+ambiguous ownership/currency never becomes a synthetic pass. Full suite is not
+required for this data/component checkpoint.
+
+Preflight: 435 stock candidates, 414 complete, three partial, 18 empty; 375 complete
+units end within retained identity coverage and 39 extend beyond it (not admission
+counts). Required stock cash inventory: 6,717 events across 352 provider symbols;
+6,403 ordinary domestic; 329 candidate CUSIP/ISIN identities and up to 2,023 tax
+years. All 44 benchmark tail events have retained tax records; seven exact amount
+matches, 37 need issuer comparison. Inventory manifest SHA256
+9fbc29250021ff752a1a86be0340b663de849f0f614bd63ea3e4e6766430861a
+under data/research/investment_full_target_preflight_20261109.
+
 ### QQQ special cash distribution and investment raw candles — November 9
 
 Completed QQQ and investment raw-candle checkpoint — November 9

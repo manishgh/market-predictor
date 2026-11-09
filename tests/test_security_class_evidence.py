@@ -199,6 +199,44 @@ def test_unknown_class_member_does_not_override_stock_title(tmp_path: Path) -> N
         _extract(tmp_path, html)
 
 
+@pytest.mark.parametrize("member,title", [
+    ("us-gaap:CommonClassAMember", "Class A Common Stock, $0.01 par value"),
+    ("us-gaap:CommonClassBMember", "class b common stock, $0.01 par value"),
+    ("company:CapitalClassCMember", "Class C Capital Stock, $0.001 par value"),
+])
+def test_explicit_equity_class_member_matches_exact_displayed_title(tmp_path: Path, member: str, title: str) -> None:
+    html = _document(_context("base"), _issuer("base"), _context("stock", dimensions=(
+        ("us-gaap:StatementClassOfStockAxis", member),)), _row("stock", title=title))
+    result = _extract(tmp_path, html)
+    assert result.security_title.value == title
+    stock = next(context for context in result.contexts if context.contextref == "stock")
+    assert stock.dimensions[0][1].endswith(member.split(":")[-1])
+
+
+@pytest.mark.parametrize("member,title", [
+    ("us-gaap:CommonClassAMember", "Class B Common Stock"),
+    ("us-gaap:CommonClassAMember", "Common Stock"),
+    ("us-gaap:CommonClassAMember", "Class A Preferred Stock"),
+    ("company:CapitalClassCMember", "Class C Common Stock"),
+    ("company:CapitalClassCMember", "Class A Capital Stock"),
+    ("company:CapitalClassCMember", "Class C Capital Notes"),
+    ("company:CommonClassAMember", "Class A Common Stock"),
+    ("us-gaap:CommonClassAMember", "Class A Common Stock and Class B Common Stock"),
+    ("us-gaap:CommonClassAMember", "Class A Common Stock and Class A Preferred Stock"),
+    ("us-gaap:CommonStockMember", "Class C Capital Stock"),
+])
+def test_explicit_class_cannot_erase_mismatched_class_or_non_equity(tmp_path: Path, member: str, title: str) -> None:
+    html = _document(_context("base"), _issuer("base"), _context("stock", dimensions=(
+        ("us-gaap:StatementClassOfStockAxis", member),)), _row("stock", title=title))
+    with pytest.raises(DataReadinessError):
+        _extract(tmp_path, html)
+
+
+def test_unclassified_capital_stock_is_not_an_implicit_equity_class(tmp_path: Path) -> None:
+    with pytest.raises(DataReadinessError, match="explicit matching class"):
+        _extract(tmp_path, _document(_context("base"), _issuer("base"), _row("base", title="Class C Capital Stock")))
+
+
 def test_aliased_inline_exclusion_is_not_silently_included(tmp_path: Path) -> None:
     html = _document(_context("base"), _issuer("base"), _row("base", title="Common Stock<ix:exclude> Other</ix:exclude>"))
     html = html.replace("ix:", "inline:").replace("xmlns:ix=", "xmlns:inline=")

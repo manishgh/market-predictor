@@ -84,6 +84,7 @@ class InvestmentCorporateActions:
         observed_corroborations: set[str] = set()
         amount_corrections = dividend_amount_corrections or {}
         observed_corrections: set[str] = set()
+        stock_identity_cache: dict[str, Any] = {}
         for name in evidence.source_files:
             if not name.endswith("/_request.json"):
                 continue
@@ -168,7 +169,7 @@ class InvestmentCorporateActions:
                                     raise DataReadinessError("independent USD evidence contradicts provider currency")
                                 corroboration_refs = corroboration.validates_against(
                                     record, self.root, policy_reference.interpretation_policy_sha256,
-                                    amount_correction=amount_correction)
+                                    amount_correction=amount_correction, stock_identity_cache=stock_identity_cache)
                                 if special_assertion:
                                     self.special_cash_entitlements.add(identity)
                             for source_ref in (*amount_refs, *corroboration_refs):
@@ -221,6 +222,10 @@ class InvestmentCorporateActions:
                         self.terms[identity] = _Term(action_id, symbol, family, ex, value, (term_ref, *coverage[1:], *extra))
                     except (KeyError, TypeError, ValueError):
                         self.invalid.add(identity)
+        for name, digest in stock_identity_cache.get("source_files", {}).items():
+            if name in self.source_files and self.source_files[name] != digest:
+                raise DataReadinessError("stock dividend identity source hash conflicts")
+            self.source_files[name] = digest
         if observed_corrections != set(amount_corrections):
             raise DataReadinessError("dividend amount corrections contain unused or unsupported action IDs")
         if observed_corroborations != set(independent_currencies):

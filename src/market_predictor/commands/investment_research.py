@@ -11,6 +11,7 @@ import typer
 from market_predictor.config import get_settings
 from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError
+from market_predictor.investment.dividend_resolution import resolve_investment_dividends
 from market_predictor.investment.raw_acquisition import (
     collect_investment_raw_acquisition,
     publish_investment_raw_acquisition_plan,
@@ -61,11 +62,18 @@ def register_investment_collection_commands(app: typer.Typer) -> None:
     @app.command("collect-investment-dividend-currencies")
     def collect_currencies(root: Path = typer.Option(...), action_config: Path = typer.Option(...),
                            action_config_sha256: str = typer.Option(...), action_archive: Path = typer.Option(...),
-                           action_audit_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
+                           action_audit_sha256: str = typer.Option(...), output: Path = typer.Option(...),
+                           required_events: Path | None = typer.Option(None),
+                           required_events_sha256: str | None = typer.Option(None)) -> None:
         """Corroborate dividend currency with archived provider responses for exact action IDs."""
+        if (required_events is None) != (required_events_sha256 is None):
+            raise typer.BadParameter("required-events and required-events-sha256 must be supplied together")
+        event_scope = None
+        if required_events is not None and required_events_sha256 is not None:
+            event_scope = SourcePin(path=required_events.as_posix(), sha256=required_events_sha256)
         _run(lambda: collect_investment_dividend_currencies(
             root=root, action_config=SourcePin(path=action_config.as_posix(), sha256=action_config_sha256),
-            action_archive=action_archive, action_audit_sha256=action_audit_sha256, output=output))
+            action_archive=action_archive, action_audit_sha256=action_audit_sha256, output=output, required_events=event_scope))
 
     @app.command("collect-investment-coverage")
     def collect_coverage(root: Path = typer.Option(...), roster_manifest: Path = typer.Option(...),
@@ -82,6 +90,13 @@ def register_investment_collection_commands(app: typer.Typer) -> None:
 
 
 def register_investment_research_commands(app: typer.Typer) -> None:
+    @app.command("resolve-investment-dividends")
+    def resolve_dividends(root: Path = typer.Option(...), request: Path = typer.Option(...),
+                          request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
+        """Resolve exact required cash events from retained sources and report local evidence gaps."""
+        _run(lambda: resolve_investment_dividends(root=root,
+            request=SourcePin(path=request.as_posix(), sha256=request_sha256), output=output))
+
     @app.command("plan-investment-raw-candles")
     def plan_raw_candles(root: Path = typer.Option(...), request: Path = typer.Option(...),
                         output: Path = typer.Option(...)) -> None:

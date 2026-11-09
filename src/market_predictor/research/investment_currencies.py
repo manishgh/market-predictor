@@ -14,7 +14,8 @@ from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
-from market_predictor.heavy_jobs import heavy_job_lease
+from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
+from market_predictor.investment.dividend_currencies import _json
 from market_predictor.research.investment_features import FLAGS, ArtifactReference, _object, _publish, _read
 from market_predictor.sources.alpaca import AlpacaSource
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference
@@ -80,7 +81,8 @@ def _decode_response(
 
 
 def collect_investment_dividend_currencies(
-    *, root: Path, action_config: SourcePin, action_archive: Path, action_audit_sha256: str, output: Path, settings: Settings | None = None
+    *, root: Path, action_config: SourcePin, action_archive: Path, action_audit_sha256: str, output: Path, settings: Settings | None = None,
+    required_events: SourcePin | None = None
 ) -> dict[str, Any]:
     """Refresh IDs only; unchanged rate/entitlement evidence is never replaced.
 
@@ -100,8 +102,23 @@ def collect_investment_dividend_currencies(
         expected_audit_sha256=action_audit_sha256,
         memory_guard=lambda: guard("dividend currency source replay"),
     )
-    with heavy_job_lease("collect-investment-dividend-currencies", runtime_dir=root / "data/runtime"):
+    with heavy_job_lease("collect-investment-dividend-currencies", runtime_dir=root / heavy_job_runtime_dir()):
         guard("dividend currency collection inputs")
+        scope: dict[str, str] | None = None
+        if required_events is not None:
+            scope_payload = _json(_read(root, ArtifactReference.model_validate(required_events.model_dump()), {}))
+            if scope_payload.get("schema") != "market_predictor.investment_dividend_event_scope":
+                raise DataReadinessError("explicit dividend event scope schema differs")
+            items = scope_payload.get("events")
+            if not isinstance(items, list) or not 1 <= len(items) <= 10_000:
+                raise DataReadinessError("explicit dividend event scope exceeds bounded population")
+            scope = {}
+            for item in items:
+                if not isinstance(item, dict) or set(item) != {"action_id", "original_record_sha256"}:
+                    raise DataReadinessError("explicit dividend event scope record differs")
+                if not isinstance(item["action_id"], str) or item["action_id"] in scope:
+                    raise DataReadinessError("explicit dividend event scope repeats action IDs")
+                scope[item["action_id"]] = item["original_record_sha256"]
         originals: dict[str, dict[str, Any]] = {}
         for families in evidence.records_by_symbol.values():
             for record in families.get("cash_dividends", []):
@@ -109,7 +126,8 @@ def collect_investment_dividend_currencies(
                     record.get("currency") not in {None, ""}
                     or record.get("foreign") is not False
                     or record.get("special") is not False
-                    or not "2019-07-09" <= str(record.get("ex_date", "")) <= "2024-05-28"
+                    or (scope is None and not "2019-07-09" <= str(record.get("ex_date", "")) <= "2024-05-28")
+                    or (scope is not None and record.get("id") not in scope)
                 ):
                     continue
                 action_id = record.get("id")
@@ -117,9 +135,15 @@ def collect_investment_dividend_currencies(
                     raise DataReadinessError("archived dividend lacks stable action ID")
                 if action_id in originals and originals[action_id] != record:
                     raise DataReadinessError("archived dividend ID has conflicting records")
+                if scope is not None and scope[action_id] != json_sha256(record):
+                    raise DataReadinessError("explicit dividend event scope original hash differs")
                 originals[action_id] = record
+        if scope is not None and set(originals) != set(scope):
+            raise DataReadinessError("explicit dividend event scope contains unsupported or missing actions")
         pins = {str(inside(root, name)): digest for name, digest in evidence.source_files.items()}
         pins[str(config)] = action_config.sha256
+        if required_events is not None:
+            pins[str(inside(root, required_events.path))] = required_events.sha256
         pins[str(Path(__file__).resolve())] = file_sha256(Path(__file__))
         request = {
             "action_config": action_config.model_dump(),
@@ -129,6 +153,7 @@ def collect_investment_dividend_currencies(
             "implementation_sha256": pins[str(Path(__file__).resolve())],
             "batch_size": BATCH_SIZE,
             "purpose": "observed_currency_verification_only_no_historical_clock_backdating",
+            **({"required_events": required_events.model_dump()} if required_events is not None else {}),
         }
         job_sha = json_sha256(request)
         output.mkdir(parents=True, exist_ok=True)

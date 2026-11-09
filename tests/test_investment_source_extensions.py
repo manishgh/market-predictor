@@ -2,6 +2,7 @@
 import copy
 import json
 from contextlib import ExitStack
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,6 +15,7 @@ from market_predictor.heavy_jobs import HeavyJobBusyError, heavy_job_lease
 from market_predictor.investment import source_extensions as extension
 from market_predictor.investment.label_sources import InvestmentSourceReader
 from market_predictor.investment.raw_acquisition import QUARANTINE
+from market_predictor.investment.stock_identity import StockIdentityUnavailable
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 
 
@@ -138,6 +140,71 @@ def test_quarantined_stock_overlap_does_not_block_verified_benchmarks(scope):
     assert all(item["artifact"]["role"] == "benchmark" for item in result["segments"][3:])
     assert result["quarantined_stock_artifact_count"] == 1
     assert stock["identity_admission"] == QUARANTINE
+
+
+def _proof_scope(scope):
+    stock = scope["extension"].acquisition["completed_artifacts"][2]
+    stock.update(unit_id="synthetic-stock-unit", start_date="2024-05-29", end_date="2024-05-31", ownership_admitted=False)
+    stock["candidate_requirements"]["asof"] = "2024-05-31"
+    proof = SimpleNamespace(security_id=stock["security_id"], ticker=stock["ticker"])
+    request = scope["extension"].request.model_copy(update={"stock_identity": SourcePin(
+        path="synthetic-proof-manifest.json", sha256="e" * 64)})
+    scope["extension"] = replace(scope["extension"], request=request, stock_proofs=(proof,))
+    return stock
+
+
+def test_positive_stock_proof_adds_only_exact_proven_sessions_and_preserves_capture(scope, monkeypatch):
+    stock = _proof_scope(scope)
+    monkeypatch.setattr(extension, "replay_stock_identity", lambda *args, **kwargs: SimpleNamespace(
+        proven_sessions=(date(2024, 5, 29), date(2024, 5, 30)),
+        missing_reasons=("stock_identity_session_unproven:2024-05-31",)))
+    original = copy.deepcopy(scope["parent_selection"])
+    result = extension.compose_investment_raw_extension(**scope)
+    selected = [segment for segment in result["segments"][3:] if segment["artifact"]["role"] == "stock"]
+    assert len(selected) == 1
+    assert selected[0]["first_session"] == "2024-05-29" and selected[0]["last_session"] == "2024-05-30"
+    assert selected[0]["source_admission"] == "stock_identity_reconstructed_research"
+    assert result["segments"][:3] == original["segments"]
+    assert stock["identity_admission"] == QUARANTINE and stock["ownership_admitted"] is False
+    assert result["stock_identity_admitted_artifact_count"] == 1 and result["stock_extensions_quarantined"]
+
+
+def test_observed_stock_conflicting_with_parent_owner_is_refused(scope, monkeypatch):
+    stock = _proof_scope(scope)
+    stock["start_date"] = "2024-05-28"
+    monkeypatch.setattr(extension, "replay_stock_identity", lambda *args, **kwargs: SimpleNamespace(
+        proven_sessions=(date(2024, 5, 28), date(2024, 5, 29)), missing_reasons=()))
+    with pytest.raises(DataReadinessError, match="overlaps selected ownership"):
+        extension.compose_investment_raw_extension(**scope)
+
+
+def test_fully_admitted_stock_is_not_counted_as_current_quarantine(scope, monkeypatch):
+    stock = _proof_scope(scope)
+    monkeypatch.setattr(extension, "replay_stock_identity", lambda *args, **kwargs: SimpleNamespace(
+        proven_sessions=(date(2024, 5, 29), date(2024, 5, 30), date(2024, 5, 31)), missing_reasons=()))
+    result = extension.compose_investment_raw_extension(**scope)
+    assert result["stock_identity_admitted_artifact_count"] == 1
+    assert result["quarantined_stock_artifact_count"] == 0
+    assert result["quarantined_stock_observed_artifact_count"] == 0
+    assert result["quarantined_stock_security_ids"] == []
+    assert result["stock_extensions_quarantined"] is False
+    assert stock["identity_admission"] == QUARANTINE
+
+
+def test_unsupported_class_is_local_but_inspected_sources_remain_bound(scope, monkeypatch):
+    _proof_scope(scope)
+    inspected = scope["root"] / "synthetic-inspected-source.bin"
+    inspected.write_bytes(b"explicit synthetic unsupported source")
+
+    def unsupported(*args, **kwargs):
+        kwargs["cache"]["source_files"] = {str(inspected): file_sha256(inspected)}
+        raise StockIdentityUnavailable("synthetic unsupported class context")
+
+    monkeypatch.setattr(extension, "replay_stock_identity", unsupported)
+    result = extension.compose_investment_raw_extension(**scope)
+    assert len(result["segments"]) == 5
+    assert str(inspected) in scope["extension"].source_files
+    assert "stock_identity_unavailable" in result["stock_identity_admission_audit"][0]["missing_reasons"][0]
 
 
 def test_extension_rejects_unknown_artifact_roles(scope):

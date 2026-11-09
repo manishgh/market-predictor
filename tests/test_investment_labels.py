@@ -79,6 +79,16 @@ def test_full_population_horizons_and_asof_are_separate(tmp_path: Path, monkeypa
     assert all("specifications" not in row for row in rows)
     assert all(row["membership_source_capture_at_utc"] is None for row in rows)
     assert report["training_ready"] is False
+    coverage = report["coverage_by_year_sector_and_roster_status"]
+    assert sum(item["population_rows"] for item in coverage) == 4
+    assert sum(item["source_validated_rows"] for item in coverage) == 2
+    assert all(item["decision_year"] == "2023" for item in coverage)
+    assert all(item["currently_available_rows"] == 0 for item in coverage)
+    assert {item["roster_status"] for item in coverage} == {"eligible", "excluded_research_cohort"}
+    assert {item["sector"] for item in coverage} == {"Technology", "unavailable"}
+    for manifest_path in (output / "securities").glob("*/_manifest.json"):
+        checkpoint = json.loads(manifest_path.read_text())
+        assert sum(c["population_rows"] for c in checkpoint["counts_by_horizon"].values()) == 2
 
 
 def test_resume_reuses_security_artifacts_and_detects_tampering(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

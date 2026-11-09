@@ -540,3 +540,70 @@ def test_correction_manifest_uses_separate_closed_hash_bound_schema(tmp_path: Pa
     reference = write_json(path, payload)
     with pytest.raises(ValidationError):
         load_dividend_amount_corrections(tmp_path, path, reference["sha256"], policy_sha256=POLICY)
+
+
+@pytest.mark.parametrize("variant", ["valid", "missing", "competing", "wrong_session", "wrong_ticker", "cusip",
+    "tax_category", "tax_preferred", "tax_group", "tax_name", "lookup_isin", "tax_name_preferred", "tax_name_adr"])
+def test_stock_composite_requires_exact_dated_class_and_provider_cusip(tmp_path, monkeypatch, variant):
+    from types import SimpleNamespace
+
+    from market_predictor.investment import stock_identity
+    from market_predictor.swing.contracts.holding_accounting import EvidenceReference
+
+    original, item = fixture(tmp_path)
+    original["cusip"] = "78462F103"
+    item["original_record_sha256"] = json_sha256(original)
+    authority = write_json(tmp_path / "stock-authority.json", {"synthetic_test_only": True})
+    proof = {"security_id": "stock:one", "ticker": "WRONG" if variant == "wrong_ticker" else "SPY",
+        "sec_cik": "0000000001", "security_title": "Common stock", "identity_authority": authority,
+        "membership_authority": authority, "anchor": {"collection_manifest": authority, "receipt_artifact": authority,
+            "unit_id": "test-only-unit", "body_sha256": authority["sha256"], "filing_metadata": authority}}
+    proof_pin = write_json(tmp_path / "proof.json", proof)
+    item["identity"] = {"kind": "stock_composite", "cusip": "78462F103", "proof": proof_pin,
+        "cusip_provenance": "provider_original_cash_action"}
+    ref = EvidenceReference(reference=authority["path"], artifact_sha256=authority["sha256"], record_locator="test-only SEC class",
+        interpretation_policy_sha256=POLICY, retrieved_at=datetime.fromisoformat(CAPTURE), available_at=datetime.fromisoformat(CAPTURE))
+    result = SimpleNamespace(issuer_name="SPY Corporation", security_title="Common stock", evidence=(ref,),
+        missing_reasons=("dated_relation_missing",) if variant == "missing" else (),
+        competing_class_tickers=("OTHER",) if variant == "competing" else (),
+        proven_sessions=() if variant == "wrong_session" else (date.fromisoformat(original["ex_date"]),))
+    monkeypatch.setattr(stock_identity, "replay_stock_identity", lambda *args, **kwargs: result)
+    replace_tax(item, lambda payload: payload["data"]["calculation"].update(name="SPY Corp., Namenaktien, US", instrumentGroup="SHARE"))
+    item["tax"]["lookup"] = captured(tmp_path / "lookup.json", json.dumps({"total": 1, "count": 1, "security": [{
+        "isin": "US78462F1030", "vn": 45088, "institution": "SPY Corp.", "name": "Common shares",
+        "categoryName": "SHARE", "typeName": "SHARE.COMMON", "typeDescription": "Ordinary shares"}]}).encode())
+    if variant in ("tax_group", "tax_name"):
+        replace_tax(item, lambda payload: payload["data"]["calculation"].update(
+            **({"instrumentGroup": "BOND"} if variant == "tax_group" else {"name": ""})))
+    if variant in ("tax_name_preferred", "tax_name_adr"):
+        replace_tax(item, lambda payload: payload["data"]["calculation"].update(
+            name="SPY Corp. Preferred Stock" if variant == "tax_name_preferred" else "SPY Corp. ADR"))
+    if variant in ("tax_category", "tax_preferred", "lookup_isin"):
+        payload = json.loads(Path(item["tax"]["lookup"]["body"]["path"]).read_text())
+        changes = {"tax_category": {"categoryName": "BOND"}, "tax_preferred": {"typeName": "SHARE.PREFERRED"},
+            "lookup_isin": {"isin": "US46090E1038"}}
+        payload["security"][0].update(changes[variant])
+        item["tax"]["lookup"] = captured(tmp_path / "modified-lookup.json", json.dumps(payload).encode())
+    if variant == "cusip":
+        original["cusip"] = ""
+        item["original_record_sha256"] = json_sha256(original)
+    if variant == "valid":
+        refs = model(item).validates_against(original, tmp_path, POLICY, stock_identity_cache={})
+        assert any("provider-only CUSIP=78462F103" in r.record_locator for r in refs)
+    else:
+        with pytest.raises(DataReadinessError):
+            model(item).validates_against(original, tmp_path, POLICY)
+
+
+def test_currency_manifest_explicit_scale_bound_is_separate_from_receipts(tmp_path, monkeypatch):
+    from market_predictor.investment import dividend_currencies
+
+    _, item = fixture(tmp_path)
+    path = tmp_path / "scale-manifest.json"
+    raw = (" " * (4 * 1024**2)) + json.dumps({"schema": dividend_currencies.SCHEMA, "corroborations": [item]})
+    path.write_text(raw, encoding="utf-8")
+    assert set(load_currency_corroborations(tmp_path, path, pin(path)["sha256"], policy_sha256=POLICY)) == {"action-one"}
+    monkeypatch.setattr(dividend_currencies, "MAX_CURRENCY_MANIFEST_BYTES", 1024)
+    with pytest.raises(DataReadinessError, match="byte bound"):
+        load_currency_corroborations(tmp_path, path, pin(path)["sha256"], policy_sha256=POLICY)
+    assert dividend_currencies.MAX_MANIFEST_BYTES == 4 * 1024**2

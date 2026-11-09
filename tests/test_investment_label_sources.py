@@ -100,3 +100,13 @@ def test_extension_tamper_is_fatal(tmp_path: Path) -> None:
     (tmp_path / "extension.parquet").write_bytes(b"changed")
     with pytest.raises(DataReadinessError, match="hash differs"):
         source.read("issuer:test", "TEST", (date(2025, 5, 27), date(2025, 5, 28)), benchmark=False)
+
+
+def test_requested_gap_preserves_exact_present_day_clocks(tmp_path: Path) -> None:
+    source = composed_reader(tmp_path)
+    source.selection["segments"][1]["last_session"] = "2025-05-29"
+    observed = source.read("issuer:test", "TEST", (date(2025, 5, 27), date(2025, 5, 28), date(2025, 5, 29)), benchmark=False)
+    assert observed.missing_reasons == ("raw_observation_unavailable:2025-05-29",)
+    assert set(observed.evidence) == {date(2025, 5, 27), date(2025, 5, 28)}
+    assert observed.evidence[date(2025, 5, 27)].available_at == datetime(2026, 11, 7, tzinfo=UTC)
+    assert observed.evidence[date(2025, 5, 28)].available_at == datetime(2026, 11, 9, tzinfo=UTC)

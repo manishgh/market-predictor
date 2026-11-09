@@ -116,8 +116,9 @@ class InvestmentSourceReader:
         refs = {day: EvidenceReference(reference=day_sources[day][0], artifact_sha256=day_sources[day][1],
             record_locator=f"security_id={security_id};session_date={day}",
             interpretation_policy_sha256=self.interpretation_sha256,
-            retrieved_at=pd.Timestamp(frame.loc[day, "ingested_at_utc"]).to_pydatetime(),
-            available_at=pd.Timestamp(frame.loc[day, "available_at_utc"]).to_pydatetime()) for day in days}
-        missing = tuple(f"raw_observation_unavailable:{day}" for day in sessions
-            if day not in frame.index or not bool(frame.loc[day, "outcome_observation_valid"]))
+            retrieved_at=pd.Timestamp(captured).to_pydatetime(),
+            available_at=pd.Timestamp(available).to_pydatetime())
+            for day, captured, available in zip(frame.index, frame.ingested_at_utc, frame.available_at_utc, strict=True)}
+        valid_days = set(frame.index[frame.outcome_observation_valid])
+        missing = tuple(f"raw_observation_unavailable:{day}" for day in sessions if day not in valid_days)
         return InvestmentObservations(frame, refs, symbol, missing)

@@ -209,20 +209,38 @@ def _extract(soup: BeautifulSoup, digest: str, expected_cik: str, target_ticker:
 
     title = row_fact("Security12bTitle")
     exchange = row_fact("SecurityExchangeName")
-    stock_type = re.search(r"\b(common|ordinary|preferred)\s+(stock|shares)\b", title.value, re.IGNORECASE)
+    stock_type = re.search(r"\b(common|ordinary|preferred|capital)\s+(stock|shares)\b", title.value, re.IGNORECASE)
     if stock_type is None or re.search(r"\b(notes|bonds|debentures)\b", title.value, re.IGNORECASE):
         raise DataReadinessError("unsupported non-stock security title")
+    title_classes = set(re.findall(r"\bclass\s+([a-z])\b", title.value, re.IGNORECASE))
+    title_classes = {letter.upper() for letter in title_classes}
+    title_types = {kind.lower() for kind, _ in re.findall(
+        r"\b(common|ordinary|preferred|capital)\s+(stock|shares)\b", title.value, re.IGNORECASE)}
+    if len(title_classes) > 1 or len(title_types) > 1:
+        raise DataReadinessError("ambiguous stock classes or types in security title")
     security = contexts[ticker.contextref]
     class_members = [member for axis, member in security.dimensions if _stock_axis(axis)]
     if len(class_members) > 1:
         raise DataReadinessError("ambiguous stock-class dimensions")
     for member in class_members:
-        if not re.fullmatch(r"\{http://fasb.org/us-gaap/[0-9-]+\}(CommonStockMember|PreferredStockMember)", member):
-            raise DataReadinessError("unsupported stock-class member")
         local = member.split("}")[-1]
-        if (local == "CommonStockMember" and stock_type[1].lower() == "preferred"
+        generic = re.fullmatch(r"\{http://fasb.org/us-gaap/[0-9-]+\}(CommonStockMember|PreferredStockMember)", member)
+        common_class = re.fullmatch(r"\{http://fasb.org/us-gaap/[0-9-]+\}CommonClass([A-Z])Member", member)
+        capital_class = re.fullmatch(r"\{https?://[^}]+\}CapitalClass([A-Z])Member", member)
+        if common_class or capital_class:
+            explicit = common_class or capital_class
+            assert explicit is not None
+            expected_kind = "common" if common_class else "capital"
+            if title_classes != {explicit[1]} or stock_type[1].lower() != expected_kind:
+                raise DataReadinessError("stock title contradicts explicit class member")
+        elif not generic:
+            raise DataReadinessError("unsupported stock-class member")
+        elif (local == "CommonStockMember" and stock_type[1].lower() not in {"common", "ordinary"}
                 or local == "PreferredStockMember" and stock_type[1].lower() != "preferred"):
             raise DataReadinessError("stock title contradicts class dimension")
+    if stock_type[1].lower() == "capital" and (len(class_members) != 1 or not re.fullmatch(
+            r"\{https?://[^}]+\}CapitalClass([A-Z])Member", class_members[0])):
+        raise DataReadinessError("capital stock requires an explicit matching class member")
 
     names = [fact(tag) for tag in tags["EntityRegistrantName"]]
     ciks = [fact(tag) for tag in tags["EntityCentralIndexKey"]]

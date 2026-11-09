@@ -63,6 +63,8 @@ def _implementation() -> dict[str, str]:
     names = ("research/investment_labels.py", "research/investment_currencies.py", "research/investment_features.py",
         "investment/label_sources.py", "investment/label_materialization.py", "investment/corporate_actions.py",
         "investment/dividend_currencies.py", "investment/raw_acquisition.py", "investment/source_extensions.py",
+        "investment/stock_identity.py", "universe/security_class_evidence.py",
+        "catalysts/sec_filings/document_collection.py",
         "investment/contracts.py", "investment/targets.py", "swing/contracts/holding_accounting.py",
         "swing/evaluation/holding_accounting.py", "swing/labels/holding_paths.py", "swing/labels/holding_identity.py",
         "swing/datasets/action_evidence.py", "swing/datasets/corrected_outcomes.py")
@@ -233,6 +235,7 @@ def materialize_investment_labels(*, root: Path, request: Path, request_sha256: 
         totals: dict[str, Counter[str]] = {str(horizon): Counter() for horizon in (63, 252)}
         reasons_by_horizon: dict[str, Counter[str]] = {str(horizon): Counter() for horizon in (63, 252)}
         availability_clocks: dict[str, Counter[str]] = {str(horizon): Counter() for horizon in (63, 252)}
+        coverage: dict[tuple[int, str, str, str], Counter[str]] = {}
         for security, decisions in sorted(groups.items()):
             guard("investment serial security labels")
             directory = output / "securities" / json_sha256(security)
@@ -272,6 +275,7 @@ def materialize_investment_labels(*, root: Path, request: Path, request_sha256: 
                             local_pins[str(_path(root, source["reference"]))] = source["artifact_sha256"]
                 _publish(directory, {"schema": "market_predictor.investment_security_labels", "status": "security_complete",
                     "job_identity": job_identity, "security_id": security, "declared_rows": len(results),
+                    "counts_by_horizon": _counts(results),
                     "source_files": local_pins, **FLAGS}, local_pins,
                     partial(_save_rows, records=results))
             checkpoint_ref = ArtifactReference(path=str(directory / "_manifest.json"), sha256=file_sha256(directory / "_manifest.json"))
@@ -289,7 +293,17 @@ def materialize_investment_labels(*, root: Path, request: Path, request_sha256: 
             for horizon_key, counts in _counts(records).items():
                 reasons_by_horizon[horizon_key].update(counts.pop("missing_reason_counts"))
                 totals[horizon_key].update(counts)
+            decision_metadata = {row["decision_id"]: row for row in decisions}
             for record in records:
+                metadata = decision_metadata[record["decision_id"]]
+                key = (record["horizon_sessions"], metadata["decision_session"][:4],
+                    metadata.get("sector") or "unavailable", metadata["status"])
+                counts = coverage.setdefault(key, Counter())
+                counts.update({"population_rows": 1,
+                    "source_validated_rows": int(record["status"] == "source_validated"),
+                    "unresolved_rows": int(record["status"] != "source_validated"),
+                    "economically_mature_rows": int(record["economically_mature_at_evaluation"]),
+                    "currently_available_rows": int(record["available_by_evaluation_as_of"])})
                 if record["status"] == "source_validated" and record["label_available_at_utc"] is not None:
                     availability_clocks[str(record["horizon_sessions"])][record["label_available_at_utc"]] += 1
             checkpoints.append(checkpoint_ref.model_dump(mode="json"))
@@ -308,6 +322,13 @@ def materialize_investment_labels(*, root: Path, request: Path, request_sha256: 
             "frozen_roster_rows": frozen_roster_rows, "selected_decision_ids": parsed.decision_ids,
             "roster_rows": len(rows), "label_rows": sum(counts["population_rows"] for counts in totals.values()),
             "counts_by_horizon": counts_by_horizon,
+            "coverage_by_year_sector_and_roster_status": [
+                {"horizon_sessions": key[0], "decision_year": key[1], "sector": key[2],
+                    "roster_status": key[3], **dict(counts)} for key, counts in sorted(coverage.items())],
+            "raw_source_extension_coverage": None if raw_extension is None else {
+                name: selection[name] for name in ("investment_outcome_end", "stock_extensions_quarantined",
+                    "stock_identity_admitted_artifact_count", "stock_identity_admission_audit",
+                    "quarantined_stock_artifact_count", "quarantined_stock_observed_artifact_count")},
             "security_checkpoints": checkpoints, "evaluation_as_of_utc": parsed.evaluation_as_of_utc.isoformat(),
             "completed_at_utc": completed_at.isoformat(), "available_by_completion_rows_by_horizon": dict(available_by_completion),
             "membership_basis": "reconstructed_research_current_verification", "membership_availability_basis": "reconstructed_research",

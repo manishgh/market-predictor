@@ -18,6 +18,7 @@ from xml.etree import ElementTree as ET
 from pydantic import Field, PrivateAttr, model_validator
 
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import resolve_inside_authority
 from market_predictor.sources.official_documents import _Receipt
@@ -27,11 +28,16 @@ SCHEMA = "market_predictor.investment_dividend_currency_corroborations"
 AMOUNT_CORRECTION_SCHEMA = "market_predictor.investment_dividend_amount_corrections"
 MAX_SOURCE_BYTES = 16 * 1024**2
 MAX_MANIFEST_BYTES = 4 * 1024**2
+MAX_CURRENCY_MANIFEST_BYTES = 64 * 1024**2
 MAX_ZIP_EXPANDED_BYTES = 64 * 1024**2
 MAX_XML_BYTES = 16 * 1024**2
 NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 HEADERS = ("FUND NAME", "TICKER", "CUSIP", "EX-DATE", "RECORD DATE", "PAYABLE DATE", "DIVIDEND ($)",
            "SHORT TERM CAPITAL GAIN ($)", "LONG TERM CAPITAL GAIN ($)", "FREQUENCY")
+
+
+class DividendEvidenceUnavailable(DataReadinessError):
+    """Valid captured authority lacks a supported economic/class interpretation."""
 
 
 class CurrencyArtifactPin(HoldingContract):
@@ -50,6 +56,7 @@ class TaxCurrencyEvent(HoldingContract):
     isin: Annotated[str, Field(pattern=r"^US[A-Z0-9]{9}[0-9]$")]
     entry_index: Annotated[int, Field(ge=0)]
     gross_amount: Identifier
+    lookup: CapturedCurrencySource | None = None
 
 
 class IssuerWorkbookIdentity(HoldingContract):
@@ -65,6 +72,96 @@ class OfficialDocumentIdentity(HoldingContract):
     cusip: Annotated[str, Field(pattern=r"^[A-Z0-9]{9}$")]
     fund_name: Identifier
     quotes: Annotated[tuple[Identifier, ...], Field(min_length=1, max_length=8)]
+
+
+class StockCompositeIdentity(HoldingContract):
+    """Official stock class plus provider-asserted CUSIP and exact tax ISIN.
+
+    The provider CUSIP is not independently corroborated by the SEC class proof.
+    Missing dated ownership or another issuer share class prevents admission.
+    """
+
+    kind: Literal["stock_composite"]
+    cusip: Annotated[str, Field(pattern=r"^[A-Z0-9]{9}$")]
+    proof: CurrencyArtifactPin
+    cusip_provenance: Literal["provider_original_cash_action"]
+    _issuer_name: str = PrivateAttr(default="")
+    _security_title: str = PrivateAttr(default="")
+    _tax_identity_observation: dict[str, Any] = PrivateAttr(default_factory=dict)
+
+    @property
+    def tax_identity_observation(self) -> dict[str, Any]:
+        return dict(self._tax_identity_observation)
+
+    def validates_tax_identity(self, calculation: Mapping[str, Any], lookup: CapturedCurrencySource | None,
+                               root: Path, policy_sha256: str) -> tuple[EvidenceReference, ...]:
+        if (calculation.get("instrumentGroup") != "SHARE" or not isinstance(calculation.get("name"), str)
+            or not calculation["name"].strip()):
+            raise DividendEvidenceUnavailable("stock tax instrument group/name missing or unsupported")
+        if lookup is None:
+            raise DividendEvidenceUnavailable("stock tax classification source missing")
+        raw, receipt, refs = _captured(root, lookup, policy_sha256, {"www.ictax.admin.ch", "ictax.admin.ch"})
+        payload = _json(raw)
+        records = payload.get("security")
+        if (payload.get("total") != 1 or payload.get("count") != 1 or not isinstance(records, list) or len(records) != 1
+            or not isinstance(records[0], dict) or receipt.get("request", {}).get("isin") != calculation.get("isin")
+            or records[0].get("isin") != calculation.get("isin") or records[0].get("vn") != calculation.get("valorNumber")):
+            raise DataReadinessError("stock tax lookup exact ISIN/valor/request binding differs")
+        record = records[0]
+        observation = {"tax_security_name": calculation["name"], "tax_instrument_group": calculation["instrumentGroup"],
+            "tax_institution": record.get("institution"), "tax_category_name": record.get("categoryName"),
+            "tax_type_name": record.get("typeName"), "tax_type_description": record.get("typeDescription"),
+            "sec_issuer_name": self._issuer_name, "sec_security_title": self._security_title,
+            "cusip_provenance": self.cusip_provenance, "lookup_source": lookup.model_dump(mode="json")}
+        self._tax_identity_observation = observation
+        category = record.get("categoryName")
+        class_text = " ".join(str(record.get(field) or "") for field in ("name", "typeName", "typeDescription"))
+        explicit_non_common = re.search(
+            r"\b(preferred|preference|ADR|ADS|bonds?|notes?|debentures?|Vorzugsaktien)\b|deposit[ao]ry", class_text,
+            re.IGNORECASE)
+        calculation_non_common = re.search(
+            r"\b(preferred|preference)\s+(stock|shares)\b|\b(ADR|ADS|bonds?|notes?|debentures?)\b|deposit[ao]ry",
+            calculation["name"], re.IGNORECASE)
+        official_common = re.search(r"\b(common|ordinary)\s+(stock|shares)\b", self._security_title, re.IGNORECASE)
+        if category not in (None, "", "SHARE") or explicit_non_common or calculation_non_common or official_common is None:
+            raise DividendEvidenceUnavailable("stock tax classification contradicts direct common/ordinary stock")
+        return refs
+
+    def validates_against(self, original: Mapping[str, Any], root: Path, policy_sha256: str,
+                          cache: dict[str, Any] | None = None) -> tuple[EvidenceReference, ...]:
+        from market_predictor.investment.stock_identity import StockIdentityProof, StockIdentityUnavailable, replay_stock_identity
+
+        if (original.get("cusip") != self.cusip or original.get("foreign") is not False
+            or original.get("special") is not False):
+            raise DataReadinessError("stock composite original domestic class/CUSIP terms differ")
+        raw = _read(root, self.proof, MAX_MANIFEST_BYTES)
+        _json(raw)
+        proof = StockIdentityProof.model_validate_json(raw)
+        if proof.ticker != original.get("symbol"):
+            raise DataReadinessError("stock composite official ticker differs from original event")
+        pins = {self.proof.path: self.proof.sha256}
+        try:
+            replayed = replay_stock_identity(root, proof, sessions=(date.fromisoformat(original["ex_date"]),),
+                source_files=pins, interpretation_sha256=policy_sha256, cache=cache)
+        except StockIdentityUnavailable as exc:
+            raise DividendEvidenceUnavailable(str(exc)) from exc
+        if (replayed.missing_reasons or replayed.competing_class_tickers
+            or replayed.proven_sessions != (date.fromisoformat(original["ex_date"]),)):
+            raise DividendEvidenceUnavailable("stock composite dated class identity missing or multiple share classes unresolved")
+        self._issuer_name = replayed.issuer_name
+        self._security_title = replayed.security_title
+        refs = list(replayed.evidence)
+        if not refs:
+            raise DividendEvidenceUnavailable("stock composite lacks official dated class evidence")
+        # A proof's availability is the latest real authority capture, never its
+        # retrospective action date or filesystem modification time.
+        captures = [r.retrieved_at for r in refs]
+        available = [r.available_at for r in refs if r.available_at is not None]
+        refs.append(EvidenceReference(reference=self.proof.path, artifact_sha256=self.proof.sha256,
+            record_locator="SEC dated stock-class proof; provider-only CUSIP=" + self.cusip,
+            interpretation_policy_sha256=policy_sha256, retrieved_at=max(captures),
+            available_at=max(available) if available else max(captures)))
+        return tuple(refs)
 
 
 class IssuerDistributionRate(HoldingContract):
@@ -446,7 +543,7 @@ class CurrencyCorroboration(HoldingContract):
     ex_date: date
     currency: Literal["USD"]
     tax: TaxCurrencyEvent
-    identity: Annotated[IssuerWorkbookIdentity | OfficialDocumentIdentity, Field(discriminator="kind")]
+    identity: Annotated[IssuerWorkbookIdentity | OfficialDocumentIdentity | StockCompositeIdentity, Field(discriminator="kind")]
     issuer_rate: IssuerDistributionRate | None = None
     tax_value_difference: Identifier
     tax_resolved_value_difference: Identifier | None = None
@@ -466,7 +563,8 @@ class CurrencyCorroboration(HoldingContract):
         return self._validated_evidence
 
     def validates_against(self, original: Mapping[str, Any], root: Path, policy_sha256: str, *,
-                          amount_correction: IssuerDividendAmountCorrection | None = None) -> tuple[EvidenceReference, ...]:
+                          amount_correction: IssuerDividendAmountCorrection | None = None,
+                          stock_identity_cache: dict[str, Any] | None = None) -> tuple[EvidenceReference, ...]:
         """Replay separate currency and optional cash-class evidence; retain provider terms."""
         special_refs: tuple[EvidenceReference, ...] = ()
         if self.special_cash_distribution is None:
@@ -494,6 +592,10 @@ class CurrencyCorroboration(HoldingContract):
             raise DataReadinessError("tax-minus-resolved comparison requires an explicit amount correction")
         if isinstance(self.identity, IssuerWorkbookIdentity):
             _, found = _issuer_row(root, self.identity.source, self.identity.row, self.symbol, cusip, self.ex_date, policy_sha256)
+        elif isinstance(self.identity, StockCompositeIdentity):
+            if self.method != "exact_tax_event" or amount_correction is not None:
+                raise DataReadinessError("stock composite requires exact original gross amount")
+            found = self.identity.validates_against(original, root, policy_sha256, stock_identity_cache)
         else:
             raw, _, found = _captured(root, self.identity.source, policy_sha256,
                 {"www.sec.gov", "sec.gov", "www.invesco.com", "invesco.com"})
@@ -503,7 +605,7 @@ class CurrencyCorroboration(HoldingContract):
             if (any(len(q) > 4096 or q not in text for q in quotes) or cusip not in joined
                 or not re.search(r"\b" + re.escape(self.symbol) + r"\b", joined)
                 or self.identity.fund_name not in joined):
-                raise DataReadinessError("official source does not prove quoted ticker/CUSIP/fund identity")
+                raise DividendEvidenceUnavailable("official source does not prove quoted ticker/CUSIP/fund identity")
         refs.extend(found)
         raw, receipt, found = _captured(root, self.tax.source, policy_sha256, {"www.ictax.admin.ch", "ictax.admin.ch"})
         tax_locator = (f"/data/calculation/isin={self.tax.isin};"
@@ -517,17 +619,20 @@ class CurrencyCorroboration(HoldingContract):
         request = receipt.get("request", {})
         if (calculation.get("isin") != self.tax.isin or request.get("isin") != self.tax.isin
             or request.get("referenceDate") != calculation.get("referenceDate")
-            or request.get("valorNumber") != calculation.get("valorNumber")
-            or calculation.get("quotationType") != "PIECE" or type(calculation.get("quantity")) is not int
+            or request.get("valorNumber") != calculation.get("valorNumber")):
+            raise DataReadinessError("tax distribution request/security identity differs")
+        if (calculation.get("quotationType") != "PIECE" or type(calculation.get("quantity")) is not int
             or calculation.get("quantity") != 1):
-            raise DataReadinessError("tax distribution request/security/per-share basis differs")
+            raise DividendEvidenceUnavailable("tax distribution per-share basis differs")
+        if isinstance(self.identity, StockCompositeIdentity):
+            refs.extend(self.identity.validates_tax_identity(calculation, self.tax.lookup, root, policy_sha256))
         entries = payload["data"]["calculationDetails"]["entries"]
         if not isinstance(entries, list) or len(entries) > 128:
             raise DataReadinessError("tax distribution entries exceed bounded shape")
         matches = [(i, e) for i, e in enumerate(entries) if isinstance(e, dict) and e.get("type") == "PAYMENT"
                    and _date_ms(e.get("exDate")) == self.ex_date]
         if len(matches) != 1 or matches[0][0] != self.tax.entry_index:
-            raise DataReadinessError("tax distribution ex-date is absent or ambiguous")
+            raise DividendEvidenceUnavailable("tax distribution ex-date is absent or ambiguous")
         entry = matches[0][1]
         tax_amount = _decimal(entry.get("value"))
         provider_amount = _decimal(original.get("rate"))
@@ -543,22 +648,23 @@ class CurrencyCorroboration(HoldingContract):
             {"www.ictax.admin.ch", "ictax.admin.ch"})
         html_payload = _json(html_raw)
         html = html_payload.get("data", {}).get("html")
-        if (html_payload.get("status") != "SUCCESS" or not isinstance(html, str)
-            or html_receipt.get("request") != receipt.get("request") or "Brutto" not in _text(html)):
-            raise DataReadinessError("tax gross-column semantic context differs")
+        if html_receipt.get("request") != receipt.get("request"):
+            raise DataReadinessError("tax structured/HTML request identity differs")
+        if html_payload.get("status") != "SUCCESS" or not isinstance(html, str) or "Brutto" not in _text(html):
+            raise DividendEvidenceUnavailable("tax gross-column semantic context differs")
         table = _GrossRows()
         table.feed(html)
         gross_rows = [index for index, row in enumerate(table.rows)
             if len(row) == 13 and row[5] == self.ex_date.strftime("%d.%m.") and row[8] == "USD"
             and _decimal(row[9]) == tax_amount]
         if len(gross_rows) != 1:
-            raise DataReadinessError("tax amount/currency is absent or ambiguous in gross table column")
+            raise DividendEvidenceUnavailable("tax amount/currency is absent or ambiguous in gross table column")
         gross_locator = (f"/data/html;gross-table-row={gross_rows[0]};ex-date={self.ex_date.isoformat()};"
             f"currency-column=8:USD;gross-column=9:{self.tax.gross_amount}")
         refs.extend(ref.model_copy(update={"record_locator": gross_locator}) for ref in found)
         if self.issuer_rate is None:
             if provider_amount != tax_amount:
-                raise DataReadinessError("independent distribution amount differs from provider rate")
+                raise DividendEvidenceUnavailable("independent distribution amount differs from provider rate")
         else:
             issuer_amount, found = _issuer_gross_amount(root, self.issuer_rate,
                 self.symbol, cusip, self.ex_date, policy_sha256)
@@ -582,8 +688,9 @@ class CurrencyCorroborationManifest(HoldingContract):
 
 def load_currency_corroborations(root: Path, manifest: Path, sha256: str, *, policy_sha256: str) -> dict[str, CurrencyCorroboration]:
     """Load closed typed assertions; source admission occurs against each actual action."""
+    guard("investment dividend currency manifest")
     # Strict JSON parsing rejects duplicate fields before Pydantic's typed JSON parser.
-    raw = _read(root, CurrencyArtifactPin(path=manifest.as_posix(), sha256=sha256), MAX_MANIFEST_BYTES)
+    raw = _read(root, CurrencyArtifactPin(path=manifest.as_posix(), sha256=sha256), MAX_CURRENCY_MANIFEST_BYTES)
     _json(raw)
     parsed = CurrencyCorroborationManifest.model_validate_json(raw)
     result: dict[str, CurrencyCorroboration] = {}
