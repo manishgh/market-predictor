@@ -27,6 +27,15 @@ archives or logs. Collection supplies evidence, not currency or training admissi
 Identity/hash/receipt corruption fails; missing provider years/events remain local
 gaps so unrelated collection continues. SPY remains mandatory for every target.
 
+Actual collector producer `3654cc9` stopped after capturing SPY 2021–2025: the
+unique QQQ 2021 lookup returned exact ISIN `US46090E1038`, `vn=41887067` and
+`gk=28837`. Requiring `gk` to equal `vn` was unsupported; the retained QQQ 2020
+request already uses `valorNumber=41887067`. The corrected lookup contract uses
+the unique exact ISIN and positive integer `vn`, then verifies the returned detail
+identity against that request. Preserve the original lookup and interrupted job.
+Use a new immutable producer/request/output and reuse the five completed SPY pairs
+alongside the eight older verified pairs, rather than fetching their bodies again.
+
 The evidence builder must use existing exact CurrencyCorroboration and explicit
 IssuerDividendAmountCorrection contracts, preserving original action hashes and
 current capture clocks. No inferred USD, tolerance, special-action fallback,

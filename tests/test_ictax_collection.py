@@ -195,6 +195,25 @@ def test_ambiguous_lookup_cannot_select_first_result(setup):
         ictax.collect_ictax_archive(**setup(years=(2019,)), client=Client(ambiguous))
 
 
+def test_actual_qqq_lookup_uses_valor_vn_when_gk_is_distinct(setup):
+    actual_lookup = {"total": 1, "count": 1, "offset": 0,
+                     "security": [{"id": 613167, "schema": "ICT", "gk": 28837, "vn": 41887067,
+                                   "isin": "US46090E1038", "institution": "Invesco QQQ Trust Series I"}]}
+
+    def source(url, request, original):
+        return response(url, actual_lookup) if url == ictax.SEARCH_URL else original
+
+    kwargs = setup(funds=[{"symbol": "QQQ", "isin": "US46090E1038", "years": [2021]}])
+    client = Client(source)
+    ictax.collect_ictax_archive(**kwargs, client=client)
+    report = verify(kwargs)
+    assert report["source_gap_fund_years"] == 0
+    assert report["records"][0]["request"]["valorNumber"] == 41887067
+    assert all(request["valorNumber"] == 41887067 for url, request in client.calls if url != ictax.SEARCH_URL)
+    captured = kwargs["output"] / "lookups/US46090E1038/2021/response.bin"
+    assert json.loads(captured.read_bytes()) == actual_lookup
+
+
 def test_lookup_not_found_does_not_abort_other_funds(setup):
     def absent(url, request, original):
         if url == ictax.SEARCH_URL and request["isin"] == ISIN:

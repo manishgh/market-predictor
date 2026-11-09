@@ -276,7 +276,7 @@ def _valor(payload: dict[str, Any] | None, isin: str) -> int | None:
         or payload.get("count") != 1 or not isinstance(records[0], dict) or records[0].get("isin") != isin):
         raise DataReadinessError("ICTax lookup does not uniquely identify requested ISIN")
     valor = records[0].get("vn")
-    if type(valor) is not int or valor <= 0 or type(records[0].get("gk")) is not int or records[0].get("gk") != valor:
+    if type(valor) is not int or valor <= 0:
         raise DataReadinessError("ICTax lookup valor identity differs")
     return valor
 
