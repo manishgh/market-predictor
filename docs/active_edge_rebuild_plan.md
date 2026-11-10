@@ -2,18 +2,54 @@
 
 ### Investment dataset, training and SPY evaluation - November 10
 
-Status: `in_progress`. User authorizes retained candle/news/financial joins followed
-by investment training and SPY evaluation when checks pass, using Sol agents on main.
-This is the sole active checkpoint; closed target/source work below stays frozen.
+Status: `complete`. The requested join, conditional training and independent evaluation
+are finished. Model approval/activation remains false because measured results do not
+support it. No additional experiment is in progress.
 
-Current phase: dataset30b54bf published successfully19:03:29UTC; independent actual
-dataset audit passed19:49:23UTC; all12splits permit the frozen48fold/8final research fits.
-Training is the current operation. All74,458 rows remain;
-research-eligible12,834 at252sessions and14,341 at63sessions. Reuse the
-74,458-row corpus (9b70c348ab17738f5874d42c51bff6af386d94061ef383385bdd6ead5bcad4c3)
-and existing retained features. Never rebuild unaffected sources or change their
-original clocks/flags. Preserve 45 prior exclusions, all original security decisions,
-63/252-session target policies, 20bp cost semantics and existing swing model artifacts.
+The frozen experiment completed: **48 validation fits and 8 final research models**.
+Independent Senior Sol Quant replay passed at 2026-11-10T20:07:44.978406+00:00.
+All saved predictions, training-only preprocessing, split identities, metrics, actual
+clocks and consumed source hashes passed the independent checks. Maximum saved-model
+prediction replay residual: 0.
+
+The models are trained, but the measured results do not support live activation.
+All 16 horizon/profile/learner/scope aggregate MSEs and MAEs exceed the baseline that predicts
+zero excess return over SPY. This measures forecast error, not a portfolio return.
+Temporal XGBoost results across the fixed 2022–May 2024 development periods:
+
+| Horizon | Feature set | XGBoost MSE above zero-SPY-excess baseline |
+| --- | --- | --- |
+| 252 sessions | 124 technical/relationship | +27.81% |
+| 252 sessions | 215 including news/financial | +33.81% |
+| 63 sessions | 124 technical/relationship | +5.22% |
+| 63 sessions | 215 including news/financial | +4.85% |
+
+Adding news/financial features worsens MSE in seven of eight paired comparisons
+and MAE in all eight.
+The remaining three-month temporal XGBoost comparison improves only about 0.35%
+against technical features, while still underperforming the zero-excess baseline.
+Ridge also underperforms that baseline in every aggregate comparison. No model was
+selected, promoted, served or retuned after observing these results.
+
+Each temporal specification scored 11,091 rows across 29 monthly decision dates. Known
+outcomes: 7,126 at 252 sessions (3,965 unknown), and 7,862 at 63 sessions (3,229 unknown).
+Every temporal top-decile monthly cohort has at least one unknown selected outcome:
+0/29 complete cohorts for each specification. Whole-cohort return comparisons remain
+unavailable; unknown selected rows were never dropped or replaced. Security-transfer
+results remain separately reported, with 2,100 scored rows per specification.
+Overlapping monthly horizons and previously inspected periods are retrospective
+development evidence, not independent samples or an untouched test.
+
+Training manifest: data/research/investment_training_20261110/models_30b54bf/_manifest.json
+SHA256 16eda742f2b6c0b95d25c03796185aac447c6c348f6710f6b7037640675516b3.
+Independent post-fit audit: chat outputs/investment-models-independent-postfit-audit-20261110.json
+SHA256 b139c5e84d98c332aec3598c4751dedb35b5d4d8f2b414630604839cd94404dd; reviewed helper SHA256 9a3694c7c4d726995e01465138802a9ec7fef069290f9ecdee108983c3d476e6.
+Pre-fit audit SHA256 bdcf62b5a7fdacbdbf854fb5f0d6adb36390eab5b2e3212fbb9c4b4f3efbda46.
+Implementation producer: 30b54bfd28b9a01de4bb9abcf1dba82661966cef on canonical main.
+All existing candles, news, financial snapshots, target evidence and swing models
+were reused/preserved. No new downloads, security exclusions or source reconstruction.
+
+Frozen design and completed implementation context:
 
 Observed consuming conflict: the existing saved-forecast evaluator requires actual
 fit before historical decision, but targets were verified in November 2026. A truthful

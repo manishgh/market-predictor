@@ -1,56 +1,82 @@
 # Active Edge Rebuild Handoff
 
-## Active investment dataset and research training - November 10
+## Completed investment training and evaluation - November 10
 
-User authorizes joining verified targets to retained candles/news/financial features,
-then training and SPY evaluation after checks pass. Canonical main remains the only
-checkout. The leading active plan freezes the reviewed design and test gates.
-Current operation: independent pre-fit audit passed at 19:49:23 UTC November 10.
-All 12 frozen splits are available. The 48 validation fits and 8 final research
-models are now authorized by that result; no model has been promoted or activated.
+The frozen experiment completed: **48 validation fits and 8 final research models**.
+Independent Senior Sol Quant replay passed at 2026-11-10T20:07:44.978406+00:00.
+All saved predictions, training-only preprocessing, split identities, metrics, actual
+clocks and consumed source hashes passed the independent checks. Maximum saved-model
+prediction replay residual: 0.
 
-Producer: 30b54bfd28b9a01de4bb9abcf1dba82661966cef, committed/pushed on main and
-exported immutably with 462 source files. Dataset build completed at 19:03:29 UTC.
-Dataset data/research/investment_dataset_20261110/joined_30b54bf/dataset/_manifest.json
+The models are trained, but the measured results do not support live activation.
+All 16 horizon/profile/learner/scope aggregate MSEs and MAEs exceed the baseline that predicts
+zero excess return over SPY. This measures forecast error, not a portfolio return.
+Temporal XGBoost results across the fixed 2022–May 2024 development periods:
+
+| Horizon | Feature set | XGBoost MSE above zero-SPY-excess baseline |
+| --- | --- | --- |
+| 252 sessions | 124 technical/relationship | +27.81% |
+| 252 sessions | 215 including news/financial | +33.81% |
+| 63 sessions | 124 technical/relationship | +5.22% |
+| 63 sessions | 215 including news/financial | +4.85% |
+
+Adding news/financial features worsens MSE in seven of eight paired comparisons
+and MAE in all eight.
+The remaining three-month temporal XGBoost comparison improves only about 0.35%
+against technical features, while still underperforming the zero-excess baseline.
+Ridge also underperforms that baseline in every aggregate comparison. No model was
+selected, promoted, served or retuned after observing these results.
+
+Each temporal specification scored 11,091 rows across 29 monthly decision dates. Known
+outcomes: 7,126 at 252 sessions (3,965 unknown), and 7,862 at 63 sessions (3,229 unknown).
+Every temporal top-decile monthly cohort has at least one unknown selected outcome:
+0/29 complete cohorts for each specification. Whole-cohort return comparisons remain
+unavailable; unknown selected rows were never dropped or replaced. Security-transfer
+results remain separately reported, with 2,100 scored rows per specification.
+Overlapping monthly horizons and previously inspected periods are retrospective
+development evidence, not independent samples or an untouched test.
+
+Training manifest: data/research/investment_training_20261110/models_30b54bf/_manifest.json
+SHA256 16eda742f2b6c0b95d25c03796185aac447c6c348f6710f6b7037640675516b3.
+Independent post-fit audit: chat outputs/investment-models-independent-postfit-audit-20261110.json
+SHA256 b139c5e84d98c332aec3598c4751dedb35b5d4d8f2b414630604839cd94404dd; reviewed helper SHA256 9a3694c7c4d726995e01465138802a9ec7fef069290f9ecdee108983c3d476e6.
+Pre-fit audit SHA256 bdcf62b5a7fdacbdbf854fb5f0d6adb36390eab5b2e3212fbb9c4b4f3efbda46.
+Implementation producer: 30b54bfd28b9a01de4bb9abcf1dba82661966cef on canonical main.
+All existing candles, news, financial snapshots, target evidence and swing models
+were reused/preserved. No new downloads, security exclusions or source reconstruction.
+
+Saved artifacts are research-only. Do not refit or rebuild this closed experiment for
+preference. Any subsequent experiment needs a new frozen hypothesis and evaluation
+plan; the observed results suggest revisiting feature usefulness and calibration,
+while resolving outcome gaps is necessary for a complete selected-cohort comparison.
+
+Dataset: data/research/investment_dataset_20261110/joined_30b54bf/dataset/_manifest.json
 SHA256 9c19fbf3a9f716b3f82b9958c094f9752f477952f5df8c4cb797123e765c1280.
-Admission same root/admission/_manifest.json
+Research admission: sibling admission/_manifest.json
 SHA256 197b9b3f23025d2d41927516fa4c14837e9fc6d5410f9c26ca8eebed81d96e9b.
-All 74,458 rows remain. Feature-eligible: 22,334 per horizon. Research-eligible:
-12,834 at 252 sessions and 14,341 at 63 sessions; seven verified targets per horizon
-lack usable features. Original verified target counts 12,841/14,348 are unchanged.
+Training request: data/research/investment_training_20261110/inputs_exact_dataset_pin/request.json
+SHA256 7d7c96a6b6b5816cb4867952bc7f750965e9fea53905e018a429a4103b3e4e8b.
+The initial relative-path request fb93 was refused before fitting; its replacement
+copies the audited admission's exact absolute dataset descriptor with the same hash.
+All other settings and sources are unchanged. Original failed requests/logs are retained.
 
-Independent audit chat outputs/investment-dataset-independent-prefit-audit-20261110.json
-SHA256 bdcf62b5a7fdacbdbf854fb5f0d6adb36390eab5b2e3212fbb9c4b4f3efbda46.
-Execution helper audit_investment_dataset_prefit_execution.py
-SHA256 9e15dd22dc21d3c2065b2da30dbcb87db7f09385ab5f8dd6eff6104652eb4c1e.
-It verified every target binding, 5,874,781 feature values and their clocks, 134,076
-financial values, all 46 original news-producer files and 2,430 consumed file hashes.
-All sources unchanged; strict 21-XNYS-session purge and security-transfer separation
-passed. Completed native session78559 exit0; worker37120 ended and lease released.
+Verification: original 106 component tests passed; final 36 focused dataset tests
+include actual-schema metadata ownership and mixed text/null Parquet regression.
+Affected Ruff and strict mypy passed; independent Sol design/code and Quant reviews
+approved the fixes. Actual dataset build, full pre-fit audit, training and saved-model
+replay completed successfully. No full-suite/release/deployment verification was claimed.
+The initial pre-fit helper had an index-column lookup bug; corrected helper9e15
+passed an actual-row smoke then the full audit. Initial post-fit helper4482 omitted
+the dataset's published request from its expected source inventory; its replacement
+independently verifies that file and retains strict inventory equality and final hashes.
+A later independent encoder used column-major arrays; a measured 4,545-prediction
+diagnostic showed identical values and exact stored predictions when using the original
+producer's row-major layout. The reviewed audit fix preserves strict exact equality;
+no numeric tolerance was relaxed and no model was refitted.
+No source, model or evaluation policy was changed to obtain an audit pass.
 
-Frozen training request data/research/investment_training_20261110/inputs/request.json
-SHA256 fb93bd126d23b0bbf331dadab094acb9ba0c75d7df0a3ee51f8a5e8475384903.
-Exact accepted audit copied beside it; preflight.json binds producer and clocks.
-Next command uses immutable30b54bf, train-investment-models, output
- data/research/investment_training_20261110/models_30b54bf.
-Reviewed post-fit helper audit_investment_models_postfit_execution.py
-SHA256 4482b0cc873722ee856628a24655660744e8dbac6d87e01cb48b2e1eae088757
-must independently replay saved predictions, train-only preprocessing, metrics and
-source hashes after training. It was frozen before any model results were read.
-
-Resolved failures retained for evidence: original dataset readers assumed metadata
-fields on the wrong owning objects (5f83087 corrected them), and mixed reason text
-with absent-source lists (30b54bf preserves text/null). Source bytes stayed unchanged.
-Original pre-fit helper9b247 had an index-column lookup bug; replacement9e15 changes
-only that lookup and passed a 209-value/209-clock actual-row smoke before full audit.
-Original helpers/logs remain unchanged; no caching, resource-limit or policy changes.
-Final 36 focused regression tests, affected Ruff/strict mypy and independent review
-passed. Original broader component run passed 106 tests. Exact logs remain in chat
-outputs and prior commits; no full suite or release verification was claimed.
-Sol ML engineer owns investment/dataset.py and research/investment_dataset.py plus
-consumer tests. Root owns investment/training.py, research/investment_training.py,
-CLI integration and current documentation. Independent Sol design/code and Senior
-Quant reviewers approved the bounded design. Actual dataset audit precedes fits.
+Historical frozen design and source details follow; leading completed result above
+is authoritative. The previous next-step wording below is historical evidence.
 
 Use exactly the previous XNYS session nightly209-feature snapshot, not same-day18:00
 features at a market-close decision. Preserve original values/clocks/IDs and586-peer

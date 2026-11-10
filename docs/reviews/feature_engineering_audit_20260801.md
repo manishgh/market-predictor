@@ -30,8 +30,17 @@ does not depend on future outcome availability; selected unknown outcomes cannot
 removed to improve measured returns. Component, poison and publication tests passed;
 latest representation regression has 36 passing tests plus affected Ruff/strict mypy.
 
-Training and subsequent saved-model replay are the next actual steps. No fitted model,
-prospective validation, promotion, serving activation or profitability is claimed yet.
+Training and independent saved-model replay completed: 48 validation fits and 8 final
+research models. Training-only preprocessing, all saved predictions, split/clock/source
+bindings and independent metrics passed. All 16 aggregate MSEs exceed zero-SPY-excess
+baselines; news/financial inputs worsen seven of eight paired MSE comparisons.
+The completed feature consumer is verified for retrospective research; measured model
+quality does not support production activation. No prospective performance, promotion,
+serving or complete selected-cohort return is claimed.
+Post-fit audit SHA256 b139c5e84d98c332aec3598c4751dedb35b5d4d8f2b414630604839cd94404dd.
+Historical checkpoint evidence below predates the completed training result above;
+earlier references to pending fitting describe those checkpoints at their original dates.
+
 ### Full investment targets built and independently checked - November 10
 
 The full corpus contains exactly 74,458 horizon rows for 37,229 monthly decisions.
