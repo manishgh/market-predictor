@@ -1,7 +1,7 @@
 """Synthetic pinned fixtures through dataset publication, admission and loading."""
 import json
 from contextlib import nullcontext
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -162,7 +162,8 @@ def news_fixture(root: Path, *, parent_request_columns: bool = True) -> dict[str
     contract_pins = {name: bytes_pin(root / f"news/{name}.toml", '[policy]\nname="original"\n')
         for name in ("strategy_contract", "research_contract", "temporal_contract")}
     config_evidence = write(root / "news/configuration-evidence.json", {"contract_pins": contract_pins})
-    source = source_frame([source_row(), source_row("issuer:unknown"), source_row("issuer:outside")])
+    source = source_frame([source_row(), source_row("issuer:unknown"),
+        source_row("issuer:outside", session=date(2024, 5, 23))])
     source = pd.concat([source, pd.DataFrame(dict.fromkeys(f"missing_reason_{name}" for name in NEWS_COLUMNS),
         index=source.index)], axis=1)
     source.loc[1, list(NEWS_COLUMNS)] = float("nan")
@@ -232,7 +233,15 @@ def test_complete_publication_admission_loader_and_unknown_forecast_population(t
     assert dataset.metadata.loc[unknown, "target_net_excess_vs_spy"].isna().all()
     assert dataset.features.loc[unknown, list(NEWS_COLUMNS)].isna().all().all()
     assert (dataset.metadata.loc[~unknown & dataset.metadata.feature_eligible, "target_net_excess_vs_spy"] == 0.05).all()
-    assert dataset.metadata.source_decision_id.str.startswith("original-swing").all()
+    present = dataset.metadata.source_decision_id.notna()
+    assert dataset.metadata.loc[present, "source_decision_id"].str.startswith("original-swing").all()
+    expected = value["news"]["source"].loc[0, "technical_missing_reasons"]
+    assert dataset.metadata.loc[present, "source_feature_missing_reasons"].eq(expected).all()
+    absent = dataset.metadata.security_id.eq("issuer:outside")
+    assert dataset.metadata.loc[absent, "source_decision_id"].isna().all()
+    assert dataset.metadata.loc[absent, "source_feature_missing_reasons"].isna().all()
+    assert all("exact_previous_xnys_snapshot_missing" in reasons
+        for reasons in dataset.metadata.loc[absent, "feature_missing_reasons"])
     assert all(Path(path).read_bytes() == content for path, content in before.items())
     assert not (tmp_path / "producer-raw-provenance-not-reopened").exists()
     assert json.loads(Path(result["admission"]["path"]).read_text())["research_training_allowed"] is True

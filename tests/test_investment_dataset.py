@@ -1,4 +1,5 @@
 """Exact prior-session snapshot joins, null preservation and causal admission poisons."""
+import json
 from datetime import date
 from typing import Any
 
@@ -28,7 +29,7 @@ def source_row(security: str = "issuer:one", *, session: date = date(2024, 5, 24
     cutoff = swing_prediction_cutoffs(pd.Series([session])).iloc[0]
     return {"decision_id": f"original-swing-{security}-{session}", "security_id": security, "ticker": "ONE",
         "session_date_et": session, "decision_time_utc": cutoff, "feature_eligible": False,
-        "technical_missing_reasons": ["original_partial_technical_snapshot"],
+        "technical_missing_reasons": json.dumps(["original_partial_technical_snapshot"]),
         **{name: np.float32(0.125 + index / 1000) for index, name in enumerate(COLUMNS)},
         **dict.fromkeys(CLOCKS.values(), cutoff)}
 
@@ -57,7 +58,7 @@ def test_exact_previous_exchange_session_values_and_both_identity_namespaces_sur
     assert result.loc[0, "source_cutoff_utc"] == pd.Timestamp("2024-05-24T22:00:00Z")
     assert result.loc[0, "feature_eligible"]
     assert not result.loc[0, "source_feature_eligible"]  # original flag is diagnostic only
-    assert result.loc[0, "source_feature_missing_reasons"] == ["original_partial_technical_snapshot"]
+    assert result.loc[0, "source_feature_missing_reasons"] == source.loc[0, "technical_missing_reasons"]
     pd.testing.assert_series_equal(result.loc[0, list(COLUMNS)], source.loc[0, list(COLUMNS)], check_names=False)
     assert all(result[name].dtype == source[name].dtype for name in COLUMNS)
     assert result.loc[0, list(FEATURE_NAMES)].isna().all()
@@ -70,8 +71,20 @@ def test_absent_exact_previous_snapshot_does_not_use_older_or_same_day_source() 
     result = joined(source=source)
     assert not result.loc[0, "feature_eligible"]
     assert result.loc[0, "source_decision_id"] is None
+    assert result.loc[0, "source_feature_missing_reasons"] is None
     assert result.loc[0, list(COLUMNS)].isna().all()
     assert "exact_previous_xnys_snapshot_missing" in result.loc[0, "feature_missing_reasons"]
+
+
+@pytest.mark.parametrize("reason", ['[]', '["warmup", "gap"]', None])
+def test_saved_technical_reason_text_or_null_is_preserved_verbatim(reason: str | None) -> None:
+    source = source_frame([source_row()])
+    source.loc[0, "technical_missing_reasons"] = reason
+    result = joined(source=source)
+    if reason is None:
+        assert pd.isna(result.loc[0, "source_feature_missing_reasons"])
+    else:
+        assert result.loc[0, "source_feature_missing_reasons"] == reason
 
 
 def test_all_baseline_missing_is_ineligible_optional_news_and_financial_nulls_are_retained() -> None:

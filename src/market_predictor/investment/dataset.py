@@ -157,7 +157,7 @@ def join_lagged_features(*, decisions: list[dict[str, Any]], source: pd.DataFram
         result["decision_session"] = day
         result.update({"source_decision_id": None, "source_security_id": None, "source_ticker": None,
             "source_session": None, "source_cutoff_utc": None, "source_feature_eligible": False,
-            "source_feature_missing_reasons": [], "feature_missing_reasons": []})
+            "source_feature_missing_reasons": None, "feature_missing_reasons": []})
         baseline_finite = 0
         for name in model_columns:
             result[name], result[availability_columns[name]] = np.nan, None
@@ -172,7 +172,7 @@ def join_lagged_features(*, decisions: list[dict[str, Any]], source: pd.DataFram
             result.update({"source_decision_id": saved["decision_id"], "source_security_id": saved["security_id"],
                 "source_ticker": saved["ticker"], "source_session": prior, "source_cutoff_utc": source_cutoff,
                 "source_feature_eligible": saved["feature_eligible"],
-                "source_feature_missing_reasons": saved.get("technical_missing_reasons", [])})
+                "source_feature_missing_reasons": saved.get("technical_missing_reasons")})
             for position, name in enumerate(model_columns):
                 value, raw_clock = saved[name], saved[availability_columns[name]]
                 clock = pd.Timestamp(raw_clock) if not pd.isna(raw_clock) else None
