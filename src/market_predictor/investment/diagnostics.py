@@ -47,9 +47,9 @@ def _known(frame: pd.DataFrame) -> pd.DataFrame:
     return frame.loc[scored & frame.research_eligible & frame[TARGET].notna()].copy()
 
 
-def _auc(frame: pd.DataFrame, weights: np.ndarray) -> dict[str, Any]:
+def _auc(frame: pd.DataFrame, weights: np.ndarray, score_column: str = PREDICTION) -> dict[str, Any]:
     actual = frame[TARGET].to_numpy(dtype=float) > 0
-    predicted = frame[PREDICTION].to_numpy(dtype=float)
+    predicted = frame[score_column].to_numpy(dtype=float)
     positive, negative = int(actual.sum()), int((~actual).sum())
     auc = float(roc_auc_score(actual, predicted, sample_weight=weights)) if positive and negative else None
     dates: list[dict[str, Any]] = []
@@ -57,7 +57,7 @@ def _auc(frame: pd.DataFrame, weights: np.ndarray) -> dict[str, Any]:
         labels = group[TARGET].to_numpy(dtype=float) > 0
         both = bool(labels.any() and (~labels).any())
         dates.append({"decision_session": str(day), "known_rows": len(group), "positive_rows": int(labels.sum()),
-            "negative_rows": int((~labels).sum()), "auc": float(roc_auc_score(labels, group[PREDICTION])) if both else None,
+            "negative_rows": int((~labels).sum()), "auc": float(roc_auc_score(labels, group[score_column])) if both else None,
             "missing_reason": None if both else "one_outcome_class"})
     valid = [row["auc"] for row in dates if row["auc"] is not None]
     return {"label": "strictly_positive_net_excess_vs_spy", "positive_rows": positive, "negative_rows": negative,

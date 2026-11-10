@@ -20,18 +20,16 @@ from market_predictor.investment.forecast_adjustment import centered_shrunk_pred
 from market_predictor.investment.fundamentals import FEATURE_NAMES
 from market_predictor.investment.training import FAMILIES, HORIZONS, PROFILES, SCOPES, SCORE_YEARS
 from market_predictor.research.investment_diagnostics import (
-    InvestmentReferenceRun,
     _recheck,
     read_fit_predictions,
     read_reference_run,
     read_validation_predictions,
     reference_folds,
 )
-from market_predictor.research.investment_feature_ablation import InvestmentFeatureAblationRequest
+from market_predictor.research.investment_feature_ablation import InvestmentComparisonSources, read_ablation_reference
 from market_predictor.research.investment_feature_ablation import _implementation as ablation_implementation
 from market_predictor.research.investment_features import _publish
 from market_predictor.research.investment_training import FLAGS, _fold_record, _publish_fit
-from market_predictor.swing.contracts.holding_accounting import HoldingContract
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.return_training import BoostedReturnSettings
 
@@ -43,56 +41,15 @@ RAW_PROFILES = (TECHNICAL, NEWS, FULL, PROFILE)
 ADJUSTED_PROFILES = (NEWS, FULL, PROFILE)
 
 
-class InvestmentForecastAdjustmentRequest(HoldingContract):
+class InvestmentForecastAdjustmentRequest(InvestmentComparisonSources):
     schema_version: Literal["market_predictor.investment_forecast_adjustment_request"]
     scope: Literal["retrospective_research"]
-    training_manifest: SourcePin
-    training_request: SourcePin
-    ablation_manifest: SourcePin
-    ablation_request: SourcePin
 
 
 def _implementation() -> dict[str, str]:
     package = Path(__file__).resolve().parents[1]
     names = ("research/investment_forecast_adjustment.py", "investment/forecast_adjustment.py")
     return {**ablation_implementation(), **{str(package / name): file_sha256(package / name) for name in names}}
-
-
-def _read_ablation(root: Path, request: InvestmentForecastAdjustmentRequest, training: InvestmentReferenceRun,
-                   columns: dict[str, tuple[str, ...]], pins: dict[str, str]) -> InvestmentReferenceRun:
-    original = InvestmentFeatureAblationRequest.model_validate_json(json.dumps(read_object(root, request.ablation_request, pins)))
-    require(original.training_manifest == request.training_manifest and original.training_request == request.training_request,
-        "forecast adjustment ablation binds a different training run")
-    report = read_object(root, request.ablation_manifest, pins)
-    require(report.get("schema") == "market_predictor.investment_feature_ablation"
-        and report.get("status") == "complete_research_only" and report.get("scope") == "retrospective_research"
-        and report["request_sha256"] == request.ablation_request.sha256 and report["fold_scope_fits"] == 48
-        and report["final_models"] == 0 and all(report.get(flag) is False for flag in FLAGS)
-        and report["training_manifest"] == request.training_manifest.model_dump(mode="json")
-        and report["training_request"] == request.training_request.model_dump(mode="json"),
-        "forecast adjustment requires the exact completed matched ablation")
-    require(report["reused_units"] == {key: pin for key, pin in training.manifest["units"].items() if not key.endswith("final_refit")}
-        and set(report["new_units"]) == {f"{h}/{profile}/{family}/{scope}/{year}"
-            for h in HORIZONS for profile in NEW_PROFILES for family in FAMILIES for scope in SCOPES for year in SCORE_YEARS},
-        "forecast adjustment ablation unit inventory differs")
-    completed_at = pd.Timestamp(report["completed_at_utc"])
-    require(not pd.isna(completed_at) and completed_at.tzinfo is not None
-        and training.completed_at < completed_at <= pd.Timestamp(datetime.now(UTC)),
-        "forecast adjustment ablation completion clock differs")
-    experiment_path = inside(root, request.ablation_manifest.path).parent / "experiment.json"
-    require(report["files"] == {"experiment.json": report["experiment_sha256"]}, "forecast adjustment ablation experiment pin differs")
-    experiment = read_object(root, SourcePin(path=str(experiment_path), sha256=report["experiment_sha256"]), pins)
-    require(experiment.get("schema") == "market_predictor.investment_feature_ablation_experiment"
-        and experiment["scope"] == "retrospective_research" and all(experiment.get(flag) is False for flag in FLAGS)
-        and experiment["request_sha256"] == request.ablation_request.sha256
-        and experiment["reference_experiment_sha256"] == training.manifest["experiment_sha256"]
-        and all(experiment[name] == getattr(training.request, name).model_dump(mode="json")
-            for name in ("dataset_manifest", "dataset_admission", "estimator_settings"))
-        and all(experiment[name] == training.experiment[name] for name in
-            ("dependencies", "feature_contract_sha256", "parameters", "folds"))
-        and {name: tuple(values) for name, values in experiment["model_columns"].items()} == columns,
-        "forecast adjustment ablation experiment differs from the frozen training contract")
-    return InvestmentReferenceRun(report, experiment, training.request, request.ablation_request.sha256, completed_at)
 
 
 def _benchmark_check(reports: dict[str, Any]) -> dict[str, Any]:
@@ -141,7 +98,7 @@ def run_investment_forecast_adjustment(*, root: Path, request: Path, request_sha
         add_pins(root, pins, dataset.source_files)
         folds = reference_folds(training, dataset)
         columns = ablation_profiles(dataset.model_columns)
-        ablation = _read_ablation(root, parsed, training, columns, pins)
+        ablation = read_ablation_reference(root, parsed, training, columns, pins)
         metadata = dataset.metadata.reset_index(drop=True)
         coverage = feature_coverage(dataset.features, columns[FULL])
         columns[PROFILE] = columns[FULL]

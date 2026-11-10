@@ -21,6 +21,7 @@ from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, read_json_object, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.investment.dataset import load_investment_dataset
+from market_predictor.investment.ranking import RANKING_SCORE, ranking_diagnostics, within_date_rank_targets
 from market_predictor.investment.training import (
     FAMILIES,
     HORIZONS,
@@ -41,6 +42,8 @@ from market_predictor.swing.training.return_validation import date_balanced_weig
 
 FLAGS = {"promotion_eligible": False, "production_eligible": False, "serving_eligible": False,
          "portfolio_evaluated": False, "untouched_test_evidence": False}
+RANKING_PROFILE = "within_date_return_rank"
+RANKING_TARGET = "within_training_date_centered_average_rank_of_net_excess_vs_spy"
 
 
 class InvestmentTrainingRequest(HoldingContract):
@@ -92,7 +95,7 @@ def _fold_record(fold: InvestmentFold, metadata: pd.DataFrame) -> dict[str, Any]
 def _publish_fit(output: Path, key: str, *, features: pd.DataFrame, metadata: pd.DataFrame,
                  columns: tuple[str, ...], family: str, parameters: dict[str, Any], train_indices: np.ndarray,
                  score_indices: np.ndarray, prediction_indices: np.ndarray, identity: dict[str, Any],
-                 request_sha256: str, admitted_at: datetime, native_missing_columns: tuple[str, ...] = ()
+                 request_sha256: str, admitted_at: datetime, native_missing_columns: tuple[str, ...] = (), ranking_target: bool = False
                  ) -> tuple[dict[str, Any], pd.DataFrame | None]:
     guard("investment research fit " + key)
     started = datetime.now(UTC)
@@ -101,32 +104,37 @@ def _publish_fit(output: Path, key: str, *, features: pd.DataFrame, metadata: pd
     if (not len(train_meta) or available.isna().any() or not available.lt(started).all()
             or pd.Timestamp(admitted_at) >= pd.Timestamp(started)):
         raise DataReadinessError("actual investment fit must follow admission and every training label verification")
+    if ranking_target and (family != FAMILIES[1] or native_missing_columns or not len(score_indices)):
+        raise DataReadinessError("ranking fits require the frozen boosted validation setup")
+    target_values = within_date_rank_targets(train_meta) if ranking_target else train_meta[TARGET].to_numpy(dtype=np.float64)
     model = fit_return_regressor(family, features.iloc[train_indices].loc[:, list(columns)],
-        train_meta[TARGET].to_numpy(dtype=np.float64), date_balanced_weights(train_meta.decision_session), parameters,
+        target_values, date_balanced_weights(train_meta.decision_session), parameters,
         **({"native_missing_columns": native_missing_columns} if native_missing_columns else {}))
     fitted = datetime.now(UTC)
     guard("investment research prediction " + key)
     predictions: pd.DataFrame | None = None
     metrics: dict[str, object] = {}
+    score_column = RANKING_SCORE if ranking_target else "predicted_excess_return"
     if len(score_indices):
         predictions = metadata.iloc[score_indices].copy()
-        predictions["predicted_excess_return"] = np.nan
+        predictions[score_column] = np.nan
         if len(prediction_indices):
             values = predict_return(model, features.iloc[prediction_indices].loc[:, list(columns)])
-            predictions.loc[prediction_indices, "predicted_excess_return"] = values
+            predictions.loc[prediction_indices, score_column] = values
         generated = datetime.now(UTC)
         predictions["actual_fit_started_at_utc"] = started
         predictions["actual_fitted_at_utc"] = fitted
         predictions["prediction_generated_at_utc"] = generated
         predictions["evidence_scope"] = "retrospective_research"
         predictions["prediction_missing_reason"] = pd.Series(None, index=predictions.index, dtype=object)
-        predictions.loc[predictions.predicted_excess_return.isna(), "prediction_missing_reason"] = "source_features_unavailable"
-        metrics = investment_diagnostics(predictions)
+        predictions.loc[predictions[score_column].isna(), "prediction_missing_reason"] = "source_features_unavailable"
+        metrics = ranking_diagnostics(predictions) if ranking_target else investment_diagnostics(predictions)
     target = output / key
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists():
         raise FileExistsError(target)
-    record = {"schema": "market_predictor.investment_research_model", "scope": "retrospective_research",
+    schema = "market_predictor.investment_ranking_model" if ranking_target else "market_predictor.investment_research_model"
+    record = {"schema": schema, "scope": "retrospective_research",
         "request_sha256": request_sha256, "unit": identity, "family": family, "parameters": parameters,
         "feature_names": list(columns), "actual_fit_started_at_utc": started.isoformat(),
         "actual_fitted_at_utc": fitted.isoformat(), "dataset_admitted_at_utc": admitted_at.isoformat(),
@@ -135,6 +143,9 @@ def _publish_fit(output: Path, key: str, *, features: pd.DataFrame, metadata: pd
         "training_rows": len(train_meta), "training_security_ids": sorted(train_meta.security_id.unique().tolist()),
         "training_decision_ids_sha256": json_sha256(sorted(train_meta.decision_id.tolist())),
         "metrics": metrics, **FLAGS}
+    if ranking_target:
+        record.update(ranking_target=RANKING_TARGET, score_column=RANKING_SCORE, score_units="dimensionless",
+            training_rank_targets_sha256=json_sha256(list(zip(train_meta.decision_id, target_values.tolist(), strict=True))))
     if native_missing_columns:
         record["native_missing_features"] = [asdict(feature) for feature in model.native_missing_features]
     with tempfile.TemporaryDirectory(dir=target.parent, prefix=".investment-fit-") as temporary:

@@ -3,12 +3,36 @@
 
 | Component | Retained source/time/value evidence | Ordered consumer | Train/evaluate | Live/API |
 | --- | --- | --- | --- | --- |
-| 209 technical/news inputs | Verified admitted values and clocks, unchanged | Pending exact original 418 encoding/persistence regression | Pending actual 12 fits and independent replay | Not applicable: retrospective ranking only |
-| Within-date rank target | Verified original net SPY excess and maturity | Pending training-only rank/tie/singleton/holdout poison checks | Pending exact target-vector hash and independent fit replay | Not applicable: no new live labels |
-| Unitless ranking score | Exact full eligible roster and original masks | Pending separate score/schema and common date support tests | Pending same-row ranking/top-decile audit | Not applicable: no return/API claim |
+| 209 technical/news inputs | Verified admitted values and clocks, unchanged | Verified shared encoder/default persistence regressions; actual 418 replay pending | Pending actual 12 fits and independent replay | Not applicable: retrospective ranking only |
+| Within-date rank target | Verified original net SPY excess and maturity | Verified training-only rank/tie/singleton/alignment and publisher poison checks | Pending exact target-vector hash and independent fit replay | Not applicable: no new live labels |
+| Unitless ranking score | Exact full eligible roster and original masks | Verified dedicated unitless score/schema, label-only date support and unknown selections | Pending same-row ranking/top-decile audit | Not applicable: no return/API claim |
 
 Only target representation changes; raw labels, optional source gaps and outcomes stay
-intact. No fit until consumer tests and independent design/code review pass.
+intact. Consumer tests and independent design/code review passed; actual fitting is authorized.
+The new score is retrospective research only; live/API layers are not applicable.
+
+Implementation consumer checks and independent consolidated Sol code review passed.
+All 89 distinct focused cases pass: the first run passed 87 cases and found one
+test-only temporary-folder collision; separate fixture folders and the targeted
+three-case rerun passed, including the newly added estimator-target poison test.
+The focused component suite covers rank ties/singletons/alignment, constant-score
+support, retained unknown selections, shared return diagnostics and reference reader
+regressions, rank publication, tamper refusal and CLI forwarding. The extra publisher
+poison test checks the exact target vector consumed by the estimator after changing
+future and held-out outcomes. Affected Ruff and strict mypy pass. These are synthetic
+unit/regression checks; the actual 12 fits and independent replay remain pending.
+Normal component verification applies; no release/full-suite/API checks are needed.
+
+Frozen request: data/research/investment_ranking_20261111/inputs/request.json
+SHA256 d283a93a0f36506618f5f339db5e67fa429204205480b5c5abbf93784b35d9e0.
+It binds the unchanged, independently audited training/ablation requests and reports.
+Independent audit helper: chat outputs/audit_investment_stock_selection.py,
+SHA256 0fff64758cc8dbcd6d2e14305a4d090e563660ec7579c9db615d8f3ccaa67ec1.
+The helper was independently reviewed before execution. It reconstructs training
+targets/medians/encoding, replays 12 saved models, rechecks 36 previously audited
+controls, and independently evaluates all 48 units/16 aggregates and frozen gates.
+Next: commit/export main, run the frozen 12 fits, then independent senior Quant replay.
+
 
 ### Forecast adjustment and financial handling November 10
 

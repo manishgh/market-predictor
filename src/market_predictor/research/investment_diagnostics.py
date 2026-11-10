@@ -61,13 +61,13 @@ def _recheck(pins: dict[str, str]) -> None:
 
 
 def read_fit_predictions(root: Path, pin: SourcePin, record: dict[str, Any], expected: pd.DataFrame,
-    coverage: pd.DataFrame, pins: dict[str, str], completed_at: pd.Timestamp) -> pd.DataFrame:
+    coverage: pd.DataFrame, pins: dict[str, str], completed_at: pd.Timestamp, *, score_column: str = PREDICTION) -> pd.DataFrame:
     path = inside(root, pin.path).parent / "predictions.parquet"
     digest = record["files"]["predictions.parquet"]
     require(path.stat().st_size <= 64 * 1024**2 and file_sha256(path) == digest,
         "investment saved predictions exceed size bound or changed")
     add_pins(root, pins, {str(path): digest})
-    frame = pd.read_parquet(path, columns=list(PREDICTION_COLUMNS))
+    frame = pd.read_parquet(path, columns=[score_column if name == PREDICTION else name for name in PREDICTION_COLUMNS])
     require(len(frame) == len(expected) and not frame.decision_id.duplicated().any(),
         "investment saved prediction population differs from its frozen fold")
     try:
@@ -77,7 +77,7 @@ def read_fit_predictions(root: Path, pin: SourcePin, record: dict[str, Any], exp
         from market_predictor.core.errors import DataReadinessError
 
         raise DataReadinessError("investment saved prediction identities/outcomes differ from the admitted dataset") from error
-    require(frame[PREDICTION].notna().equals(frame.feature_eligible)
+    require(frame[score_column].notna().equals(frame.feature_eligible)
         and frame.evidence_scope.eq("retrospective_research").all(), "investment saved prediction mask or scope differs")
     started, fitted = pd.Timestamp(record["actual_fit_started_at_utc"]), pd.Timestamp(record["actual_fitted_at_utc"])
     require(started.tzinfo is not None and fitted.tzinfo is not None and started <= fitted

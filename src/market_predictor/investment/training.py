@@ -79,13 +79,13 @@ def investment_fold(metadata: pd.DataFrame, horizon: int, score_year: int,
         np.flatnonzero(prediction.to_numpy()), tuple(reasons))
 
 
-def investment_diagnostics(predictions: pd.DataFrame) -> dict[str, object]:
-    """Equal-date errors and fixed-decile cohorts; no compounding overlapping returns."""
-    required = {"decision_id", "security_id", "decision_session", "predicted_excess_return", TARGET,
+def _prediction_masks(predictions: pd.DataFrame, score_column: str) -> tuple[pd.Series, pd.Series]:
+    """Validate matched holding outcomes and identify scored and known rows."""
+    required = {"decision_id", "security_id", "decision_session", score_column, TARGET,
                 "stock_net_return", "spy_gross_return", "qqq_gross_return", "sector_gross_return", "research_eligible"}
     if not required.issubset(predictions.columns) or predictions.decision_id.duplicated().any():
         raise DataReadinessError("investment diagnostics need one row per declared decision")
-    scored = predictions.predicted_excess_return.notna()
+    scored = predictions[score_column].notna()
     known = scored & predictions.research_eligible & predictions[TARGET].notna()
     verified = predictions.loc[predictions.research_eligible]
     returns = [TARGET, "stock_net_return", "spy_gross_return", "qqq_gross_return", "sector_gross_return"]
@@ -93,38 +93,23 @@ def investment_diagnostics(predictions: pd.DataFrame) -> dict[str, object]:
             or not np.allclose(verified[TARGET], verified.stock_net_return - verified.spy_gross_return,
                 rtol=0.0, atol=1e-12)):
         raise DataReadinessError("verified investment target must reconcile to complete matched holding returns")
-    for column in ("predicted_excess_return", TARGET, "stock_net_return", "spy_gross_return",
+    for column in (score_column, TARGET, "stock_net_return", "spy_gross_return",
                    "qqq_gross_return", "sector_gross_return"):
         values = predictions.loc[predictions[column].notna(), column].to_numpy(dtype=float)
         if not np.isfinite(values).all():
             raise DataReadinessError("nonfinite investment evaluation input")
-    result: dict[str, object] = {
-        "declared_rows": len(predictions), "scored_rows": int(scored.sum()),
-        "known_scored_outcomes": int(known.sum()), "unknown_scored_outcomes": int((scored & ~known).sum()),
-        "mse": None, "mae": None, "zero_excess_baseline_mse": None, "zero_excess_baseline_mae": None,
-        "mean_date_rank_correlation": None, "rank_correlation_dates": 0,
-        "portfolio_evaluated": False, "untouched_test_evidence": False,
-        "overlap_notice": "63/252-session monthly outcomes overlap; rows and months are not independent samples.",
-        "confidence_intervals": None, "annual_compounded_return": None,
-    }
-    if known.any():
-        observed = predictions.loc[known]
-        weights = date_balanced_weights(observed.decision_session)
-        actual = observed[TARGET].to_numpy(dtype=float)
-        error = observed.predicted_excess_return.to_numpy(dtype=float) - actual
-        correlations = []
-        for _, group in observed.groupby("decision_session", sort=True):
-            if len(group) >= 3 and group[TARGET].nunique() > 1 and group.predicted_excess_return.nunique() > 1:
-                correlations.append(float(group[TARGET].rank().corr(group.predicted_excess_return.rank())))
-        result.update(mse=float(np.average(error ** 2, weights=weights)),
-            mae=float(np.average(np.abs(error), weights=weights)),
-            zero_excess_baseline_mse=float(np.average(actual ** 2, weights=weights)),
-            zero_excess_baseline_mae=float(np.average(np.abs(actual), weights=weights)),
-            mean_date_rank_correlation=float(np.mean(correlations)) if correlations else None,
-            rank_correlation_dates=len(correlations))
+    return scored, known
+
+
+def investment_selection_diagnostics(predictions: pd.DataFrame,
+                                    score_column: str = "predicted_excess_return") -> dict[str, object]:
+    """Select the full eligible score roster before resolving holding outcomes."""
+    scored, known = _prediction_masks(predictions, score_column)
+    result: dict[str, object] = {"declared_rows": len(predictions), "scored_rows": int(scored.sum()),
+        "known_scored_outcomes": int(known.sum()), "unknown_scored_outcomes": int((scored & ~known).sum())}
     selected_dates: list[dict[str, object]] = []
     for day, group in predictions.loc[scored].groupby("decision_session", sort=True):
-        selected = group.sort_values(["predicted_excess_return", "security_id"],
+        selected = group.sort_values([score_column, "security_id"],
             ascending=[False, True], kind="stable").head(math.ceil(len(group) / 10))
         supported = selected.loc[selected.research_eligible & selected[TARGET].notna()]
         complete = len(supported) == len(selected)
@@ -149,6 +134,37 @@ def investment_diagnostics(predictions: pd.DataFrame) -> dict[str, object]:
         float(np.mean([row["mean_net_excess_vs_spy"] for row in selected_dates]))
         if selected_dates and all(row["complete_selected_outcomes"] for row in selected_dates) else None
     )
+    return result
+
+
+def investment_diagnostics(predictions: pd.DataFrame) -> dict[str, object]:
+    """Equal-date errors and fixed-decile cohorts; no compounding overlapping returns."""
+    scored, known = _prediction_masks(predictions, "predicted_excess_return")
+    result: dict[str, object] = {
+        "declared_rows": len(predictions), "scored_rows": int(scored.sum()),
+        "known_scored_outcomes": int(known.sum()), "unknown_scored_outcomes": int((scored & ~known).sum()),
+        "mse": None, "mae": None, "zero_excess_baseline_mse": None, "zero_excess_baseline_mae": None,
+        "mean_date_rank_correlation": None, "rank_correlation_dates": 0,
+        "portfolio_evaluated": False, "untouched_test_evidence": False,
+        "overlap_notice": "63/252-session monthly outcomes overlap; rows and months are not independent samples.",
+        "confidence_intervals": None, "annual_compounded_return": None,
+    }
+    if known.any():
+        observed = predictions.loc[known]
+        weights = date_balanced_weights(observed.decision_session)
+        actual = observed[TARGET].to_numpy(dtype=float)
+        error = observed.predicted_excess_return.to_numpy(dtype=float) - actual
+        correlations = []
+        for _, group in observed.groupby("decision_session", sort=True):
+            if len(group) >= 3 and group[TARGET].nunique() > 1 and group.predicted_excess_return.nunique() > 1:
+                correlations.append(float(group[TARGET].rank().corr(group.predicted_excess_return.rank())))
+        result.update(mse=float(np.average(error ** 2, weights=weights)),
+            mae=float(np.average(np.abs(error), weights=weights)),
+            zero_excess_baseline_mse=float(np.average(actual ** 2, weights=weights)),
+            zero_excess_baseline_mae=float(np.average(np.abs(actual), weights=weights)),
+            mean_date_rank_correlation=float(np.mean(correlations)) if correlations else None,
+            rank_correlation_dates=len(correlations))
+    result.update(investment_selection_diagnostics(predictions))
     return result
 
 

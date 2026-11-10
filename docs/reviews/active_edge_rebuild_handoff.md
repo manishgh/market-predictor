@@ -1,14 +1,31 @@
 # Active Edge Rebuild Handoff
 ## Active stock selection ranking experiment November 11
 
-Main starts clean at 2598cf1. User authorizes the leading target-only 12-fit ranking
-experiment with retained 209 features and fixed XGBoost, original 12 outer folds,
-36 old controls and a separate unitless score contract. Root owns pure ranking,
-shared selection/AUC helpers and docs; Sol engineer owns persistence/references/CLI.
-Independent design and senior Quant approval are complete. No new fit yet.
-Next: implement and test the shared contracts, review, update feature acceptance,
-commit/export main, run 12 models, independently replay and report honest ranking
-and economic limits. No tuning, source rebuilds, exclusions or V1/beta work.
+The d9284c5 frozen target-only experiment is implemented and ready for the actual
+retained-data run. Canonical checkout remains main; no extra checkout, source rebuild,
+download, exclusion, model promotion or V1/beta work is included.
+
+Implementation consumer checks and independent consolidated Sol code review passed.
+All 89 distinct focused cases pass: the first run passed 87 cases and found one
+test-only temporary-folder collision; separate fixture folders and the targeted
+three-case rerun passed, including the newly added estimator-target poison test.
+The focused component suite covers rank ties/singletons/alignment, constant-score
+support, retained unknown selections, shared return diagnostics and reference reader
+regressions, rank publication, tamper refusal and CLI forwarding. The extra publisher
+poison test checks the exact target vector consumed by the estimator after changing
+future and held-out outcomes. Affected Ruff and strict mypy pass. These are synthetic
+unit/regression checks; the actual 12 fits and independent replay remain pending.
+Normal component verification applies; no release/full-suite/API checks are needed.
+
+Frozen request: data/research/investment_ranking_20261111/inputs/request.json
+SHA256 d283a93a0f36506618f5f339db5e67fa429204205480b5c5abbf93784b35d9e0.
+It binds the unchanged, independently audited training/ablation requests and reports.
+Independent audit helper: chat outputs/audit_investment_stock_selection.py,
+SHA256 0fff64758cc8dbcd6d2e14305a4d090e563660ec7579c9db615d8f3ccaa67ec1.
+The helper was independently reviewed before execution. It reconstructs training
+targets/medians/encoding, replays 12 saved models, rechecks 36 previously audited
+controls, and independently evaluates all 48 units/16 aggregates and frozen gates.
+Next: commit/export main, run the frozen 12 fits, then independent senior Quant replay.
 
 ## Completed forecast bias and financial handling experiment November 10
 

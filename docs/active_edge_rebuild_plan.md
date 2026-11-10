@@ -68,6 +68,28 @@ committed immutable producer, actual 12 fits and independent saved-model/metric 
 Normal shared lease and memory policy (strictly below 90%, existing process limits).
 Update feature acceptance before fits; commit/push main and leave no own workers.
 
+Implementation consumer checks and independent consolidated Sol code review passed.
+All 89 distinct focused cases pass: the first run passed 87 cases and found one
+test-only temporary-folder collision; separate fixture folders and the targeted
+three-case rerun passed, including the newly added estimator-target poison test.
+The focused component suite covers rank ties/singletons/alignment, constant-score
+support, retained unknown selections, shared return diagnostics and reference reader
+regressions, rank publication, tamper refusal and CLI forwarding. The extra publisher
+poison test checks the exact target vector consumed by the estimator after changing
+future and held-out outcomes. Affected Ruff and strict mypy pass. These are synthetic
+unit/regression checks; the actual 12 fits and independent replay remain pending.
+Normal component verification applies; no release/full-suite/API checks are needed.
+
+Frozen request: data/research/investment_ranking_20261111/inputs/request.json
+SHA256 d283a93a0f36506618f5f339db5e67fa429204205480b5c5abbf93784b35d9e0.
+It binds the unchanged, independently audited training/ablation requests and reports.
+Independent audit helper: chat outputs/audit_investment_stock_selection.py,
+SHA256 0fff64758cc8dbcd6d2e14305a4d090e563660ec7579c9db615d8f3ccaa67ec1.
+The helper was independently reviewed before execution. It reconstructs training
+targets/medians/encoding, replays 12 saved models, rechecks 36 previously audited
+controls, and independently evaluates all 48 units/16 aggregates and frozen gates.
+Next: commit/export main, run the frozen 12 fits, then independent senior Quant replay.
+
 ### Forecast bias and financial input handling November 10
 
 Status: `complete` for the measured forecast/financial experiment. The user authorized fixing forecasts and
