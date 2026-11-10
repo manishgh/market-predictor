@@ -104,6 +104,27 @@ Replay all 391 candidate stock proofs on actual retained source bytes before ano
 full event run; record local ownership gaps and fatal failures distinctly. No source
 bytes or proof requests may be rewritten into a successful result.
 
+Bounded raw-reader amendment: actual full-target ffafdeb replay wrote four security
+checkpoints, then stopped on overlapping legacy ticker segments for the same issuer.
+The 565-parent metadata scan finds six such pairs and no same-ticker/role overlaps;
+all 18 parent/capture-range overlaps are EMPTY captures, with no observed extension
+conflict. Exact ARNC/HWM evidence is decisive: accepted ARNC ownership ends and HWM
+starts April 1, 2020, while the old selected ARNC capture extends through April 15.
+Never filter out the competing HWM segment to accept those old-symbol prices.
+Keep all 565 parents and return the existing cross-symbol local-unavailable result
+before reading prices for distinct logical stock tickers with the same stock role.
+First check every requested session for genuine same-ticker duplicate ownership;
+provider differences or a third alias must not conceal it. Keep benchmark and
+conflicting-role overlaps fatal. Same-ticker overlap, hashes, capture clocks and
+unsupported cross-symbol continuity retain their existing behavior. This is only a
+negative-result change, never a new identity or source admission. Senior Quant
+independently checked the exact relation and parent hashes. Add actual-shape alias,
+no-price-read and mixed-alias-plus-duplicate poison regressions; run affected reader,
+label and source-extension consumers, Ruff/strict mypy and independent code review.
+Before another full target replay, scan all parent ownership conflicts under the new
+classification from retained metadata; preserve the failed partial corpus and source
+resolution artifacts. A new immutable producer reuses the frozen target request.
+
 Ownership: Sol stock engineer owns stock_identity/source_extensions and tests;
 Sol distribution engineer owns dividend_resolution/research investment_currencies
 and tests; root owns integration, materializer, command surfaces and continuity.

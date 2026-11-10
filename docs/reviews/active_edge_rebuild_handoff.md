@@ -3,12 +3,59 @@
 ## Active stock identity and full-target checkpoint — November 9
 
 The leading active plan freezes the authorized implementation and exit gates.
-Implementation 5020c51be637cb294838ce6fb54d59c63863cee4 is committed and pushed
-on main, including the narrow actual-source date and guard amendment. Immutable
-producer export contains 457 source files at
- data/research/implementation_snapshots/5020c51be637cb294838ce6fb54d59c63863cee4/src.
-Code verification and all eleven collection batches are complete. Actual stock
-source resolution, full target publication and independent audit remain in progress.
+Implementation ffafdeb41e7288d2ae0f2c25482957f87f3ca586 is committed and pushed
+on main, including the narrow actual-source date/guard and SEC primary-document
+amendments. Immutable producer export contains 457 source files at
+ data/research/implementation_snapshots/ffafdeb41e7288d2ae0f2c25482957f87f3ca586/src.
+Code verification, all eleven collection batches and full stock dividend resolution
+are complete. Full target publication and independent target audit remain in progress.
+Full dividend manifest:
+ data/research/investment_full_dividend_resolution_20261109/stock-resolution/_manifest.json
+SHA256 daccbd252fbe6e5aab398e42532dc74db234cb8adeeb925194e5c603f3178579.
+All 6,717 requested stock events are accounted for: 4,241 source-validated and 2,476
+explicitly unresolved. The 257 benchmark objects remain unchanged, total 4,498
+assertions. Currency SHA256 2eacfde6fa37bd224b7638d89b2f5af0aed0f3cbb5e1e453936d377e1776f092;
+the original two-correction file remains byte-identical (9a44ec36...); no new correction.
+Source audit at data/research/investment_full_dividend_resolution_20261109/stock-source-audit.json
+SHA256 224f9df7f971dde4e6e6c1b5d6e310851cfc1c2afa0e864fb8481fc6918cbed4.
+The 2,476 local gaps: 722 missing original CUSIP, 635 usable CUSIP/ISIN but no selected
+class proof, 242 unsupported tax PAYMENT dates, 113 dated-class/multiple-class gaps,
+314 unsupported ordinary-domestic terms, 375 absent exact payments, 45 conflicting
+PAYMENT versions and 30 provider/tax gross amount mismatches. Alias diagnostics
+retain all 43 GEN/NLOK/VIAC/PARA event IDs and exact sequential relation intervals;
+cohort membership does not establish absence of other issuer classes, so no waiver.
+
+The full target CLI used immutable ffafdeb with no selected subset. It completed
+shared-source verification and wrote four per-security checkpoints, then stopped on
+`investment selected raw sources overlap session ownership`. No final corpus exists.
+The four partial checkpoints and common source inventory remain immutable evidence;
+no complete target publication or audit is claimed. The stock engineer is checking
+all parent/extension ownership metadata and the exact next security; genuine same-
+asset overlap must remain fatal. Do not rerun the dividend source resolver. A narrow
+reader fix, if supported by exact evidence and Quant review, needs its own immutable
+producer and full-target replay. The heavy-job lease was released on failure.
+Exact metadata diagnosis found six different-ticker parent overlaps, no same-ticker
+conflicts, and 18 parent/capture overlaps all belonging to EMPTY captures. The accepted
+ARNC/HWM identity boundary is April 1, 2020; old ARNC capture tails reach April 15.
+The reviewed reader amendment keeps all owners, rejects genuine duplicate ticker,
+benchmark and role conflicts, and returns existing local cross-symbol unavailability
+for distinct stock ticker overlaps without reading prices. No new positive source
+admission, symbol stitching or source rewrite occurs. Forty-one focused reader,
+label-materialization and source-extension tests passed in 3.06s; affected Ruff and
+strict mypy passed. Independent Sol code review and exact-source Senior Quant review
+approved. Commit/export, run the six-conflict immutable preflight, then rerun the full
+unchanged target request into a new output; preserve the failed corpus. Full suite,
+training and model activation were not run for this narrow component amendment.
+Request data/research/investment_full_targets_20261109/inputs/request.json
+SHA256 4ab29ba0552fa79e17721648999f3f130148f4393a58f0c3f3dca764ac8f45f1.
+Output data/research/investment_full_targets_20261109/corpus; log in chat
+outputs/full-investment-targets-ffafdeb-20261109.log. Wrapper
+outputs/run_full_investment_targets.py validates the exact producer export, request
+hash and full roster selection before invoking the canonical materialize-investment-labels
+CLI. Do not launch a second heavy job alongside the ownership diagnostic. On successful
+completion independently audit all 74,458
+rows and the 57 prior examples using the frozen plan and snapshot below. No target
+success, fitting, training admission or model promotion is yet claimed.
 Actual 5020c51 replay passed all eleven archive checks, then stopped before publication
 on a fatal stock class SEC URL/issuer binding check. No source-resolution or full-target
 artifact was published. Exact retained-source diagnosis found 13 of 293 selected
@@ -19,8 +66,16 @@ The narrow consumer fix binds that exact listed URL rather than folder/issuer eq
 explicit body-issuer mismatch stays fatal. Independent code review approved the fix;
 80 affected identity/source/currency/class tests passed in 9.05s, Ruff and strict mypy
 passed. Full suite/model checks were deliberately not run for this component change.
-Commit/export this amendment, then replay all 391 candidate proofs from the immutable
-producer before another full event run. A prematurely started editable-source diagnostic
+Immutable ffafdeb source preflight is complete: 391/391 candidate proofs passed,
+zero local gaps or fatal failures, and 272 bound-source hashes rechecked. All 293
+selected dividend identity groups map to 288 distinct successfully replayed proofs;
+APA, COR, GE, LRCX and NOV each have two CUSIP groups sharing a class proof. The
+request hash and every selected proof pin/object match were checked. Report in chat
+outputs/stock-source-preflight-391-ffafdeb41e72-20261109.json, SHA256
+39393e35fcdf59723cb90989e256a8c5ba26c8c406cd89a3c6eca95697eca6ba.
+This verifies source facts on representative first/last retained interval sessions;
+full raw-session ownership, currency admission and target publication still follow.
+The shared lease was released to the full dividend resolver for its ffafdeb rerun. A prematurely started editable-source diagnostic
 was stopped without publication; its interrupted log is retained and is not admission.
 Original captures, requests, prior producers and the 257 benchmark seed remain unchanged.
 Canonical main starts at f7d9af02490010decd607121cb41b9e74cc92972. Prior completed

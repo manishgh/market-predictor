@@ -6,10 +6,17 @@ The additional benchmark coverage adds 44 independently audited distributions to
 213 preserved assertions: 257 supported benchmark events, with both existing amount
 corrections unchanged. Stock tax capture is complete for 1,564 of 1,696 requested
 identity-year pairs (one reused pair, 1,563 new pairs); 132 pairs retain source gaps.
-Captured responses are not admitted stock dividends. The full 6,717-event stock
-resolution has not published: actual replay exposed a co-registrant SEC document
-path that the new identity consumer refused despite existing collector support.
-The leading plan freezes its narrow correction and all-391-proof source preflight.
+Full stock dividend resolution is published: 4,241 of 6,717 events are source-validated
+and 2,476 remain explicit gaps. Together with 257 unchanged benchmark assertions,
+there are 4,498 supported assertions, no new amount corrections, and exact source-audit
+coverage. Immutable ffafdeb preflight also passes all 391 candidate stock proofs with
+zero gaps/fatal failures and 272 source hashes rechecked; 293 dividend identity groups
+are covered by 288 distinct proofs. Full target construction completed shared-source
+verification and four stock checkpoints before refusing overlapping historical ticker
+segments. The current bounded fix preserves those parent sources and makes unsupported
+cross-ticker windows explicit local gaps; genuine duplicate owners stay fatal.
+No final full target corpus has been published. Source verification and partial target
+checkpoints are not training admission.
 All 57 previous target examples and frozen source bytes remain preserved. Full
 74,458-row target publication, independent arithmetic audit, dataset admission and
 investment fitting remain pending. No model or prediction activation is claimed.

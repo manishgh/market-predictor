@@ -1,4 +1,5 @@
 """Raw outcome source hashes and actual capture clocks survive horizon expansion."""
+import copy
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -77,6 +78,58 @@ def test_overlap_never_chooses_a_preferred_segment_even_for_identical_bytes(tmp_
     source.selection["segments"].append(dict(source.selection["segments"][0]))
     with pytest.raises(DataReadinessError, match="overlap"):
         source.read("issuer:test", "TEST", (date(2025, 5, 27),), benchmark=False)
+
+
+def _alias_overlap(source: InvestmentSourceReader) -> None:
+    alias = copy.deepcopy(source.selection["segments"][0])
+    alias["artifact"].update(ticker="OLD", provider_symbol="OLD", bars_path="must-not-read-alias.parquet")
+    source.selection["segments"].append(alias)
+
+
+@pytest.mark.parametrize("ticker", ["TEST", "OLD"])
+def test_distinct_stock_ticker_overlap_is_unavailable_without_any_source_read(tmp_path: Path, monkeypatch, ticker) -> None:
+    source = reader(tmp_path)
+    _alias_overlap(source)
+    original = copy.deepcopy(source.selection)
+    monkeypatch.setattr(pd, "read_parquet", lambda *args, **kwargs: pytest.fail("alias ambiguity must precede price reads"))
+    observed = source.read("issuer:test", ticker, (date(2025, 5, 27),), benchmark=False)
+    assert observed.missing_reasons == ("raw_security_symbol_or_role_differs",)
+    assert observed.frame.empty and not observed.evidence and observed.provider_symbol is None
+    assert source.selection == original and source.source_files == {}
+
+
+def test_alias_gap_cannot_hide_genuine_duplicate_on_another_requested_day(tmp_path: Path, monkeypatch) -> None:
+    source = composed_reader(tmp_path)
+    _alias_overlap(source)
+    duplicate = copy.deepcopy(source.selection["segments"][1])
+    duplicate["artifact"]["provider_symbol"] = "DIFFERENT"
+    source.selection["segments"].append(duplicate)
+    monkeypatch.setattr(pd, "read_parquet", lambda *args, **kwargs: pytest.fail("ownership must precede prices"))
+    with pytest.raises(DataReadinessError, match="overlap"):
+        source.read("issuer:test", "TEST", (date(2025, 5, 27), date(2025, 5, 28)), benchmark=False)
+
+
+@pytest.mark.parametrize("change", ["provider", "role"])
+def test_same_logical_ticker_overlap_stays_fatal_regardless_of_provider_or_role(tmp_path: Path, monkeypatch, change) -> None:
+    source = reader(tmp_path)
+    other = copy.deepcopy(source.selection["segments"][0])
+    other["artifact"]["provider_symbol" if change == "provider" else "role"] = "DIFFERENT" if change == "provider" else "benchmark"
+    source.selection["segments"].append(other)
+    monkeypatch.setattr(pd, "read_parquet", lambda *args, **kwargs: pytest.fail("ownership must precede prices"))
+    with pytest.raises(DataReadinessError, match="overlap"):
+        source.read("issuer:test", "TEST", (date(2025, 5, 27),), benchmark=False)
+
+
+@pytest.mark.parametrize("benchmark", [False, True])
+def test_cross_ticker_role_conflict_and_benchmark_overlap_remain_fatal(tmp_path: Path, monkeypatch, benchmark) -> None:
+    source = reader(tmp_path)
+    _alias_overlap(source)
+    source.selection["segments"][-1]["artifact"]["role"] = "benchmark"
+    if benchmark:
+        source.selection["segments"][0]["artifact"]["role"] = "benchmark"
+    monkeypatch.setattr(pd, "read_parquet", lambda *args, **kwargs: pytest.fail("ownership must precede prices"))
+    with pytest.raises(DataReadinessError, match="overlap"):
+        source.read("issuer:test", "TEST", (date(2025, 5, 27),), benchmark=benchmark)
 
 
 def test_quarantined_stock_tail_cannot_authorize_a_target(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

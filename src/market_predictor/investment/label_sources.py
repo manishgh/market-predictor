@@ -54,8 +54,16 @@ class InvestmentSourceReader:
         owners = {day: [segment for segment in matches
             if date.fromisoformat(segment["first_session"]) <= day <= date.fromisoformat(segment["last_session"])]
             for day in sessions}
-        if any(len(segments) > 1 for segments in owners.values()):
-            raise DataReadinessError("investment selected raw sources overlap session ownership")
+        overlapping = [segments for segments in owners.values() if len(segments) > 1]
+        if overlapping:
+            # Old symbol plans retain short horizon tails past a rename. Do not
+            # choose either ticker, stitch their observations, or hide another
+            # genuine duplicate elsewhere in the requested window.
+            duplicate_ticker = any(len({segment["artifact"]["ticker"] for segment in segments}) != len(segments)
+                                   for segments in overlapping)
+            if (duplicate_ticker or benchmark or any(segment["artifact"]["role"] != "stock" for segment in matches)):
+                raise DataReadinessError("investment selected raw sources overlap session ownership")
+            return InvestmentObservations(pd.DataFrame(), {}, None, ("raw_security_symbol_or_role_differs",))
         if any(not segments for segments in owners.values()):
             return InvestmentObservations(pd.DataFrame(), {}, None, ("missing_or_cross_segment_raw_binding",))
         if any(segment.get("source_admission") == "quarantined_unreviewed_provider_candidate" for segment in matches):
