@@ -4,7 +4,43 @@
 
 The leading active plan freezes the authorized implementation and exit gates.
 
-Current operational state, November 10 08:38 UTC: immutable 0038663 run exited 2
+Current operation, November 10 09:10 UTC: implementation
+0a1ca7daf924e900ac0947e6169678e93d27c41e is committed/pushed on main and exported
+immutably with 458 source files under data/research/implementation_snapshots.
+Reviewed continuation is running through the canonical CLI, native session 64603,
+actual worker PID 63108 (35264 is its Windows venv launcher), output
+ data/research/investment_full_targets_20261109/corpus_0a1ca7d
+and chat log outputs/full-investment-targets-0a1ca7d-20261110.log.
+It uses the unchanged request 4ab29ba0... and the separately pinned receipt
+ data/research/investment_full_targets_20261109/inputs/parent_0038663_receipt.json
+SHA256 9937afa3ca8a7c71181ee46ec171f9971371d24cbf43f7dd241eea445aa120e1.
+The actual inventory builder checked 606 original checkpoints and 71,508 exact
+rows, preserving their paths, bytes and clocks; 25 groups/2,950 rows remain for the
+new producer. This inventory is not yet canonical consumer admission: shared-source
+verification, receipt admission, final publication and independent audit are pending.
+Do not start another heavy job. Monitor this continuation through completion.
+Final code/design and independent helper reviews passed. Component verification:
+110 tests in 27.54s, affected Ruff/strict mypy and git diff --check passed. Log
+outputs/investment-label-reuse-checks-20261110e.log SHA256
+70dd9b78b87c881f260a688702bd4829b05a2fe1a8613403457e4a119a89ca91.
+Full suite, model fitting and release checks were not run for this component change.
+
+After successful publication and lease release, Senior Quant runs the new independent
+outputs/audit_lineage_full_investment_targets.py (no subcommand), SHA256
+3bfd877ecba3077bc4874a119b0b4c3dbc6719dfbf1a2e40fd44d6f2720f3c94, with this producer
+src, batch/request/final hash, original prior-57 snapshot and metadata sample plan,
+cleanup snapshot 39c23894... and stopped-parent observation
+outputs/stopped-0038663-observation-20261110.json SHA256
+9db991980f5eaeb2093e0487ac4b4edf3011d066fa8809f781e489f3887af7d1.
+The observation bounds the failed parent's runtime at actual observed 08:38:38.8615299Z;
+it is not a successful completion timestamp. The audit checks each checkpoint's own
+job, source capture clocks and producer, 606 inherited/25 new origins, full 74,458-row
+accounting, 60 unresolved EPAM comparison rows, 57 preserved examples, frozen sample
+arithmetic and the old 3,540-row cleanup comparison against their original 0038663
+origin. Original helpers, sample plan and snapshots remain unchanged. No target
+completion, dataset admission, fit, promotion or activation is claimed before audit.
+
+Previous failed-producer observation, November 10 08:38 UTC: immutable 0038663 run exited 2
 after 606 complete checkpoints (71,508 rows); actual worker 60112 and native session
 57668 are finished, lease released. No final corpus exists. Exact failure is strict
 duplicate comparison identity: EPAM's 30 eligible months bind sector benchmark SPY,
@@ -17,7 +53,7 @@ auditing; root owns receipt creation, integration, publication and docs. No new
 implementation or successful full target publication is claimed yet. The following
 run-start record and earlier partial attempts remain historical evidence.
 
-Current implementation 003866346f374ef30a680374266c1a442c488883 is committed and
+Previous implementation 003866346f374ef30a680374266c1a442c488883 was committed and
 pushed on main. Its immutable export contains 457 source files under
  data/research/implementation_snapshots/003866346f374ef30a680374266c1a442c488883/src.
 It includes the reviewed cleanup amendment below and all prior source/reader fixes.
