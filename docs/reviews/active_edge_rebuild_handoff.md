@@ -1,4 +1,67 @@
 # Active Edge Rebuild Handoff
+### Fixed selected-stock outcome recovery and SPY comparison November 11
+
+Status: `in_progress`. User authorizes resolving the missing selected outcomes,
+keeping selections fixed, then comparing SPY after costs; Sol engineering and senior
+Quant review, retained data, canonical main only, V1/beta deferred.
+
+Freeze ranking report 47ffb2985416aea654c8c226f9f6215c94254aaf888dda1273ae1445d1e6079a
+from implementation bc8d593. Preserve all 16 profile/horizon/scope selection lists,
+all 29 dates per view, ordered securities and their original unit/prediction pins.
+The metadata-only inventory contains 3,970 unique selected decision/horizon keys,
+1,199 unknown keys across 150 securities. Of these, 1,192 have stock-role gaps and
+seven have the EPAM sector/SPY distinctness gap. Overlapping reason counts are
+619 currency, 219 missing action dates, 198 corporate terms, 198 ordinary cash
+entitlement, 181 raw bindings, 120 due-bill dates and 11 raw identity reasons.
+Inventory: chat outputs/investment-selected-outcome-inventory-20261111.json,
+SHA256 2f927c991f3d77b87d4f593c097f31a7b3f1779ceb08e2ac150d5759ad05942d.
+
+Bounded work: (1) recover demonstrated source facts from retained evidence using
+existing identity, dividend and action validators; (2) publish a separate fixed-
+selection stock/SPY outcome overlay; (3) report complete selected cohorts after
+the existing 20 bp stock cost once, against gross SPY. Reuse original verified
+holding outcomes and clocks. Deduplicate recovery work only, never portfolio
+positions. Preserve original training labels, research eligibility, models, raw
+bytes and every original source verification clock; no refit or reselection.
+
+Earlier retained SEC primary anchors may be examined in frozen metadata order,
+not price/outcome order: the prior discovery searched only three recent filings.
+Use the existing exact class parser and full source/ownership replay; no issuer,
+class, currency or source waiver. New proofs/receipts get fresh artifacts and clocks.
+Existing official tax archives can then be resolved with admitted dated class proof.
+Other corporate actions require exact class, date, entitlement and valuation facts;
+an acquirer lot may be unaffected only with independent exact-class ownership proof.
+Unproven mergers, successor cash, special distributions and due-bill dates stay gaps.
+Any source-algorithm change needs a concrete retained example and focused review.
+
+The stock/SPY pair is a separate retrospective evaluation contract, not a replacement
+for four-holding training targets. Reuse shared role specification construction and
+the holding kernel; auxiliary QQQ/sector gaps stay explicit. All required stock/SPY
+marks, actions, identity, membership, source hashes and actual clocks must pass;
+terminal arithmetic alone cannot admit a path. EPAM needs fresh exact two-role proof.
+
+Freeze stock net vs SPY gross as primary; any cost-matched SPY net diagnostic is
+separate. Unknown selected positions remain present and make the date return null;
+any incomplete date makes full-period aggregate null. No zero filling, dropping,
+replacement or favorable-date selection. Report original/resolved/remaining gaps
+with denominator, known complete cohorts and after-cost differences without claiming
+a funded portfolio. A funded monthly comparison requires complete required paths
+and a separately frozen capital/exit/settlement policy; it cannot compound overlapping
+63/252-session cohort means. No live/API/promotion change or untouched-test claim.
+
+Independent Sol design review approved before implementation. Root owns selected
+inventory, retained anchor reserve and docs; engineer owns shared pair materialization
+and publication/evaluation; senior Quant audits source remedies and actual outcomes;
+separate reviewer checks design and consolidated code. One heavy job at a time with
+normal lease and <90% RAM guard. Commit/export before actual new publication.
+Tests: exact frozen selection tamper/refusal, dedup without position loss, unchanged
+old target behavior, source/identity/date poison, every missing selected outcome
+retained, cost once, no hidden full-period mean, actual verification clocks and
+exact shared holding arithmetic. Focused affected consumers, Ruff/strict mypy,
+retained-data execution and independent replay are required. Recheck old bytes.
+Exit: publish measured recoverable outcomes and honest complete/incomplete SPY
+comparison, or document exact externally missing evidence; never fabricate closure.
+
 ## Completed stock selection ranking experiment November 11
 
 Measured experiment complete; the SPY investment-performance goal is not yet proven.
