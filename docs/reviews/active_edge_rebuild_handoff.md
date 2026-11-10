@@ -5,18 +5,24 @@
 User authorizes joining verified targets to retained candles/news/financial features,
 then training and SPY evaluation after checks pass. Canonical main remains the only
 checkout. The leading active plan freezes the reviewed design and test gates.
-Current operation18:22UTC November10: implementation
- a53e0165dea64e95756055ae234d8e2e62f21e51 is committed/pushed on main and exported
-immutably with462 source files. Actual dataset CLI is running under the shared lease,
-native session98668, actual workerPID69812 (20420 is its venv launcher), output
- data/research/investment_dataset_20261110/joined_a53e016.
-Log chat outputs/investment-dataset-build-a53e016-20261110.log; request88f24 below.
-Initial RAM81.36%, worker about331MiB. Do not start another heavy job. On exit0,
-record actual dataset/admission hashes and grant independent Quant the pre-fit audit.
-No publication, admission-audit result or model fit is claimed yet.
-Current stage: reviewed implementation and component verification complete; actual
-dataset publication and independent pre-fit audit are next. No model fit yet.
-
+Current operation: the a53e016 immutable dataset build stopped at18:28:45UTC
+November10 before publication. Native session98668 exited1 and worker69812 ended.
+The saved news verification report intentionally has no profile field; the new reader
+incorrectly required it. Metadata inspection also found that the parent profile and
+column contract belong to its pinned request, rather than its publication manifest.
+The bounded reader/fixture correction preserves all saved source bytes and request88f24.
+The corrected reader passed an actual metadata-only check of59 saved months,
+209 model columns and61 consumed metadata/code files, without decoding feature rows.
+Focused dataset tests passed33 cases in26.20s; the fixtures now match the actual
+receipt and parent-request field ownership, including missing-required-field refusals.
+Logs: chat outputs/investment-news-metadata-diagnostic-20261110b.log and
+investment-dataset-schema-focused-20261110a.log. Affected Ruff and strict mypy passed;
+independent code review approved. Implementation5f8308725e960ac6b04054cb29768af3b6738856
+is committed/pushed on main. Its immutable export and unchanged88f24 request feed
+the next build at data/research/investment_dataset_20261110/joined_5f83087.
+Failed-run log: chat outputs/investment-dataset-build-a53e016-20261110.log.
+No dataset admission or model fit has completed. The previously passing106 synthetic
+component tests did not represent these two actual retained metadata shapes.
 Sol ML engineer owns investment/dataset.py and research/investment_dataset.py plus
 consumer tests. Root owns investment/training.py, research/investment_training.py,
 CLI integration and current documentation. Independent Sol design/code and Senior
