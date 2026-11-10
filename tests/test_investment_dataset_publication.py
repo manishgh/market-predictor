@@ -35,7 +35,7 @@ def bytes_pin(path: Path, content: str) -> dict[str, str]:
     return {"path": str(path), "sha256": file_sha256(path)}
 
 
-def fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+def fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, parent_request_columns: bool = True) -> dict[str, Any]:
     monkeypatch.setattr(data, "EXPECTED_ROWS", 6)
     monkeypatch.setattr(publisher, "EXPECTED_ROWS", 6)
     monkeypatch.setattr(data, "guard", lambda *_: None)
@@ -128,7 +128,7 @@ def fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         "roster_manifest_sha256": roster_pin["sha256"], "roster_sha256": roster_rows["sha256"],
         "feature_contract_sha256": FEATURE_CONTRACT_SHA256, "feature_names": list(FEATURE_NAMES), "failed_issuers": 0,
         "completed_issuers": 2, "eligible_issuers": 2, "eligible_rows": 2, "files": {"coverage.json": coverage["sha256"]}, **FLAGS})
-    news = news_fixture(tmp_path)
+    news = news_fixture(tmp_path, parent_request_columns=parent_request_columns)
     request = {"schema": "market_predictor.investment_dataset_request", "scope": "retrospective_research",
         "targets_manifest": targets, "roster_manifest": roster_pin, "financial_manifest": financial,
         "news_manifest": news["manifest"], "news_verification": news["receipt"], "news_producer_sources": news["code"],
@@ -138,7 +138,7 @@ def fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     return {"request": request, "request_pin": request_pin, "news": news, "roster": rows, "output": tmp_path / "output"}
 
 
-def news_fixture(root: Path) -> dict[str, Any]:
+def news_fixture(root: Path, *, parent_request_columns: bool = True) -> dict[str, Any]:
     closed = dict.fromkeys(("training_eligible", "promotion_eligible", "serving_eligible",
         "source_coverage_admitted", "world_actor_verified"), False)
     code = {}
@@ -152,7 +152,11 @@ def news_fixture(root: Path) -> dict[str, Any]:
         "producer_source_provenance": {}, **closed})
     policy = {"schema": "market_predictor.news_decision_publication_config", "source_link_index": link, "sentiment_copy_evidence": copy}
     config = write(root / "news/config.json", policy)
-    parent = write(root / "news/parent.json", {"model_columns": list(COLUMNS[:124]), "profile_sha256": "c" * 64, "rows": 3})
+    parent_request_value = {"profile": "technical_relationships", "profile_sha256": "c" * 64, "rows": 3}
+    if parent_request_columns:
+        parent_request_value["model_columns"] = list(COLUMNS[:124])
+    parent_request = write(root / "news/_request.json", parent_request_value)
+    parent = write(root / "news/parent.json", {"rows": 3, "request_sha256": parent_request["sha256"]})
     saved = write(root / "news/parent-proof.json", {"status": "passed"})
     replay = write(root / "news/original-replay.json", {"status": "passed"})
     contract_pins = {name: bytes_pin(root / f"news/{name}.toml", '[policy]\nname="original"\n')
@@ -199,7 +203,7 @@ def news_fixture(root: Path) -> dict[str, Any]:
         "source_link_index": link, "sentiment_copy_evidence": copy, "configuration_evidence": config_evidence,
         "contract_pins": contract_pins, "source_files": consumed, "publication_availability_columns": CLOCKS,
         "monthly": {"2024-05": {"rows": 3, "clock_violations": 0}},
-        **{name: original[name] for name in ("rows", "profile", "profile_sha256", "model_columns", "decision_ids_sha256",
+        **{name: original[name] for name in ("rows", "profile_sha256", "model_columns", "decision_ids_sha256",
             "availability_columns", "historical_implementation_files", "parent_publication",
             "parent_saved_row_verification", "original_snapshot_replay")},
         **closed}
@@ -235,7 +239,8 @@ def test_complete_publication_admission_loader_and_unknown_forecast_population(t
     assert str(tmp_path / "news/strategy_contract.toml") in dataset.source_files
 
 
-@pytest.mark.parametrize("poison", ["source_bytes", "producer_bytes", "producer_mapping", "false_news_receipt", "past_evaluation"])
+@pytest.mark.parametrize("poison", ["source_bytes", "producer_bytes", "producer_mapping", "false_news_receipt", "past_evaluation",
+    "missing_required_receipt_field"])
 def test_pinned_source_consumer_poison_refuses_publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, poison: str) -> None:
     value = fixture(tmp_path, monkeypatch)
     if poison == "source_bytes":
@@ -247,12 +252,33 @@ def test_pinned_source_consumer_poison_refuses_publication(tmp_path: Path, monke
     elif poison == "false_news_receipt":
         value["news"]["receipt_value"]["news_additions_source_replayed"] = False
         value["request"]["news_verification"] = write(Path(value["news"]["receipt"]["path"]), value["news"]["receipt_value"])
+    elif poison == "missing_required_receipt_field":
+        value["news"]["receipt_value"].pop("profile_sha256")
+        value["request"]["news_verification"] = write(Path(value["news"]["receipt"]["path"]), value["news"]["receipt_value"])
     elif poison == "past_evaluation":
         value["request"]["evaluation_as_of_utc"] = "2025-12-31T00:00:00Z"
     value["request_pin"] = write(Path(value["request_pin"]["path"]), value["request"])
     with pytest.raises(DataReadinessError):
         build(tmp_path, value)
     assert not (value["output"] / "admission").exists()
+
+
+def test_news_receipt_failure_precedes_roster_target_and_financial_scans(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    value = fixture(tmp_path, monkeypatch)
+    assert "profile" not in value["news"]["receipt_value"]  # actual retained receipt shape
+    value["news"]["receipt_value"].pop("profile_sha256")
+    value["request"]["news_verification"] = write(Path(value["news"]["receipt"]["path"]), value["news"]["receipt_value"])
+    value["request_pin"] = write(Path(value["request_pin"]["path"]), value["request"])
+    for name in ("_roster", "_targets", "_financial"):
+        monkeypatch.setattr(publisher, name, lambda *_: pytest.fail("source scan preceded news metadata admission"))
+    with pytest.raises(DataReadinessError, match="receipt publication contract"):
+        build(tmp_path, value)
+
+
+def test_missing_required_parent_request_columns_remains_fatal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    value = fixture(tmp_path, monkeypatch, parent_request_columns=False)
+    with pytest.raises(DataReadinessError, match="inherited 586-peer"):
+        build(tmp_path, value)
 
 
 @pytest.mark.parametrize("poison", ["wrong_dataset", "wrong_contract", "wrong_sources", "wrong_counts", "changed_partition"])

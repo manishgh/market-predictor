@@ -241,9 +241,14 @@ def _news(root: Path, request: InvestmentDatasetRequest, pins: dict[str, str]) -
         and report.get("original_outcome_values_exact") is True and report.get("outcome_filtered_rows") == 0
         and all(value.get(flag) is False for value in (report, manifest, producer_request, checkpoint) for flag in closed),
         "investment news saved-row receipt does not prove the exact closed publication")
-    fields = ("rows", "profile", "profile_sha256", "model_columns", "decision_ids_sha256")
+    # The retained verification receipt binds the profile hash and column order,
+    # while its publication/request pair owns the profile name.
+    require(manifest.get("profile") == producer_request.get("profile") == "technical_relationships_news",
+        "investment news publication profile differs from its original request")
+    fields = ("rows", "profile_sha256", "model_columns", "decision_ids_sha256")
     for name in fields:
-        require(manifest[name] == producer_request[name] and report[name] == manifest[name],
+        require(name in manifest and name in producer_request and name in report
+            and manifest[name] == producer_request[name] and report[name] == manifest[name],
             "investment news receipt publication contract differs")
     for name in ("source_files", "implementation_files", "source_index_producer_provenance",
         "sentiment_copy_producer_provenance", "sentiment_copy_policy"):
@@ -268,14 +273,20 @@ def _news(root: Path, request: InvestmentDatasetRequest, pins: dict[str, str]) -
     require(all(original_code.get(name) == digest for name, digest in producer_request["implementation_files"].items()),
         "investment news original publication implementation is not bound by saved proof")
     parent = None
+    parent_request = None
     for name in ("parent_publication", "parent_saved_row_verification", "original_snapshot_replay"):
         require(report[name] == producer_request[name], "investment news retained parent proof differs")
-        value = read_object(root, SourcePin.model_validate_json(json.dumps(report[name])), pins)
+        parent_pin = SourcePin.model_validate_json(json.dumps(report[name]))
+        value = read_object(root, parent_pin, pins)
         if name == "parent_publication":
             parent = value
-    require(parent is not None and parent["model_columns"] == manifest["model_columns"][:124]
-        and parent["profile_sha256"] == producer_request["parent_profile_sha256"]
-        and parent["rows"] == manifest["rows"], "investment news inherited 586-peer feature context differs")
+            parent_request = read_object(root, _child(root, parent_pin, "_request.json", parent["request_sha256"]), pins)
+    require(parent is not None and parent_request is not None
+        and parent_request.get("profile") == "technical_relationships"
+        and parent_request.get("model_columns") == manifest["model_columns"][:124]
+        and parent_request.get("profile_sha256") == producer_request["parent_profile_sha256"]
+        and parent_request.get("rows") == parent["rows"] == manifest["rows"],
+        "investment news inherited 586-peer feature context differs")
     config_pin = SourcePin.model_validate_json(json.dumps(producer_request["config"]))
     policy = read_object(root, config_pin, pins)
     require(policy == producer_request["policy"], "investment news original configuration differs")
@@ -333,10 +344,10 @@ def build_investment_dataset(*, root: Path, request: Path, request_sha256: str, 
         pins = _implementation()
         request_pin = SourcePin(path=str(inside(root, request)), sha256=request_sha256)
         parsed = InvestmentDatasetRequest.model_validate_json(json.dumps(read_object(root, request_pin, pins)))
+        news, availability = _news(root, parsed, pins)
         roster = _roster(root, parsed, pins)
         targets, target_report = _targets(root, parsed, roster, pins)
         financial = _financial(root, parsed, roster, pins)
-        news, availability = _news(root, parsed, pins)
         profiles = model_profiles(tuple(news["model_columns"]))
         availability = {name: availability[name] for name in news["model_columns"]}
         availability.update(dict.fromkeys(FEATURE_NAMES, "financial_available_at_utc"))
