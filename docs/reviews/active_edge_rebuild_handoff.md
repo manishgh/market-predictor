@@ -3,10 +3,17 @@
 ## Active stock identity and full-target checkpoint — November 9
 
 The leading active plan freezes the authorized implementation and exit gates.
-Implementation 2ad6c95fbb2c5751144571c177ded1dee9bbc2db is committed and pushed
-on main, including actual-source date/guard, SEC primary-document and negative-only
-historical-ticker overlap amendments. Immutable producer export contains 457 source
-files at data/research/implementation_snapshots/2ad6c95fbb2c5751144571c177ded1dee9bbc2db/src.
+Current implementation 003866346f374ef30a680374266c1a442c488883 is committed and
+pushed on main. Its immutable export contains 457 source files under
+ data/research/implementation_snapshots/003866346f374ef30a680374266c1a442c488883/src.
+It includes the reviewed cleanup amendment below and all prior source/reader fixes.
+The full target job started November 10 at 01:32 UTC, native session 57668, actual
+worker PID 60112 (42452 is its Windows venv launcher). Current output:
+ data/research/investment_full_targets_20261109/corpus_0038663
+Log: chat outputs/full-investment-targets-0038663-20261110.log. It reuses the exact
+4ab29ba0... request below. No final publication yet. Monitor to completion; no other
+heavy jobs may run concurrently. After exit, independently audit and compare before
+claiming full target completion. No model fit, admission or activation is claimed.
 The 2ad6c95 full-target run was deliberately stopped after 30 complete security
 checkpoints for the single reviewed monthly-cleanup performance amendment. Its
 unchanged request is 4ab29ba0... below; preserve partial output
@@ -27,9 +34,20 @@ across ten memory-policy/label-consumer files, affected Ruff and strict mypy pas
 Log: chat outputs/monthly-cleanup-tests-20261110a.log. Full suite/model release checks
 were not run for this narrow component change. Quant is snapshotting all completed
 actual rows and original capture clocks for exact paired parity after the new run.
-Next: commit/push/export this reviewed amendment, run the same full request into a
-new output, then independently compare the stopped rows and audit all 74,458 rows
-plus the 57 prior examples. No training or activation is authorized by this build.
+Stopped-row snapshot is complete: 30 security checkpoints, 3,540 decision/horizon
+rows, 735 original source pins, 386 sources with observed capture clocks; baseline
+clock bounds passed. Chat outputs/cleanup-2ad6-stopped-snapshot-20261110.json SHA256
+39c23894f2827adc4a53e5f60ab7cb6f0cbd50e7b99a2a80ccb0258235792eca.
+Separate comparison helper outputs/audit_cleanup_amendment_parity.py SHA256
+675ea3e8c9fded28621a9c00be2c1a086997b7e76a43e269a8ff40bdcc73ca4a.
+Frozen full-audit helper, metadata plan and prior-57 snapshot remain unchanged.
+After the current full run, compare every stopped row before the independent
+74,458-row/57-example audit. Exact statuses, reasons, economics, maturity and
+original source capture clocks must match; only verified current-run clocks and
+their explicitly checked derived hashes may differ. The original per-row transient
+verification instant is not separately persisted; allowed aggregate clocks are
+bounded by pinned job/snapshot/final clocks and known proof authorities. Do not
+claim exact replay of an unrecorded instant. No training/activation follows here.
 Immutable raw-reader preflight passed all six legacy overlap pairs in both ticker
 directions plus the actual ARNC annual window (13 negative queries, zero price files
 opened). Old ffafdeb and new 2ad6c95 ARNC/HWM unaffected 63-session price/evidence/
