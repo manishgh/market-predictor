@@ -49,6 +49,20 @@ a funded portfolio. A funded monthly comparison requires complete required paths
 and a separately frozen capital/exit/settlement policy; it cannot compound overlapping
 63/252-session cohort means. No live/API/promotion change or untouched-test claim.
 
+Concrete source remedy frozen before implementation: the retained Microsoft primary
+0001193125-24-011295/1 (body SHA256 d77cc55e023c715c88934119a4333112f9285d56066d6d77b6be12f69dcce247)
+has three tagged MSFT symbols: common stock and two explicitly titled debt notes.
+The current extractor rejects the repeated symbol before classifying those rows.
+Extend only repeated-symbol handling: verify every row, exact same-row tagged
+facts, issuer/period and class context; exclude only positively identified debt
+with a matching distinct debt member. Preserve entity/consolidation dimensions.
+Require exactly one remaining equity row and all existing equity checks. Duplicate
+equities, unknown/mixed titles, reused/malformed contexts and incompatible issuer
+or class facts still fail. Single-symbol behavior is unchanged. Root owns the
+shared SEC class extractor and tests; independent design/code and senior Quant
+reviews approve this demonstrated remedy. Verify the retained source and poison
+cases, then revisit only the prior unresolved selected-class reserve using the
+committed parser. Any new proofs still pass full dated identity/dividend validators.
 Independent Sol design review approved before implementation. Root owns selected
 inventory, retained anchor reserve and docs; engineer owns shared pair materialization
 and publication/evaluation; senior Quant audits source remedies and actual outcomes;
