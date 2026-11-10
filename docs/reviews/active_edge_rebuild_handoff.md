@@ -1,31 +1,108 @@
 # Active Edge Rebuild Handoff
-## Active stock selection ranking experiment November 11
+## Completed stock selection ranking experiment November 11
 
-The d9284c5 frozen target-only experiment is implemented and ready for the actual
-retained-data run. Canonical checkout remains main; no extra checkout, source rebuild,
-download, exclusion, model promotion or V1/beta work is included.
+Measured experiment complete; the SPY investment-performance goal is not yet proven.
+Implementation bc8d59394d63ae7ec45aa5cca1b66e3a07121b71 is committed/pushed on main.
+The immutable export contains 470 source files; export SHA256
+411f32a7ce14363e0ca37621c0e62b70d4734196657120f8d1bedd1b15068a14.
+Actual retained-data execution started 2026-11-10T23:20:01.710233+00:00 and
+completed 2026-11-10T23:22:26.605845+00:00. Exactly 12 new validation
+models and 36 saved controls produced 48 unit and 16 aggregate comparisons.
+No source rebuild, download, exclusion, old/final refit, tuning or API change occurred.
 
-Implementation consumer checks and independent consolidated Sol code review passed.
-All 89 distinct focused cases pass: the first run passed 87 cases and found one
-test-only temporary-folder collision; separate fixture folders and the targeted
-three-case rerun passed, including the newly added estimator-target poison test.
-The focused component suite covers rank ties/singletons/alignment, constant-score
-support, retained unknown selections, shared return diagnostics and reference reader
-regressions, rank publication, tamper refusal and CLI forwarding. The extra publisher
-poison test checks the exact target vector consumed by the estimator after changing
-future and held-out outcomes. Affected Ruff and strict mypy pass. These are synthetic
-unit/regression checks; the actual 12 fits and independent replay remain pending.
-Normal component verification applies; no release/full-suite/API checks are needed.
-
-Frozen request: data/research/investment_ranking_20261111/inputs/request.json
+Report: data/research/investment_ranking_20261111/ranking_bc8d593/_manifest.json
+SHA256 47ffb2985416aea654c8c226f9f6215c94254aaf888dda1273ae1445d1e6079a.
+Request: data/research/investment_ranking_20261111/inputs/request.json
 SHA256 d283a93a0f36506618f5f339db5e67fa429204205480b5c5abbf93784b35d9e0.
-It binds the unchanged, independently audited training/ablation requests and reports.
-Independent audit helper: chat outputs/audit_investment_stock_selection.py,
+Independent senior Sol Quant audit: chat outputs/investment-ranking-independent-audit-20261111.json
+SHA256 73514bdef15423c2d80e52c6bc19c1db234979735f532c0c55cab5c63a4bbfa8; completed 2026-11-10T23:24:05.456098+00:00.
+The audit independently reconstructs training-only target vectors, 209 medians and
+418 encoded inputs, replays every new saved model with zero score residual, rechecks
+36 previously audited controls, and reproduces all 48/16 metrics and frozen gates.
+All 2,606 independently checked file hashes remain unchanged. Actual source and fit
+clocks remain in 2026; inspected 2022-2024 periods are retrospective development
+evidence, not an untouched test or contemporaneously deployed prediction record.
+
+All 89 distinct focused tests pass. The initial eight-file suite passed 87 and found
+one shared synthetic temporary-directory collision. Separate fixture folders and
+the targeted three-case rerun passed, including the new exact-consumed-target poison
+test. Ruff on 11 changed files, strict mypy on 9 sources, whitespace checks, real
+44-pin metadata smoke, independent design/code review and actual replay all passed.
+Component tier only: no release, full-suite or serving checks were required.
+The shared lease and strictly-below-90% RAM policy remained active. Both actual workers exited successfully, the lease is released, and the final process check found no Python workers; system RAM was 71.6%.
+
+| Horizon and scope | Technical rank / AUC | Technical + news rank / AUC | Full rank / AUC | New rank target rank / AUC | All-control gate |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 252 sessions, temporal | 0.073307 / 0.555428 | 0.077703 / 0.558481 | 0.066465 / 0.549641 | 0.100744 / 0.561533 | Pass |
+| 252 sessions, security_transfer | 0.017467 / 0.524225 | 0.003205 / 0.522270 | 0.002506 / 0.518687 | 0.052629 / 0.542884 | Pass |
+| 63 sessions, temporal | 0.035672 / 0.515615 | 0.034117 / 0.514495 | 0.028530 / 0.511070 | 0.053825 / 0.520458 | Pass |
+| 63 sessions, security_transfer | -0.009452 / 0.481836 | -0.029501 / 0.469399 | -0.012923 / 0.485104 | 0.001232 / 0.493764 | Fail |
+
+Rank means equal-date Spearman correlation; AUC distinguishes strictly positive net
+excess versus SPY. Each aggregate uses the same 29 supported dates and known rows
+across all four profiles; none has a constant-score supported date. Annual temporal
+uses 7,126 known/3,965 unknown among 11,091 scored decision rows; held-out-stock
+transfer uses 1,285 known/815 unknown among 2,100 scored rows. Quarterly counts are
+7,862 known/3,229 unknown temporal and 1,425 known/675 unknown transfer. These are
+monthly stock decisions, not distinct stocks or independent investment outcomes.
+
+The frozen annual ranking gate passes in both scopes against all three controls and
+neutral discrimination. Relative to the matched 209-feature model, annual temporal
+Spearman/AUC improve from 0.077703/0.558481 to 0.100744/0.561533, and held-out stocks
+from 0.003205/0.522270 to 0.052629/0.542884. This supports the target-only ranking
+hypothesis on this development set, not an explanation that more features are better.
+
+Year-level limits are material. Annual temporal 2023 AUC falls from 0.545863 to
+0.531063 despite slightly better rank correlation. Annual held-out 2023 correlation
+remains negative (-0.047269); held-out 2024 AUC falls from 0.590674 to 0.586450.
+Annual year gates pass temporal 2022/2024 and transfer 2022 only. Quarterly temporal
+passes the aggregate gate; quarterly held-out AUC is 0.493764, below 0.5, so its
+aggregate gate fails. Quarterly year gates pass temporal 2023/2024 and transfer
+2024 only. 2024 covers January-May, not a full year. No confidence/significance claim
+is made from 29 overlapping dates, and no model is automatically selected/promoted.
+Pooling scores across dates produces lower annual AUC than the matched 209 control:
+0.553272 versus 0.562346 temporal and 0.533639 versus 0.536523 held-out. The observed
+gain concerns ordering stocks on the same date; it does not establish improved
+comparison of score levels across dates or calibrated SPY-beating probabilities.
+
+Economic coverage remains insufficient. The annual candidate selects 1,117 stock/date
+positions across 29 temporal cohorts, with 431 unverified selected outcomes and zero
+complete cohorts. Held-out annual selects 232 positions with 72 unverified outcomes
+and only 1/29 complete cohorts. Quarterly has 275/1,117 unverified temporal selections
+(0/29 complete) and 55/232 held-out selections (2/29 complete). All selected identities
+remain; unavailable outcomes are not replaced with zero or removed. Full-period
+selected-cohort excess returns remain null in every view. Even complete overlapping
+cohort means would not establish a funded portfolio's SPY outperformance.
+The only complete annual held-out candidate cohort, September 30, 2022 (eight
+selected positions), has mean stock net return 11.3324% versus SPY gross 18.5607%,
+or -7.2283 percentage points net excess. This is an unfavorable isolated cohort,
+not an estimate for the 28 incomplete cohorts or a funded portfolio result.
+
+Next prerequisite for a SPY-return claim: resolve the existing selected-outcome source
+gaps across the fixed candidate/control rosters, then freeze a cost-aware funded SPY
+comparison and an untouched/prospective evaluation. Do not tune this candidate on
+these observed results or promote it based only on improved AUC. Preserve this
+ranking experiment as development evidence. V1/beta remains deferred.
+
+Verification logs are in chat outputs, rooted at
+C:/Users/manis/Documents/Codex/2026-11-05/c-project-market-predictor/outputs:
+- investment-ranking-component-checks-20261111.log: SHA256 2c3801eda746540b99252633184ef490059dcbde996b3c98acaef5cae32ed530.
+- investment-ranking-publication-checks-20261111.log: SHA256 61e77bc6edff6b630a931eb9f630177ebe3770147b777b655911fa7affaba8a0.
+- investment-ranking-final-static-smoke-20261111.log: SHA256 d85cbffbd08fc08af656b9da4734f676346320acc80231009760e2fd18c4bbf4.
+- investment-ranking-actual-run-20261111.log: SHA256 ec5244b4f269726cbce15dbb398aecc15609c0ccbfde295c4cd694ae07e28b6b.
+
+Independent audit execution log: investment-ranking-independent-audit-20261111a.log, SHA256 9b9c2029394598ce4bca3d89fd72140c4e0158fecda63b8215649071512fabd3.
+
+Verification commands: guarded pytest -q on test_investment_ranking.py,
+test_investment_ranking_publication.py, test_investment_training.py,
+test_investment_diagnostics.py, test_investment_diagnostics_publication.py,
+test_investment_feature_ablation_publication.py,
+test_investment_forecast_adjustment_publication.py and test_investment_research.py;
+targeted rerun of the two publication integrations and exact-target poison case.
+Ruff covered the 11 changed Python files; strict mypy --follow-imports=silent
+covered all 9 changed sources. Actual command: train-investment-ranking with
+the exact request above; independent helper audit_investment_stock_selection.py
 SHA256 0fff64758cc8dbcd6d2e14305a4d090e563660ec7579c9db615d8f3ccaa67ec1.
-The helper was independently reviewed before execution. It reconstructs training
-targets/medians/encoding, replays 12 saved models, rechecks 36 previously audited
-controls, and independently evaluates all 48 units/16 aggregates and frozen gates.
-Next: commit/export main, run the frozen 12 fits, then independent senior Quant replay.
 
 ## Completed forecast bias and financial handling experiment November 10
 
