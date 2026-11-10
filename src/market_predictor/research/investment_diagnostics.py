@@ -147,16 +147,26 @@ def reference_folds(reference: InvestmentReferenceRun, dataset: InvestmentDatase
 def read_reference_predictions(root: Path, reference: InvestmentReferenceRun, key: str, fold: InvestmentFold,
                                dataset: InvestmentDataset, metadata: pd.DataFrame, coverage: pd.DataFrame,
                                pins: dict[str, str]) -> tuple[SourcePin, dict[str, Any], pd.DataFrame]:
+    _, profile, _, _, _ = key.split("/")
+    pin = SourcePin.model_validate_json(json.dumps(reference.manifest["units"][key]))
+    record, frame = read_validation_predictions(root, reference, pin, key, fold, dataset, metadata,
+        coverage, pins, dataset.model_columns[profile])
+    return pin, record, frame
+
+
+def read_validation_predictions(root: Path, reference: InvestmentReferenceRun, pin: SourcePin, key: str,
+                                fold: InvestmentFold, dataset: InvestmentDataset, metadata: pd.DataFrame,
+                                coverage: pd.DataFrame, pins: dict[str, str],
+                                columns: tuple[str, ...]) -> tuple[dict[str, Any], pd.DataFrame]:
     run, experiment = reference.manifest, reference.experiment
     _, profile, family, _, _ = key.split("/")
-    pin = SourcePin.model_validate_json(json.dumps(run["units"][key]))
     record = read_object(root, pin, pins)
     identity = {**_fold_record(fold, metadata), "profile": profile, "experiment_sha256": run["experiment_sha256"]}
     require(record.get("schema") == "market_predictor.investment_research_model"
         and record.get("scope") == "retrospective_research" and record["unit"] == identity
         and record["request_sha256"] == reference.request_sha256 and record["family"] == family
         and record["parameters"] == experiment["parameters"][family]
-        and tuple(record["feature_names"]) == dataset.model_columns[profile]
+        and tuple(record["feature_names"]) == columns
         and set(record["files"]) == {"model.joblib", "predictions.parquet"}
         and all(record.get(flag) is False for flag in FLAGS), "investment saved model unit binding differs")
     train = metadata.iloc[fold.train_indices]
@@ -169,7 +179,7 @@ def read_reference_predictions(root: Path, reference: InvestmentReferenceRun, ke
         and pd.Timestamp(record["latest_training_economic_maturity_at_utc"]) == pd.to_datetime(
             train.economic_maturity_at_utc, utc=True).max(), "investment saved training lineage differs")
     frame = read_fit_predictions(root, pin, record, metadata.iloc[fold.score_indices], coverage, pins, reference.completed_at)
-    return pin, record, frame
+    return record, frame
 
 
 def diagnose_investment_predictions(*, root: Path, request: Path, request_sha256: str, output: Path) -> dict[str, Any]:

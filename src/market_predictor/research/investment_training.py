@@ -5,6 +5,7 @@ import importlib.metadata
 import json
 import os
 import tempfile
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -91,7 +92,8 @@ def _fold_record(fold: InvestmentFold, metadata: pd.DataFrame) -> dict[str, Any]
 def _publish_fit(output: Path, key: str, *, features: pd.DataFrame, metadata: pd.DataFrame,
                  columns: tuple[str, ...], family: str, parameters: dict[str, Any], train_indices: np.ndarray,
                  score_indices: np.ndarray, prediction_indices: np.ndarray, identity: dict[str, Any],
-                 request_sha256: str, admitted_at: datetime) -> tuple[dict[str, Any], pd.DataFrame | None]:
+                 request_sha256: str, admitted_at: datetime, native_missing_columns: tuple[str, ...] = ()
+                 ) -> tuple[dict[str, Any], pd.DataFrame | None]:
     guard("investment research fit " + key)
     started = datetime.now(UTC)
     train_meta = metadata.iloc[train_indices]
@@ -100,7 +102,8 @@ def _publish_fit(output: Path, key: str, *, features: pd.DataFrame, metadata: pd
             or pd.Timestamp(admitted_at) >= pd.Timestamp(started)):
         raise DataReadinessError("actual investment fit must follow admission and every training label verification")
     model = fit_return_regressor(family, features.iloc[train_indices].loc[:, list(columns)],
-        train_meta[TARGET].to_numpy(dtype=np.float64), date_balanced_weights(train_meta.decision_session), parameters)
+        train_meta[TARGET].to_numpy(dtype=np.float64), date_balanced_weights(train_meta.decision_session), parameters,
+        **({"native_missing_columns": native_missing_columns} if native_missing_columns else {}))
     fitted = datetime.now(UTC)
     guard("investment research prediction " + key)
     predictions: pd.DataFrame | None = None
@@ -132,6 +135,8 @@ def _publish_fit(output: Path, key: str, *, features: pd.DataFrame, metadata: pd
         "training_rows": len(train_meta), "training_security_ids": sorted(train_meta.security_id.unique().tolist()),
         "training_decision_ids_sha256": json_sha256(sorted(train_meta.decision_id.tolist())),
         "metrics": metrics, **FLAGS}
+    if native_missing_columns:
+        record["native_missing_features"] = [asdict(feature) for feature in model.native_missing_features]
     with tempfile.TemporaryDirectory(dir=target.parent, prefix=".investment-fit-") as temporary:
         staged = Path(temporary) / "artifact"
         staged.mkdir()

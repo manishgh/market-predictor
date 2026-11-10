@@ -7,10 +7,24 @@ financial clipping/native missing values and a fixed score-only centering/half-s
 rule. Independent Sol design and senior Quant review approve it. Metadata feasibility
 rules out learned calibration for the earliest annual fold without weakening history.
 Root owns score adjustment and tests/docs; Sol engineer owns shared opt-in encoder,
-orchestration/CLI and tests. No implementation or fits have started at this freeze.
-Next: implement the exact consumer contracts, pass component checks/review, update
-feature acceptance, commit/export main, fit 12 models, independently replay/evaluate.
+orchestration/CLI and tests. Implementation passed 139 focused tests, Ruff/strict
+mypy and consolidated code review; the retained request and preflight pins follow.
+Next: commit/export reviewed main, run exactly 12 new models, independently replay
+and evaluate against all frozen controls before claiming improvement.
 No data reconstruction, exclusions, old/final refits, parameter search or V1/beta.
+
+Pre-fit component gates passed: 139 focused tests, affected Ruff/strict mypy,
+independent consolidated Sol code review and senior Quant design review. Root's
+score-only poison/precision tests and old default estimator/persistence regressions
+are included. Actual 12-model execution and independent replay remain pending.
+Immutable request: data/research/investment_forecast_adjustment_20261110/inputs/request.json
+SHA256 f95f255470455201b3c11de11a3e964449a55ec9362e9314f3dee23b078af40e.
+Metadata preflight: chat outputs/investment-forecast-adjustment-projected-preflight-20261110.log,
+SHA256 e1d48085c6376653166368066d07d57049619d007aafe12dffbaf234119f6045.
+Its helper SHA256 is 9ef1900a485b4f47f4826061f14a8dd45045b8b3f2f5d547d10375d3542b9f41;
+all 74,458 metadata rows and 61 consumed source digests were rechecked unchanged.
+The independent post-fit helper is reviewed, SHA256
+e2e2b8d74ed359acabb07e3a00e55a518093d01121057e5466ba8fda6c591fb5.
 
 ## Completed news and financial feature comparison November 10
 

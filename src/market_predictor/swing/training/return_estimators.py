@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 from typing import Any
 
 import numpy as np
@@ -12,6 +13,14 @@ from sklearn.preprocessing import StandardScaler
 from threadpoolctl import threadpool_limits  # type: ignore[import-untyped]
 
 
+@dataclass(frozen=True)
+class NativeMissingFeature:
+    name: str
+    finite_training_rows: int
+    lower: float | None
+    upper: float | None
+
+
 @dataclass
 class FittedReturnRegressor:
     family: str
@@ -20,6 +29,7 @@ class FittedReturnRegressor:
     scaler: Any | None
     estimator: Any
     parameters: dict[str, Any]
+    native_missing_features: tuple[NativeMissingFeature, ...] = ()
 
 
 def _feature_names(features: pd.DataFrame) -> tuple[str, ...]:
@@ -75,17 +85,69 @@ def _encode(
     return encoded, learned
 
 
+def _native_values(column: pd.Series) -> NDArray[np.float64]:
+    if getattr(column.dtype, "kind", None) not in ("i", "u", "f"):
+        raise ValueError("native-missing features must contain real numeric values")
+    values: NDArray[np.float64] = column.to_numpy(dtype=np.float64, na_value=np.nan, copy=True)
+    if np.isinf(values).any():
+        raise ValueError("native-missing features must be finite or NaN")
+    return values
+
+
+def _fit_native_missing(features: pd.DataFrame, columns: tuple[str, ...]) -> tuple[NativeMissingFeature, ...]:
+    fitted = []
+    for name in columns:
+        values = _native_values(features[name])
+        observed = values[~np.isnan(values)]
+        if observed.size:
+            lower, upper = np.quantile(observed, (0.01, 0.99), method="linear")
+            fitted.append(NativeMissingFeature(name, int(observed.size), float(lower), float(upper)))
+        else:
+            fitted.append(NativeMissingFeature(name, 0, None, None))
+    return tuple(fitted)
+
+
+def _encode_model_features(features: pd.DataFrame, medians: NDArray[np.float64] | None,
+                           native: tuple[NativeMissingFeature, ...]) -> tuple[NDArray[np.float32], NDArray[np.float64]]:
+    if not native:
+        return _encode(features, medians)
+    if len(native) >= len(features.columns) or tuple(features.columns[-len(native):]) != tuple(column.name for column in native):
+        raise ValueError("fitted native-missing features must match the ordered suffix")
+    legacy, learned = _encode(features.iloc[:, :-len(native)], medians)
+    encoded = np.empty((len(features), legacy.shape[1] + len(native)), dtype=np.float32)
+    encoded[:, :legacy.shape[1]] = legacy
+    for index, fitted in enumerate(native, start=legacy.shape[1]):
+        values = _native_values(features[fitted.name])
+        lower, upper, count = fitted.lower, fitted.upper, fitted.finite_training_rows
+        if type(count) is not int or count < 0:
+            raise ValueError("fitted native-missing support must be a nonnegative row count")
+        if count == 0 and lower is None and upper is None:
+            values.fill(np.nan)
+        elif count > 0 and lower is not None and upper is not None and isfinite(lower) and isfinite(upper) and lower <= upper:
+            np.clip(values, lower, upper, out=values)
+        else:
+            raise ValueError("fitted native-missing bounds must agree with training support and be finite and ordered")
+        if (np.abs(values[~np.isnan(values)]) > np.finfo(np.float32).max).any():
+            raise ValueError("clipped native-missing features exceed float32 range")
+        encoded[:, index] = values
+    return encoded, learned
+
+
 def fit_return_regressor(
     family: str,
     features: pd.DataFrame,
     target: NDArray[Any],
     sample_weight: NDArray[Any],
     parameters: dict[str, Any],
+    *, native_missing_columns: tuple[str, ...] = (),
 ) -> FittedReturnRegressor:
     """Fit the parent's fixed learner specification on this training partition only."""
     if family not in ("regularized_linear_return", "shallow_boosted_return"):
         raise ValueError(f"unsupported return regressor family: {family}")
     names = _feature_names(features)
+    if native_missing_columns and (family != "shallow_boosted_return"
+            or len(native_missing_columns) >= len(names) or names[-len(native_missing_columns):] != native_missing_columns):
+        raise ValueError("native-missing features require a boosted regressor and exact ordered suffix")
     labels = _vector(target, "target", len(features))
     weights = _vector(sample_weight, "sample_weight", len(features))
     fitted_parameters = dict(parameters)
@@ -98,7 +160,8 @@ def fit_return_regressor(
 
         estimator = XGBRegressor(**fitted_parameters)
     with threadpool_limits(limits=1):
-        encoded, medians = _encode(features, None)
+        native = _fit_native_missing(features, native_missing_columns)
+        encoded, medians = _encode_model_features(features, None, native)
         if family == "regularized_linear_return":
             scaler = StandardScaler(copy=False)
             scaler.fit(encoded, sample_weight=weights)
@@ -106,7 +169,7 @@ def fit_return_regressor(
             if not np.isfinite(encoded).all():
                 raise ValueError("scaled features must be finite")
         estimator.fit(encoded, labels, sample_weight=weights)
-    return FittedReturnRegressor(family, names, medians, scaler, estimator, fitted_parameters)
+    return FittedReturnRegressor(family, names, medians, scaler, estimator, fitted_parameters, native)
 
 
 def predict_return(model: FittedReturnRegressor, features: pd.DataFrame) -> NDArray[np.float64]:
@@ -117,8 +180,10 @@ def predict_return(model: FittedReturnRegressor, features: pd.DataFrame) -> NDAr
         raise ValueError(f"unsupported return regressor family: {model.family}")
     if (model.family == "regularized_linear_return") != (model.scaler is not None):
         raise ValueError("fitted scaler does not match the regressor family")
+    if model.native_missing_features and model.family != "shallow_boosted_return":
+        raise ValueError("fitted native-missing features require a boosted regressor")
     with threadpool_limits(limits=1):
-        encoded, _ = _encode(features, model.medians)
+        encoded, _ = _encode_model_features(features, model.medians, model.native_missing_features)
         if model.scaler is not None:
             model.scaler.transform(encoded, copy=False)
             if not np.isfinite(encoded).all():

@@ -71,12 +71,16 @@ def prepare(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, 
         target.mkdir(parents=True)
         prediction.to_parquet(target / "predictions.parquet", index=False)
         (target / "model.joblib").write_bytes(b"synthetic newly published estimator")
+        train = dataset.metadata.iloc[fold.train_indices]
         record = {"schema": "market_predictor.investment_research_model", "scope": "retrospective_research",
             "request_sha256": kwargs["request_sha256"], "unit": kwargs["identity"], "family": family,
             "parameters": kwargs["parameters"], "feature_names": list(kwargs["columns"]),
             "actual_fit_started_at_utc": started.isoformat(), "actual_fitted_at_utc": started.isoformat(),
             "dataset_admitted_at_utc": dataset.admitted_at_utc.isoformat(),
-            "latest_training_label_available_at_utc": dataset.metadata.iloc[fold.train_indices].label_available_at_utc.max().isoformat(),
+            "latest_training_label_available_at_utc": train.label_available_at_utc.max().isoformat(),
+            "latest_training_economic_maturity_at_utc": train.economic_maturity_at_utc.max().isoformat(),
+            "training_rows": len(train), "training_decision_ids_sha256": kwargs["identity"]["training_decision_ids_sha256"],
+            "training_security_ids": kwargs["identity"]["training_security_ids"],
             "metrics": investment_diagnostics(prediction), "persistence_prediction_parity": True,
             "files": {name: file_sha256(target / name) for name in ("model.joblib", "predictions.parquet")}, **FLAGS}
         write_json_object(target / "_manifest.json", record)

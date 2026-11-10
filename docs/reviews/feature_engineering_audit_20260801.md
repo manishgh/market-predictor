@@ -6,13 +6,26 @@ Only the model's six financial-column encoding and a score-only batch rule chang
 
 | Component | Source and historical values | Ordered consumer | Training/evaluation | Live/API |
 | --- | --- | --- | --- | --- |
-| 209 technical/news columns | Verified retained values/clocks, unchanged | Pending exact original 418 encoded-value/indicator parity | Pending default-consumer regression | Not applicable: retrospective comparison |
-| Six clipped/native-missing financial columns | Verified retained values/clocks, raw NaNs unchanged | Pending train-only p01/p99 and 424-column contract checks | Pending actual 12-model fits and independent replay | Not applicable: no live transformation release |
-| Centered and halved forecasts | Existing saved or new verified raw forecasts | Pending full eligible date/scope roster and outcome-poison tests | Pending exact derived-score/metric audit | Not applicable: requires full batch, no API work |
+| 209 technical/news columns | Verified retained values/clocks, unchanged | Verified exact original 418 value/indicator parity | Verified default-consumer regression; actual new run pending | Not applicable: retrospective comparison |
+| Six clipped/native-missing financial columns | Verified retained values/clocks, raw NaNs unchanged | Verified train-only bounds, empty/constant/missing state and 424-column order | Component checks verified; actual fits and independent replay pending | Not applicable: no live transformation release |
+| Centered and halved forecasts | Existing saved or new verified raw forecasts | Verified full eligible roster, outcome independence and float64 centering | Component checks verified; actual derived-score audit pending | Not applicable: requires full batch, no API work |
 
 No fitting begins until these consumer checks and independent design/code review
 pass. No source or original artifact is rewritten. The planned zero forecast mean
 is over all feature-eligible stocks, including unknown outcomes, not the known subset.
+
+Pre-fit component gates passed: 139 focused tests, affected Ruff/strict mypy,
+independent consolidated Sol code review and senior Quant design review. Root's
+score-only poison/precision tests and old default estimator/persistence regressions
+are included. Actual 12-model execution and independent replay remain pending.
+Immutable request: data/research/investment_forecast_adjustment_20261110/inputs/request.json
+SHA256 f95f255470455201b3c11de11a3e964449a55ec9362e9314f3dee23b078af40e.
+Metadata preflight: chat outputs/investment-forecast-adjustment-projected-preflight-20261110.log,
+SHA256 e1d48085c6376653166368066d07d57049619d007aafe12dffbaf234119f6045.
+Its helper SHA256 is 9ef1900a485b4f47f4826061f14a8dd45045b8b3f2f5d547d10375d3542b9f41;
+all 74,458 metadata rows and 61 consumed source digests were rechecked unchanged.
+The independent post-fit helper is reviewed, SHA256
+e2e2b8d74ed359acabb07e3a00e55a518093d01121057e5466ba8fda6c591fb5.
 
 ### News and financial comparison views November 10
 

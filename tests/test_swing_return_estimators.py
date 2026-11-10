@@ -1,9 +1,11 @@
 """Small real-estimator tests for train-only return preprocessing."""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+import joblib
 import numpy as np
 import pandas as pd
 import pytest
@@ -214,3 +216,71 @@ def test_unknown_family_rejected(family: str) -> None:
     features, target, weights = training()
     with pytest.raises(ValueError, match="family"):
         owner.fit_return_regressor(family, features, target, weights, {})
+
+
+def test_native_missing_financial_tail_preserves_original_encoder_and_clips_only_fit_bounds(tmp_path: Path) -> None:
+    features, target, weights = training()
+    names = ("cash_conversion", "empty_financial", "constant_financial")
+    supplied = features.assign(cash_conversion=[-10.0, np.nan, 2.0, 100.0],
+        empty_financial=np.nan, constant_financial=3.0)
+    saved = supplied.copy(deep=True)
+    model = owner.fit_return_regressor("shallow_boosted_return", supplied, target, weights, BOOSTED,
+        native_missing_columns=names)
+    lower, upper = np.quantile([-10.0, 2.0, 100.0], [0.01, 0.99], method="linear")
+    assert model.native_missing_features == (
+        owner.NativeMissingFeature(names[0], 3, lower, upper), owner.NativeMissingFeature(names[1], 0, None, None),
+        owner.NativeMissingFeature(names[2], 4, 3.0, 3.0))
+    heldout = supplied.assign(cash_conversion=[-1e12, np.nan, 0.0, 1e12],
+        empty_financial=1e12, constant_financial=[1e12, 0.0, -1e12, np.nan])
+    future_before = heldout.copy(deep=True)
+    encoded, _ = owner._encode_model_features(heldout, model.medians, model.native_missing_features)
+    assert encoded.dtype == np.float32 and encoded.flags.c_contiguous
+    assert_array_equal(encoded[:, :6], encoded_training())
+    assert_array_equal(encoded[:, 6:], np.array([
+        [lower, np.nan, 3.0], [np.nan, np.nan, 3.0], [0.0, np.nan, 3.0], [upper, np.nan, np.nan],
+    ], dtype=np.float32))
+    assert model.estimator.n_features_in_ == 9
+    path = tmp_path / "new.joblib"
+    joblib.dump(model, path)
+    restored = joblib.load(path)
+    assert restored.native_missing_features == model.native_missing_features
+    assert_array_equal(owner.predict_return(restored, heldout), owner.predict_return(model, heldout))
+    pd.testing.assert_frame_equal(supplied, saved)
+    pd.testing.assert_frame_equal(heldout, future_before)
+
+
+def test_legacy_serialized_regressor_without_native_field_replays_exactly(tmp_path: Path) -> None:
+    features, target, weights = training()
+    model = owner.fit_return_regressor("shallow_boosted_return", features, target, weights, BOOSTED)
+    prediction = owner.predict_return(model, features)
+    del model.__dict__["native_missing_features"]
+    path = tmp_path / "legacy.joblib"
+    joblib.dump(model, path)
+    legacy = joblib.load(path)
+    assert "native_missing_features" not in legacy.__dict__
+    assert_array_equal(owner.predict_return(legacy, features), prediction)
+
+
+@pytest.mark.parametrize(("family", "columns"), [
+    ("regularized_linear_return", ("complete",)),
+    ("shallow_boosted_return", ("empty",)),
+    ("shallow_boosted_return", ("signal", "empty", "complete")),
+])
+def test_native_missing_opt_in_rejects_wrong_family_or_column_order(family: str, columns: tuple[str, ...]) -> None:
+    features, target, weights = training()
+    with pytest.raises(ValueError, match="exact ordered suffix"):
+        owner.fit_return_regressor(family, features, target, weights, BOOSTED, native_missing_columns=columns)
+
+
+@pytest.mark.parametrize(("name", "count", "lower", "upper"), [
+    ("empty", 4, 1.0, 10.0), ("complete", -1, None, None), ("complete", 0, 1.0, 10.0),
+    ("complete", 4, None, 10.0), ("complete", 4, np.nan, 10.0), ("complete", 4, 10.0, 1.0),
+])
+def test_prediction_refuses_invalid_persisted_native_state(name: str, count: int,
+                                                          lower: float | None, upper: float | None) -> None:
+    features, target, weights = training()
+    model = owner.fit_return_regressor("shallow_boosted_return", features, target, weights, BOOSTED,
+        native_missing_columns=("complete",))
+    model.native_missing_features = (owner.NativeMissingFeature(name, count, lower, upper),)
+    with pytest.raises(ValueError, match="fitted native-missing"):
+        owner.predict_return(model, features)

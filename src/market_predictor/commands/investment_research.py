@@ -27,6 +27,7 @@ from market_predictor.research.investment_features import (
     collect_investment_company_facts,
     evaluate_investment_predictions,
 )
+from market_predictor.research.investment_forecast_adjustment import run_investment_forecast_adjustment
 from market_predictor.research.investment_labels import materialize_investment_labels
 from market_predictor.research.investment_training import train_investment_models
 from market_predictor.sources.alpaca import AlpacaSource
@@ -177,4 +178,11 @@ def register_investment_research_commands(app: typer.Typer) -> None:
                         request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
         """Measure separate news and financial effects on matched validation rows."""
         _run(lambda: run_investment_feature_ablation(root=root, request=request,
+            request_sha256=request_sha256, output=output))
+
+    @app.command("adjust-investment-forecasts")
+    def adjust_forecasts(root: Path = typer.Option(...), request: Path = typer.Option(...),
+                         request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
+        """Fit clipped financial inputs and measure fixed score-only shrinkage."""
+        _run(lambda: run_investment_forecast_adjustment(root=root, request=request,
             request_sha256=request_sha256, output=output))
