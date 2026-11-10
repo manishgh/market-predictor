@@ -1,8 +1,78 @@
 # Active Edge Rebuild Plan
+### Separate news and financial feature effects November 10
+
+Status: `in_progress`. User explicitly authorizes the feature-group comparison using
+Sol implementation and senior Quant review, existing data and canonical main only.
+V1/beta remains after model improvement. No API work is part of this checkpoint.
+
+Hypothesis: news and financial inputs have distinct incremental prediction effects;
+the earlier combined comparison cannot attribute the observed harm to either group.
+Measure feature-block effects for the fixed learners, not causal effects on markets.
+Freeze these four exact views of the existing admitted215-column dataset:
+- technical_relationships: first124 columns, old saved forecasts reused;
+- technical_news: first209 columns,48/2=24 new validation fits;
+- technical_financial: first124 plus original final6 financial columns,24 new fits;
+- all_features: all215 columns, old saved forecasts reused.
+
+The48newfits cover2newviews x2horizons x2learners x2scopes x3scoreyears. Reuse all48
+original validation fits with original model/prediction/unit hashes and actual clocks;
+no old profile refits and no new final model fits. Keep the original dataset/admission,
+feature order/values/clocks, research/scoring masks, targets, costs, 12 fold definitions,
+21-session purge/embargo, fixed Ridge/XGBoost settings/seeds, train-only preprocessing,
+all-column missingness indicators and equal-date weights. Do not alter peer transforms,
+source counts, exclusions, availability, news windows, financial ratios or thresholds.
+Primary evidence is252-session temporal;63-session and security-transfer remain separate.
+
+Use source-pinned original training request7d7c96a6b6b5816cb4867952bc7f750965e9fea53905e018a429a4103b3e4e8b
+and training manifest16eda742f2b6c0b95d25c03796185aac447c6c348f6710f6b7037640675516b3.
+Read exact original dataset/admission/settings pins from that request. Existing diagnostic
+2e570a4b714e0305d11909fe23ee48eeb116114be42ada16331070a92ce86981 is explanatory evidence,
+not permission to change predictions. Hashes and original producer inventory stay intact.
+
+All four profiles must share exact security/decision/horizon/fold/scope rows, eligibility,
+outcomes and coverage. Preserve every forecast and unknown outcome; top-decile selection
+precedes outcome lookup. Evaluate all96validation units and32profile aggregates, with
+24fold comparison sets and8aggregate comparison sets. Reuse canonical metrics, means,
+AUC/rank diagnostics and cohort-completeness accounting. Aggregate by equal decision date,
+not equal fold. Every complete-cohort return still requires all selected outcomes.
+Report signed MSE and MAE changes (positive means worse):
+- news given technical: L209 minus L124;
+- financial given technical: L130 minus L124;
+- news given financial: L215 minus L130;
+- financial given news: L215 minus L209;
+- interaction: L215 minus L209 minus L130 plus L124.
+Year/coverage/sector contributions retain original global date weights; show per-year
+and scope consistency. Do not hide an unfavorable year or remove tail observations.
+
+Improvement check: for each new profile/learner/horizon/scope, BOTH MSE and MAE must be
+strictly below BOTH the technical-profile and zero-SPY-excess losses on identical known
+rows. Report unavailable when comparisons are unavailable. Separately report whether
+annual temporal and transfer both pass; no automatic winner selection or promotion.
+A view beating only technical identifies less harmful inputs, not a successful model.
+All inspected periods remain development evidence; economics remains unavailable for
+incomplete cohorts. No calibration, parameter sweep or final refit is authorized here.
+
+Implementation uses shared dataset, fold, estimator/persistence and saved-prediction
+validation functions. Small reusable reader extraction is justified because this new
+consumer must enforce the same closed-run provenance; existing diagnostic regression
+must pass. The dataset manifest's original2profiles are never mutated. New derived
+view contracts and actual fit clocks are published in a separate immutable artifact.
+One guarded heavy job at a time, strictly below90% RAM,5GiB process+0.75GiB headroom.
+Any source/mask/clock/fit/metric mismatch refuses completed publication; no gate relaxation.
+
+Ownership: root pure feature projection/factorial comparison tests and continuity docs;
+Sol engineer shared saved-reader extraction/orchestration/CLI/publication tests;
+independent Sol code reviewer design/consolidated code; independent SeniorSol Quant
+statistical design and actual48-new-model replay/metric/contrast verification.
+Design approved statistically by SeniorQuant; concrete code contract review precedes edits.
+Exit gates: focused projection/identity/future-poison/source-tamper/unknown-outcome and
+weight-reconciliation tests, affected diagnostic/training consumer regressions, Ruff,
+strictmypy, immutable implementation export, actual48fits, independent saved-model replay
+and contrast review, documented measured answer, commit/push and no workers remaining.
 
 ### Investment prediction-error diagnosis and bounded improvement - November 10
 
-Status: `in_progress`. The user explicitly authorizes diagnosing why news/financial
+Status: `complete` for diagnosis. The user explicitly authorizes diagnosing why news/financial
 inputs worsen forecasts and improving the models, using Astra research, Sol engineers
 and independent senior Quant/design/code review. Keep only canonical main and reuse
 existing data. The completed experiment below remains immutable reference evidence.

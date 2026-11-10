@@ -1,4 +1,16 @@
 # Active Edge Rebuild Handoff
+## Active separation of news and financial features November 10
+
+Canonical main starts clean at9582c08. User authorizes the frozen48-new-fit comparison
+in the leading active plan; use exact retained215-column dataset and reuse old48fits.
+Root owns investment/feature_ablation.py and its pure tests. Sol engineer owns research
+orchestration, saved-reader extraction, CLI and publication tests. Independent SeniorSol
+Quant approved statistics; independent Sol design/code review is required before edits.
+Current stage: design freeze before implementation, no heavy job active. Do not start
+V1/beta, calibration, parameter search, source reconstruction, old/final model refits.
+Next: complete reusable consumers and focused checks, update feature acceptance to
+verified, export reviewed main, fit48serial units, independently replay and evaluate.
+Original producer/admission flags, model/data bytes and actual2026 clocks stay unchanged.
 
 ## Active prediction-error diagnosis - November 10
 

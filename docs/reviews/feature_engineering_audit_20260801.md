@@ -1,4 +1,19 @@
 # Current Feature Engineering Audit
+### News and financial comparison views November 10
+
+The user authorizes two projections of the admitted215-column matrix. No new source,
+value, timestamp or missingness calculation is introduced. Preserve original2-profile
+dataset contract; publish new ordered view names in the separate experiment only.
+
+| View | Source and historical values | Ordered feature consumer | Train and evaluate | Live and API |
+| --- | --- | --- | --- | --- |
+| technical_news209 | Verified retained124technical plus85news values and original availability clocks | Blocked until exact projection/identity tests pass | Blocked until shared consumer checks and actual experiment pass | Not applicable retrospective research only |
+| technical_financial130 | Verified retained124technical plus6financial values and original availability clocks | Blocked until exact projection/identity tests pass | Blocked until shared consumer checks and actual experiment pass | Not applicable retrospective research only |
+
+Old124/215models are immutable references. Source/causal/value evidence in the closed
+matrix below is reused. Missing optional features and unknown outcomes are retained;
+no added source is inferred from a finite zero. No new model training begins until
+projection/consumer checks and independent design/code review pass.
 
 ### Investment research feature acceptance - November 10
 
