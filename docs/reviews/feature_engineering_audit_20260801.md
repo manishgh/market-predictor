@@ -2,25 +2,36 @@
 
 ### Investment research feature acceptance - November 10
 
-Current checkpoint has verified the implementation of a research-only dataset and training
-consumer. Independent Sol design and Senior Quant review approved exact prior-session
-reuse and retrospective clocks. No actual dataset admission or model fit is claimed.
-The existing feature calculations remain unchanged; this matrix assesses new consumers.
+The actual dataset and independent pre-fit audit passed. Implementation
+30b54bfd28b9a01de4bb9abcf1dba82661966cef joins retained predictors and targets;
+no source calculations, values or original availability clocks were changed.
+All 74,458 rows remain. The independent audit completed on November 10 at
+19:49:23 UTC and permits the frozen retrospective experiment in all 12 splits.
 
-| Feature group | Source/time contract | Historical construction | Ordered model contract | New training/evaluation consumer | Live/serving/API consumption |
+| Feature group | Source/time contract | Historical construction | Ordered model contract | Training/evaluation consumer | Live/serving/API |
 | --- | --- | --- | --- | --- | --- |
-|124 candle technical/relationship measures | Exact prior-XNYS nightly snapshot; all clocks <=originalcutoff<investmentclose; original586-peer values | Reuse saved209-column partitions; new join audit pending | First124 verified parent columns, same rows asfullprofile | Component tests passed; actual dataset audit pending | Not applicable: retrospective research artifacts only, no serving/model activation |
-|85 news measures | Same prior-session snapshot and historical-proxy source semantics; absent values remain null | Reuse retained reviewed news values; no new window aggregation | Parent209 order unchanged | Component tests passed; actual source/row replay pending | Not applicable: this checkpoint creates no live news transformation or serving release |
-|6 financial measures | Exact security/decision-close snapshot; retained SEC publication clocks and reconstruction basis | Reuse financial recovery; no recalculation or inferred values | Append existing FEATURE_NAMES order | Component tests passed; actual identity/clock/value join audit pending | Not applicable: retrospective filing reconstruction is not admitted live input |
+| 124 candle technical/relationship measures | Verified exact previous-XNYS-session source identity and clocks before investment close; original 586-security peer values | Verified exact retained values; no recalculation | Verified original 124-column prefix | Verified actual row/value/clock parity, common eligibility and independent splits | Not applicable: retrospective research only |
+| 85 news measures | Verified original saved clocks and explicit source/missingness semantics | Verified retained values; no window reconstruction | Verified full original 209-column order | Verified actual values/nulls/reasons and source pins | Not applicable: no live transformation or serving release |
+| 6 financial measures | Verified exact security/decision/close and retained SEC availability clocks | Verified 134,076 original metric values across 22,346 financial decisions | Verified appended FEATURE_NAMES order | Verified actual identity/clock/value/missingness joins | Not applicable: historical filing reconstruction is not admitted live input |
 
-All three groups require original source hashes and explicit missingness. The new
-consumer must preserve historical source flags; only a separate derived admission
-permits research fitting. Train-only medians/indicators handle optional values, never
-fabricate source coverage. Full historical row accounting survives feature/target gaps.
-Shared transformations are the retained calculations; new lagged join is verified by
-exact source-value/clock parity and future-poison tests. No model-specific serving API
-or prospective validation is claimed. Promotion/serving remain false for every artifact.
+Audit: chat outputs/investment-dataset-independent-prefit-audit-20261110.json,
+SHA256 bdcf62b5a7fdacbdbf854fb5f0d6adb36390eab5b2e3212fbb9c4b4f3efbda46.
+Reviewed execution helper: 9e15dd22dc21d3c2065b2da30dbcb87db7f09385ab5f8dd6eff6104652eb4c1e.
+The audit checked 5,874,781 saved feature values and the same number of availability
+values, all 27,189 verified target bindings, 46 original news-producer files, and
+2,430 consumed file hashes before/after. All 12 frozen purged/embargoed temporal
+and security-transfer splits are available. Original source admission flags remain
+unchanged; the separate derived admission permits retrospective research fitting only.
 
+Per horizon, 22,334 rows have usable features. Verified target plus feature rows:
+12,834 at 252 sessions and 14,341 at 63 sessions. Missing optional values retain
+nulls/reasons and use training-partition-only preprocessing. Prediction eligibility
+does not depend on future outcome availability; selected unknown outcomes cannot be
+removed to improve measured returns. Component, poison and publication tests passed;
+latest representation regression has 36 passing tests plus affected Ruff/strict mypy.
+
+Training and subsequent saved-model replay are the next actual steps. No fitted model,
+prospective validation, promotion, serving activation or profitability is claimed yet.
 ### Full investment targets built and independently checked - November 10
 
 The full corpus contains exactly 74,458 horizon rows for 37,229 monthly decisions.

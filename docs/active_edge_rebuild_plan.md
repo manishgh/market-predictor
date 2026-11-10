@@ -6,9 +6,10 @@ Status: `in_progress`. User authorizes retained candle/news/financial joins foll
 by investment training and SPY evaluation when checks pass, using Sol agents on main.
 This is the sole active checkpoint; closed target/source work below stays frozen.
 
-Current phase: reviewed implementation is complete; actual dataset construction is
-retrying after a bounded retained-news metadata reader correction. Independent actual
-dataset audit must pass before fitting the frozen experiment. Reuse the
+Current phase: dataset30b54bf published successfully19:03:29UTC; independent actual
+dataset audit passed19:49:23UTC; all12splits permit the frozen48fold/8final research fits.
+Training is the current operation. All74,458 rows remain;
+research-eligible12,834 at252sessions and14,341 at63sessions. Reuse the
 74,458-row corpus (9b70c348ab17738f5874d42c51bff6af386d94061ef383385bdd6ead5bcad4c3)
 and existing retained features. Never rebuild unaffected sources or change their
 original clocks/flags. Preserve 45 prior exclusions, all original security decisions,

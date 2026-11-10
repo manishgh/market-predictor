@@ -5,41 +5,48 @@
 User authorizes joining verified targets to retained candles/news/financial features,
 then training and SPY evaluation after checks pass. Canonical main remains the only
 checkout. The leading active plan freezes the reviewed design and test gates.
-Current operation: the a53e016 immutable dataset build stopped at18:28:45UTC
-November10 before publication. Native session98668 exited1 and worker69812 ended.
-The saved news verification report intentionally has no profile field; the new reader
-incorrectly required it. Metadata inspection also found that the parent profile and
-column contract belong to its pinned request, rather than its publication manifest.
-The bounded reader/fixture correction preserves all saved source bytes and request88f24.
-The corrected reader passed an actual metadata-only check of59 saved months,
-209 model columns and61 consumed metadata/code files, without decoding feature rows.
-Focused dataset tests passed33 cases in26.20s; the fixtures now match the actual
-receipt and parent-request field ownership, including missing-required-field refusals.
-Logs: chat outputs/investment-news-metadata-diagnostic-20261110b.log and
-investment-dataset-schema-focused-20261110a.log. Affected Ruff and strict mypy passed;
-independent code review approved. Implementation5f8308725e960ac6b04054cb29768af3b6738856
-is committed/pushed on main. Its immutable export and unchanged88f24 request feed
-the build at data/research/investment_dataset_20261110/joined_5f83087.
-It completed59 monthly joins and combined validation, then failed Parquet publication
-at18:47:36UTC: source_feature_missing_reasons mixes retained text with absent-row lists.
-Native91648 exited1; worker55424 ended; no dataset/admission was published.
-Log chat outputs/investment-dataset-build-5f83087-20261110.log. Engineer owns the
-bounded missing-reason representation fix and regression; source values stay unchanged.
-Actual diagnostic projected464 saved July30,2019 rows: every technical reason was
-text (Arrow large_string). Fix preserves that exact text and uses null only when
-the source snapshot/diagnostic is absent. No reason parsing, reencoding or source edits.
-Independent code/Quant reviews agree; focused tests now exercise mixed present/absent
-rows through a real Parquet round trip. Both audit helper hashes remain unchanged.
-Representation correction30b54bfd28b9a01de4bb9abcf1dba82661966cef is committed/pushed.
-Focused36 tests passed26.02s; affected3-file Ruff, strictmypy1source and diffcheck passed.
-Independent reviewers approved; sole job is now the unchanged88f24 dataset retry using
-its immutable producer, output data/research/investment_dataset_20261110/joined_30b54bf.
-Logs: chat outputs/investment-dataset-reasons-focused-20261110a.log and
-investment-dataset-reasons-static-20261110a.log. Independent pre-fit audit still precedes any training after the corrected retry.
-Failed-run log: chat outputs/investment-dataset-build-a53e016-20261110.log.
-No dataset admission or model fit has completed. The previously passing106 synthetic
-component tests did not represent these two actual retained metadata shapes.
+Current operation: independent pre-fit audit passed at 19:49:23 UTC November 10.
+All 12 frozen splits are available. The 48 validation fits and 8 final research
+models are now authorized by that result; no model has been promoted or activated.
 
+Producer: 30b54bfd28b9a01de4bb9abcf1dba82661966cef, committed/pushed on main and
+exported immutably with 462 source files. Dataset build completed at 19:03:29 UTC.
+Dataset data/research/investment_dataset_20261110/joined_30b54bf/dataset/_manifest.json
+SHA256 9c19fbf3a9f716b3f82b9958c094f9752f477952f5df8c4cb797123e765c1280.
+Admission same root/admission/_manifest.json
+SHA256 197b9b3f23025d2d41927516fa4c14837e9fc6d5410f9c26ca8eebed81d96e9b.
+All 74,458 rows remain. Feature-eligible: 22,334 per horizon. Research-eligible:
+12,834 at 252 sessions and 14,341 at 63 sessions; seven verified targets per horizon
+lack usable features. Original verified target counts 12,841/14,348 are unchanged.
+
+Independent audit chat outputs/investment-dataset-independent-prefit-audit-20261110.json
+SHA256 bdcf62b5a7fdacbdbf854fb5f0d6adb36390eab5b2e3212fbb9c4b4f3efbda46.
+Execution helper audit_investment_dataset_prefit_execution.py
+SHA256 9e15dd22dc21d3c2065b2da30dbcb87db7f09385ab5f8dd6eff6104652eb4c1e.
+It verified every target binding, 5,874,781 feature values and their clocks, 134,076
+financial values, all 46 original news-producer files and 2,430 consumed file hashes.
+All sources unchanged; strict 21-XNYS-session purge and security-transfer separation
+passed. Completed native session78559 exit0; worker37120 ended and lease released.
+
+Frozen training request data/research/investment_training_20261110/inputs/request.json
+SHA256 fb93bd126d23b0bbf331dadab094acb9ba0c75d7df0a3ee51f8a5e8475384903.
+Exact accepted audit copied beside it; preflight.json binds producer and clocks.
+Next command uses immutable30b54bf, train-investment-models, output
+ data/research/investment_training_20261110/models_30b54bf.
+Reviewed post-fit helper audit_investment_models_postfit_execution.py
+SHA256 4482b0cc873722ee856628a24655660744e8dbac6d87e01cb48b2e1eae088757
+must independently replay saved predictions, train-only preprocessing, metrics and
+source hashes after training. It was frozen before any model results were read.
+
+Resolved failures retained for evidence: original dataset readers assumed metadata
+fields on the wrong owning objects (5f83087 corrected them), and mixed reason text
+with absent-source lists (30b54bf preserves text/null). Source bytes stayed unchanged.
+Original pre-fit helper9b247 had an index-column lookup bug; replacement9e15 changes
+only that lookup and passed a 209-value/209-clock actual-row smoke before full audit.
+Original helpers/logs remain unchanged; no caching, resource-limit or policy changes.
+Final 36 focused regression tests, affected Ruff/strict mypy and independent review
+passed. Original broader component run passed 106 tests. Exact logs remain in chat
+outputs and prior commits; no full suite or release verification was claimed.
 Sol ML engineer owns investment/dataset.py and research/investment_dataset.py plus
 consumer tests. Root owns investment/training.py, research/investment_training.py,
 CLI integration and current documentation. Independent Sol design/code and Senior
@@ -83,7 +90,7 @@ Actual frozen request data/research/investment_dataset_20261110/inputs/request.j
 SHA25688f24d310c1d25e912576e7edc20dd9a72d1a75f50620ab9233148f43f13870f,
 evaluation_as_of2026-11-10T18:10:16.716790+00:00. Both source manifests and the original
 46 news verifier source bytes are pinned; no retained source is rebuilt.
-Independent pre-fit helper chat outputs/audit_investment_dataset_prefit.py is reviewed,
+Historical initial pre-fit helper chat outputs/audit_investment_dataset_prefit.py was reviewed,
 SHA2569b24721f00b9879f129ea7d7c0a65b6d2f0c3635a2a3958482046c775c475223.
 It checks full value/clock/row parity and date/sector coverage plus12 independent folds.
 Existing estimator settings configs/swing_news_return_training.json SHA256
