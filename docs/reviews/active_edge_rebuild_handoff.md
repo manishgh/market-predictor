@@ -1,4 +1,15 @@
 # Active Edge Rebuild Handoff
+## Active stock selection ranking experiment November 11
+
+Main starts clean at 2598cf1. User authorizes the leading target-only 12-fit ranking
+experiment with retained 209 features and fixed XGBoost, original 12 outer folds,
+36 old controls and a separate unitless score contract. Root owns pure ranking,
+shared selection/AUC helpers and docs; Sol engineer owns persistence/references/CLI.
+Independent design and senior Quant approval are complete. No new fit yet.
+Next: implement and test the shared contracts, review, update feature acceptance,
+commit/export main, run 12 models, independently replay and report honest ranking
+and economic limits. No tuning, source rebuilds, exclusions or V1/beta work.
+
 ## Completed forecast bias and financial handling experiment November 10
 
 Implementation 0de4474169f2fc3cf1552e99c16afdad7d2cefa0 is committed and pushed

@@ -1,4 +1,73 @@
 # Active Edge Rebuild Plan
+### Stock selection and held-out security ranking November 11
+
+Status: `in_progress`. User authorizes improved stock selection and held-out-stock
+performance, with Sol engineering and independent senior Quant/design/code review,
+existing data and main only. V1/beta remains deferred. Prior forecast adjustment
+reduced magnitudes but preserved ordering; financial clipping did not add consistent
+value. This checkpoint tests whether a date-relative training target learns more
+transferable ordering than absolute annual return magnitudes.
+
+Freeze one target-only candidate and exactly 12 new fixed shallow XGBoost validation
+fits: original 209 technical/news inputs, 418 median/value-indicator encodings,
+2 horizons x 2 scopes x 3 years. Use the existing admitted dataset, original feature
+values/order/clocks, economic targets/costs, original outer folds and 21-XNYS-session
+maturity embargo, equal-date training weights, fixed estimator settings/dependencies
+and seed. Current 12-fold support was independently replayed in the prior checkpoint;
+do not rescan raw data or rebuild sources. Reuse 36 saved XGBoost fits for 124 technical,
+209 technical/news and 215 full controls. No financial clipping, score adjustment,
+parameter sweep, old/final refit, stock exclusion, download or API change.
+
+After selecting each exact mature outer training partition and removing held-out
+securities, rank known net-SPY-excess targets separately within each decision date:
+target_rank = 2 * (average_tie_rank - 0.5) / date_training_count - 1.
+Ties share their midrank; singleton dates get zero. All training rows remain and date
+weights remain unchanged. These are ranks relative to known mature training outcomes,
+not unobserved universe returns. No held-out or scoring labels enter training ranks.
+The new `within_date_return_rank` profile emits unitless `predicted_rank_score`, not
+a return or probability. Persist exact train-row/rank-target hash and dedicated
+ranking schema, with original economic labels and actual fit/generation clocks.
+
+Reuse the canonical numerical estimator/encoder and persistence with one default-off
+ranking-target opt-in. Shared cohort selection and AUC helpers accept a score column;
+all existing return manifests/metrics/default behavior stay unchanged. Share existing
+training/ablation reference validation instead of copying it. New request has the same
+four SourcePins (training manifest/request and ablation manifest/request) under its
+own ranking schema. Publish 12 new/36 reused units, 48 unit and 16 aggregate ranking
+reports. Never publish MSE/MAE against zero return for unitless rank scores.
+
+Compute Spearman within dates with at least 3 known outcomes and nonconstant actual
+excess, with support determined from labels alone. A constant-score model contributes
+neutral zero on a supported date and is counted; it cannot omit a difficult date.
+AUC support requires both actual positive-net-excess classes; constant scores give
+0.5. Average supported dates equally, and require exact identical support and known
+row masks across candidate/controls. Retain every scored unknown outcome. Select the
+canonical top ceil(n/10) from all eligible scores first, with security-id tie breaking,
+then evaluate availability and matched stock/SPY costs using the existing evaluator.
+
+Frozen primary ranking gate: in EACH 252-session scope, Spearman must be >0 and
+strictly exceed all three saved controls, and within-date AUC must be >0.5 and
+strictly exceed all three controls. Report aggregate, every score year and quarterly
+results, all date-support/constant-score counts and missing outcomes. No automatic
+winner, threshold tuning or model promotion. These repeatedly inspected periods are
+development evidence. Ranking improvement is distinct from SPY outperformance:
+incomplete selected outcomes forbid a full-period cohort return, and even complete
+overlapping cohort means are not a funded portfolio comparison. Do not claim the
+user's SPY goal achieved merely because a ranking gate passes.
+
+Ownership: root investment/ranking.py, shared selection extraction in
+investment/training.py, optional AUC score column and focused pure tests/docs;
+Sol engineer ranking publisher/readers, shared reference extraction, orchestration,
+CLI and publication tests; independent Sol design/code review; senior Sol Quant
+independent exact target/median/model replay and matched ranking/cohort audit.
+Design approved before code. Component exit gates: tie/singleton/row alignment,
+future/held-out target poison, train-only preprocessing, constant-score common date
+support, unchanged old metrics/persistence, full unknown-outcome selection, tampered
+source refusal and actual clock checks; focused affected consumers, Ruff/strict mypy,
+committed immutable producer, actual 12 fits and independent saved-model/metric replay.
+Normal shared lease and memory policy (strictly below 90%, existing process limits).
+Update feature acceptance before fits; commit/push main and leave no own workers.
+
 ### Forecast bias and financial input handling November 10
 
 Status: `complete` for the measured forecast/financial experiment. The user authorized fixing forecasts and

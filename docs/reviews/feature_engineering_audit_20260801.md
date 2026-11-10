@@ -1,4 +1,15 @@
 # Current Feature Engineering Audit
+### Within-date investment ranking November 11
+
+| Component | Retained source/time/value evidence | Ordered consumer | Train/evaluate | Live/API |
+| --- | --- | --- | --- | --- |
+| 209 technical/news inputs | Verified admitted values and clocks, unchanged | Pending exact original 418 encoding/persistence regression | Pending actual 12 fits and independent replay | Not applicable: retrospective ranking only |
+| Within-date rank target | Verified original net SPY excess and maturity | Pending training-only rank/tie/singleton/holdout poison checks | Pending exact target-vector hash and independent fit replay | Not applicable: no new live labels |
+| Unitless ranking score | Exact full eligible roster and original masks | Pending separate score/schema and common date support tests | Pending same-row ranking/top-decile audit | Not applicable: no return/API claim |
+
+Only target representation changes; raw labels, optional source gaps and outcomes stay
+intact. No fit until consumer tests and independent design/code review pass.
+
 ### Forecast adjustment and financial handling November 10
 
 The source/data/availability contract remains the accepted 215-column dataset.
