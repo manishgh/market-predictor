@@ -1,7 +1,7 @@
 # Active Edge Rebuild Plan
 ### Separate news and financial feature effects November 10
 
-Status: `in_progress`. User explicitly authorizes the feature-group comparison using
+Status: `complete` for the measured feature-group comparison. The user authorized
 Sol implementation and senior Quant review, existing data and canonical main only.
 V1/beta remains after model improvement. No API work is part of this checkpoint.
 
@@ -70,9 +70,90 @@ weight-reconciliation tests, affected diagnostic/training consumer regressions, 
 strictmypy, immutable implementation export, actual48fits, independent saved-model replay
 and contrast review, documented measured answer, commit/push and no workers remaining.
 
-Implementation pre-fit gates passed: 75 focused tests, affected Ruff/strict mypy,
-independent consolidated Sol code review and senior Quant design approval. Actual fits
-and the independent saved-model/metric audit remain pending.
+
+Implementation 433d6d43e32b6448c52257dc717f24e6a37c0b07 is committed and pushed on
+canonical main; the immutable export contains 466 files. The actual run completed
+at 2026-11-10T22:20:31 UTC, with 48 new validation fits, 48 reference fits reused,
+96 unit reports, 32 aggregate reports, 24 fold comparisons and 8 aggregate comparisons.
+No final models, data downloads, source rebuilds or serving changes were performed.
+The 75 focused tests, affected Ruff and strict mypy, independent Sol design/code
+review and senior Quant statistical review passed.
+
+Report: data/research/investment_feature_ablation_20261110/ablation_433d6d4/_manifest.json
+SHA256 400661d2945bc28ff2bbef6e3dd2d74eb34c1e7566b506fe37624e2c7c2cf31e.
+Request SHA256 c84435c641682092a84d8778dda7abe11618c05ee714a1d11f40cd8c9ecd4266.
+Independent audit: chat outputs/investment-feature-ablation-independent-audit-20261110.json
+SHA256 8eb6404219dc0a9d6e1d777224d0f96c3739403f80290a173df2c463d1d0ade8.
+Audit completed at 2026-11-10T22:23:29.155289+00:00; all 48 new saved models replay
+exactly (maximum prediction difference zero), all 96 unit and 32 aggregate metrics,
+24 fold/8 aggregate conditional comparisons, source hashes and actual clocks pass.
+All 2,745 independently checked file digests were unchanged before and after the audit.
+Original 48-unit audit and model bytes were reused unchanged. No model was refitted
+by the audit. All source admission and promotion flags retain their original meaning.
+
+| Annual temporal feature view | XGBoost MSE above zero excess | Ridge MSE above zero excess |
+| --- | ---: | ---: |
+| Technical only | 27.81% | 40.41% |
+| Technical + news | 28.05% | 51.12% |
+| Technical + financial | 33.66% | 48.58% |
+| Technical + news + financial | 33.81% | 56.36% |
+
+Lower is better; 0% equals the zero-excess forecast baseline.
+
+Measured answer: the current financial block is the main source of annual XGBoost
+deterioration. Adding it to technical increases MSE by 4.575% and MAE by 3.001%;
+adding it when news is already present increases MSE by 4.492% and MAE by 3.028%.
+Both metrics worsen in every annual score year (2022, 2023 and January-May 2024),
+for both learners and both scopes, whether financial inputs are added before or
+after news. These are effects under this fixed training pipeline, not a conclusion
+that financial information is inherently useless or causes market movements.
+
+The financial-only annual XGBoost view raises the mean predicted SPY excess from
++6.58% to +7.42% on the same known outcomes, whose observed equal-date mean is
+-7.11%. Prediction standard deviation rises from 12.99 to 14.17 percentage points;
+both date-mean and within-date errors rise. This identifies excessive positive
+return estimates and weakly supported forecast variation, rather than proving a
+simple mean correction would solve the problem.
+
+News alone changes annual temporal XGBoost MSE by +0.192% and MAE by +0.250%;
+with financial inputs already present the changes are +0.113% and +0.276%.
+Its annual held-out-stock aggregate improves MSE by 0.777% and MAE by 0.324%
+relative to technical, but the year-level effects are mixed. For Ridge, both groups
+hurt: news alone increases annual temporal MSE by 7.627%, financial alone by 5.821%.
+Ridge's financial view improves within-date AUC from 0.55755 to 0.56829 despite
+worse magnitude error. Ranking and calibrated return accuracy remain separate.
+
+The annual temporal loss interaction is negative for MSE for both learners:
+-0.0024334131 Ridge and -0.0000791959 XGBoost. The combined deterioration is
+therefore not the sum of the two standalone changes. MAE interaction differs:
+-0.0018781831 Ridge and +0.0000880400 XGBoost. Do not assign a unique causal
+percentage of total deterioration to either group.
+
+Quarterly results do not reverse the conclusion. XGBoost with news alone lowers
+temporal MSE by 0.094% and MAE by 0.043% versus technical, while held-out-stock
+errors rise. Quarterly financial-only XGBoost lowers temporal MSE by 0.081% but
+raises MAE by 0.151%. Ridge worsens with either group at both horizons/scopes.
+
+All 32 four-profile/horizon/learner/scope aggregate MSEs and MAEs remain above
+their matched zero-SPY-excess baselines. All 16 new-view improvement checks fail,
+as do all four annual both-scope checks. Removing the financial block lowers the
+current full annual XGBoost MSE by about 4.30%, but does not establish useful
+forecast performance or authorize deployment. No profile was selected or promoted.
+
+Each temporal profile scores 11,091 feature-eligible rows across 29 decision dates:
+7,126 known annual outcomes and 3,965 unknown; quarterly has 7,862 known and 3,229
+unknown. Each transfer profile scores 2,100 rows: 1,285/815 known/unknown annual,
+1,425/675 quarterly. Rows with unknown outcomes remained eligible for selection;
+no rows or stocks were removed. All 16 temporal profile/horizon/learner combinations have zero complete
+top-decile cohorts out of 29 dates. Reported errors are conditional on known
+outcomes with equal-date weights; they are not realized investment losses.
+
+Next bounded research priority: improve return magnitude/bias and the financial
+feature representation or its regularization, with news effects kept learner- and
+horizon-specific. Freeze that next protocol before any new fit. This checkpoint
+does not authorize a parameter sweep, outcome-based exclusions, final refits or
+serving changes. Previously inspected periods remain development evidence.
+V1/beta stays deferred until model improvement is demonstrated.
 
 ### Investment prediction-error diagnosis and bounded improvement - November 10
 

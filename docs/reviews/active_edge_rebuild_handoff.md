@@ -1,20 +1,58 @@
 # Active Edge Rebuild Handoff
-## Active separation of news and financial features November 10
+## Completed news and financial feature comparison November 10
 
-Canonical main starts clean at9582c08. User authorizes the frozen48-new-fit comparison
-in the leading active plan; use exact retained215-column dataset and reuse old48fits.
-Root owns investment/feature_ablation.py and its pure tests. Sol engineer owns research
-orchestration, saved-reader extraction, CLI and publication tests. Independent SeniorSol
-Quant approved statistics; independent Sol design/code review is required before edits.
-Current stage: implementation and pre-fit checks passed. The shared saved-run reader,
-four feature views and factorial comparison are implemented, with 75 focused tests,
-affected Ruff and strict mypy passing. Independent Sol code review found no issues;
-senior Quant approved the fixed comparison and prepared an independent model replay.
-The scheduled collector finished before the serial component tests started.
-Next: export the reviewed implementation commit, run exactly 48 new validation fits,
-and independently replay saved models and all reported conditional comparisons.
-Do not start V1/beta, calibration, parameter search, source reconstruction or final fits.
-Original producer/admission flags, model/data bytes and actual2026 clocks stay unchanged.
+Implementation 433d6d43e32b6448c52257dc717f24e6a37c0b07 is committed and pushed on
+canonical main; the immutable export contains 466 files. The actual run completed
+at 2026-11-10T22:20:31 UTC, with 48 new validation fits, 48 reference fits reused,
+96 unit reports, 32 aggregate reports, 24 fold comparisons and 8 aggregate comparisons.
+No final models, data downloads, source rebuilds or serving changes were performed.
+The 75 focused tests, affected Ruff and strict mypy, independent Sol design/code
+review and senior Quant statistical review passed.
+
+Verification tier: component checkpoint, with actual retained-data fitting and
+independent replay in addition to unit/consumer checks. Commands (normal shared lease):
+- pytest -q tests/test_investment_feature_ablation_publication.py
+  tests/test_investment_feature_ablation.py tests/test_investment_diagnostics.py
+  tests/test_investment_diagnostics_publication.py tests/test_investment_training.py
+  tests/test_investment_research.py: 75 passed in 233.97 seconds. Six warnings are
+  existing joblib/NumPy shape deprecations in the persistence regression.
+- python -m ruff check: all seven changed Python source/test files passed.
+- python -m mypy --strict --follow-imports=silent: investment/feature_ablation.py,
+  research/investment_diagnostics.py, research/investment_feature_ablation.py and
+  commands/investment_research.py passed (all under src/market_predictor).
+- git diff --check passed. Test log SHA256
+  927bca0147722d672a3414238d0ba37e6a22dcaeb83ebd96ed2e5b2eeb61a699;
+  static log SHA256 a50b76e4a00396e3db51f800c8088a69ce350c7454e2cd86f04a3b3cb351bceb.
+The repository-wide suite and API/serving checks were deliberately not run: this
+component changes retrospective feature comparison only, with no release or promotion.
+
+Report: data/research/investment_feature_ablation_20261110/ablation_433d6d4/_manifest.json
+SHA256 400661d2945bc28ff2bbef6e3dd2d74eb34c1e7566b506fe37624e2c7c2cf31e.
+Request SHA256 c84435c641682092a84d8778dda7abe11618c05ee714a1d11f40cd8c9ecd4266.
+Independent audit: chat outputs/investment-feature-ablation-independent-audit-20261110.json
+SHA256 8eb6404219dc0a9d6e1d777224d0f96c3739403f80290a173df2c463d1d0ade8.
+Audit completed at 2026-11-10T22:23:29.155289+00:00; all 48 new saved models replay
+exactly (maximum prediction difference zero), all 96 unit and 32 aggregate metrics,
+24 fold/8 aggregate conditional comparisons, source hashes and actual clocks pass.
+All 2,745 independently checked file digests were unchanged before and after the audit.
+Original 48-unit audit and model bytes were reused unchanged. No model was refitted
+by the audit. All source admission and promotion flags retain their original meaning.
+
+| Annual temporal feature view | XGBoost MSE above zero excess | Ridge MSE above zero excess |
+| --- | ---: | ---: |
+| Technical only | 27.81% | 40.41% |
+| Technical + news | 28.05% | 51.12% |
+| Technical + financial | 33.66% | 48.58% |
+| Technical + news + financial | 33.81% | 56.36% |
+
+Financial inputs are the main contributor to the annual temporal XGBoost error
+increase from adding both feature groups; Ridge worsens with both groups. News has small, mixed XGBoost effects across scopes/years. All 16 new-view
+checks fail to beat both technical and zero-excess MSE/MAE. No model is promoted.
+All stocks, rows, missing outcomes, source bytes and original dataset values remain.
+Full conditional effects, year consistency and denominators are in the leading plan.
+The next research priority is return magnitude/bias and financial representation or
+regularization under a separately frozen protocol. V1/beta remains deferred until
+measured model improvement. No test, fit or audit worker from this checkpoint remains.
 
 ## Active prediction-error diagnosis - November 10
 

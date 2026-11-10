@@ -7,17 +7,40 @@ dataset contract; publish new ordered view names in the separate experiment only
 
 | View | Source and historical values | Ordered feature consumer | Train and evaluate | Live and API |
 | --- | --- | --- | --- | --- |
-| technical_news209 | Verified retained124technical plus85news values and original availability clocks | Verified exact ordered projection and common-row tests | Shared consumers verified; actual fits and independent replay pending | Not applicable retrospective research only |
-| technical_financial130 | Verified retained124technical plus6financial values and original availability clocks | Verified exact ordered projection and common-row tests | Shared consumers verified; actual fits and independent replay pending | Not applicable retrospective research only |
+| technical_news209 | Verified retained124technical plus85news values and original availability clocks | Verified exact ordered projection and common-row tests | Verified actual fits and independent saved-model/metric replay; forecast quality fails the improvement checks | Not applicable retrospective research only |
+| technical_financial130 | Verified retained124technical plus6financial values and original availability clocks | Verified exact ordered projection and common-row tests | Verified actual fits and independent saved-model/metric replay; forecast quality fails the improvement checks | Not applicable retrospective research only |
 
 Old124/215models are immutable references. Source/causal/value evidence in the closed
 matrix below is reused. Missing optional features and unknown outcomes are retained;
 no added source is inferred from a finite zero. No new model training begins until
 projection/consumer checks and independent design/code review pass.
 
-Pre-fit gates passed: 75 focused tests, affected Ruff and strict mypy, and
-independent Sol design/code and senior Quant statistical review. Actual fitting is
-authorized for the two new views only. Existing reference model bytes are unchanged.
+
+Implementation 433d6d43e32b6448c52257dc717f24e6a37c0b07 is committed and pushed on
+canonical main; the immutable export contains 466 files. The actual run completed
+at 2026-11-10T22:20:31 UTC, with 48 new validation fits, 48 reference fits reused,
+96 unit reports, 32 aggregate reports, 24 fold comparisons and 8 aggregate comparisons.
+No final models, data downloads, source rebuilds or serving changes were performed.
+The 75 focused tests, affected Ruff and strict mypy, independent Sol design/code
+review and senior Quant statistical review passed.
+
+Report: data/research/investment_feature_ablation_20261110/ablation_433d6d4/_manifest.json
+SHA256 400661d2945bc28ff2bbef6e3dd2d74eb34c1e7566b506fe37624e2c7c2cf31e.
+Request SHA256 c84435c641682092a84d8778dda7abe11618c05ee714a1d11f40cd8c9ecd4266.
+Independent audit: chat outputs/investment-feature-ablation-independent-audit-20261110.json
+SHA256 8eb6404219dc0a9d6e1d777224d0f96c3739403f80290a173df2c463d1d0ade8.
+Audit completed at 2026-11-10T22:23:29.155289+00:00; all 48 new saved models replay
+exactly (maximum prediction difference zero), all 96 unit and 32 aggregate metrics,
+24 fold/8 aggregate conditional comparisons, source hashes and actual clocks pass.
+All 2,745 independently checked file digests were unchanged before and after the audit.
+Original 48-unit audit and model bytes were reused unchanged. No model was refitted
+by the audit. All source admission and promotion flags retain their original meaning.
+
+The four-view comparison is complete. Annual XGBoost deterioration comes mainly
+from the current financial block; Ridge errors increase with either group. Every
+aggregate still exceeds zero-excess MSE and MAE, so feature-consumer verification
+does not establish forecast quality or live/API acceptance. See the leading plan
+for all measured comparisons and retained unknown-outcome counts.
 
 ### Investment research feature acceptance - November 10
 
@@ -63,9 +86,9 @@ Saved-prediction diagnostic completed November10 at20:43:44UTC using implementat
 All48validationunits and16aggregates reproduce canonical metrics exactly, with no
 source/feature/forecast changes. Independent Quant confirms material positive annual
 forecast bias, modest within-date ordering and weaker security transfer. The combined
-news/financial comparison does not identify separate source effects. A proposed
-209news/130financial factorial comparison is not yet implemented/fitted; existing
-feature acceptance applies only to the completed frozen profiles and diagnostics.
+news/financial comparison does not identify separate source effects. At that diagnostic checkpoint, the
+209news/130financial comparison remained proposed. It is now completed and independently
+verified in the leading section; the original diagnostic evidence remains unchanged.
 Historical checkpoint evidence below predates the completed training result above;
 earlier references to pending fitting describe those checkpoints at their original dates.
 
