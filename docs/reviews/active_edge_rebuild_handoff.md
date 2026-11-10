@@ -5,6 +5,15 @@
 User authorizes joining verified targets to retained candles/news/financial features,
 then training and SPY evaluation after checks pass. Canonical main remains the only
 checkout. The leading active plan freezes the reviewed design and test gates.
+Current operation18:22UTC November10: implementation
+ a53e0165dea64e95756055ae234d8e2e62f21e51 is committed/pushed on main and exported
+immutably with462 source files. Actual dataset CLI is running under the shared lease,
+native session98668, actual workerPID69812 (20420 is its venv launcher), output
+ data/research/investment_dataset_20261110/joined_a53e016.
+Log chat outputs/investment-dataset-build-a53e016-20261110.log; request88f24 below.
+Initial RAM81.36%, worker about331MiB. Do not start another heavy job. On exit0,
+record actual dataset/admission hashes and grant independent Quant the pre-fit audit.
+No publication, admission-audit result or model fit is claimed yet.
 Current stage: reviewed implementation and component verification complete; actual
 dataset publication and independent pre-fit audit are next. No model fit yet.
 
@@ -57,7 +66,7 @@ It checks full value/clock/row parity and date/sector coverage plus12 independen
 Existing estimator settings configs/swing_news_return_training.json SHA256
 41f73b6f5f79fbf3896b6b97c4d7b8ca7c654be78469bba6acf69ac012074f25;
 only its fixed linear/boosted parameters are consumed, not swing fold/target settings.
-Next: export the committed reviewed producer,
+Next: follow the actual immutable build to completion,
 build pinned dataset/admission, independently verify causal joins and split coverage,
 then sequential fits/SPY diagnostics if gates pass. Shared lease and below90% RAM
 ceiling remain;5GiB process budget/0.75GiB headroom. Do not start parallel heavy jobs.
