@@ -19,10 +19,27 @@ Logs: chat outputs/investment-news-metadata-diagnostic-20261110b.log and
 investment-dataset-schema-focused-20261110a.log. Affected Ruff and strict mypy passed;
 independent code review approved. Implementation5f8308725e960ac6b04054cb29768af3b6738856
 is committed/pushed on main. Its immutable export and unchanged88f24 request feed
-the next build at data/research/investment_dataset_20261110/joined_5f83087.
+the build at data/research/investment_dataset_20261110/joined_5f83087.
+It completed59 monthly joins and combined validation, then failed Parquet publication
+at18:47:36UTC: source_feature_missing_reasons mixes retained text with absent-row lists.
+Native91648 exited1; worker55424 ended; no dataset/admission was published.
+Log chat outputs/investment-dataset-build-5f83087-20261110.log. Engineer owns the
+bounded missing-reason representation fix and regression; source values stay unchanged.
+Actual diagnostic projected464 saved July30,2019 rows: every technical reason was
+text (Arrow large_string). Fix preserves that exact text and uses null only when
+the source snapshot/diagnostic is absent. No reason parsing, reencoding or source edits.
+Independent code/Quant reviews agree; focused tests now exercise mixed present/absent
+rows through a real Parquet round trip. Both audit helper hashes remain unchanged.
+Representation correction30b54bfd28b9a01de4bb9abcf1dba82661966cef is committed/pushed.
+Focused36 tests passed26.02s; affected3-file Ruff, strictmypy1source and diffcheck passed.
+Independent reviewers approved; sole job is now the unchanged88f24 dataset retry using
+its immutable producer, output data/research/investment_dataset_20261110/joined_30b54bf.
+Logs: chat outputs/investment-dataset-reasons-focused-20261110a.log and
+investment-dataset-reasons-static-20261110a.log. Independent pre-fit audit still precedes any training after the corrected retry.
 Failed-run log: chat outputs/investment-dataset-build-a53e016-20261110.log.
 No dataset admission or model fit has completed. The previously passing106 synthetic
 component tests did not represent these two actual retained metadata shapes.
+
 Sol ML engineer owns investment/dataset.py and research/investment_dataset.py plus
 consumer tests. Root owns investment/training.py, research/investment_training.py,
 CLI integration and current documentation. Independent Sol design/code and Senior
