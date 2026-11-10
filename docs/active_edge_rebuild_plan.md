@@ -8,11 +8,47 @@ and independent senior Quant/design/code review. Keep only canonical main and re
 existing data. The completed experiment below remains immutable reference evidence.
 
 First checkpoint: explain the measured prediction errors and reconcile the user's
-remembered four-month AUC near0.67 with exact retained target/horizon/split provenance.
+remembered AUC near0.67 from a previous model some months ago with exact retained target/horizon/split provenance. The user clarified that this does not identify July specifically; July is one candidate pending the broader saved-model comparison.
 AUC measures ranking, whereas return MSE/MAE measure magnitude errors; neither may be
 substituted for the other or described as an investment return. Historical AUC matches
 remain unconfirmed until their original run metadata identifies the same experiment.
 
+Historical comparison established by Astra and root metadata/Git inspection:
+- July8 next-day large-gain candidate: ROC-AUC0.665665, 47,904 validation rows,
+  499 tickers,110 features, January-July2026 history. Saved root models manifest
+  sp500_6m_next_day_big_up_v2_20260708_candidate.joblib.manifest.json. The July11
+  plan at87b3aad explicitly records0.6657 and confirms this historical result, but not that it is the model the user remembers.
+- July21 53c51c2 removed volatile.py/build/train/score routes and introduced a
+  different five-session net-positive task before a real canonical replacement
+  had been trained/promoted. July25 HGB on that new task reports AUC0.5000/0.4970,
+  53 features,581 tickers and2021-2026 history; this is not a rerun of July's task.
+- Subsequent research changed to ten-session returns and then63/252-session SPY
+  excess, with different scoring periods. No later same-target manifest was found.
+  The continuity failure is absence of a continuously measured July-task baseline,
+  not a demonstrated monotonic decline of one unchanged estimator.
+- July21 5ebfa83 removed current-snapshot SEC/rating/surprise fields from historical
+  defaults; July22 2764ea5/56aac9d strengthened cutoffs/causal validation. These are
+  concrete methodology repairs, but their effect on the July AUC is unmeasured.
+  Do not call that AUC invalid or economic profitability without an exact replay.
+- Historical volatile-label code defaults to next-session open-to-close gain>=3%,
+  with no SPY/cost subtraction, but threshold overrides were possible and the actual
+  July manifest does not pin that setting. Report the default, not a certified label.
+Broader historical shortlist after the user's clarification (not a baseline selection):
+- August2/4 intraday HGB reports temporal AUC0.667580/0.667583 and unseen-security
+  AUC0.663132/0.663375 for a 30-minute target-before-stop/timeout task. Evaluations:
+  models/edge_rebuild_intraday_candidate_20260802_v1/evaluation.json and
+  data/models/edge_rebuild_intraday_candidate_v3/evaluation.json. The saved model
+  in each bundle is selected logistic, not the HGB responsible for the near0.67 score.
+  HGB selected mean net return is approximately-10bps; AUC did not establish net gains.
+- August20 rating-upgrade specialist reports0.666184 unseen but0.436840 chronological;
+  data/models/swing_directional_broker_action_specialists_dev_20260820_v1/_manifest.json
+  records models=[] and rejection. It is not an available deployable0.67 model.
+- July8 five-day volatile mover separately reports0.712604 AUC under earlier gates.
+- August7 3b41ea5 explicitly addressed 'Intraday0.66AUC'; closure061ed35's claimed
+  solution had no measured improved fit, and August10 e168482 removed its z-scores.
+  Code/documentation changes alone did not establish recovered predictive performance.
+The remembered experiment remains unidentified. Keep the leading July next-day and
+August intraday possibilities separate; do not promise an unavailable HGB artifact.
 Frozen diagnostic scope, agreed by independent Quant/Astra and ML engineering:
 - Read the existing48 saved validation prediction artifacts and pinned215-column
   dataset; no models refitted, source values rebuilt, exclusions changed or rows dropped.
@@ -44,6 +80,25 @@ Ownership: Astra deep diagnosis/provenance; Sol ML engineer diagnostic implement
 independent Senior Sol Quant causal/economic design and actual result review; Sol code
 reviewer consolidated implementation review; root orchestration/docs/next experiment.
 No new model improvement is claimed before the frozen comparison is actually run.
+Diagnostic implementation is reviewed and ready for actual execution: 57 focused tests
+passed in106.28seconds, including self-consistent backdated-fit and post-completion
+score poisons. Ruff over5 changed Python files and strict mypy over3 sources passed.
+Independent Sol code review approved the consolidated fix; Senior Sol Quant approved
+statistical formulas and interpretation limits. The actual saved-data diagnostic has
+not yet run. Logs are chat outputs/investment-diagnostics-component-20261110c.log and
+investment-diagnostics-static-20261110a.log. The original55-test pass preceded the
+clock-regression additions; first7 fixture failures were fixed by supplying12 held-out
+synthetic securities rather than8, without relaxing the10-security scoring minimum.
+
+User amendment: AFTER completing diagnosis, bounded model improvement and evaluation,
+implement API separation with the verified earlier strong model as V1 and the current model
+as beta. This is an ordered follow-on checkpoint; do not start API work in parallel
+with unfinished model research. July is a candidate, not a confirmed selection. Verify the selected artifact, dependencies, input
+contract, target and horizon before wiring it to the API. The July next-day classifier
+and current63/252-session return regressors must remain explicitly distinguished.
+Keep V1 stable; replace it only after a matched comparison supports the replacement.
+The earlier no-serving scope applies to the research phase; this explicit user request
+adds the subsequent API implementation, without inventing evidence of model improvement.
 ### Investment dataset, training and SPY evaluation - November 10
 
 Status: `complete`. The requested join, conditional training and independent evaluation

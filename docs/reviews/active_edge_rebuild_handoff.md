@@ -3,22 +3,31 @@
 ## Active prediction-error diagnosis - November 10
 
 New user instruction opens a bounded improvement experiment after the completed
-48+8-model reference below. Canonical main starts clean atf6bc29b. Astra and Sol
+48+8-model reference below. Completed reference closure is f6bc29b; diagnostic plan commit is354ebc3 on canonical main. Astra and Sol
 agents are investigating separate ranking quality, return calibration and feature-group
 contributions; no old dataset/model/source artifact is reopened or replaced.
 
-Current operation: metadata inventory and frozen diagnostic design, before data jobs
+Current operation: diagnostic implementation passed independent code and Quant review plus57 focused tests, Ruff and strict mypy, before data jobs
 or refits. Senior Quant, Astra and ML engineer agree to analyze the existing48 saved
 validation prediction sets on identical masks. Root is locating the historical~0.67
-AUC claim; a six-month-history next-day-big-up candidate has0.665665 AUC but is not yet
-identified as the user's remembered four-month run. Do not claim a lost edge by
+AUC claim. The user clarified that four months means a previous model some months ago, not specifically July and not a forecast
+or data window. July8 next-day-big-up candidate AUC0.665665 is corroborated by the
+July11 plan87b3aad. Astra traced the July21 target/workflow migration53c51c2 and
+subsequent label/horizon/validation changes; exact comparison evidence is in the active
+plan. No like-for-like later next-day model result was found. Do not claim a lost edge by
 comparing that classifier with63/252-session SPY-excess regression errors.
 
 Engineer owns investment/diagnostics.py, research/investment_diagnostics.py, their
 focused tests and CLI connection. Root owns plan/handoff/feature acceptance and job
-coordination. No heavy job is active yet. Next: implement/test reviewed diagnostic,
+coordination. No heavy job is active. Next: commit/export the reviewed diagnostic,
 run once on retained artifacts underlease, review measured attribution, freeze the
 smallest justified model experiment. Original source flags and2026 clocks stay intact.
+
+User ordered follow-on: only after model diagnosis/improvement/evaluation completes,
+wire the verified earlier strong model as API V1 and current model as beta. July remains only a candidate. Verify the selected artifact
+and exact target/input contract first; do not start API work yet. A replacement must
+show improvement on the same prediction task, not compare next-day AUC with annual MSE.
+
 ## Completed investment training and evaluation - November 10
 
 The frozen experiment completed: **48 validation fits and 8 final research models**.
