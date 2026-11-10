@@ -23,8 +23,11 @@ MAXIMUM_SYSTEM_PAUSE_SECONDS = 120.0
 SYSTEM_MEMORY_POLL_SECONDS = 5.0
 
 
-def _used_percent(stage: str) -> float:
-    assert_memory_budget(stage=stage, hard_budget_gib=5.0, headroom_gib=0.75)
+def _used_percent(stage: str, *, reclaim_unused_memory: bool = True) -> float:
+    if reclaim_unused_memory:
+        assert_memory_budget(stage=stage, hard_budget_gib=5.0, headroom_gib=0.75)
+    else:
+        assert_memory_budget(stage=stage, hard_budget_gib=5.0, headroom_gib=0.75, reclaim_unused_memory=False)
     return validate_system_memory_snapshot(system_memory_snapshot()).used_percent
 
 
@@ -36,13 +39,15 @@ def _event(event: str, stage: str, used: float, elapsed: float) -> None:
     }, allow_nan=False, sort_keys=True), file=sys.stderr, flush=True)
 
 
-def guard(stage: str = "news source links") -> None:
+def guard(stage: str = "news source links", *, reclaim_unused_memory: bool = True) -> None:
     """Pause only valid system pressure; callers retain their lease and transaction.
 
     No caller data work runs during the bounded wait. Invalid measurements and
     process-budget failures propagate immediately, including during a pause.
+    Opting out skips only initial explicit reclamation. Every pressure poll
+    retains full reclamation and every process/system measurement and refusal.
     """
-    used = _used_percent(stage)
+    used = _used_percent(stage) if reclaim_unused_memory else _used_percent(stage, reclaim_unused_memory=False)
     if used < MAXIMUM_SYSTEM_USED_PERCENT:
         return
     started = time.monotonic()

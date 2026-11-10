@@ -205,3 +205,107 @@ def test_data_io_does_not_start_while_paused_and_results_unchanged(
         assert list(runtime.parquet_rows(path, ("value",))) == expected_rows
     assert clock.sleeps == [5.0]
     assert io_calls
+
+
+@pytest.mark.parametrize("reclaim", [True, False])
+def test_cleanup_keyword_preserves_real_process_and_system_measurements(monkeypatch, reclaim):
+    from market_predictor import resources
+
+    events = []
+    monkeypatch.setattr(memory, "assert_memory_budget", resources.assert_memory_budget)
+    monkeypatch.setattr(resources, "process_memory_snapshot", lambda: events.append("process") or (1024**3, 1024**3))
+    monkeypatch.setattr(resources, "release_unused_process_memory", lambda: events.append("cleanup"))
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: events.append("system") or SystemMemory(1000, 101))
+    memory.guard("unit cadence", reclaim_unused_memory=reclaim)
+    assert events == ["process", *(["cleanup"] if reclaim else []), "system"]
+
+
+@pytest.mark.parametrize("snapshot", [None, SystemMemory(0, 0), SystemMemory(100, -1), SystemMemory(100, 101)])
+def test_cleanup_opt_out_cannot_admit_unknown_or_invalid_system_measurement(monkeypatch, snapshot):
+    from market_predictor import resources
+
+    events = []
+    monkeypatch.setattr(memory, "assert_memory_budget", resources.assert_memory_budget)
+    monkeypatch.setattr(resources, "process_memory_snapshot", lambda: events.append("process") or (1024**3, 1024**3))
+    monkeypatch.setattr(resources, "release_unused_process_memory", lambda: pytest.fail("initial cleanup opted out"))
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: events.append("system") or snapshot)
+    with pytest.raises(MemoryBudgetError, match="measurement unavailable"):
+        memory.guard("unit unknown", reclaim_unused_memory=False)
+    assert events == ["process", "system"]
+
+
+@pytest.mark.parametrize("snapshot", [None, (6 * 1024**3, 6 * 1024**3)])
+def test_cleanup_opt_out_cannot_bypass_unknown_or_exceeded_process_budget(monkeypatch, snapshot):
+    from market_predictor import resources
+
+    monkeypatch.setattr(memory, "assert_memory_budget", resources.assert_memory_budget)
+    monkeypatch.setattr(resources, "process_memory_snapshot", lambda: snapshot)
+    monkeypatch.setattr(resources, "release_unused_process_memory", lambda: pytest.fail("process refusal precedes cleanup"))
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: pytest.fail("process refusal precedes system check"))
+    with pytest.raises(MemoryBudgetError):
+        memory.guard("unit process refusal", reclaim_unused_memory=False)
+
+
+def test_cleanup_opt_out_recovers_from_exact90_with_full_cleanup_every_poll(clock, monkeypatch, capsys):
+    from market_predictor import resources
+
+    events = []
+    snapshots = iter([SystemMemory(10000, 1000), SystemMemory(10000, 1000), SystemMemory(10000, 1001)])
+    monkeypatch.setattr(memory, "assert_memory_budget", resources.assert_memory_budget)
+    monkeypatch.setattr(resources, "process_memory_snapshot", lambda: events.append("process") or (1024**3, 1024**3))
+    monkeypatch.setattr(resources, "release_unused_process_memory", lambda: events.append("cleanup"))
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: events.append("system") or next(snapshots))
+    memory.guard("unit pressure recovery", reclaim_unused_memory=False)
+    assert events == ["process", "system", "process", "cleanup", "system", "process", "cleanup", "system"]
+    assert clock.sleeps == [5.0, 5.0]
+    logs = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
+    assert [entry["event"] for entry in logs] == ["pause", "resume"]
+    assert [entry["used_percent"] for entry in logs] == pytest.approx([90.0, 89.99])
+    assert logs[-1]["elapsed_seconds"] == 10.0
+
+
+def test_cleanup_opt_out_sustained90_times_out_and_reclaims_every_poll(clock, monkeypatch, capsys):
+    from market_predictor import resources
+
+    events = []
+    monkeypatch.setattr(memory, "assert_memory_budget", resources.assert_memory_budget)
+    monkeypatch.setattr(resources, "process_memory_snapshot", lambda: events.append("process") or (1024**3, 1024**3))
+    monkeypatch.setattr(resources, "release_unused_process_memory", lambda: events.append("cleanup"))
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: events.append("system") or SystemMemory(10000, 1000))
+    with pytest.raises(MemoryBudgetError, match="within 120 seconds"):
+        memory.guard("unit pressure timeout", reclaim_unused_memory=False)
+    assert clock.now == 120.0 and clock.sleeps == [5.0] * 24
+    assert events.count("process") == events.count("system") == 25
+    assert events.count("cleanup") == 24
+    assert [json.loads(line)["event"] for line in capsys.readouterr().err.splitlines()] == ["pause", "timeout"]
+
+
+def test_cleanup_opt_out_does_not_hide_invalid_measurement_during_pressure_poll(clock, monkeypatch):
+    from market_predictor import resources
+
+    events = []
+    snapshots = iter([SystemMemory(10000, 1000), None])
+    monkeypatch.setattr(memory, "assert_memory_budget", resources.assert_memory_budget)
+    monkeypatch.setattr(resources, "process_memory_snapshot", lambda: events.append("process") or (1024**3, 1024**3))
+    monkeypatch.setattr(resources, "release_unused_process_memory", lambda: events.append("cleanup"))
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: events.append("system") or next(snapshots))
+    with pytest.raises(MemoryBudgetError, match="measurement unavailable"):
+        memory.guard("unit unknown poll", reclaim_unused_memory=False)
+    assert clock.sleeps == [5.0]
+    assert events == ["process", "system", "process", "cleanup", "system"]
+
+
+@pytest.mark.parametrize("failed", [None, (6 * 1024**3, 6 * 1024**3)])
+def test_cleanup_opt_out_rechecks_process_budget_before_pressure_poll_cleanup(clock, monkeypatch, failed):
+    from market_predictor import resources
+
+    events = []
+    process = iter([(1024**3, 1024**3), failed])
+    monkeypatch.setattr(memory, "assert_memory_budget", resources.assert_memory_budget)
+    monkeypatch.setattr(resources, "process_memory_snapshot", lambda: events.append("process") or next(process))
+    monkeypatch.setattr(resources, "release_unused_process_memory", lambda: pytest.fail("failed RSS check precedes cleanup"))
+    monkeypatch.setattr(memory, "system_memory_snapshot", lambda: events.append("system") or SystemMemory(10000, 1000))
+    with pytest.raises(MemoryBudgetError):
+        memory.guard("unit process failure while paused", reclaim_unused_memory=False)
+    assert clock.sleeps == [5.0]
+    assert events == ["process", "system", "process"]

@@ -3,10 +3,42 @@
 ## Active stock identity and full-target checkpoint — November 9
 
 The leading active plan freezes the authorized implementation and exit gates.
-Implementation ffafdeb41e7288d2ae0f2c25482957f87f3ca586 is committed and pushed
-on main, including the narrow actual-source date/guard and SEC primary-document
-amendments. Immutable producer export contains 457 source files at
- data/research/implementation_snapshots/ffafdeb41e7288d2ae0f2c25482957f87f3ca586/src.
+Implementation 2ad6c95fbb2c5751144571c177ded1dee9bbc2db is committed and pushed
+on main, including actual-source date/guard, SEC primary-document and negative-only
+historical-ticker overlap amendments. Immutable producer export contains 457 source
+files at data/research/implementation_snapshots/2ad6c95fbb2c5751144571c177ded1dee9bbc2db/src.
+The 2ad6c95 full-target run was deliberately stopped after 30 complete security
+checkpoints for the single reviewed monthly-cleanup performance amendment. Its
+unchanged request is 4ab29ba0... below; preserve partial output
+ data/research/investment_full_targets_20261109/corpus_2ad6c95
+and chat outputs/full-investment-targets-2ad6c95-20261110.log. Owned worker 25992
+was verified by exact command and stopped; native session 71966 exited with Windows
+code 4294967295. This controlled interruption is not a target validation failure.
+No final full corpus exists. Do not resume these checkpoints under a new producer.
+The amendment changes only explicit cleanup at the monthly-horizon guard; all RSS
+and system measurements/refusals remain, default/per-security calls and EVERY
+pressure poll still reclaim, and automatic GC stays enabled. The strict below-90%
+system policy, 5-GiB process budget with 0.75-GiB headroom and 120s/5s pause remain.
+Actual-line profiling measured 87/329 valid samples in this monthly cleanup, with
+50 sampling errors; this is not a promised whole-run speedup. The active plan binds
+the profile evidence and scope. Senior Sol Quant and independent Sol code review
+approved the final diff. Focused component verification: 180 tests passed in 7.12s
+across ten memory-policy/label-consumer files, affected Ruff and strict mypy passed.
+Log: chat outputs/monthly-cleanup-tests-20261110a.log. Full suite/model release checks
+were not run for this narrow component change. Quant is snapshotting all completed
+actual rows and original capture clocks for exact paired parity after the new run.
+Next: commit/push/export this reviewed amendment, run the same full request into a
+new output, then independently compare the stopped rows and audit all 74,458 rows
+plus the 57 prior examples. No training or activation is authorized by this build.
+Immutable raw-reader preflight passed all six legacy overlap pairs in both ticker
+directions plus the actual ARNC annual window (13 negative queries, zero price files
+opened). Old ffafdeb and new 2ad6c95 ARNC/HWM unaffected 63-session price/evidence/
+capture-clock digests match exactly. All 565 parents remain unchanged. Reports in
+chat outputs/raw-owner-reader-negative-2ad6c95fbb2c-20261110.json SHA256
+5113cce71f314f357dc5a81cef5cdaa4fe2e692375933c8656bed0897b71e4da;
+positive-ffafdeb41e72 SHA256 84b7cb71d2091339c1d5eb1aa2a694e4366c82aa26cc40884a2bc8c6e84409e3;
+positive-2ad6c95fbb2c SHA256 16729a3018d6cb5c959f7054719bcfedbe8ff4f9d3a42caaa583201371757706
+(use the same raw-owner-reader prefix and -20261110.json suffix).
 Code verification, all eleven collection batches and full stock dividend resolution
 are complete. Full target publication and independent target audit remain in progress.
 Full dividend manifest:

@@ -247,7 +247,7 @@ def materialize_investment_labels(*, root: Path, request: Path, request_sha256: 
                         row["ticker"] = corrected_ticker(row["security_id"], row["ticker"],
                             pd.Timestamp(row["decision_session"]).date(), policy.decision_corrections)
                     for horizon in (63, 252):
-                        guard("investment monthly horizon label")
+                        guard("investment monthly horizon label", reclaim_unused_memory=False)
                         if row["status"] == "eligible":
                             result = compile_investment_label(decision=row, horizon=horizon, reader=reader,
                                 membership=_validate_membership_sources(sources=sources, row=row, horizon=horizon,

@@ -36,7 +36,7 @@ def setup_job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, st
     config = write(tmp_path / "config.json", {})
     request = write(tmp_path / "request.json", {"roster_manifest": roster, "target_config": config,
         "nominal_unpaid_claim_valuation": True, "evaluation_as_of_utc": "2026-01-01T00:00:00Z"})
-    monkeypatch.setattr(module, "guard", lambda *_: None)
+    monkeypatch.setattr(module, "guard", lambda *_, **__: None)
     monkeypatch.setattr(module, "_implementation", lambda: {})
     monkeypatch.setattr("market_predictor.research.investment_features.guard", lambda *_: None)
     monkeypatch.setattr(module, "load_corrected_outcome_policy", lambda *_: SimpleNamespace(
@@ -89,6 +89,38 @@ def test_full_population_horizons_and_asof_are_separate(tmp_path: Path, monkeypa
     for manifest_path in (output / "securities").glob("*/_manifest.json"):
         checkpoint = json.loads(manifest_path.read_text())
         assert sum(c["population_rows"] for c in checkpoint["counts_by_horizon"].values()) == 2
+
+
+def test_only_monthly_row_checks_opt_out_of_explicit_reclamation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    request, digest, output = setup_job(tmp_path, monkeypatch)
+    calls = []
+
+    def checked(stage: str, *, reclaim_unused_memory: bool = True) -> None:
+        calls.append((stage, reclaim_unused_memory))
+
+    monkeypatch.setattr(module, "guard", checked)
+    module.materialize_investment_labels(root=tmp_path, request=request, request_sha256=digest, output=output)
+    assert [stage for stage, reclaim in calls if not reclaim] == ["investment monthly horizon label"] * 4
+    assert [reclaim for stage, reclaim in calls if stage == "investment serial security labels"] == [True, True]
+    assert calls[0] == ("investment label preparation", True)
+    assert all(stage == "investment monthly horizon label" or reclaim for stage, reclaim in calls)
+
+
+def test_monthly_cleanup_opt_out_still_refuses_before_label_construction(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from market_predictor.core.errors import MemoryBudgetError
+
+    request, digest, output = setup_job(tmp_path, monkeypatch)
+
+    def checked(stage: str, *, reclaim_unused_memory: bool = True) -> None:
+        if stage == "investment monthly horizon label":
+            assert reclaim_unused_memory is False
+            raise MemoryBudgetError("synthetic monthly process/system refusal")
+
+    monkeypatch.setattr(module, "guard", checked)
+    monkeypatch.setattr(module, "compile_investment_label", lambda **_: pytest.fail("label built after guard refusal"))
+    with pytest.raises(MemoryBudgetError, match="monthly process/system refusal"):
+        module.materialize_investment_labels(root=tmp_path, request=request, request_sha256=digest, output=output)
+    assert not list((output / "securities").glob("*/_manifest.json"))
 
 
 def test_resume_reuses_security_artifacts_and_detects_tampering(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

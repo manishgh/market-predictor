@@ -125,6 +125,41 @@ Before another full target replay, scan all parent ownership conflicts under the
 classification from retained metadata; preserve the failed partial corpus and source
 resolution artifacts. A new immutable producer reuses the frozen target request.
 
+One bounded monthly-row performance amendment - November 10: read-only nonblocking
+sampling of the actual 2ad6c95 full-target worker found 87/329 valid samples (26.44%)
+at monthly-horizon guard line 250 executing explicit gc.collect at process_memory.py
+line 29; 50 sampling errors limit precision. An earlier function-aggregated window
+showed 55.21% cleanup but cannot establish the monthly callsite. These are distinct
+short windows, not a predicted global speedup. Actual-line summary SHA256
+3ebff8ce919a198e1286d9bd29cf792df07f11ee575a29f3d145145b8fdc689e
+in chat outputs/live-worker-25992-lines-nonblocking-20261110.summary.json.
+Senior Quant approved one controlled amendment: add an internal keyword defaulting
+to True for cleanup only in the shared budget/guard path; only the monthly-horizon
+call opts out. Every call still measures and enforces the 5-GiB process budget with
+0.75-GiB headroom, strictly-below-90-percent system memory and invalid/unknown refusal.
+Per-security and every existing default caller still reclaim; EVERY pressure poll
+reclaims, with the unchanged 120-second maximum pause and 5-second polling. Automatic
+GC remains enabled. No thresholds, configuration, labels, source selection or feature
+logic changes. Higher transient RSS and earlier conservative refusal are the main
+risks; monitor the actual run. The source engineer owns runtime_memory.py/resources.py,
+only the monthly call in research/investment_labels.py and corresponding tests.
+Prepare/review the concrete patch before stopping the current owned worker; preserve
+its partial checkpoints/log and use a new immutable producer/output. Do not resume
+old checkpoints under a new implementation. Verification: default-cleanup and opt-out
+measurement/refusal poisons, strict 90 boundary, pressure-poll cleanup/recovery/timeout,
+unknown/process-limit refusal, only-monthly consumer opt-out, affected Ruff/strict
+mypy, independent code review, and actual paired status/reasons/numerics/per-source
+capture clocks against the stopped run's completed rows. Only new verification clocks
+and source implementation pins may differ. Then finish the full run and independent
+full-corpus audit; no wider performance search is authorized.
+
+The concrete amendment passed independent Sol code review and Senior Sol Quant
+scope review. Root then verified/stopped owned worker 25992 after 30 published
+security checkpoints, preserving its complete partial directory and log. Focused
+component checks passed: 180 tests in 7.12s, affected Ruff and strict mypy. No source
+or target admissions changed. Actual stopped-row snapshot/parity and the new full
+corpus/audit remain pending; this is not checkpoint closure or model approval.
+
 Ownership: Sol stock engineer owns stock_identity/source_extensions and tests;
 Sol distribution engineer owns dividend_resolution/research investment_currencies
 and tests; root owns integration, materializer, command surfaces and continuity.

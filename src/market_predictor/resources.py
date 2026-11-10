@@ -33,6 +33,7 @@ def assert_memory_budget(
     hard_budget_gib: float,
     headroom_gib: float,
     stage: str,
+    reclaim_unused_memory: bool = True,
 ) -> None:
     if hard_budget_gib <= 0 or headroom_gib <= 0 or headroom_gib >= hard_budget_gib:
         raise ValueError("memory budget and headroom are invalid")
@@ -47,8 +48,9 @@ def assert_memory_budget(
             f"memory guard stopped {stage}: RSS {_gib(snapshot[0]):.2f} GiB exceeds "
             f"the {_gib(threshold):.2f} GiB safety threshold for the {hard_budget_gib:.2f} GiB hard budget"
         )
-    # Reclaim unused buffers after measuring RSS, before subsequent system guards.
-    release_unused_process_memory()
+    # Reclamation is optional; the RSS measurement and refusal always precede it.
+    if reclaim_unused_memory:
+        release_unused_process_memory()
 
 
 def assert_peak_memory_budget(

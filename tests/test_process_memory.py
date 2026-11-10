@@ -156,3 +156,34 @@ def test_unused_cleanup_cannot_authorize_unresolved_system_pressure(monkeypatch)
     resources.assert_memory_budget(hard_budget_gib=5, headroom_gib=0.75, stage="test")
     with pytest.raises(MemoryBudgetError, match="system memory pressure"):
         system_memory.assert_system_memory_available()
+
+
+def test_explicit_cleanup_opt_out_still_measures_rss_and_leaves_auto_gc_enabled(monkeypatch):
+    import gc
+
+    from market_predictor import resources
+    events = []
+    monkeypatch.setattr(resources, "process_memory_snapshot", lambda: events.append("measure") or (1024**3, 1024**3))
+    monkeypatch.setattr(resources, "release_unused_process_memory", lambda: events.append("cleanup"))
+    assert gc.isenabled()
+    resources.assert_memory_budget(hard_budget_gib=5.0, headroom_gib=0.75, stage="unit", reclaim_unused_memory=False)
+    assert events == ["measure"]
+    assert gc.isenabled()
+
+
+def test_explicit_cleanup_opt_out_retains_exact_rss_boundary_and_unknown_refusal(monkeypatch):
+    import pytest
+
+    from market_predictor import resources
+    from market_predictor.core.errors import MemoryBudgetError
+    threshold = int((5.0 - 0.75) * 1024**3)
+    events = []
+    monkeypatch.setattr(resources, "release_unused_process_memory", lambda: events.append("cleanup"))
+    for reclaim in (True, False):
+        monkeypatch.setattr(resources, "process_memory_snapshot", lambda: (threshold, threshold))
+        resources.assert_memory_budget(hard_budget_gib=5.0, headroom_gib=0.75, stage="unit", reclaim_unused_memory=reclaim)
+        for snapshot, reason in ((None, "accounting is unavailable"), ((threshold + 1, threshold + 1), "exceeds")):
+            monkeypatch.setattr(resources, "process_memory_snapshot", lambda value=snapshot: value)
+            with pytest.raises(MemoryBudgetError, match=reason):
+                resources.assert_memory_budget(hard_budget_gib=5.0, headroom_gib=0.75, stage="unit", reclaim_unused_memory=reclaim)
+    assert events == ["cleanup"]
