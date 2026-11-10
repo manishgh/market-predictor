@@ -7,22 +7,34 @@ New user instruction opens a bounded improvement experiment after the completed
 agents are investigating separate ranking quality, return calibration and feature-group
 contributions; no old dataset/model/source artifact is reopened or replaced.
 
-Current operation: diagnostic implementation passed independent code and Quant review plus57 focused tests, Ruff and strict mypy, before data jobs
-or refits. Senior Quant, Astra and ML engineer agree to analyze the existing48 saved
-validation prediction sets on identical masks. Root is locating the historical~0.67
-AUC claim. The user clarified that four months means a previous model some months ago, not specifically July and not a forecast
-or data window. July8 next-day-big-up candidate AUC0.665665 is corroborated by the
-July11 plan87b3aad. Astra traced the July21 target/workflow migration53c51c2 and
-subsequent label/horizon/validation changes; exact comparison evidence is in the active
-plan. No like-for-like later next-day model result was found. Do not claim a lost edge by
-comparing that classifier with63/252-session SPY-excess regression errors.
+Current operation: actual saved-prediction diagnosis completed successfully from
+reviewed main770d0db3dd3099bde109edf404b6fe41b106f5b8; code57tests/Ruff/mypy and
+independent code/Quant reviews passed. No heavy job remains active. The actual report
+is data/research/investment_prediction_errors_20261110/diagnostics_770d0db/_manifest.json,
+SHA2562e570a4b714e0305d11909fe23ee48eeb116114be42ada16331070a92ce86981.
+All48units/16aggregates replay exact canonical metrics;24foldpairs/8aggregatepairs
+reconcile. Independent Quant verified reporthash, counts and algebraic residuals.
+No fitting, forecast changes or source rebuild occurred. Leading plan records findings.
 
-Engineer owns investment/diagnostics.py, research/investment_diagnostics.py, their
-focused tests and CLI connection. Root owns plan/handoff/feature acceptance and job
-coordination. No heavy job is active. Next: commit/export the reviewed diagnostic,
-run once on retained artifacts underlease, review measured attribution, freeze the
-smallest justified model experiment. Original source flags and2026 clocks stay intact.
+Annual full temporal XGBoost forecasts mean+7.50% SPY excess versus observed-7.11%
+on7,126known outcomes across29dates; Ridge mean+9.89%. Within-date AUC is modest
+and transfer weaker. News/financial additions cause forecast changes whose residual
+corrections do not offset squared magnitude costs. Harm spans all3years and all
+financial-coverage groups. Source-specific effects remain unmeasured.
 
+The user's remembered~0.67 is an earlier model some months ago, NOT specificallyJuly.
+July next-day0.6657 and August30-minute HGB0.6676 are plausible distinct candidates;
+the saved August selected model is logistic rather than that HGB. Do not selectAPI V1
+solely by date/score or compare these tasks directly with annual forecast MSE.
+
+Astra authored the requested3,447-word static Fable5.2brief; independent SeniorSol Quant reviewed its facts and final diagnostic section. Word rendering through installed MicrosoftWord and visual inspection of all8 pages passed. Sources: docs/research_briefs/fable_5_2_project_brief_20261110.md and the same-name.docx. Packaged LibreOffice was absent; native Word supplied the actual layout preview. These are research snapshots, not new active plans. No diagnostic, test or rendering worker remains running.
+
+Next: freeze exactlyone
+bounded improvement/attribution protocol. Quant recommends209news/130financial views,
+48additionalvalidationfits with old48reused, unchanged data/settings/masks and nofinal
+refit. This is recommended, not implemented or an established improvement. Before
+any new fit update feature acceptance and independent design review. Root owns current
+documents and orchestration; all source/admission flags and2026 clocks stay intact.
 User ordered follow-on: only after model diagnosis/improvement/evaluation completes,
 wire the verified earlier strong model as API V1 and current model as beta. July remains only a candidate. Verify the selected artifact
 and exact target/input contract first; do not start API work yet. A replacement must

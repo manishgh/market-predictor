@@ -80,16 +80,49 @@ Ownership: Astra deep diagnosis/provenance; Sol ML engineer diagnostic implement
 independent Senior Sol Quant causal/economic design and actual result review; Sol code
 reviewer consolidated implementation review; root orchestration/docs/next experiment.
 No new model improvement is claimed before the frozen comparison is actually run.
-Diagnostic implementation is reviewed and ready for actual execution: 57 focused tests
-passed in106.28seconds, including self-consistent backdated-fit and post-completion
-score poisons. Ruff over5 changed Python files and strict mypy over3 sources passed.
-Independent Sol code review approved the consolidated fix; Senior Sol Quant approved
-statistical formulas and interpretation limits. The actual saved-data diagnostic has
-not yet run. Logs are chat outputs/investment-diagnostics-component-20261110c.log and
-investment-diagnostics-static-20261110a.log. The original55-test pass preceded the
-clock-regression additions; first7 fixture failures were fixed by supplying12 held-out
-synthetic securities rather than8, without relaxing the10-security scoring minimum.
+Diagnostic checkpoint complete on main770d0db3dd3099bde109edf404b6fe41b106f5b8:
+57 focused tests passed106.28seconds, Ruff5files and strictmypy3sources passed.
+Independent Sol code review closed the actual-clock finding; Senior Sol Quant
+approved formulas and independently checked the actual report and interpretation.
+The immutable464-file export ran the saved-data analysis at20:41:43–20:43:44UTC.
+Report: data/research/investment_prediction_errors_20261110/diagnostics_770d0db/_manifest.json
+SHA256 2e570a4b714e0305d11909fe23ee48eeb116114be42ada16331070a92ce86981.
+Inventory:48units,16aggregates,24foldpairs,8aggregatepairs;2,542consumed sourcepins.
+No model was loaded/refitted, no forecast/source/eligibility changed. Exact canonical
+unit/aggregate metrics replayed. Independent JSON arithmetic checks found maximum
+moment residual3.12e-17, date decomposition2.78e-17, paired residual1.22e-18 and
+aggregate stratum reconciliation6.94e-18. This review did not repeat the closed full
+source/model replay. Logs are chat outputs/investment-prediction-errors-20261110a.log,
+investment-diagnostics-component-20261110c.log and investment-diagnostics-static-20261110a.log.
 
+Observed causes of error on known outcomes, with equal-date weights:
+- Annual temporal full XGBoost predicts mean+7.50% excess versus observed-7.11%;
+  Ridge predicts+9.89%. Bias is+14.61/+17.01percentagepoints, not portfolio loss.
+- Within-date annual AUC is modest: Ridge technical0.55755 to full0.56673;
+  XGBoost0.55543 to0.54964. Full transfer is0.51723/0.51869. All29 dates have
+  both classes. Quarterly temporal ranges0.51107–0.51561; no recovered0.67claim.
+- Annual temporal date-mean error is21–27% of totalMSE; within-date error is73–79%.
+  Correcting one global bias alone does not solve weak stock discrimination.
+- Full-minus-technical annual temporal MSE is+0.0132376 Ridge and+0.0049777 XGBoost.
+  Added-feature forecast changes partly correct old residuals, but their squared
+  magnitude costs0.0147063/0.0055782 against only0.0014688/0.0006005 correction.
+  Forecast dispersion is below target dispersion; the problem is scale relative to
+  predictive covariance, not forecasts being more volatile than actual outcomes.
+- Annual degradation appears in all3 years for every learner/scope.2022 supplies
+  about82% of temporal Ridge and67% of temporal XGBoost degradation.
+- All3 financial-coverage strata contribute annual temporal degradation;97.96% of
+  known news weight is partial finite coverage. Coverage is not relevance or quality,
+  and the joint comparison cannot isolate either source group. No rows are excluded.
+
+Next recommended experiment, not yet frozen or executed: add209technical-plus-news
+and130technical-plus-financial views with48validationfits; reuse the original48fits,
+keep masks/targets/settings/splits/costs identical, and make no finalrefit yet.
+Quant recommends this bounded attribution before calibration or tuning. Any actual
+implementation still requires its explicit protocol/exit gates and feature audit.
+The requested Astra research brief for Fable5.2 documents this evidence and asks for
+one falsifiable next experiment; it is a static research snapshot, not a second plan.
+Completed3,447-word brief: docs/research_briefs/fable_5_2_project_brief_20261110.md and.docx; independent Quant review passed, and all8 Word-rendered pages were visually checked.
+No new improved model, future test, complete portfolio result or API activation exists.
 User amendment: AFTER completing diagnosis, bounded model improvement and evaluation,
 implement API separation with the verified earlier strong model as V1 and the current model
 as beta. This is an ordered follow-on checkpoint; do not start API work in parallel

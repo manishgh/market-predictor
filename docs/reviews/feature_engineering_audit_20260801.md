@@ -38,6 +38,15 @@ The completed feature consumer is verified for retrospective research; measured 
 quality does not support production activation. No prospective performance, promotion,
 serving or complete selected-cohort return is claimed.
 Post-fit audit SHA256 b139c5e84d98c332aec3598c4751dedb35b5d4d8f2b414630604839cd94404dd.
+
+Saved-prediction diagnostic completed November10 at20:43:44UTC using implementation
+770d0db. Report SHA2562e570a4b714e0305d11909fe23ee48eeb116114be42ada16331070a92ce86981.
+All48validationunits and16aggregates reproduce canonical metrics exactly, with no
+source/feature/forecast changes. Independent Quant confirms material positive annual
+forecast bias, modest within-date ordering and weaker security transfer. The combined
+news/financial comparison does not identify separate source effects. A proposed
+209news/130financial factorial comparison is not yet implemented/fitted; existing
+feature acceptance applies only to the completed frozen profiles and diagnostics.
 Historical checkpoint evidence below predates the completed training result above;
 earlier references to pending fitting describe those checkpoints at their original dates.
 
