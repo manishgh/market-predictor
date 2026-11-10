@@ -1,5 +1,86 @@
 # Active Edge Rebuild Plan
 
+### Investment dataset, training and SPY evaluation - November 10
+
+Status: `in_progress`. User authorizes retained candle/news/financial joins followed
+by investment training and SPY evaluation when checks pass, using Sol agents on main.
+This is the sole active checkpoint; closed target/source work below stays frozen.
+
+Current phase: metadata and code inventory, then independent Quant/design review and
+frozen dataset/experiment specification before materialization or fitting. Reuse the
+74,458-row corpus (9b70c348ab17738f5874d42c51bff6af386d94061ef383385bdd6ead5bcad4c3)
+and existing retained features. Never rebuild unaffected sources or change their
+original clocks/flags. Preserve 45 prior exclusions, all original security decisions,
+63/252-session target policies, 20bp cost semantics and existing swing model artifacts.
+
+Observed consuming conflict: the existing saved-forecast evaluator requires actual
+fit before historical decision, but targets were verified in November 2026. A truthful
+retrospective research experiment needs explicit historical split cutoffs separately
+from actual fit/score/source clocks. Leave prospective forecast requirements intact;
+never backdate fits or verification, and never relabel old source flags as admission.
+
+Exit gates to freeze after inventory: exact source pins and feature order, one-to-one
+security/decision joins with complete missingness accounting, feature availability at
+or before decisions, train-only preprocessing, horizon-aware purging/embargo and
+sufficient time partitions, matched SPY intervals/costs, component/poison tests and
+independent actual-data review. Training proceeds only for an explicitly verified
+research dataset; any failing prerequisite remains a named reason, not a silent drop.
+No model promotion/activation, new source collection or unrelated refactor is in scope.
+
+Ownership: Sol ML engineer inventories and implements dataset integration; independent
+Senior Sol Quant owns causal/split/economic review; Sol design/code reviewer checks
+the frozen plan and final implementation; root owns orchestration and current docs.
+Heavy data/test/fitting jobs remain serial under the shared lease, strictly below90%
+system RAM with5GiB process budget and0.75GiB headroom. Unknown measurements refuse.
+Detailed design frozen before implementation and performance observation; independent
+Sol design/code review and Senior Sol Quant approved the causal reuse policy.
+- Reuse exactly previous XNYS session nightly209-column snapshot, preserving original
+  decision ID, ticker/security/session, cutoff, feature values and all availability
+  clocks. Missing exact snapshot stays missing, with no older surviving-row fallback.
+  All feature availability must be <=original source cutoff<investment decision.
+  Existing peer values retain their original586-security reference population.
+- Append6 financial metrics at exact investment decision/security/close. Missing news
+  or financial values remain null/reasoned. Both profiles share eligibility: verified
+  target, exact prior-session feature row and at least1 finite baseline feature.
+  Carry parent feature eligibility diagnostically; it does not authorize this dataset.
+  Ordered profiles: same snapshot's124 technical/relationship columns, and all215
+  (209 retained+6 financial). No recomputed sources, peer transforms or news windows.
+- Preserve all74,458 rows in a pinned dataset, with exact missingness/coverage by
+  horizon/date/sector; a separate receipt permits only retrospective research fitting.
+  Original source flags stay false. Current actual execution/verification clocks and
+  historical information cutoffs are separate. No historical first-seen claim.
+- Primary horizon252, diagnostic63. Freeze expanding score years2022,2023,2024
+  (January-May final partial year), training from2019-07. Purge training outcomes
+  ending on/after the21-XNYS-session boundary before the first scored monthly decision.
+  Require12 distinct training months/100 rows/20 securities and3 scoring months/30
+  known rows/10 securities per fit.
+  Evaluate temporal and separate20% deterministic security-transfer scopes using
+  existing unseeded SHA256 identity assignment. Insufficient scopes stay unavailable;
+  never relax minima or retune boundaries after observing results.
+- Use existing fixed Ridge and shallow XGBoost specifications from pinned retained
+  settings, no parameter search. Train-only medians/missingness indicators/scaling;
+  equal total weight per decision date. Fit separately per fold/profile/scope/horizon.
+- Compare date-balanced MSE/MAE against zero-SPY-excess and matched124-column baseline;
+  date rank correlations and fixed top-decile mean stock net versus matched gross
+  SPY/QQQ/sector. Select ceil(n/10) by descending predicted excess, security_id ties.
+  No positive-forecast threshold, best-model selection, CAGR, Sharpe, compounded or
+  funded-portfolio claim. Historical periods are development evidence, not untouched.
+- Final Quant scoring clarification: training requires research eligibility; predictions
+  cover ALL feature-eligible in-scope rows irrespective of future target availability.
+  Select top-decile before matching outcomes. Unknown selected targets cannot be
+  replaced/dropped; a complete selected-cohort mean is unavailable unless all selected
+  outcomes are known. Report coverage separately. Both profiles share scoring masks.
+  Aggregate folds by equal decision date, not equal fold weights. Security transfer
+  excludes held-out securities from preprocessing too; it is not unseen-issuer proof.
+- Final research refits use each admitted horizon/profile/family's available full
+  dataset only after fold checks; save exact feature/preprocessing/source lineage.
+  Deployment, serving admission and strategy promotion remain outside this request.
+- Component verification: duplicate/identity/hash/clock/after-close/future-poison,
+  missingness preservation, source flags, label-target reconciliation, exact-session
+  lag, purging and exchange-session embargo, transfer isolation, train-only encoding,
+  shared scoring cohort and matched SPY economics; affected Ruff/strict mypy.
+  Actual dataset audit precedes any fit; independent Quant reviews actual fit/evaluation.
+
 ### Stock identity, distribution coverage and full investment targets — November 9
 
 Status: `completed` - November 10. Implementation 0a1ca7daf924e900ac0947e6169678e93d27c41e

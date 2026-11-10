@@ -19,12 +19,14 @@ from market_predictor.investment.raw_acquisition import (
 )
 from market_predictor.research.investment_coverage import plan_investment_coverage, run_investment_coverage
 from market_predictor.research.investment_currencies import collect_investment_dividend_currencies
+from market_predictor.research.investment_dataset import build_investment_dataset
 from market_predictor.research.investment_features import (
     build_investment_features,
     collect_investment_company_facts,
     evaluate_investment_predictions,
 )
 from market_predictor.research.investment_labels import materialize_investment_labels
+from market_predictor.research.investment_training import train_investment_models
 from market_predictor.sources.alpaca import AlpacaSource
 from market_predictor.sources.ictax import collect_ictax_archive, verify_ictax_archive
 from market_predictor.swing.contracts.holding_materialization import SourcePin
@@ -148,3 +150,15 @@ def register_investment_research_commands(app: typer.Typer) -> None:
         """Compare complete paired saved forecasts using mature canonical investment outcomes."""
         _run(lambda: evaluate_investment_predictions(root=root, request=request,
                                                    request_sha256=request_sha256, output=output))
+
+    @app.command("build-investment-dataset")
+    def build_dataset(root: Path = typer.Option(...), request: Path = typer.Option(...),
+                      request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
+        """Join verified targets to prior-session features and exact-close financial snapshots."""
+        _run(lambda: build_investment_dataset(root=root, request=request, request_sha256=request_sha256, output=output))
+
+    @app.command("train-investment-models")
+    def train_models(root: Path = typer.Option(...), request: Path = typer.Option(...),
+                     request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
+        """Fit fixed retrospective research models and evaluate matched SPY-relative outcomes."""
+        _run(lambda: train_investment_models(root=root, request=request, request_sha256=request_sha256, output=output))

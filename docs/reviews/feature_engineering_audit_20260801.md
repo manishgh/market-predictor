@@ -1,5 +1,26 @@
 # Current Feature Engineering Audit
 
+### Investment research feature acceptance - November 10
+
+Current checkpoint is implementing a research-only investment dataset and training
+consumer. Independent Sol design and Senior Quant review approved exact prior-session
+reuse and retrospective clocks. No actual dataset admission or model fit is claimed.
+The existing feature calculations remain unchanged; this matrix assesses new consumers.
+
+| Feature group | Source/time contract | Historical construction | Ordered model contract | New training/evaluation consumer | Live/serving/API consumption |
+| --- | --- | --- | --- | --- | --- |
+|124 candle technical/relationship measures | Exact prior-XNYS nightly snapshot; all clocks <=originalcutoff<investmentclose; original586-peer values | Reuse saved209-column partitions; new join audit pending | First124 verified parent columns, same rows asfullprofile | Blocked pending join/purge/poison tests and actual dataset audit | Not applicable: retrospective research artifacts only, no serving/model activation |
+|85 news measures | Same prior-session snapshot and historical-proxy source semantics; absent values remain null | Reuse retained reviewed news values; no new window aggregation | Parent209 order unchanged | Blocked pending source receipt and consumer replay | Not applicable: this checkpoint creates no live news transformation or serving release |
+|6 financial measures | Exact security/decision-close snapshot; retained SEC publication clocks and reconstruction basis | Reuse financial recovery; no recalculation or inferred values | Append existing FEATURE_NAMES order | Blocked pending identity/clock/missingness and actual join checks | Not applicable: retrospective filing reconstruction is not admitted live input |
+
+All three groups require original source hashes and explicit missingness. The new
+consumer must preserve historical source flags; only a separate derived admission
+permits research fitting. Train-only medians/indicators handle optional values, never
+fabricate source coverage. Full historical row accounting survives feature/target gaps.
+Shared transformations are the retained calculations; new lagged join is verified by
+exact source-value/clock parity and future-poison tests. No model-specific serving API
+or prospective validation is claimed. Promotion/serving remain false for every artifact.
+
 ### Full investment targets built and independently checked - November 10
 
 The full corpus contains exactly 74,458 horizon rows for 37,229 monthly decisions.

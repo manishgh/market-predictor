@@ -1,5 +1,68 @@
 # Active Edge Rebuild Handoff
 
+## Active investment dataset and research training - November 10
+
+User authorizes joining verified targets to retained candles/news/financial features,
+then training and SPY evaluation after checks pass. Canonical main remains the only
+checkout. The leading active plan freezes the reviewed design and test gates.
+Current stage: reviewed implementation and component verification complete; actual
+dataset publication and independent pre-fit audit are next. No model fit yet.
+
+Sol ML engineer owns investment/dataset.py and research/investment_dataset.py plus
+consumer tests. Root owns investment/training.py, research/investment_training.py,
+CLI integration and current documentation. Independent Sol design/code and Senior
+Quant reviewers approved the bounded design. Actual dataset audit precedes fits.
+
+Use exactly the previous XNYS session nightly209-feature snapshot, not same-day18:00
+features at a market-close decision. Preserve original values/clocks/IDs and586-peer
+reference population; no older-row fallback. Add6 exact-close financial metrics.
+Profiles are the same snapshot's124 technical/relationship columns versus215full.
+Both profiles have identical feature masks; train only verified targets, but score
+all feature-eligible in-scope rows and select before inspecting outcome availability.
+Keep all74,458 rows and explicit gaps. Research admission is a new pinned receipt;
+closed source flags and actual2026 verification clocks remain unchanged.
+
+Freeze primary252 and diagnostic63 horizons,2022/2023/2024Jan-May temporal folds,
+21-exchange-session embargo with strict economic-maturity purge; independent20%
+security transfer, train-only imputation/scaling, existing fixed Ridge/XGBoost, no
+parameter search. Minimum training12months/100rows/20securities and known scoring
+3months/30rows/10securities. Insufficient scope remains explicit. Finalresearchrefits
+follow passing temporal folds. No historical deployment/prospective success claim.
+
+A consuming source-version mismatch was resolved without regenerating news: the old
+news verifier pins46 source files,13 no longer match current code. Exact historical
+bytes are preserved in data/research/investment_dataset_20261110/news_receipt_sources
+/_manifest.json SHA256 b1429af9cc31e8bcc626de8a56971f0214df17598831e9c6021b9d482110c54a.
+Thirty-three files reuse existing immutable exports;13 were recovered from Git;
+two require documented deterministic CRLF representation matching original hashes.
+The recovery report is pinned4e8c2fc6c5da5d96529226f614ce1b79c96e254fa774af3b8b607d594546993a.
+None of those historical files is executed or edited. New reader code is pinned
+separately; original report/publication/source bytes remain unchanged.
+
+Component verification passed106 tests in38.38s across dataset, publication/loader,
+training, research CLI, existing evaluation and fundamentals. Affected8-file Ruff and
+strict mypy5sources passed; git diff --check passed. Test log chat outputs/
+investment-dataset-training-component-20261110a.log SHA256
+3a15003c771e75730b52c3613a4ad09196b70b5d72450ffc0d1fb933845b6570.
+These are synthetic component/regression checks, not actual-provider dataset admission.
+No full suite or release check was run for this research component checkpoint.
+
+Actual frozen request data/research/investment_dataset_20261110/inputs/request.json
+SHA25688f24d310c1d25e912576e7edc20dd9a72d1a75f50620ab9233148f43f13870f,
+evaluation_as_of2026-11-10T18:10:16.716790+00:00. Both source manifests and the original
+46 news verifier source bytes are pinned; no retained source is rebuilt.
+Independent pre-fit helper chat outputs/audit_investment_dataset_prefit.py is reviewed,
+SHA2569b24721f00b9879f129ea7d7c0a65b6d2f0c3635a2a3958482046c775c475223.
+It checks full value/clock/row parity and date/sector coverage plus12 independent folds.
+Existing estimator settings configs/swing_news_return_training.json SHA256
+41f73b6f5f79fbf3896b6b97c4d7b8ca7c654be78469bba6acf69ac012074f25;
+only its fixed linear/boosted parameters are consumed, not swing fold/target settings.
+Next: export the committed reviewed producer,
+build pinned dataset/admission, independently verify causal joins and split coverage,
+then sequential fits/SPY diagnostics if gates pass. Shared lease and below90% RAM
+ceiling remain;5GiB process budget/0.75GiB headroom. Do not start parallel heavy jobs.
+The completed source/target checkpoint below remains historical evidence.
+
 ## Completed stock identity and full investment targets - November 10
 
 Canonical checkout remains C:/project/market-predictor on main. Implementation
