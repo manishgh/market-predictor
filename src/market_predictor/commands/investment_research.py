@@ -21,6 +21,7 @@ from market_predictor.research.investment_coverage import plan_investment_covera
 from market_predictor.research.investment_currencies import collect_investment_dividend_currencies
 from market_predictor.research.investment_dataset import build_investment_dataset
 from market_predictor.research.investment_diagnostics import diagnose_investment_predictions
+from market_predictor.research.investment_feature_ablation import run_investment_feature_ablation
 from market_predictor.research.investment_features import (
     build_investment_features,
     collect_investment_company_facts,
@@ -169,4 +170,11 @@ def register_investment_research_commands(app: typer.Typer) -> None:
                              request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
         """Explain all saved validation errors without refitting or changing forecasts."""
         _run(lambda: diagnose_investment_predictions(root=root, request=request,
+            request_sha256=request_sha256, output=output))
+
+    @app.command("ablate-investment-features")
+    def ablate_features(root: Path = typer.Option(...), request: Path = typer.Option(...),
+                        request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
+        """Measure separate news and financial effects on matched validation rows."""
+        _run(lambda: run_investment_feature_ablation(root=root, request=request,
             request_sha256=request_sha256, output=output))

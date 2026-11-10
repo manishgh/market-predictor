@@ -1,4 +1,5 @@
 """Synthetic saved-run proof checks; no estimator or original raw source is loaded."""
+import importlib.metadata
 import json
 from contextlib import nullcontext
 from datetime import UTC, datetime
@@ -14,6 +15,7 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.investment.dataset import InvestmentDataset
+from market_predictor.investment.fundamentals import FEATURE_NAMES
 from market_predictor.investment.training import (
     FAMILIES,
     HORIZONS,
@@ -63,7 +65,7 @@ def fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
                     TARGET: actual, "stock_net_return": actual + 0.05, "spy_gross_return": 0.05 if known else np.nan,
                     "qqq_gross_return": 0.07 if known else np.nan, "sector_gross_return": 0.06 if known else np.nan})
     metadata = pd.DataFrame(records)
-    names = tuple(f"feature-{i}" for i in range(215))
+    names = (*tuple(f"feature-{i}" for i in range(209)), *FEATURE_NAMES)
     features = pd.DataFrame(0.0, index=metadata.index, columns=names)
     source = write(tmp_path / "source.json", {"fixture": "pinned admitted saved data"})
     dataset = InvestmentDataset(features, metadata, {PROFILES[0]: names[:124], PROFILES[1]: names},
@@ -71,7 +73,8 @@ def fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     monkeypatch.setattr(module, "load_investment_dataset", lambda **_: dataset)
     dataset_pin = write(tmp_path / "dataset.json", {"fixture": "dataset"})
     admission_pin = write(tmp_path / "admission.json", {"dataset": dataset_pin})
-    settings_pin = write(tmp_path / "settings.json", {"fixture": "closed fixed settings"})
+    settings = json.loads((Path(__file__).resolve().parents[1] / "configs/swing_news_return_training.json").read_text())
+    settings_pin = write(tmp_path / "settings.json", settings)
     train_request = write(tmp_path / "training-request.json", {"schema_version": "market_predictor.investment_training_request",
         "scope": "retrospective_research", "dataset_manifest": dataset_pin, "dataset_admission": admission_pin,
         "estimator_settings": settings_pin})
@@ -79,7 +82,10 @@ def fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     assert all(not fold.missing_reasons for fold in folds)
     fold_records = [_fold_record(fold, metadata) for fold in folds]
     experiment = {"request_sha256": train_request["sha256"], "model_columns": dataset.model_columns,
-        "feature_contract_sha256": dataset.feature_contract_sha256, "parameters": {family: {"fixed": 42} for family in FAMILIES},
+        "feature_contract_sha256": dataset.feature_contract_sha256,
+        "parameters": {FAMILIES[0]: settings["linear"], FAMILIES[1]: settings["boosted"]},
+        "dependencies": {name: importlib.metadata.version(name) for name in
+            ("numpy", "pandas", "scikit-learn", "xgboost", "joblib", "exchange-calendars")},
         "folds": fold_records, **FLAGS}
     directory = tmp_path / "run"
     experiment_pin = write(directory / "experiment.json", experiment)

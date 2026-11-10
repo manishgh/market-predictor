@@ -7,13 +7,17 @@ dataset contract; publish new ordered view names in the separate experiment only
 
 | View | Source and historical values | Ordered feature consumer | Train and evaluate | Live and API |
 | --- | --- | --- | --- | --- |
-| technical_news209 | Verified retained124technical plus85news values and original availability clocks | Blocked until exact projection/identity tests pass | Blocked until shared consumer checks and actual experiment pass | Not applicable retrospective research only |
-| technical_financial130 | Verified retained124technical plus6financial values and original availability clocks | Blocked until exact projection/identity tests pass | Blocked until shared consumer checks and actual experiment pass | Not applicable retrospective research only |
+| technical_news209 | Verified retained124technical plus85news values and original availability clocks | Verified exact ordered projection and common-row tests | Shared consumers verified; actual fits and independent replay pending | Not applicable retrospective research only |
+| technical_financial130 | Verified retained124technical plus6financial values and original availability clocks | Verified exact ordered projection and common-row tests | Shared consumers verified; actual fits and independent replay pending | Not applicable retrospective research only |
 
 Old124/215models are immutable references. Source/causal/value evidence in the closed
 matrix below is reused. Missing optional features and unknown outcomes are retained;
 no added source is inferred from a finite zero. No new model training begins until
 projection/consumer checks and independent design/code review pass.
+
+Pre-fit gates passed: 75 focused tests, affected Ruff and strict mypy, and
+independent Sol design/code and senior Quant statistical review. Actual fitting is
+authorized for the two new views only. Existing reference model bytes are unchanged.
 
 ### Investment research feature acceptance - November 10
 

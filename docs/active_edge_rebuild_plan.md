@@ -70,6 +70,10 @@ weight-reconciliation tests, affected diagnostic/training consumer regressions, 
 strictmypy, immutable implementation export, actual48fits, independent saved-model replay
 and contrast review, documented measured answer, commit/push and no workers remaining.
 
+Implementation pre-fit gates passed: 75 focused tests, affected Ruff/strict mypy,
+independent consolidated Sol code review and senior Quant design approval. Actual fits
+and the independent saved-model/metric audit remain pending.
+
 ### Investment prediction-error diagnosis and bounded improvement - November 10
 
 Status: `complete` for diagnosis. The user explicitly authorizes diagnosing why news/financial

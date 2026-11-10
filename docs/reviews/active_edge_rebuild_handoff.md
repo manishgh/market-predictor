@@ -6,10 +6,14 @@ in the leading active plan; use exact retained215-column dataset and reuse old48
 Root owns investment/feature_ablation.py and its pure tests. Sol engineer owns research
 orchestration, saved-reader extraction, CLI and publication tests. Independent SeniorSol
 Quant approved statistics; independent Sol design/code review is required before edits.
-Current stage: design freeze before implementation, no heavy job active. Do not start
-V1/beta, calibration, parameter search, source reconstruction, old/final model refits.
-Next: complete reusable consumers and focused checks, update feature acceptance to
-verified, export reviewed main, fit48serial units, independently replay and evaluate.
+Current stage: implementation and pre-fit checks passed. The shared saved-run reader,
+four feature views and factorial comparison are implemented, with 75 focused tests,
+affected Ruff and strict mypy passing. Independent Sol code review found no issues;
+senior Quant approved the fixed comparison and prepared an independent model replay.
+The scheduled collector finished before the serial component tests started.
+Next: export the reviewed implementation commit, run exactly 48 new validation fits,
+and independently replay saved models and all reported conditional comparisons.
+Do not start V1/beta, calibration, parameter search, source reconstruction or final fits.
 Original producer/admission flags, model/data bytes and actual2026 clocks stay unchanged.
 
 ## Active prediction-error diagnosis - November 10

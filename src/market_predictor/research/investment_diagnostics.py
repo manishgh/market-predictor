@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -12,7 +13,13 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.io import inside
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
-from market_predictor.investment.dataset import add_pins, load_investment_dataset, read_object, require
+from market_predictor.investment.dataset import (
+    InvestmentDataset,
+    add_pins,
+    load_investment_dataset,
+    read_object,
+    require,
+)
 from market_predictor.investment.diagnostics import (
     CONTEXT,
     COVERAGE,
@@ -21,7 +28,7 @@ from market_predictor.investment.diagnostics import (
     paired_diagnostics,
     prediction_diagnostics,
 )
-from market_predictor.investment.training import FAMILIES, HORIZONS, PROFILES, SCOPES, SCORE_YEARS, investment_fold
+from market_predictor.investment.training import FAMILIES, HORIZONS, PROFILES, SCOPES, SCORE_YEARS, InvestmentFold, investment_fold
 from market_predictor.research.investment_features import _publish
 from market_predictor.research.investment_training import FLAGS, InvestmentTrainingRequest, _fold_record
 from market_predictor.swing.contracts.holding_accounting import HoldingContract
@@ -53,7 +60,7 @@ def _recheck(pins: dict[str, str]) -> None:
         require(file_sha256(Path(name)) == digest, f"investment diagnostic source changed: {name}")
 
 
-def _read_predictions(root: Path, pin: SourcePin, record: dict[str, Any], expected: pd.DataFrame,
+def read_fit_predictions(root: Path, pin: SourcePin, record: dict[str, Any], expected: pd.DataFrame,
     coverage: pd.DataFrame, pins: dict[str, str], completed_at: pd.Timestamp) -> pd.DataFrame:
     path = inside(root, pin.path).parent / "predictions.parquet"
     digest = record["files"]["predictions.parquet"]
@@ -89,6 +96,82 @@ def _read_predictions(root: Path, pin: SourcePin, record: dict[str, Any], expect
     return frame
 
 
+@dataclass(frozen=True)
+class InvestmentReferenceRun:
+    manifest: dict[str, Any]
+    experiment: dict[str, Any]
+    request: InvestmentTrainingRequest
+    request_sha256: str
+    completed_at: pd.Timestamp
+
+
+def read_reference_run(root: Path, manifest: SourcePin, request: SourcePin,
+                       pins: dict[str, str]) -> InvestmentReferenceRun:
+    run = read_object(root, manifest, pins)
+    train_request = InvestmentTrainingRequest.model_validate_json(json.dumps(read_object(root, request, pins)))
+    require(run.get("schema") == "market_predictor.investment_training" and run.get("status") == "complete_research_only"
+        and run.get("scope") == "retrospective_research" and all(run.get(flag) is False for flag in FLAGS)
+        and run["request_sha256"] == request.sha256 and run["fold_scope_fits"] == 48 and run["final_models"] == 8,
+        "investment diagnostics require the complete closed 48-plus-8 research run")
+    completed_at = pd.Timestamp(run.get("completed_at_utc"))
+    require(not pd.isna(completed_at) and completed_at.tzinfo is not None
+        and completed_at <= pd.Timestamp(datetime.now(UTC)), "investment closed run completion clock is absent or in the future")
+    run_path = inside(root, manifest.path)
+    experiment = read_object(root, SourcePin(path=str(run_path.parent / "experiment.json"), sha256=run["experiment_sha256"]), pins)
+    require(experiment["request_sha256"] == request.sha256 and all(experiment.get(flag) is False for flag in FLAGS),
+        "investment diagnostic experiment identity or scope differs")
+    return InvestmentReferenceRun(run, experiment, train_request, request.sha256, completed_at)
+
+
+def reference_folds(reference: InvestmentReferenceRun, dataset: InvestmentDataset) -> dict[tuple[int, str, int], InvestmentFold]:
+    run, experiment = reference.manifest, reference.experiment
+    metadata = dataset.metadata.reset_index(drop=True)
+    require(dataset.features.index.equals(metadata.index) and dataset.model_columns == {
+        key: tuple(value) for key, value in experiment["model_columns"].items()}
+        and dataset.feature_contract_sha256 == experiment["feature_contract_sha256"], "investment diagnostic feature order differs")
+    fold_keys = {(h, scope, year) for h in HORIZONS for scope in SCOPES for year in SCORE_YEARS}
+    folds = {key: investment_fold(metadata, key[0], key[2], cast(Any, key[1])) for key in fold_keys}
+    require(all(not fold.missing_reasons for fold in folds.values()), "investment diagnostic original fold is unavailable")
+    fold_records = [_fold_record(folds[(h, scope, year)], metadata) for h in HORIZONS for scope in SCOPES for year in SCORE_YEARS]
+    require(run["folds"] == experiment["folds"] == fold_records, "investment diagnostic frozen split inventory differs")
+    expected_aggregates = {f"{h}/{profile}/{family}/{scope}" for h in HORIZONS for scope in SCOPES
+        for profile in PROFILES for family in FAMILIES}
+    require(set(run["aggregate_metrics"]) == expected_aggregates, "investment diagnostic aggregate inventory differs")
+    expected_keys = {f"{h}/{profile}/{family}/{scope}/{year}" for h, scope, year in fold_keys
+        for profile in PROFILES for family in FAMILIES}
+    expected_keys |= {f"{h}/{profile}/{family}/final_refit" for h in HORIZONS for profile in PROFILES for family in FAMILIES}
+    require(set(run["units"]) == expected_keys, "investment diagnostic unit inventory is not the exact closed 56")
+    return folds
+
+
+def read_reference_predictions(root: Path, reference: InvestmentReferenceRun, key: str, fold: InvestmentFold,
+                               dataset: InvestmentDataset, metadata: pd.DataFrame, coverage: pd.DataFrame,
+                               pins: dict[str, str]) -> tuple[SourcePin, dict[str, Any], pd.DataFrame]:
+    run, experiment = reference.manifest, reference.experiment
+    _, profile, family, _, _ = key.split("/")
+    pin = SourcePin.model_validate_json(json.dumps(run["units"][key]))
+    record = read_object(root, pin, pins)
+    identity = {**_fold_record(fold, metadata), "profile": profile, "experiment_sha256": run["experiment_sha256"]}
+    require(record.get("schema") == "market_predictor.investment_research_model"
+        and record.get("scope") == "retrospective_research" and record["unit"] == identity
+        and record["request_sha256"] == reference.request_sha256 and record["family"] == family
+        and record["parameters"] == experiment["parameters"][family]
+        and tuple(record["feature_names"]) == dataset.model_columns[profile]
+        and set(record["files"]) == {"model.joblib", "predictions.parquet"}
+        and all(record.get(flag) is False for flag in FLAGS), "investment saved model unit binding differs")
+    train = metadata.iloc[fold.train_indices]
+    require(record["training_rows"] == len(train)
+        and record["training_decision_ids_sha256"] == identity["training_decision_ids_sha256"]
+        and record["training_security_ids"] == identity["training_security_ids"]
+        and pd.Timestamp(record["dataset_admitted_at_utc"]) == dataset.admitted_at_utc
+        and pd.Timestamp(record["latest_training_label_available_at_utc"]) == pd.to_datetime(
+            train.label_available_at_utc, utc=True).max()
+        and pd.Timestamp(record["latest_training_economic_maturity_at_utc"]) == pd.to_datetime(
+            train.economic_maturity_at_utc, utc=True).max(), "investment saved training lineage differs")
+    frame = read_fit_predictions(root, pin, record, metadata.iloc[fold.score_indices], coverage, pins, reference.completed_at)
+    return pin, record, frame
+
+
 def diagnose_investment_predictions(*, root: Path, request: Path, request_sha256: str, output: Path) -> dict[str, Any]:
     root = root.resolve()
     output = inside(root, output)
@@ -98,38 +181,13 @@ def diagnose_investment_predictions(*, root: Path, request: Path, request_sha256
         pins = _implementation()
         parsed = InvestmentDiagnosticRequest.model_validate_json(json.dumps(read_object(root,
             SourcePin(path=str(request), sha256=request_sha256), pins)))
-        run = read_object(root, parsed.training_manifest, pins)
-        train_request = InvestmentTrainingRequest.model_validate_json(json.dumps(read_object(root, parsed.training_request, pins)))
-        require(run.get("schema") == "market_predictor.investment_training" and run.get("status") == "complete_research_only"
-            and run.get("scope") == "retrospective_research" and all(run.get(flag) is False for flag in FLAGS)
-            and run["request_sha256"] == parsed.training_request.sha256 and run["fold_scope_fits"] == 48 and run["final_models"] == 8,
-            "investment diagnostics require the complete closed 48-plus-8 research run")
-        completed_at = pd.Timestamp(run.get("completed_at_utc"))
-        require(not pd.isna(completed_at) and completed_at.tzinfo is not None
-            and completed_at <= pd.Timestamp(datetime.now(UTC)), "investment closed run completion clock is absent or in the future")
-        run_path = inside(root, parsed.training_manifest.path)
-        experiment = read_object(root, SourcePin(path=str(run_path.parent / "experiment.json"), sha256=run["experiment_sha256"]), pins)
-        require(experiment["request_sha256"] == parsed.training_request.sha256 and all(experiment.get(flag) is False for flag in FLAGS),
-            "investment diagnostic experiment identity or scope differs")
+        reference = read_reference_run(root, parsed.training_manifest, parsed.training_request, pins)
+        run, train_request = reference.manifest, reference.request
         dataset = load_investment_dataset(root=root, manifest=train_request.dataset_manifest, admission=train_request.dataset_admission)
         add_pins(root, pins, dataset.source_files)
         metadata = dataset.metadata.reset_index(drop=True)
-        require(dataset.features.index.equals(metadata.index) and dataset.model_columns == {
-            key: tuple(value) for key, value in experiment["model_columns"].items()}
-            and dataset.feature_contract_sha256 == experiment["feature_contract_sha256"], "investment diagnostic feature order differs")
+        folds = reference_folds(reference, dataset)
         coverage = feature_coverage(dataset.features, dataset.model_columns["all_features"])
-        fold_keys = {(h, scope, year) for h in HORIZONS for scope in SCOPES for year in SCORE_YEARS}
-        folds = {key: investment_fold(metadata, key[0], key[2], cast(Any, key[1])) for key in fold_keys}
-        require(all(not fold.missing_reasons for fold in folds.values()), "investment diagnostic original fold is unavailable")
-        fold_records = [_fold_record(folds[(h, scope, year)], metadata) for h in HORIZONS for scope in SCOPES for year in SCORE_YEARS]
-        require(run["folds"] == experiment["folds"] == fold_records, "investment diagnostic frozen split inventory differs")
-        expected_aggregates = {f"{h}/{profile}/{family}/{scope}" for h in HORIZONS for scope in SCOPES
-            for profile in PROFILES for family in FAMILIES}
-        require(set(run["aggregate_metrics"]) == expected_aggregates, "investment diagnostic aggregate inventory differs")
-        expected_keys = {f"{h}/{profile}/{family}/{scope}/{year}" for h, scope, year in fold_keys
-            for profile in PROFILES for family in FAMILIES}
-        expected_keys |= {f"{h}/{profile}/{family}/final_refit" for h in HORIZONS for profile in PROFILES for family in FAMILIES}
-        require(set(run["units"]) == expected_keys, "investment diagnostic unit inventory is not the exact closed 56")
         unit_reports, aggregate_reports, paired_units, paired_aggregates = {}, {}, {}, {}
         for horizon in HORIZONS:
             for scope in SCOPES:
@@ -141,26 +199,8 @@ def diagnose_investment_predictions(*, root: Path, request: Path, request_sha256
                         frames = {}
                         for profile in PROFILES:
                             key = f"{horizon}/{profile}/{family}/{scope}/{year}"
-                            pin = SourcePin.model_validate_json(json.dumps(run["units"][key]))
-                            record = read_object(root, pin, pins)
-                            identity = {**_fold_record(fold, metadata), "profile": profile, "experiment_sha256": run["experiment_sha256"]}
-                            require(record.get("schema") == "market_predictor.investment_research_model"
-                                and record.get("scope") == "retrospective_research" and record["unit"] == identity
-                                and record["request_sha256"] == parsed.training_request.sha256 and record["family"] == family
-                                and record["parameters"] == experiment["parameters"][family]
-                                and tuple(record["feature_names"]) == dataset.model_columns[profile]
-                                and set(record["files"]) == {"model.joblib", "predictions.parquet"}
-                                and all(record.get(flag) is False for flag in FLAGS), "investment saved model unit binding differs")
-                            train = metadata.iloc[fold.train_indices]
-                            require(record["training_rows"] == len(train)
-                                and record["training_decision_ids_sha256"] == identity["training_decision_ids_sha256"]
-                                and record["training_security_ids"] == identity["training_security_ids"]
-                                and pd.Timestamp(record["dataset_admitted_at_utc"]) == dataset.admitted_at_utc
-                                and pd.Timestamp(record["latest_training_label_available_at_utc"]) == pd.to_datetime(
-                                    train.label_available_at_utc, utc=True).max()
-                                and pd.Timestamp(record["latest_training_economic_maturity_at_utc"]) == pd.to_datetime(
-                                    train.economic_maturity_at_utc, utc=True).max(), "investment saved training lineage differs")
-                            frame = _read_predictions(root, pin, record, metadata.iloc[fold.score_indices], coverage, pins, completed_at)
+                            _, record, frame = read_reference_predictions(
+                                root, reference, key, fold, dataset, metadata, coverage, pins)
                             diagnostics = prediction_diagnostics(frame)
                             require(diagnostics["canonical_metrics"] == record["metrics"],
                                 "investment canonical saved unit metrics do not replay exactly")
