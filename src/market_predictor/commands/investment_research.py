@@ -119,10 +119,16 @@ def register_investment_research_commands(app: typer.Typer) -> None:
 
     @app.command("materialize-investment-labels")
     def materialize_labels(root: Path = typer.Option(...), request: Path = typer.Option(...),
-                           request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
+                           request_sha256: str = typer.Option(...), output: Path = typer.Option(...),
+                           parent_receipt: Path | None = typer.Option(None),
+                           parent_receipt_sha256: str | None = typer.Option(None)) -> None:
         """Calculate monthly future-return targets and report missing price or action data."""
+        if (parent_receipt is None) != (parent_receipt_sha256 is None):
+            raise typer.BadParameter("parent-receipt and parent-receipt-sha256 must be supplied together")
+        receipt = None if parent_receipt is None or parent_receipt_sha256 is None else SourcePin(
+            path=parent_receipt.as_posix(), sha256=parent_receipt_sha256)
         _run(lambda: materialize_investment_labels(root=root, request=request,
-            request_sha256=request_sha256, output=output))
+            request_sha256=request_sha256, output=output, parent_receipt=receipt))
 
     @app.command("plan-investment-coverage")
     def plan_coverage(root: Path = typer.Option(...), request: Path = typer.Option(...),

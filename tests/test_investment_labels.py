@@ -58,9 +58,11 @@ def setup_job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, st
     def compile_row(**kwargs: Any) -> dict[str, Any]:
         row = kwargs["decision"]
         return {"decision_id": row["decision_id"], "security_id": row["security_id"], "horizon_sessions": kwargs["horizon"],
+            "decision_session": row["decision_session"],
             "economic_maturity_utc": "2024-06-01T20:00:00Z", "label_available_at_utc": "2026-11-07T00:00:00Z",
             "status": "source_validated", "label_eligible": True, "missing_reasons": [], "components": [],
-            "request": {"fixture": "exact request"}, "target": {"fixture": "accounting result"}, "specifications": {"large": "drop"}}
+            "request": {"fixture": "exact request"}, "target": {"fixture": "accounting result"},
+            "specifications": {"large": "drop"}, **module.FLAGS}
 
     monkeypatch.setattr(module, "compile_investment_label", compile_row)
     return Path(request["path"]), request["sha256"], tmp_path / "output"
@@ -79,6 +81,10 @@ def test_full_population_horizons_and_asof_are_separate(tmp_path: Path, monkeypa
     assert all("specifications" not in row for row in rows)
     assert all(row["membership_source_capture_at_utc"] is None for row in rows)
     assert report["training_ready"] is False
+    assert report["inherited_security_checkpoint_count"] == 0
+    assert report["new_security_checkpoint_count"] == 2
+    assert report["new_label_rows"] == 4 and report["inherited_label_rows"] == 0
+    assert all(item["origin"] == "new" for item in report["security_checkpoint_origins"])
     coverage = report["coverage_by_year_sector_and_roster_status"]
     assert sum(item["population_rows"] for item in coverage) == 4
     assert sum(item["source_validated_rows"] for item in coverage) == 2
@@ -241,3 +247,53 @@ def test_changed_selection_cannot_reuse_old_checkpoints(tmp_path: Path, monkeypa
     pin = write(request, parsed)
     with pytest.raises(DataReadinessError, match="resume request or implementation differs"):
         module.materialize_investment_labels(root=tmp_path, request=request, request_sha256=pin["sha256"], output=output)
+
+
+@pytest.mark.parametrize("collision", ["sector_spy", "sector_qqq", "stock_symbol", "stock_identity"])
+def test_duplicate_comparison_is_local_before_any_compiler_reads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, collision: str
+) -> None:
+    request, digest, output = setup_job(tmp_path, monkeypatch)
+    request_data = json.loads(request.read_text())
+    roster_path = tmp_path / "roster/roster.json"
+    rows = json.loads(roster_path.read_text())
+    row = rows["rows"][0]
+    if collision.startswith("sector_"):
+        row["sector_benchmark"] = collision.removeprefix("sector_").upper()
+    elif collision == "stock_symbol":
+        row["ticker"] = "SPY"
+    else:
+        row["security_id"] = "benchmark:QQQ"
+    rows_pin = write(roster_path, rows)
+    roster_path = tmp_path / "roster/_manifest.json"
+    roster = json.loads(roster_path.read_text())
+    roster["files"]["roster.json"] = rows_pin["sha256"]
+    request_data["roster_manifest"] = write(roster_path, roster)
+    pin = write(request, request_data)
+    monkeypatch.setattr(module, "compile_investment_label", lambda **_: pytest.fail("duplicate reached compiler/source reads"))
+    module.materialize_investment_labels(root=tmp_path, request=request, request_sha256=pin["sha256"], output=output)
+    records = [row for path in (output / "securities").glob("*/labels.json") for row in json.loads(path.read_text())["rows"]]
+    eligible = [row for row in records if row["roster_status"] == "eligible"]
+    assert {row["horizon_sessions"] for row in eligible} == {63, 252}
+    assert all(row["missing_reasons"] == ["required_comparison_security_or_symbol_not_distinct"] for row in eligible)
+    assert all(row["status"] == "unresolved" and not row["label_eligible"] for row in eligible)
+    assert all(row["request"] is row["target"] is row["request_sha256"] is None for row in eligible)
+    assert all(row["components"] == [] and row["training_ready"] is False for row in eligible)
+
+
+def test_comparison_precheck_uses_corrected_ticker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    request, digest, output = setup_job(tmp_path, monkeypatch)
+    monkeypatch.setattr(module, "corrected_ticker", lambda *_: "SPY")
+    monkeypatch.setattr(module, "compile_investment_label", lambda **_: pytest.fail("uncorrected binding admitted"))
+    module.materialize_investment_labels(root=tmp_path, request=request, request_sha256=digest, output=output)
+    report = json.loads((output / "final/_manifest.json").read_text())
+    assert report["counts_by_horizon"]["63"]["source_validated_rows"] == 0
+
+
+def test_negative_precheck_does_not_hide_pinned_source_tampering(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    request, digest, output = setup_job(tmp_path, monkeypatch)
+    (tmp_path / "members.json").write_text("tampered")
+    monkeypatch.setattr(module, "corrected_ticker", lambda *_: "SPY")
+    with pytest.raises(DataReadinessError, match="hash differs"):
+        module.materialize_investment_labels(root=tmp_path, request=request, request_sha256=digest, output=output)
+    assert not output.exists()

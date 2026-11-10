@@ -160,6 +160,65 @@ component checks passed: 180 tests in 7.12s, affected Ruff and strict mypy. No s
 or target admissions changed. Actual stopped-row snapshot/parity and the new full
 corpus/audit remain pending; this is not checkpoint closure or model approval.
 
+Bounded duplicate-comparison and checkpoint-reuse amendment - November 10:
+Actual immutable 0038663 full replay stopped after 606 complete security checkpoints
+on InvestmentTargetRequest's strict four-distinct-security validator. Exact retained
+roster/membership diagnosis identifies only EPAM, security
+sp500-historical:cad46f9f74cfa50a1233c0d9: 30 eligible months from December 31, 2021
+through May 28, 2024 use literal sector Information Technologies and sector benchmark
+SPY. The source builder's singular Information Technology lookup falls back to SPY;
+therefore the sector role repeats the separate SPY role. This affects 60 horizon
+requests. All 606 completed securities precede EPAM and their eligible role bindings
+are distinct. No frozen source, roster or request may be normalized to XLK.
+Senior Sol Quant and independent Sol code/design review approve a negative-only
+orchestration precheck after corrected_ticker: check all four required identities
+and symbols, emit an explicit unresolved comparison-binding reason with request and
+target null, keep roster_status eligible and every training/promotion/production flag
+false. Preserve the strict shared contract and core compiler/accounting/source bytes.
+Do not catch arbitrary ValueError or waive a benchmark requirement.
+
+Preserve and reuse the 606 original immutable checkpoints (71,508 exact horizon rows)
+through a typed, separately pinned parent receipt, not by copying or relabeling them.
+The receipt also binds consumer_implementation_export to the exact reviewed running
+immutable producer export, so an old receipt cannot authorize a future orchestrator.
+The receipt is an operational input in the new job identity/source pins; the frozen
+4ab29ba0... target request remains byte-identical. Bind original request, job, common
+source inventory, immutable producer and each checkpoint/labels hash and exact row
+sets. Verify original bytes, exact request and nonimplementation input equality,
+unchanged core compiler/accounting/source hashes, and distinct required bindings for
+every inherited eligible decision. Only reviewed orchestration/reuse/CLI files may
+differ; no unrecorded implementation compatibility registry or unbound assertion.
+Every inherited checkpoint keeps its original path, job, producer and verification
+clocks. The new final manifest discloses per-checkpoint origin and inherited/new
+counts; it must never claim the new producer generated old rows. Build only the 25
+remaining groups. Missing/corrupt/overlapping/extra/mismatched parent evidence or row
+sets refuse reuse without fallback recomputation or rewriting. Recheck all parent
+and new source pins at final publication. Keep the shared lease and RAM policy.
+
+Verification: distinct-role negative tests at both horizons, unchanged ordinary
+compiler behavior, no hidden source-tamper acceptance, exact row-set/source/request/
+producer/core-hash/clock poison tests, inherited byte preservation and explicit final
+origin accounting; affected consumers, Ruff/strict mypy, independent code review.
+Run actual receipt verification and completed-corpus replay through the canonical
+consumer under a new committed immutable producer. Extend independent auditing for
+explicit per-origin jobs without a global job-identity bypass. Preserve old audit
+helpers, frozen sample plan and prior-57 snapshot; any new helper must retain their
+arithmetic/selection checks and independently verify inherited lineage. Compare the
+original 3,540 stopped rows against their actual 0038663 origins, then audit all
+74,458 published rows and 57 prior examples. Full completion remains pending.
+The final implementation and independent lineage audit passed Sol code review.
+Focused component checks: 110 passed in 27.54s across labels/reuse/materialization/
+reader/targets/research; affected Ruff and strict mypy passed; git diff --check passed.
+Log: chat outputs/investment-label-reuse-checks-20261110e.log. Poison tests cover
+parent-directory disappearance without fallback, exact consumer export binding,
+static asset preservation/tampering, full rowsets, and CLI paired options. Full
+suite/model-release checks were not run for this component change. Actual parent
+receipt admission, final publication and the independent audit remain pending.
+New independent helper outputs/audit_lineage_full_investment_targets.py SHA256
+3bfd877ecba3077bc4874a119b0b4c3dbc6719dfbf1a2e40fd44d6f2720f3c94 preserves the
+original full-audit arithmetic/sample checks and adds explicit per-origin lineage.
+Original audit helpers, frozen sample plan and prior-57 snapshot remain unchanged.
+
 Ownership: Sol stock engineer owns stock_identity/source_extensions and tests;
 Sol distribution engineer owns dividend_resolution/research investment_currencies
 and tests; root owns integration, materializer, command surfaces and continuity.

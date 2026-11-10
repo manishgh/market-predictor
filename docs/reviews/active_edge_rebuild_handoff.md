@@ -3,6 +3,20 @@
 ## Active stock identity and full-target checkpoint — November 9
 
 The leading active plan freezes the authorized implementation and exit gates.
+
+Current operational state, November 10 08:38 UTC: immutable 0038663 run exited 2
+after 606 complete checkpoints (71,508 rows); actual worker 60112 and native session
+57668 are finished, lease released. No final corpus exists. Exact failure is strict
+duplicate comparison identity: EPAM's 30 eligible months bind sector benchmark SPY,
+duplicating the separate SPY role. Quant and code/design review approved the bounded
+negative precheck and explicit immutable checkpoint inheritance now frozen in the
+active plan. Do not restart the old run, rewrite the frozen 4ab request, substitute
+XLK, alter old checkpoint jobs/clocks, or silently copy them under a new producer.
+Engineer owns production reuse/precheck and tests; Quant owns independent lineage
+auditing; root owns receipt creation, integration, publication and docs. No new
+implementation or successful full target publication is claimed yet. The following
+run-start record and earlier partial attempts remain historical evidence.
+
 Current implementation 003866346f374ef30a680374266c1a442c488883 is committed and
 pushed on main. Its immutable export contains 457 source files under
  data/research/implementation_snapshots/003866346f374ef30a680374266c1a442c488883/src.
