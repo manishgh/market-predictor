@@ -1,4 +1,17 @@
 # Active Edge Rebuild Handoff
+## Active forecast bias and financial handling experiment November 10
+
+Canonical main starts clean at a505f94. The leading plan freezes a user-authorized
+12-new-XGBoost-fit comparison using the existing 215-column dataset, training-only
+financial clipping/native missing values and a fixed score-only centering/half-shrink
+rule. Independent Sol design and senior Quant review approve it. Metadata feasibility
+rules out learned calibration for the earliest annual fold without weakening history.
+Root owns score adjustment and tests/docs; Sol engineer owns shared opt-in encoder,
+orchestration/CLI and tests. No implementation or fits have started at this freeze.
+Next: implement the exact consumer contracts, pass component checks/review, update
+feature acceptance, commit/export main, fit 12 models, independently replay/evaluate.
+No data reconstruction, exclusions, old/final refits, parameter search or V1/beta.
+
 ## Completed news and financial feature comparison November 10
 
 Implementation 433d6d43e32b6448c52257dc717f24e6a37c0b07 is committed and pushed on

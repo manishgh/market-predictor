@@ -1,4 +1,19 @@
 # Current Feature Engineering Audit
+### Forecast adjustment and financial handling November 10
+
+The source/data/availability contract remains the accepted 215-column dataset.
+Only the model's six financial-column encoding and a score-only batch rule change.
+
+| Component | Source and historical values | Ordered consumer | Training/evaluation | Live/API |
+| --- | --- | --- | --- | --- |
+| 209 technical/news columns | Verified retained values/clocks, unchanged | Pending exact original 418 encoded-value/indicator parity | Pending default-consumer regression | Not applicable: retrospective comparison |
+| Six clipped/native-missing financial columns | Verified retained values/clocks, raw NaNs unchanged | Pending train-only p01/p99 and 424-column contract checks | Pending actual 12-model fits and independent replay | Not applicable: no live transformation release |
+| Centered and halved forecasts | Existing saved or new verified raw forecasts | Pending full eligible date/scope roster and outcome-poison tests | Pending exact derived-score/metric audit | Not applicable: requires full batch, no API work |
+
+No fitting begins until these consumer checks and independent design/code review
+pass. No source or original artifact is rewritten. The planned zero forecast mean
+is over all feature-eligible stocks, including unknown outcomes, not the known subset.
+
 ### News and financial comparison views November 10
 
 The user authorizes two projections of the admitted215-column matrix. No new source,

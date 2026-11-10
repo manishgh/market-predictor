@@ -1,4 +1,86 @@
 # Active Edge Rebuild Plan
+### Forecast bias and financial input handling November 10
+
+Status: `in_progress`. The user authorizes fixing excessive positive forecasts and
+financial feature handling, using Sol agents and independent senior Quant review,
+retained data and canonical main. V1/beta remains deferred until model improvement.
+
+Problem: the completed comparison shows financial inputs increase annual XGBoost
+MSE/MAE in every year and scope. Forecast means are positive on a cohort whose known
+outcomes have negative SPY excess. Training cash-conversion values reach 2,925,
+versus training p99 values around 13.88–34.37 across the frozen outer partitions.
+The smallest hypothesis is that conservative forecast magnitude and explicit
+handling of financial tails/missing values can reduce error without replacing data.
+
+Freeze exactly 12 new shallow XGBoost validation fits: two horizons (252/63),
+two scopes (temporal/security transfer), three score years (2022/2023/2024).
+Use all original 215 inputs, preserving the 209 technical/news values, exact feature
+order, source clocks, data/admission, labels/costs, equal-date weights, original outer
+folds, 21-XNYS-session maturity embargo, fixed XGBoost parameters and seed. Reuse
+36 existing XGBoost validation units for 124 technical, 209 technical/news and 215
+full views. No Ridge fits, old model refits, final models, source rebuilds or downloads.
+
+Financial handling: learn unweighted finite-value p01/p99 bounds using NumPy's
+linear quantile method on each exact outer training partition only. Clip finite
+values to those persisted bounds. Preserve NaNs and use XGBoost's native missing
+branches for the six financial inputs, without median imputation or extra financial
+missing indicators. If a training column has zero finite values, encode it as NaN
+for all train/score rows and persist its disabled state; raw data stays unchanged.
+Constant supported columns remain constant. The model consumes a contiguous float32
+matrix ordered as 209 original nonfinancial values, 209 original missing indicators,
+then six clipped native-missing financial columns: exactly 424 columns. Reuse the
+canonical encoder/estimator through one explicit default-off opt-in; old fitting,
+serialized objects and prediction behavior must remain unchanged.
+
+Forecast rule: for each declared horizon/date/scope roster, set adjusted prediction
+to 0.5 * (raw prediction - arithmetic mean of all feature-eligible raw predictions).
+The factor is a fixed equal blend with zero excess, not a tuned or estimated slope.
+No labels, outcome masks or selected-stock subset enter the mean. Preserve every
+unscored NaN and unknown outcome; use the complete simultaneous eligible roster.
+The assumption is zero average excess for that roster, not a zero mean error on
+known outcomes. The rule preserves within-date ordering; it does not create ranking
+signal. It requires batch scoring and is not admitted as a single-stock live API.
+
+No learned calibration: metadata-only feasibility confirms annual 2022 has only
+17 outer training months. Reserving its latest three dates leaves one purged inner
+training month (61 temporal/56 transfer rows), below the existing 12-month/100-row
+minimum. Later annual inner windows have 13/25 months and quarterly 20/32/44, but
+we do not omit 2022, relax maturity rules, or substitute a fallback for that fold.
+The fixed rule uses no learned calibration sample in any fold.
+
+Publish six main views: saved 209, saved raw 215, and new
+`clipped_financial_native_missing`, each raw and `centered_shrunk`. Publish raw 124
+as an additional benchmark: 84 unit diagnostics and 28 horizon/scope aggregates.
+Keep original fit clocks for reused scores, separate actual derived-score generation
+clocks, exact source/model/Parquet/experiment pins, and persisted raw/adjusted forecasts.
+All rows/masks/outcomes must match across views before canonical loss/ranking/cohort
+metrics and prediction diagnostics run. Do not average folds equally; preserve the
+canonical equal-date aggregate and incomplete-cohort refusal.
+
+Primary candidate is fixed BEFORE results: new clipped/native-missing full XGBoost
+with centered/shrunk forecasts. In EACH annual scope, both MSE and MAE must be
+strictly below zero excess, raw 124, raw 209, adjusted 209, and adjusted original 215.
+Also require lower absolute equal-date known-row mean error than its own raw output;
+report comparison with original raw 215 separately. Report annual both-scope pass,
+every individual benchmark, year consistency, quarterly diagnostics and unknown
+outcomes even when unfavorable. Reduced error versus one control is not benchmark
+success. No automatic model selection, promotion, portfolio claim or API change.
+All inspected periods are development evidence, never an untouched final test.
+
+Ownership: root score-only adjustment function/tests and continuity documents;
+Sol engineer shared opt-in encoding/persistence, orchestrator, CLI and tests;
+independent Sol design/code reviewer; independent senior Sol Quant design and actual
+12-model preprocessing/prediction replay plus adjusted-score/metric/benchmark audit.
+Design and actual fold support approved before implementation. Feature acceptance
+must be updated before fitting. Verification is a component checkpoint: targeted
+future/outcome poison, train-only bounds, NaN/empty/constant tails, exact order,
+legacy-default serialization/prediction parity, altered-source refusal, actual clocks,
+matched unknown outcomes and cohort invariance; affected consumer tests, Ruff,
+strict mypy, committed immutable export, actual 12 fits and independent replay.
+One normal shared heavy-job lease; system RAM strictly below 90%, existing process
+limits and bounded pause unchanged. Failures prevent completed publication.
+Exit: measured results and limits documented, main committed/pushed, own workers gone.
+
 ### Separate news and financial feature effects November 10
 
 Status: `complete` for the measured feature-group comparison. The user authorized
