@@ -6,26 +6,56 @@ Only the model's six financial-column encoding and a score-only batch rule chang
 
 | Component | Source and historical values | Ordered consumer | Training/evaluation | Live/API |
 | --- | --- | --- | --- | --- |
-| 209 technical/news columns | Verified retained values/clocks, unchanged | Verified exact original 418 value/indicator parity | Verified default-consumer regression; actual new run pending | Not applicable: retrospective comparison |
-| Six clipped/native-missing financial columns | Verified retained values/clocks, raw NaNs unchanged | Verified train-only bounds, empty/constant/missing state and 424-column order | Component checks verified; actual fits and independent replay pending | Not applicable: no live transformation release |
-| Centered and halved forecasts | Existing saved or new verified raw forecasts | Verified full eligible roster, outcome independence and float64 centering | Component checks verified; actual derived-score audit pending | Not applicable: requires full batch, no API work |
+| 209 technical/news columns | Verified retained values/clocks, unchanged | Verified exact original 418 value/indicator parity | Verified original encoding, default-model regression and actual retained-data consumers | Not applicable: retrospective comparison |
+| Six clipped/native-missing financial columns | Verified retained values/clocks, raw NaNs unchanged | Verified train-only bounds, empty/constant/missing state and 424-column order | Verified 12 actual fits and independent preprocessing/model replay | Not applicable: no live transformation release |
+| Centered and halved forecasts | Existing saved or new verified raw forecasts | Verified full eligible roster, outcome independence and float64 centering | Verified 36 actual derived artifacts, unchanged rankings/cohorts and independent metrics | Not applicable: requires full batch, no API work |
 
 No fitting begins until these consumer checks and independent design/code review
 pass. No source or original artifact is rewritten. The planned zero forecast mean
 is over all feature-eligible stocks, including unknown outcomes, not the known subset.
 
-Pre-fit component gates passed: 139 focused tests, affected Ruff/strict mypy,
-independent consolidated Sol code review and senior Quant design review. Root's
-score-only poison/precision tests and old default estimator/persistence regressions
-are included. Actual 12-model execution and independent replay remain pending.
-Immutable request: data/research/investment_forecast_adjustment_20261110/inputs/request.json
-SHA256 f95f255470455201b3c11de11a3e964449a55ec9362e9314f3dee23b078af40e.
-Metadata preflight: chat outputs/investment-forecast-adjustment-projected-preflight-20261110.log,
-SHA256 e1d48085c6376653166368066d07d57049619d007aafe12dffbaf234119f6045.
-Its helper SHA256 is 9ef1900a485b4f47f4826061f14a8dd45045b8b3f2f5d547d10375d3542b9f41;
-all 74,458 metadata rows and 61 consumed source digests were rechecked unchanged.
-The independent post-fit helper is reviewed, SHA256
-e2e2b8d74ed359acabb07e3a00e55a518093d01121057e5466ba8fda6c591fb5.
+Implementation 0de4474169f2fc3cf1552e99c16afdad7d2cefa0 is committed and pushed
+on canonical main; its immutable export contains 468 source files. The actual run
+completed at 2026-11-10T22:52:48.004934+00:00. Exactly 12 new XGBoost validation models
+were fitted and 36 old validation units reused. Published 36 adjusted forecast
+artifacts, 84 unit diagnostics and 28 aggregate diagnostics. No final model,
+source rebuild, download, stock exclusion, selection or serving change occurred.
+
+The 139 distinct focused tests passed after correcting missing training-lineage
+fields in a synthetic reference fixture (138 passed initially; all 8 affected
+publication cases passed the targeted rerun). The production checks were unchanged.
+Affected Ruff (10 Python files), strict mypy (6 sources), whitespace checks and
+independent consolidated Sol code review passed. Actual request/experiment/settings
+and 36 saved unit manifests passed a metadata-only smoke check against 44 real pins.
+Component tier: affected estimator, adjustment, publication, shared reader, training
+and research tests plus actual data execution and independent replay. The repository
+full suite and API checks were not run because this is not a release or promotion.
+
+Actual report: data/research/investment_forecast_adjustment_20261110/adjustment_0de4474/_manifest.json
+SHA256 24c1bfb28e35f522cdefbc62435074f80c030dadef44db61b04c989582f506b1.
+Request SHA256 f95f255470455201b3c11de11a3e964449a55ec9362e9314f3dee23b078af40e.
+Independent senior Quant audit: chat outputs/investment-forecast-adjustment-independent-audit-20261110.json
+SHA256 6cf4bdc77c57363d6783b23bafdad12f4bf2a5394ad7acc015c35bf836cae968; completed 2026-11-10T22:55:14.097463+00:00.
+All 12 new models replay exactly, with independently reconstructed 209 train-only
+medians, six finite-training clipping bounds and the ordered 424-column encoding.
+All 36 adjusted forecasts, within-date ranks/ties/cohorts, 84 unit and 28 aggregate
+diagnostics and frozen improvement checks pass. Maximum raw forecast replay error
+is zero; maximum independently computed adjustment difference is
+0. All 2,642 independently
+checked file hashes remain unchanged before/after. Original audit/model/source evidence is reused.
+
+Verification logs (chat outputs): component-checks-20261110 SHA256
+d00ce1649e0edd271a6cc8c9d3707f80b92e1aa3ff8aa3fa90fdb7805754677f;
+publication-checks-20261110 SHA256
+22f9d199b4ab09e431fefa6c90bd474006fe9ecd3754b90b42fd9bebbccdd1803;
+final-static-smoke-20261110b SHA256
+20402a67d4bac0fccabbc3f5aa688f81673099ea40d78f570b5a14a3797fc19f.
+Each filename has the prefix investment-forecast-adjustment- and suffix .log.
+
+The new financial encoding and forecast adjustment have completed their retrospective
+source-to-model-to-evaluation checks. This verifies consumer behavior, not live/API
+acceptance or investment profitability. The leading active plan records the measured
+candidate comparisons and their limitations. Original data and admission flags remain.
 
 ### News and financial comparison views November 10
 

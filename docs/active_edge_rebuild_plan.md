@@ -1,7 +1,7 @@
 # Active Edge Rebuild Plan
 ### Forecast bias and financial input handling November 10
 
-Status: `in_progress`. The user authorizes fixing excessive positive forecasts and
+Status: `complete` for the measured forecast/financial experiment. The user authorized fixing forecasts and
 financial feature handling, using Sol agents and independent senior Quant review,
 retained data and canonical main. V1/beta remains deferred until model improvement.
 
@@ -81,18 +81,122 @@ One normal shared heavy-job lease; system RAM strictly below 90%, existing proce
 limits and bounded pause unchanged. Failures prevent completed publication.
 Exit: measured results and limits documented, main committed/pushed, own workers gone.
 
-Pre-fit component gates passed: 139 focused tests, affected Ruff/strict mypy,
-independent consolidated Sol code review and senior Quant design review. Root's
-score-only poison/precision tests and old default estimator/persistence regressions
-are included. Actual 12-model execution and independent replay remain pending.
-Immutable request: data/research/investment_forecast_adjustment_20261110/inputs/request.json
-SHA256 f95f255470455201b3c11de11a3e964449a55ec9362e9314f3dee23b078af40e.
-Metadata preflight: chat outputs/investment-forecast-adjustment-projected-preflight-20261110.log,
-SHA256 e1d48085c6376653166368066d07d57049619d007aafe12dffbaf234119f6045.
-Its helper SHA256 is 9ef1900a485b4f47f4826061f14a8dd45045b8b3f2f5d547d10375d3542b9f41;
-all 74,458 metadata rows and 61 consumed source digests were rechecked unchanged.
-The independent post-fit helper is reviewed, SHA256
-e2e2b8d74ed359acabb07e3a00e55a518093d01121057e5466ba8fda6c591fb5.
+Implementation 0de4474169f2fc3cf1552e99c16afdad7d2cefa0 is committed and pushed
+on canonical main; its immutable export contains 468 source files. The actual run
+completed at 2026-11-10T22:52:48.004934+00:00. Exactly 12 new XGBoost validation models
+were fitted and 36 old validation units reused. Published 36 adjusted forecast
+artifacts, 84 unit diagnostics and 28 aggregate diagnostics. No final model,
+source rebuild, download, stock exclusion, selection or serving change occurred.
+
+The 139 distinct focused tests passed after correcting missing training-lineage
+fields in a synthetic reference fixture (138 passed initially; all 8 affected
+publication cases passed the targeted rerun). The production checks were unchanged.
+Affected Ruff (10 Python files), strict mypy (6 sources), whitespace checks and
+independent consolidated Sol code review passed. Actual request/experiment/settings
+and 36 saved unit manifests passed a metadata-only smoke check against 44 real pins.
+Component tier: affected estimator, adjustment, publication, shared reader, training
+and research tests plus actual data execution and independent replay. The repository
+full suite and API checks were not run because this is not a release or promotion.
+
+Actual report: data/research/investment_forecast_adjustment_20261110/adjustment_0de4474/_manifest.json
+SHA256 24c1bfb28e35f522cdefbc62435074f80c030dadef44db61b04c989582f506b1.
+Request SHA256 f95f255470455201b3c11de11a3e964449a55ec9362e9314f3dee23b078af40e.
+Independent senior Quant audit: chat outputs/investment-forecast-adjustment-independent-audit-20261110.json
+SHA256 6cf4bdc77c57363d6783b23bafdad12f4bf2a5394ad7acc015c35bf836cae968; completed 2026-11-10T22:55:14.097463+00:00.
+All 12 new models replay exactly, with independently reconstructed 209 train-only
+medians, six finite-training clipping bounds and the ordered 424-column encoding.
+All 36 adjusted forecasts, within-date ranks/ties/cohorts, 84 unit and 28 aggregate
+diagnostics and frozen improvement checks pass. Maximum raw forecast replay error
+is zero; maximum independently computed adjustment difference is
+0. All 2,642 independently
+checked file hashes remain unchanged before/after. Original audit/model/source evidence is reused.
+
+Verification logs (chat outputs): component-checks-20261110 SHA256
+d00ce1649e0edd271a6cc8c9d3707f80b92e1aa3ff8aa3fa90fdb7805754677f;
+publication-checks-20261110 SHA256
+22f9d199b4ab09e431fefa6c90bd474006fe9ecd3754b90b42fd9bebbccdd1803;
+final-static-smoke-20261110b SHA256
+20402a67d4bac0fccabbc3f5aa688f81673099ea40d78f570b5a14a3797fc19f.
+Each filename has the prefix investment-forecast-adjustment- and suffix .log.
+
+| Annual temporal view | MSE above zero excess | MAE above zero excess | Mean error (pp) | Within-date AUC |
+| --- | ---: | ---: | ---: | ---: |
+| Technical, raw | +27.808% | +12.934% | +13.689 | 0.55543 |
+| Technical + news, raw | +28.054% | +13.216% | +13.765 | 0.55848 |
+| Technical + news, adjusted | +0.827% | -0.051% | +7.110 | 0.55848 |
+| Original full, raw | +33.806% | +16.644% | +14.612 | 0.54964 |
+| Original full, adjusted | +1.679% | +0.446% | +7.244 | 0.54964 |
+| New financial handling, raw | +34.983% | +17.155% | +14.844 | 0.55271 |
+| New financial handling, adjusted | +1.653% | +0.491% | +7.275 | 0.55271 |
+
+Negative error differences mean lower forecast loss than zero excess; these are
+not portfolio gains or losses. Mean error uses known outcomes with equal-date weights.
+
+Measured outcome: the fixed forecast adjustment substantially reduces annual
+forecast error and optimism. The financial clipping/native-missing hypothesis does
+not show a consistent incremental gain. The preselected candidate fails the full
+improvement gate in both annual scopes and both quarterly scopes, and in all twelve
+year/scope/horizon cells. No model is selected or promoted.
+
+Relative to the original full raw XGBoost model, the new adjusted candidate reduces
+annual temporal MSE by 24.030% and MAE by 13.848%; annual held-out-security MSE falls
+31.140% and MAE 16.781%. Its annual temporal MSE is nevertheless 1.653% above zero
+excess and MAE 0.491% above; transfer remains 7.846% and 3.010% above respectively.
+The gains are lower prediction error, not investment returns or proof of SPY
+outperformance. All 28 aggregate MSEs remain above zero excess. One adjusted news
+control has slightly lower annual temporal MAE, but does not pass the MSE comparison.
+
+Most of the improvement is already obtained by applying the fixed score rule to
+the old full model. On annual temporal data that old adjusted control has MSE
+1.679% above zero and MAE 0.446% above. Relative to this identically adjusted control,
+the new financial handling lowers temporal MSE by only 0.0259% while raising MAE
+0.0452%; on held-out stocks it raises MSE 0.5588% and MAE 0.1067%. With no adjustment,
+the new financial handling raises both annual errors in both scopes. Thus the
+clipped/native option is implemented and independently verified, but it is not
+established as a superior financial representation and does not replace defaults.
+
+The adjusted technical/news control also beats the preselected adjusted candidate
+on both annual errors in both scopes. Its annual temporal MSE is still 0.827% above
+zero, while MAE is 0.051% below zero. This control is not a post-hoc promoted winner.
+The next hypothesis must be frozen before additional results or parameter choices.
+
+On the annual temporal known-outcome population, the original full mean prediction
+is +7.499% net SPY excess versus the observed equal-date mean of -7.113%. The new
+raw model predicts +7.731%; its adjusted output predicts +0.162%, reducing its own
+mean error from +14.844 to +7.275 percentage points. The corresponding held-out-stock
+mean error falls from +19.834 to +12.108 points. The full eligible-roster forecast
+mean is zero by construction; the known-outcome subset need not have zero mean.
+Annual MSE, MAE and absolute bias improve relative to the candidate's own raw
+output in every score year and both scopes, but residual bias remains substantial.
+
+Quarterly candidate MSE/MAE remain above zero by 0.634%/0.556% temporal and
+1.506%/1.041% transfer. The new financial treatment worsens both errors relative to
+the adjusted old full model temporally, while improving them only slightly on
+transfer. The fixed adjustment does not consistently reduce quarterly year-level
+bias: it increases absolute bias in 2022 and 2024 in both scopes. In 2024 it also
+slightly increases both quarterly temporal errors and quarterly transfer MAE.
+
+Within-date ranking and selected cohorts are unchanged by centering/halving. The
+new financial fit changes annual AUC from 0.54964 to 0.55271 temporal and 0.51869 to
+0.52607 transfer, but quarterly AUC falls from 0.51107 to 0.50336 temporal and from
+0.48510 to 0.48323 transfer. This is not a consistent improvement in stock selection.
+Do not describe lower forecast magnitude as newly learned ranking signal.
+
+All original stocks, rows, feature values, availability clocks and outcome masks
+remain. Each annual temporal view scores 11,091 rows on 29 dates, with 7,126 known
+and 3,965 unknown outcomes; transfer has 2,100 scored, 1,285 known and 815 unknown.
+Quarterly known/unknown counts are 7,862/3,229 temporal and 1,425/675 transfer.
+All fourteen temporal view/horizon combinations have zero complete selected
+top-decile cohorts out of 29 dates. The annual candidate has 2/29 complete transfer
+cohorts, insufficient for the full-period selected-cohort return. Unknown selected
+outcomes are retained, and no complete economic performance is claimed.
+
+The score-rule bias reduction is useful development evidence, but return estimation
+and transferable ranking remain insufficient. Next research should target learned
+benchmark-relative signal and stable financial contribution; do not tune the fixed
+shrink factor or select thresholds from these inspected outer periods. Future work
+must keep a separately frozen comparison and prospective confirmation. V1/beta
+remains deferred until model improvement meets the required checks.
 
 ### Separate news and financial feature effects November 10
 

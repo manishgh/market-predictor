@@ -1,30 +1,90 @@
 # Active Edge Rebuild Handoff
-## Active forecast bias and financial handling experiment November 10
+## Completed forecast bias and financial handling experiment November 10
 
-Canonical main starts clean at a505f94. The leading plan freezes a user-authorized
-12-new-XGBoost-fit comparison using the existing 215-column dataset, training-only
-financial clipping/native missing values and a fixed score-only centering/half-shrink
-rule. Independent Sol design and senior Quant review approve it. Metadata feasibility
-rules out learned calibration for the earliest annual fold without weakening history.
-Root owns score adjustment and tests/docs; Sol engineer owns shared opt-in encoder,
-orchestration/CLI and tests. Implementation passed 139 focused tests, Ruff/strict
-mypy and consolidated code review; the retained request and preflight pins follow.
-Next: commit/export reviewed main, run exactly 12 new models, independently replay
-and evaluate against all frozen controls before claiming improvement.
-No data reconstruction, exclusions, old/final refits, parameter search or V1/beta.
+Implementation 0de4474169f2fc3cf1552e99c16afdad7d2cefa0 is committed and pushed
+on canonical main; its immutable export contains 468 source files. The actual run
+completed at 2026-11-10T22:52:48.004934+00:00. Exactly 12 new XGBoost validation models
+were fitted and 36 old validation units reused. Published 36 adjusted forecast
+artifacts, 84 unit diagnostics and 28 aggregate diagnostics. No final model,
+source rebuild, download, stock exclusion, selection or serving change occurred.
 
-Pre-fit component gates passed: 139 focused tests, affected Ruff/strict mypy,
-independent consolidated Sol code review and senior Quant design review. Root's
-score-only poison/precision tests and old default estimator/persistence regressions
-are included. Actual 12-model execution and independent replay remain pending.
-Immutable request: data/research/investment_forecast_adjustment_20261110/inputs/request.json
-SHA256 f95f255470455201b3c11de11a3e964449a55ec9362e9314f3dee23b078af40e.
-Metadata preflight: chat outputs/investment-forecast-adjustment-projected-preflight-20261110.log,
-SHA256 e1d48085c6376653166368066d07d57049619d007aafe12dffbaf234119f6045.
-Its helper SHA256 is 9ef1900a485b4f47f4826061f14a8dd45045b8b3f2f5d547d10375d3542b9f41;
-all 74,458 metadata rows and 61 consumed source digests were rechecked unchanged.
-The independent post-fit helper is reviewed, SHA256
-e2e2b8d74ed359acabb07e3a00e55a518093d01121057e5466ba8fda6c591fb5.
+The 139 distinct focused tests passed after correcting missing training-lineage
+fields in a synthetic reference fixture (138 passed initially; all 8 affected
+publication cases passed the targeted rerun). The production checks were unchanged.
+Affected Ruff (10 Python files), strict mypy (6 sources), whitespace checks and
+independent consolidated Sol code review passed. Actual request/experiment/settings
+and 36 saved unit manifests passed a metadata-only smoke check against 44 real pins.
+Component tier: affected estimator, adjustment, publication, shared reader, training
+and research tests plus actual data execution and independent replay. The repository
+full suite and API checks were not run because this is not a release or promotion.
+
+Actual report: data/research/investment_forecast_adjustment_20261110/adjustment_0de4474/_manifest.json
+SHA256 24c1bfb28e35f522cdefbc62435074f80c030dadef44db61b04c989582f506b1.
+Request SHA256 f95f255470455201b3c11de11a3e964449a55ec9362e9314f3dee23b078af40e.
+Independent senior Quant audit: chat outputs/investment-forecast-adjustment-independent-audit-20261110.json
+SHA256 6cf4bdc77c57363d6783b23bafdad12f4bf2a5394ad7acc015c35bf836cae968; completed 2026-11-10T22:55:14.097463+00:00.
+All 12 new models replay exactly, with independently reconstructed 209 train-only
+medians, six finite-training clipping bounds and the ordered 424-column encoding.
+All 36 adjusted forecasts, within-date ranks/ties/cohorts, 84 unit and 28 aggregate
+diagnostics and frozen improvement checks pass. Maximum raw forecast replay error
+is zero; maximum independently computed adjustment difference is
+0. All 2,642 independently
+checked file hashes remain unchanged before/after. Original audit/model/source evidence is reused.
+
+Verification logs (chat outputs): component-checks-20261110 SHA256
+d00ce1649e0edd271a6cc8c9d3707f80b92e1aa3ff8aa3fa90fdb7805754677f;
+publication-checks-20261110 SHA256
+22f9d199b4ab09e431fefa6c90bd474006fe9ecd3754b90b42fd9bebbccdd1803;
+final-static-smoke-20261110b SHA256
+20402a67d4bac0fccabbc3f5aa688f81673099ea40d78f570b5a14a3797fc19f.
+Each filename has the prefix investment-forecast-adjustment- and suffix .log.
+
+| Annual temporal view | MSE above zero excess | MAE above zero excess | Mean error (pp) | Within-date AUC |
+| --- | ---: | ---: | ---: | ---: |
+| Technical, raw | +27.808% | +12.934% | +13.689 | 0.55543 |
+| Technical + news, raw | +28.054% | +13.216% | +13.765 | 0.55848 |
+| Technical + news, adjusted | +0.827% | -0.051% | +7.110 | 0.55848 |
+| Original full, raw | +33.806% | +16.644% | +14.612 | 0.54964 |
+| Original full, adjusted | +1.679% | +0.446% | +7.244 | 0.54964 |
+| New financial handling, raw | +34.983% | +17.155% | +14.844 | 0.55271 |
+| New financial handling, adjusted | +1.653% | +0.491% | +7.275 | 0.55271 |
+
+Negative error differences mean lower forecast loss than zero excess; these are
+not portfolio gains or losses. Mean error uses known outcomes with equal-date weights.
+
+Measured decision: forecast adjustment reduces annual temporal MSE/MAE by
+24.030%/13.848% versus the original full raw model, and transfer by 31.140%/16.781%.
+The financial handling change adds no consistent gain beyond applying the same
+adjustment to the old model. Candidate annual MSE/MAE remain above zero by
+1.653%/0.491% temporal and 7.846%/3.010% transfer; it loses to adjusted technical/news
+in both errors and scopes. All four aggregate and twelve year-level gates fail.
+Financial clipping/native missing values remain an optional research path, not a
+replacement default. No candidate is selected or promoted. The leading plan records
+year-level caveats, quarterly regressions, exact denominators and ranking evidence.
+
+Verification commands ran under the normal shared lease and memory guard:
+- pytest -q tests/test_investment_forecast_adjustment_publication.py
+  tests/test_investment_forecast_adjustment.py tests/test_swing_return_estimators.py
+  tests/test_investment_diagnostics_publication.py tests/test_investment_feature_ablation_publication.py
+  tests/test_investment_training.py tests/test_investment_research.py.
+- After the synthetic lineage fixture correction, rerun the forecast-adjustment
+  and feature-ablation publication files: 8 passed. All 139 distinct cases now pass.
+- python -m ruff check on all ten changed Python files in implementation 0de4474.
+- python -m mypy --strict --follow-imports=silent on investment/forecast_adjustment.py,
+  swing/training/return_estimators.py, research/investment_training.py,
+  research/investment_diagnostics.py, research/investment_forecast_adjustment.py and
+  commands/investment_research.py, all under src/market_predictor: six sources pass.
+- git diff --check passed; metadata-only actual-source smoke checked 44 pins.
+The final type-check fix was a variable annotation only, with no runtime change.
+
+Next research must target predictive signal and stable financial contribution under
+a newly frozen protocol. Do not tune this fixed shrinkage on inspected outer outcomes
+or reinterpret lower forecast magnitude as stronger stock selection. All 14 temporal
+view/horizon combinations have 0/29 complete top-decile cohorts; no full-period
+investment-return claim is available. V1/beta remains after demonstrated model quality.
+
+No test, fit or audit worker from this checkpoint remains active. V1/beta stays
+deferred; no model was selected, promoted or admitted for live predictions.
 
 ## Completed news and financial feature comparison November 10
 
