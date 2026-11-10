@@ -1,289 +1,135 @@
 # Active Edge Rebuild Handoff
 
-## Active stock identity and full-target checkpoint — November 9
+## Completed stock identity and full investment targets - November 10
 
-The leading active plan freezes the authorized implementation and exit gates.
+Canonical checkout remains C:/project/market-predictor on main. Implementation
+0a1ca7daf924e900ac0947e6169678e93d27c41e is committed and pushed. Its immutable
+export contains 458 source files under data/research/implementation_snapshots.
+Chat outputs referenced below are rooted at
+C:/Users/manis/Documents/Codex/2026-11-05/c-project-market-predictor/outputs.
+Both full-target and supplemental-audit workers exited successfully; the shared
+heavy-job lease is released.
+No model fit, training-dataset admission, promotion or activation occurred in this
+checkpoint. All training/promotion/production flags remain false.
 
-Current operation, November 10 09:10 UTC: implementation
-0a1ca7daf924e900ac0947e6169678e93d27c41e is committed/pushed on main and exported
-immutably with 458 source files under data/research/implementation_snapshots.
-Reviewed continuation is running through the canonical CLI, native session 64603,
-actual worker PID 63108 (35264 is its Windows venv launcher), output
- data/research/investment_full_targets_20261109/corpus_0a1ca7d
-and chat log outputs/full-investment-targets-0a1ca7d-20261110.log.
-It uses the unchanged request 4ab29ba0... and the separately pinned receipt
+The full canonical build completed successfully at 2026-11-10T10:19:40.270896+00:00:
+ data/research/investment_full_targets_20261109/corpus_0a1ca7d/final/_manifest.json
+SHA256 9b70c348ab17738f5874d42c51bff6af386d94061ef383385bdd6ead5bcad4c3.
+It contains 37,229 monthly decisions and exactly 74,458 decision/horizon rows across
+631 securities. Of 44,692 in-scope horizon requests, 27,189 are source-validated and
+17,503 remain unresolved. A further 29,766 rows are explicitly outside scope.
+For 63 sessions: 14,348 validated and 7,998 in-scope unresolved, out of 22,346.
+For 252 sessions: 12,841 validated and 9,505 in-scope unresolved, out of 22,346.
+All rows' economic outcome dates have matured; that alone does not validate their
+sources. The frozen evaluation_as_of is November 9 22:38:19.059766 UTC, before current
+verification, so currently_available_rows at that old cutoff is zero. Availability
+by actual completion is 14,348/12,841. Never backdate reconstruction clocks.
+
+Independent Senior Sol Quant audit: audit_passed_with_explicit_unavailable_strata.
+All 74,458 row identities/counts and 631 origin records checked; all 71,508 inherited
+rows retain their original checkpoint bytes, job and producer. All 57 prior target
+examples match numerically and their 70 files remain unchanged. Cleanup comparison
+passes all 3,540 original rows against their actual 0038663 origin, with original
+capture clocks preserved. Independent raw four-holding arithmetic covers
+5 metadata-selected rows. The original first-12 lists had no usable
+case for these five strata: stock_split:63, stock_split:252, stock_ordinary_cash:63, stock_ordinary_cash:252, entry_exdate:252. That primary result remains unchanged.
+Audit: chat outputs/investment-full-lineage-independent-audit-0a1ca7d-20261110.json
+SHA256 7b9ffe57a5b97c27b01c26c6a319eec39ffe39723dc3f0e2d4260387cb590cbe.
+Helper: outputs/audit_lineage_full_investment_targets.py SHA256 3bfd877ecba3077bc4874a119b0b4c3dbc6719dfbf1a2e40fd44d6f2720f3c94.
+
+The bounded supplemental audit covers all five originally unavailable strata using
+5 additional distinct rows and
+20 independent holding calculations. It selects
+the first source-validated candidate in each frozen metadata order after the original
+12-candidate prefix, never by return. Consumed source hashes were checked before and
+after arithmetic. No supplemental strata remain unavailable. This is a sampled
+arithmetic check, not a second numerical computation of every corpus row.
+Additional cases: COO November 30, 2023 (63-session split), COO February 28, 2023
+(252-session split), MCD November 29, 2019 (63-session ordinary cash), CI July 31,
+2019 (252-session ordinary cash), and SYY December 31, 2019 (252-session entry ex-date).
+These are decision dates. The audit inspected 314 checkpoint status maps and selected
+the first usable candidate after 73/300/1161/229/8 checks in those respective orders.
+Supplemental report: chat outputs/investment-supplemental-arithmetic-audit-20261110.json
+SHA256 28e6c89b45af7fa40d42f58fac03c3ac17557d1c6fbdc250714862d0a621bf1c.
+Frozen reserve: outputs/investment-supplemental-metadata-reserve-20261110.json SHA256 10674bcc1bd1570e9e10c2ee270ec67838a3375628a9168bca70faeb06061687.
+Execution helper: outputs/audit_investment_reserve_arithmetic_execution.py SHA256 0075d48a69684aaeaf8539c190e76d1c8e1689852bdc5fffc3283f4076c6ce73.
+
+The run used the unchanged full request
+ data/research/investment_full_targets_20261109/inputs/request.json
+SHA256 4ab29ba0552fa79e17721648999f3f130148f4393a58f0c3f3dca764ac8f45f1.
+It inherits 606 original checkpoints/71,508 rows and creates 25 new groups/2,950 rows.
+Inheritance is explicit, not a claim that the new producer recomputed old rows.
+Parent receipt:
  data/research/investment_full_targets_20261109/inputs/parent_0038663_receipt.json
 SHA256 9937afa3ca8a7c71181ee46ec171f9971371d24cbf43f7dd241eea445aa120e1.
-The actual inventory builder checked 606 original checkpoints and 71,508 exact
-rows, preserving their paths, bytes and clocks; 25 groups/2,950 rows remain for the
-new producer. This inventory is not yet canonical consumer admission: shared-source
-verification, receipt admission, final publication and independent audit are pending.
-Do not start another heavy job. Monitor this continuation through completion.
-Final code/design and independent helper reviews passed. Component verification:
-110 tests in 27.54s, affected Ruff/strict mypy and git diff --check passed. Log
-outputs/investment-label-reuse-checks-20261110e.log SHA256
+The receipt pins both exact producer exports, original job/common inventory and
+every parent manifest/row file. Full request, core/source hashes, distinct eligible
+bindings, exact rowsets and original clocks were verified. Missing/corrupt reuse
+fails without fallback or overwriting original paths. Final origins identify each
+checkpoint's original producer/job. Parent 0038663 remains preserved at corpus_0038663.
+
+EPAM's frozen sector Information Technologies maps to sector benchmark SPY,
+duplicating the separate SPY role. The 30 eligible months/60 horizon requests remain
+explicitly unresolved with required_comparison_security_or_symbol_not_distinct.
+No XLK substitution, source rewriting or shared distinctness waiver occurred.
+The original 631-identity population, 45 prior exclusions, 565 parent raw segments,
+swing end May 28, 2024 and investment outcome bound May 30, 2025 remain unchanged.
+No new whole-security exclusions or raw-data deletion occurred. Missing financial
+features did not filter targets.
+
+Source work retained:
+- Full stock dividend manifest data/research/investment_full_dividend_resolution_20261109/stock-resolution/_manifest.json
+  SHA256 daccbd252fbe6e5aab398e42532dc74db234cb8adeeb925194e5c603f3178579.
+  All 6,717 stock events accounted for: 4,241 source-validated, 2,476 unresolved.
+  With 257 unchanged benchmark assertions, total supported assertions are 4,498.
+  Currency manifest SHA256 2eacfde6fa37bd224b7638d89b2f5af0aed0f3cbb5e1e453936d377e1776f092.
+- Stock source audit data/research/investment_full_dividend_resolution_20261109/stock-source-audit.json
+  SHA256 224f9df7f971dde4e6e6c1b5d6e310851cfc1c2afa0e864fb8481fc6918cbed4.
+  The 2,476 event gaps: 722 missing original CUSIP, 635 absent selected class proof,
+  242 unsupported tax dates, 113 dated/multiple-class gaps, 314 unsupported ordinary
+  domestic terms, 375 absent exact payments, 45 conflicting payment versions and
+  30 gross-amount mismatches. These event counts are not distinct target-row counts.
+- Eleven stock capture batches cover 1,696 identity-years: 1,564 complete pairs
+  (one reused, 1,563 new), 132 source-gap years. No inferred dates or currencies.
+  Stock request SHA256 62751925a9b8a7c3396d6f0176ed32ea9aa39b4301e2b8ed55b6f59a269eeddf.
+- 391 candidate class proofs passed immutable source replay; current proof manifest
+  data/research/investment_stock_identity_classes_20261109/proofs.json SHA256
+  f80a960fe2b8738c33ebd2f5c60e9b627b047fb30514f4d486e4af65ef2d2c23.
+  Of 435 stock acquisition units, 350 have at least one admitted session and 98
+  remain partly or wholly quarantined (80 have observed bars). Thirteen units appear
+  in both groups: 337 are fully admitted, 13 partially admitted and 85 have no admitted
+  sessions. These are acquisition units, not distinct stocks or target rows.
+- All 44 benchmark-tail distributions passed independent source audit, extending
+  213 preserved assertions to 257. Benchmark manifest SHA256
+  cde7e4d1dc65fe9ec3459777ceea7b56aae05c3de751e9079fa2cd74125594c4.
+  Original two-correction bytes stay 9a44ec36d97259d526dad5f3420b57e91c15e514ee9105677cc4ce2ace4a47bc.
+  No new amount correction was introduced.
+
+Independent audit inputs remain frozen in chat outputs:
+- investment-prior57-snapshot-20261109.json: 24b857db092b1b3d6941b302984f1a41cae652d2ce5a64fdab6a94103aaec5bb.
+- investment-metadata-audit-plan-lifecycle-20261109.json: 38ac10591c19eae36698689f5774e41a86aa3df9ee2b488658184d0d3268dbaf.
+- cleanup-2ad6-stopped-snapshot-20261110.json: 39c23894f2827adc4a53e5f60ab7cb6f0cbd50e7b99a2a80ccb0258235792eca.
+- stopped-0038663-observation-20261110.json: 9db991980f5eaeb2093e0487ac4b4edf3011d066fa8809f781e489f3887af7d1.
+  Its 08:38:38.8615299Z observation is an upper bound on a failed worker, not a
+  successful publication timestamp. Original audit helpers remain hash-preserved.
+
+Verification and operational closure: final reuse/precheck component checks passed
+110 tests in 27.54s, affected Ruff and strict mypy, plus independent Sol code/design
+review. Log outputs/investment-label-reuse-checks-20261110e.log SHA256
 70dd9b78b87c881f260a688702bd4829b05a2fe1a8613403457e4a119a89ca91.
-Full suite, model fitting and release checks were not run for this component change.
+The earlier cleanup-only change passed 180 focused tests, Ruff/mypy and actual
+3,540-row parity. Default/per-security reclamation and every pressure poll remain;
+only monthly explicit cleanup is skipped. Every RAM measurement/refusal remains.
+The global ceiling is strictly below 90%, process budget 5 GiB with 0.75 GiB headroom,
+and one shared heavy-job lease. Full suite/model release checks were not run for
+these component changes. Actual continuation log: outputs/full-investment-targets-0a1ca7d-20261110.log.
 
-After successful publication and lease release, Senior Quant runs the new independent
-outputs/audit_lineage_full_investment_targets.py (no subcommand), SHA256
-3bfd877ecba3077bc4874a119b0b4c3dbc6719dfbf1a2e40fd44d6f2720f3c94, with this producer
-src, batch/request/final hash, original prior-57 snapshot and metadata sample plan,
-cleanup snapshot 39c23894... and stopped-parent observation
-outputs/stopped-0038663-observation-20261110.json SHA256
-9db991980f5eaeb2093e0487ac4b4edf3011d066fa8809f781e489f3887af7d1.
-The observation bounds the failed parent's runtime at actual observed 08:38:38.8615299Z;
-it is not a successful completion timestamp. The audit checks each checkpoint's own
-job, source capture clocks and producer, 606 inherited/25 new origins, full 74,458-row
-accounting, 60 unresolved EPAM comparison rows, 57 preserved examples, frozen sample
-arithmetic and the old 3,540-row cleanup comparison against their original 0038663
-origin. Original helpers, sample plan and snapshots remain unchanged. No target
-completion, dataset admission, fit, promotion or activation is claimed before audit.
-
-Previous failed-producer observation, November 10 08:38 UTC: immutable 0038663 run exited 2
-after 606 complete checkpoints (71,508 rows); actual worker 60112 and native session
-57668 are finished, lease released. No final corpus exists. Exact failure is strict
-duplicate comparison identity: EPAM's 30 eligible months bind sector benchmark SPY,
-duplicating the separate SPY role. Quant and code/design review approved the bounded
-negative precheck and explicit immutable checkpoint inheritance now frozen in the
-active plan. Do not restart the old run, rewrite the frozen 4ab request, substitute
-XLK, alter old checkpoint jobs/clocks, or silently copy them under a new producer.
-Engineer owns production reuse/precheck and tests; Quant owns independent lineage
-auditing; root owns receipt creation, integration, publication and docs. No new
-implementation or successful full target publication is claimed yet. The following
-run-start record and earlier partial attempts remain historical evidence.
-
-Previous implementation 003866346f374ef30a680374266c1a442c488883 was committed and
-pushed on main. Its immutable export contains 457 source files under
- data/research/implementation_snapshots/003866346f374ef30a680374266c1a442c488883/src.
-It includes the reviewed cleanup amendment below and all prior source/reader fixes.
-The full target job started November 10 at 01:32 UTC, native session 57668, actual
-worker PID 60112 (42452 is its Windows venv launcher). Current output:
- data/research/investment_full_targets_20261109/corpus_0038663
-Log: chat outputs/full-investment-targets-0038663-20261110.log. It reuses the exact
-4ab29ba0... request below. No final publication yet. Monitor to completion; no other
-heavy jobs may run concurrently. After exit, independently audit and compare before
-claiming full target completion. No model fit, admission or activation is claimed.
-The 2ad6c95 full-target run was deliberately stopped after 30 complete security
-checkpoints for the single reviewed monthly-cleanup performance amendment. Its
-unchanged request is 4ab29ba0... below; preserve partial output
- data/research/investment_full_targets_20261109/corpus_2ad6c95
-and chat outputs/full-investment-targets-2ad6c95-20261110.log. Owned worker 25992
-was verified by exact command and stopped; native session 71966 exited with Windows
-code 4294967295. This controlled interruption is not a target validation failure.
-No final full corpus exists. Do not resume these checkpoints under a new producer.
-The amendment changes only explicit cleanup at the monthly-horizon guard; all RSS
-and system measurements/refusals remain, default/per-security calls and EVERY
-pressure poll still reclaim, and automatic GC stays enabled. The strict below-90%
-system policy, 5-GiB process budget with 0.75-GiB headroom and 120s/5s pause remain.
-Actual-line profiling measured 87/329 valid samples in this monthly cleanup, with
-50 sampling errors; this is not a promised whole-run speedup. The active plan binds
-the profile evidence and scope. Senior Sol Quant and independent Sol code review
-approved the final diff. Focused component verification: 180 tests passed in 7.12s
-across ten memory-policy/label-consumer files, affected Ruff and strict mypy passed.
-Log: chat outputs/monthly-cleanup-tests-20261110a.log. Full suite/model release checks
-were not run for this narrow component change. Quant is snapshotting all completed
-actual rows and original capture clocks for exact paired parity after the new run.
-Stopped-row snapshot is complete: 30 security checkpoints, 3,540 decision/horizon
-rows, 735 original source pins, 386 sources with observed capture clocks; baseline
-clock bounds passed. Chat outputs/cleanup-2ad6-stopped-snapshot-20261110.json SHA256
-39c23894f2827adc4a53e5f60ab7cb6f0cbd50e7b99a2a80ccb0258235792eca.
-Separate comparison helper outputs/audit_cleanup_amendment_parity.py SHA256
-675ea3e8c9fded28621a9c00be2c1a086997b7e76a43e269a8ff40bdcc73ca4a.
-Frozen full-audit helper, metadata plan and prior-57 snapshot remain unchanged.
-After the current full run, compare every stopped row before the independent
-74,458-row/57-example audit. Exact statuses, reasons, economics, maturity and
-original source capture clocks must match; only verified current-run clocks and
-their explicitly checked derived hashes may differ. The original per-row transient
-verification instant is not separately persisted; allowed aggregate clocks are
-bounded by pinned job/snapshot/final clocks and known proof authorities. Do not
-claim exact replay of an unrecorded instant. No training/activation follows here.
-Immutable raw-reader preflight passed all six legacy overlap pairs in both ticker
-directions plus the actual ARNC annual window (13 negative queries, zero price files
-opened). Old ffafdeb and new 2ad6c95 ARNC/HWM unaffected 63-session price/evidence/
-capture-clock digests match exactly. All 565 parents remain unchanged. Reports in
-chat outputs/raw-owner-reader-negative-2ad6c95fbb2c-20261110.json SHA256
-5113cce71f314f357dc5a81cef5cdaa4fe2e692375933c8656bed0897b71e4da;
-positive-ffafdeb41e72 SHA256 84b7cb71d2091339c1d5eb1aa2a694e4366c82aa26cc40884a2bc8c6e84409e3;
-positive-2ad6c95fbb2c SHA256 16729a3018d6cb5c959f7054719bcfedbe8ff4f9d3a42caaa583201371757706
-(use the same raw-owner-reader prefix and -20261110.json suffix).
-Code verification, all eleven collection batches and full stock dividend resolution
-are complete. Full target publication and independent target audit remain in progress.
-Full dividend manifest:
- data/research/investment_full_dividend_resolution_20261109/stock-resolution/_manifest.json
-SHA256 daccbd252fbe6e5aab398e42532dc74db234cb8adeeb925194e5c603f3178579.
-All 6,717 requested stock events are accounted for: 4,241 source-validated and 2,476
-explicitly unresolved. The 257 benchmark objects remain unchanged, total 4,498
-assertions. Currency SHA256 2eacfde6fa37bd224b7638d89b2f5af0aed0f3cbb5e1e453936d377e1776f092;
-the original two-correction file remains byte-identical (9a44ec36...); no new correction.
-Source audit at data/research/investment_full_dividend_resolution_20261109/stock-source-audit.json
-SHA256 224f9df7f971dde4e6e6c1b5d6e310851cfc1c2afa0e864fb8481fc6918cbed4.
-The 2,476 local gaps: 722 missing original CUSIP, 635 usable CUSIP/ISIN but no selected
-class proof, 242 unsupported tax PAYMENT dates, 113 dated-class/multiple-class gaps,
-314 unsupported ordinary-domestic terms, 375 absent exact payments, 45 conflicting
-PAYMENT versions and 30 provider/tax gross amount mismatches. Alias diagnostics
-retain all 43 GEN/NLOK/VIAC/PARA event IDs and exact sequential relation intervals;
-cohort membership does not establish absence of other issuer classes, so no waiver.
-
-The full target CLI used immutable ffafdeb with no selected subset. It completed
-shared-source verification and wrote four per-security checkpoints, then stopped on
-`investment selected raw sources overlap session ownership`. No final corpus exists.
-The four partial checkpoints and common source inventory remain immutable evidence;
-no complete target publication or audit is claimed. The stock engineer is checking
-all parent/extension ownership metadata and the exact next security; genuine same-
-asset overlap must remain fatal. Do not rerun the dividend source resolver. A narrow
-reader fix, if supported by exact evidence and Quant review, needs its own immutable
-producer and full-target replay. The heavy-job lease was released on failure.
-Exact metadata diagnosis found six different-ticker parent overlaps, no same-ticker
-conflicts, and 18 parent/capture overlaps all belonging to EMPTY captures. The accepted
-ARNC/HWM identity boundary is April 1, 2020; old ARNC capture tails reach April 15.
-The reviewed reader amendment keeps all owners, rejects genuine duplicate ticker,
-benchmark and role conflicts, and returns existing local cross-symbol unavailability
-for distinct stock ticker overlaps without reading prices. No new positive source
-admission, symbol stitching or source rewrite occurs. Forty-one focused reader,
-label-materialization and source-extension tests passed in 3.06s; affected Ruff and
-strict mypy passed. Independent Sol code review and exact-source Senior Quant review
-approved. Commit/export, run the six-conflict immutable preflight, then rerun the full
-unchanged target request into a new output; preserve the failed corpus. Full suite,
-training and model activation were not run for this narrow component amendment.
-Request data/research/investment_full_targets_20261109/inputs/request.json
-SHA256 4ab29ba0552fa79e17721648999f3f130148f4393a58f0c3f3dca764ac8f45f1.
-Output data/research/investment_full_targets_20261109/corpus; log in chat
-outputs/full-investment-targets-ffafdeb-20261109.log. Wrapper
-outputs/run_full_investment_targets.py validates the exact producer export, request
-hash and full roster selection before invoking the canonical materialize-investment-labels
-CLI. Do not launch a second heavy job alongside the ownership diagnostic. On successful
-completion independently audit all 74,458
-rows and the 57 prior examples using the frozen plan and snapshot below. No target
-success, fitting, training admission or model promotion is yet claimed.
-Actual 5020c51 replay passed all eleven archive checks, then stopped before publication
-on a fatal stock class SEC URL/issuer binding check. No source-resolution or full-target
-artifact was published. Exact retained-source diagnosis found 13 of 293 selected
-proofs use legitimate co-registrant SEC folders. CEG body SHA256
-742cd105ec029516cfcfb81560ad55a661a563fb2df096612fe53feb216b240e
-and its exact listed primary document were independently checked by Senior Quant.
-The narrow consumer fix binds that exact listed URL rather than folder/issuer equality;
-explicit body-issuer mismatch stays fatal. Independent code review approved the fix;
-80 affected identity/source/currency/class tests passed in 9.05s, Ruff and strict mypy
-passed. Full suite/model checks were deliberately not run for this component change.
-Immutable ffafdeb source preflight is complete: 391/391 candidate proofs passed,
-zero local gaps or fatal failures, and 272 bound-source hashes rechecked. All 293
-selected dividend identity groups map to 288 distinct successfully replayed proofs;
-APA, COR, GE, LRCX and NOV each have two CUSIP groups sharing a class proof. The
-request hash and every selected proof pin/object match were checked. Report in chat
-outputs/stock-source-preflight-391-ffafdeb41e72-20261109.json, SHA256
-39393e35fcdf59723cb90989e256a8c5ba26c8c406cd89a3c6eca95697eca6ba.
-This verifies source facts on representative first/last retained interval sessions;
-full raw-session ownership, currency admission and target publication still follow.
-The shared lease was released to the full dividend resolver for its ffafdeb rerun. A prematurely started editable-source diagnostic
-was stopped without publication; its interrupted log is retained and is not admission.
-Original captures, requests, prior producers and the 257 benchmark seed remain unchanged.
-Canonical main starts at f7d9af02490010decd607121cb41b9e74cc92972. Prior completed
-QQQ/raw work below is historical evidence and remains preserved. New source work
-and full target publication are in progress; no new target/model success claimed.
-Sol stock engineer owns identity/source composition; Sol distribution engineer
-owns unique-event resolution and explicit collection scope; root owns integration.
-Senior Sol Quant approved inside-interval reconstructed research identity using
-exact accepted relations plus official share-class anchors, competing-owner and
-transition checks. No future cover page is required, and no interval extrapolation
-is permitted. Independent code and actual Quant review follow implementation.
-Full expected row set is 74,458, of which 44,692 requests are scope eligible.
-Retain explicit local gaps, all 57 prior examples and the 90-percent RAM policy.
-New metadata inventory manifest is in
- data/research/investment_full_target_preflight_20261109/dividend-metadata-manifest.json
-SHA256 9fbc29250021ff752a1a86be0340b663de849f0f614bd63ea3e4e6766430861a.
-Next: finish retained class anchors and benchmark issuer comparisons, implement
-reviewed contracts, test, run actual full target build and independently audit.
-No new stock collection/admission has yet been claimed. Existing cash evidence
-must be reused; stock collection follows explicit reviewed security identity.
-
-Active checkpoint updates: 376 candidate class proofs exported (not yet admitted)
-to data/research/investment_stock_identity_20261109/proofs.json, SHA256
-fbb11bee40f63cb6dea82a9f79f2af976e8ccfc814ef551e3d5df2cda9cb63a4.
-Root reader/report tests: 26 passed; Ruff/strict mypy passed before later CLI and
-identity integration edits. Distribution engineer reports 137 focused tests passed.
-These are synthetic component checks, not actual source/target publication.
-Independent Sol code review is underway. Prior snapshot has 57 validated rows and
-70 distinct unchanged files; chat outputs/investment-prior57-snapshot-20261109.json
-SHA256 24b857db092b1b3d6941b302984f1a41cae652d2ce5a64fdab6a94103aaec5bb.
-Independent audit helper outputs/audit_full_investment_targets.py is prepared;
-plan/audit execution remains pending final immutable producer and full corpus.
-Implementation verification completed: 439 affected component tests passed,
-followed by 225 affected tests after final review edits (overlapping, not additive).
-Affected Ruff and strict mypy passed for ten source modules. Independent Sol code
-review approved the final source contracts, including taxonomy/class contradictions
-and local gaps versus fatal source corruption. No full-suite/model-release claim.
-The improved parser produced 391 candidate proofs, 44 still unresolved, in
- data/research/investment_stock_identity_classes_20261109/proofs.json
-SHA256 f80a960fe2b8738c33ebd2f5c60e9b627b047fb30514f4d486e4af65ef2d2c23.
-Actual IDXX proof replay passed three exact historical sessions without price reads.
-These are candidate/source checks; full target publication remains outstanding.
-First stock tax batch captured 160 of 175 identity-years and retained 15 source gaps;
-manifest data/research/investment_full_dividend_resolution_20261109/stock-tax-archives/batch-00/final/_manifest.json
-SHA256 ec77552d6ceafa0d196ba29f811239c6e5ee88d2bd6f02156bbbbcf5e9f8d5c6.
-Actual frozen-producer benchmark resolution is complete: 44 of 44 tail events
-verified (seven exact tax events, 37 issuer-rate/currency bridges), zero unresolved,
-zero new amount corrections. The existing 213 assertions remain unchanged; total257.
-Artifact data/research/investment_full_dividend_resolution_20261109/benchmark-candidate/_manifest.json
-SHA256 cde7e4d1dc65fe9ec3459777ceea7b56aae05c3de751e9079fa2cd74125594c4;
-currency-corroborations.json SHA256 ae2aabd2433de8a6e8d9dca8ccf403387fcec37c3bf95f888ebc80903e4f660f.
-The two-correction manifest remains byte-identical (9a44ec36d97259d526dad5f3420b57e91c15e514ee9105677cc4ce2ace4a47bc).
-Independent Quant benchmark audit passed without the production dividend adapter:
-outputs/investment-benchmark44-independent-audit-20261109.json in the chat outputs,
-SHA256 95dbfb04744a6ccfdf403a5903b2656350dc80725d8fe1afcfcef47ac4bf5dff.
-Corrected audit sample plan is frozen before prices/targets, twelve candidates for
-each of twelve strata: outputs/investment-metadata-audit-plan-lifecycle-20261109.json
-SHA256 38ac10591c19eae36698689f5774e41a86aa3df9ee2b488658184d0d3268dbaf.
-Use the current independent audit helper SHA256
-7a65fc3b27aca49fe78cf5b66fcea465dbf089d97008f5105fdccbbc297c6a61.
-Actual stock cash integration probe passed 3 of 3 metadata-selected events:
-A 2020-03-30, AAP 2020-03-19, AAPL 2020-05-08; no price/target outcomes read.
-It replayed SEC class intervals, original provider CUSIP, exact tax ISIN/valor,
-USD gross event, paired request/receipt semantics and lookup classification.
-Probe manifest data/research/investment_full_dividend_resolution_20261109/stock-probe/_manifest.json
-SHA256 a5238db02870a10939719fa98aa7ef423f5eef65cfc8fb01962a9fecd458ea50;
-all 257 benchmark assertions and old corrections preserved, no new corrections.
-All eleven capture batches are now complete: 1,696 requested identity-years,
-1,564 complete requested-year response pairs (one retained pair reused; 1,563 newly
-captured), and 132 explicit source-gap years. Captures remain separate from currency
-admission. Original missing-source identities did not stop unrelated requests.
-The full stock source request retains all 6,717 event IDs and 257 benchmark seed
-assertions; it attaches 293 unambiguous candidate class-proof identity groups and
-records 36 unavailable groups. Request
- data/research/investment_full_dividend_resolution_20261109/stock-request.json
-SHA256 62751925a9b8a7c3396d6f0176ed32ea9aa39b4301e2b8ed55b6f59a269eeddf.
-Frozen 7cf10c3 resolver verified all eleven source archives, then stopped before
-publication: a selected tax payload contains a PAYMENT exDate outside the currently
-supported UTC-midnight shape. No stock-resolution artifact or full targets were
-published. All captures and the 257 benchmark seed remain unchanged; lease released.
-The distribution engineer is identifying exact source pins and adding a typed local
-semantic-gap regression, without rounding or ignoring ambiguous PAYMENT rows.
-Exact diagnostic found 97 captured symbol/year units with unsupported PAYMENT dates;
-first AAP-2023 body f0acc7b5eab3c57135de71c1c975ccd83922a2c9a9df3dbbae189aa8b57289e2
-has null exDate and zero amounts alongside valid dividends. Senior Quant independently
-inspected that source and approved whole-selected-payload semantic unavailability,
-never inferred dates or ignored rows. Diagnostic SHA256
-703567b6945b79c82167950d4b8b074736007378b15c4f9c0bd548bc0d692084.
-The active plan freezes two resolver-only guard reductions: redundant outer index
-guard removal and final pure hash checks in <=32-file/8-MiB chunks. Global, per-event,
-read, identity and ICTax guard behavior stays unchanged. The exploratory manually
-seeded cache profile is CPU-only and is not actual source-replay evidence.
-The narrow date/guard amendment passed 147 focused resolver/currency/accounting tests
-in 14.76s, affected Ruff and strict mypy. Independent Sol code review approved it;
-Senior Quant approved the actual-source interpretation and guard scope. No full
-suite or model release is claimed. Commit/export this amendment, then rerun the
-unchanged 6,717-event request before preparing full targets.
-Chat outputs/stock-resolution-dividend-resolution-20261109.log records the attempt.
-After successful source resolution, prepare the full target request with
-outputs/prepare_full_investment_targets.py using final currency/correction pins,
-391-proof manifest and the new reviewed producer, then run the canonical full label
-materializer and independent audit with the corrected frozen metadata plan.
-Stock candidate tax collection plan: 329 identities, 1,696 exact ex/payable years,
-11 batches; covers 5,681 of 6,403 ordinary domestic events. Remaining 722 have no
-usable original-event CUSIP-to-ISIN; no substitution is permitted. Plan lives at
-data/research/investment_full_dividend_resolution_20261109/stock-tax-collection-plan.json
-SHA256 3e458c05550a4faecebe2e362d04532ffee09f3a09458a15d74d877a00ae16e4.
-Existing frozen collector c5884ff captures candidates only; new admission pending.
+Next checkpoint, not started: freeze the training-dataset specification and feature
+acceptance matrix, join the validated targets to existing candle/news/financial
+features, and measure usable causal coverage by period/sector before fitting.
+Unresolved targets remain unavailable; missing feature values are not silently zero.
+Do not treat reconstruction as historical first-seen evidence or these target
+checks as model performance. Preserve earlier fits and deferred R7.8 scope.
 
 ## Completed QQQ and investment raw-candle checkpoint — November 9
 

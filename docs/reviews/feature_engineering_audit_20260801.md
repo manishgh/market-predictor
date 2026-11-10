@@ -1,26 +1,59 @@
 # Current Feature Engineering Audit
 
-### Full investment source and target build in progress - November 9
+### Full investment targets built and independently checked - November 10
 
-The additional benchmark coverage adds 44 independently audited distributions to the
-213 preserved assertions: 257 supported benchmark events, with both existing amount
-corrections unchanged. Stock tax capture is complete for 1,564 of 1,696 requested
-identity-year pairs (one reused pair, 1,563 new pairs); 132 pairs retain source gaps.
-Full stock dividend resolution is published: 4,241 of 6,717 events are source-validated
-and 2,476 remain explicit gaps. Together with 257 unchanged benchmark assertions,
-there are 4,498 supported assertions, no new amount corrections, and exact source-audit
-coverage. Immutable ffafdeb preflight also passes all 391 candidate stock proofs with
-zero gaps/fatal failures and 272 source hashes rechecked; 293 dividend identity groups
-are covered by 288 distinct proofs. Full target construction completed shared-source
-verification and four stock checkpoints before refusing overlapping historical ticker
-segments. The current bounded fix preserves those parent sources and makes unsupported
-cross-ticker windows explicit local gaps; genuine duplicate owners stay fatal.
-No final full target corpus has been published. Source verification and partial target
-checkpoints are not training admission.
-All 57 previous target examples and frozen source bytes remain preserved. Full
-74,458-row target publication, independent arithmetic audit, dataset admission and
-investment fitting remain pending. No model or prediction activation is claimed.
-The authoritative hashes and next command remain in the current handoff.
+The full corpus contains exactly 74,458 horizon rows for 37,229 monthly decisions.
+Of 44,692 in-scope requests, 27,189 are source-validated (14,348 at 63 sessions and
+12,841 at 252 sessions); 17,503 retain explicit source/comparison gaps. Another
+29,766 rows are outside scope. The 606 original checkpoints/71,508 rows were retained
+unchanged with explicit producer/job lineage; 25 groups/2,950 rows were newly built.
+EPAM's duplicate SPY sector comparison remains unavailable for 60 eligible rows.
+
+Independent Senior Sol Quant audit: audit_passed_with_explicit_unavailable_strata.
+All 74,458 row identities/counts and 631 origin records checked; all 71,508 inherited
+rows retain their original checkpoint bytes, job and producer. All 57 prior target
+examples match numerically and their 70 files remain unchanged. Cleanup comparison
+passes all 3,540 original rows against their actual 0038663 origin, with original
+capture clocks preserved. Independent raw four-holding arithmetic covers
+5 metadata-selected rows. The original first-12 lists had no usable
+case for these five strata: stock_split:63, stock_split:252, stock_ordinary_cash:63, stock_ordinary_cash:252, entry_exdate:252. That primary result remains unchanged.
+Audit: chat outputs/investment-full-lineage-independent-audit-0a1ca7d-20261110.json
+SHA256 7b9ffe57a5b97c27b01c26c6a319eec39ffe39723dc3f0e2d4260387cb590cbe.
+Helper: outputs/audit_lineage_full_investment_targets.py SHA256 3bfd877ecba3077bc4874a119b0b4c3dbc6719dfbf1a2e40fd44d6f2720f3c94.
+
+The bounded supplemental audit covers all five originally unavailable strata using
+5 additional distinct rows and
+20 independent holding calculations. It selects
+the first source-validated candidate in each frozen metadata order after the original
+12-candidate prefix, never by return. Consumed source hashes were checked before and
+after arithmetic. No supplemental strata remain unavailable. This is a sampled
+arithmetic check, not a second numerical computation of every corpus row.
+Additional cases: COO November 30, 2023 (63-session split), COO February 28, 2023
+(252-session split), MCD November 29, 2019 (63-session ordinary cash), CI July 31,
+2019 (252-session ordinary cash), and SYY December 31, 2019 (252-session entry ex-date).
+These are decision dates. The audit inspected 314 checkpoint status maps and selected
+the first usable candidate after 73/300/1161/229/8 checks in those respective orders.
+Supplemental report: chat outputs/investment-supplemental-arithmetic-audit-20261110.json
+SHA256 28e6c89b45af7fa40d42f58fac03c3ac17557d1c6fbdc250714862d0a621bf1c.
+Frozen reserve: outputs/investment-supplemental-metadata-reserve-20261110.json SHA256 10674bcc1bd1570e9e10c2ee270ec67838a3375628a9168bca70faeb06061687.
+Execution helper: outputs/audit_investment_reserve_arithmetic_execution.py SHA256 0075d48a69684aaeaf8539c190e76d1c8e1689852bdc5fffc3283f4076c6ce73.
+
+Final corpus SHA256 9b70c348ab17738f5874d42c51bff6af386d94061ef383385bdd6ead5bcad4c3; implementation
+0a1ca7daf924e900ac0947e6169678e93d27c41e is on main. Exact artifact/input paths,
+remaining source causes and verification evidence are in the current handoff.
+The 257 benchmark cash assertions and 4,241/6,717 supported stock events remain
+verified, with 2,476 explicit stock-event gaps and no new amount corrections.
+Of 435 stock acquisition units, 350 have at least one admitted session and 98 are
+partly or wholly quarantined (80 observed); 13 units appear in both groups.
+These artifact/event counts do not denote target rows or whole-stock exclusions.
+
+Financial feature coverage remains unchanged: of 22,346 eligible decisions, 6,017
+have all six recovered financial measures, 15,485 have at least one, and 6,861 have
+none. Missing financial features did not remove target requests. The frozen earlier
+evaluation cutoff has zero currently-available rows because verification occurred
+later; all 27,189 validated targets are available by actual publication. Clocks are
+not backdated. All training/promotion/production flags remain false.
+Training-dataset/feature acceptance and model fitting remain separate pending work.
 
 ### QQQ event resolved and raw-source coverage measured — November 9
 

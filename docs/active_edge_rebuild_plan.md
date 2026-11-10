@@ -2,8 +2,46 @@
 
 ### Stock identity, distribution coverage and full investment targets — November 9
 
-Status: `in_progress`. This is the sole active checkpoint. User authorizes Sol
-agents, retained-data reuse, necessary missing-source collection and canonical main.
+Status: `completed` - November 10. Implementation 0a1ca7daf924e900ac0947e6169678e93d27c41e
+is committed/pushed on canonical main. Actual full corpus contains 74,458 rows:
+27,189 source-validated, 17,503 in-scope unresolved, 29,766 outside scope. It retains
+606 original checkpoints/71,508 rows and adds 25 groups/2,950 rows with explicit
+per-origin lineage. EPAM's 60 duplicate benchmark comparisons remain unavailable.
+Final manifest SHA256 9b70c348ab17738f5874d42c51bff6af386d94061ef383385bdd6ead5bcad4c3.
+Independent Senior Sol Quant audit: audit_passed_with_explicit_unavailable_strata.
+All 74,458 row identities/counts and 631 origin records checked; all 71,508 inherited
+rows retain their original checkpoint bytes, job and producer. All 57 prior target
+examples match numerically and their 70 files remain unchanged. Cleanup comparison
+passes all 3,540 original rows against their actual 0038663 origin, with original
+capture clocks preserved. Independent raw four-holding arithmetic covers
+5 metadata-selected rows. The original first-12 lists had no usable
+case for these five strata: stock_split:63, stock_split:252, stock_ordinary_cash:63, stock_ordinary_cash:252, entry_exdate:252. That primary result remains unchanged.
+Audit: chat outputs/investment-full-lineage-independent-audit-0a1ca7d-20261110.json
+SHA256 7b9ffe57a5b97c27b01c26c6a319eec39ffe39723dc3f0e2d4260387cb590cbe.
+Helper: outputs/audit_lineage_full_investment_targets.py SHA256 3bfd877ecba3077bc4874a119b0b4c3dbc6719dfbf1a2e40fd44d6f2720f3c94.
+
+The bounded supplemental audit covers all five originally unavailable strata using
+5 additional distinct rows and
+20 independent holding calculations. It selects
+the first source-validated candidate in each frozen metadata order after the original
+12-candidate prefix, never by return. Consumed source hashes were checked before and
+after arithmetic. No supplemental strata remain unavailable. This is a sampled
+arithmetic check, not a second numerical computation of every corpus row.
+Additional cases: COO November 30, 2023 (63-session split), COO February 28, 2023
+(252-session split), MCD November 29, 2019 (63-session ordinary cash), CI July 31,
+2019 (252-session ordinary cash), and SYY December 31, 2019 (252-session entry ex-date).
+These are decision dates. The audit inspected 314 checkpoint status maps and selected
+the first usable candidate after 73/300/1161/229/8 checks in those respective orders.
+Supplemental report: chat outputs/investment-supplemental-arithmetic-audit-20261110.json
+SHA256 28e6c89b45af7fa40d42f58fac03c3ac17557d1c6fbdc250714862d0a621bf1c.
+Frozen reserve: outputs/investment-supplemental-metadata-reserve-20261110.json SHA256 10674bcc1bd1570e9e10c2ee270ec67838a3375628a9168bca70faeb06061687.
+Execution helper: outputs/audit_investment_reserve_arithmetic_execution.py SHA256 0075d48a69684aaeaf8539c190e76d1c8e1689852bdc5fffc3283f4076c6ce73.
+
+No model fit, dataset admission or activation occurred; all related flags remain
+false. Next dataset/feature-acceptance checkpoint is not started. The current handoff
+contains authoritative artifacts, remaining gaps and exact continuation scope.
+The frozen scope and amendment paragraphs below are retained pre-run/history records;
+their future-tense instructions describe the completed verification plan.
 
 Bounded problem: new stock bars remain quarantined and unique stock/benchmark cash
 events lack currency evidence, preventing broad 63/252-session target publication.
@@ -218,6 +256,32 @@ New independent helper outputs/audit_lineage_full_investment_targets.py SHA256
 3bfd877ecba3077bc4874a119b0b4c3dbc6719dfbf1a2e40fd44d6f2720f3c94 preserves the
 original full-audit arithmetic/sample checks and adds explicit per-origin lineage.
 Original audit helpers, frozen sample plan and prior-57 snapshot remain unchanged.
+
+Bounded supplemental arithmetic coverage - November 10: actual full lineage audit
+passed 74,458-row accounting, 606/25 origins, 57 prior numerics/70 files and 3,540
+cleanup parity rows. Primary report SHA256
+7b9ffe57a5b97c27b01c26c6a319eec39ffe39723dc3f0e2d4260387cb590cbe remains immutable.
+Its frozen first-twelve lists contain no source-valid candidate for stock_split at
+63/252, stock_ordinary_cash at 63/252, and entry_exdate at 252; those five original
+strata remain unavailable in that report. Five actual arithmetic rows passed.
+To close the demonstrated sampling gap, freeze a separate reserve plan for ONLY
+these five strata from the same original source metadata, predicates and stable
+(decision_session, security_id) order. Verify the original twelve are the exact
+prefix; exclude that prefix and hash the remaining lists before using target status
+or prices for reserve selection. Then select the first source-validated reserve row
+per stratum, at most one each, never choose by return. Preserve original plan/report
+and pin them, the final corpus and reserve in the supplemental report. Rehash selected
+original sources around independent four-holding raw arithmetic. No global corpus
+replay, model/data/production code changes or fabricated completion evidence. Any
+stratum with no valid reserve remains explicitly unavailable; no wider sample search.
+Independent Sol design/code review precedes the actual supplemental run. The source
+engineer does not select cases or perform the independent arithmetic.
+The metadata-only reserve is now frozen at chat outputs/investment-supplemental-metadata-reserve-20261110.json,
+SHA256 10674bcc1bd1570e9e10c2ee270ec67838a3375628a9168bca70faeb06061687.
+All five original twelve-entry prefixes were reproduced exactly. Remaining candidate
+counts are split 63/252: 91/442; ordinary cash 63/252: 15,187/16,350; entry-exdate 252:
+170. No supplemental target status or price was used before this plan was frozen.
+The primary audit and original metadata plan remain byte-identical.
 
 Ownership: Sol stock engineer owns stock_identity/source_extensions and tests;
 Sol distribution engineer owns dividend_resolution/research investment_currencies
