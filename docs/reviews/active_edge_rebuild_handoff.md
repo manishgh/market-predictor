@@ -1,5 +1,24 @@
 # Active Edge Rebuild Handoff
 
+## Active prediction-error diagnosis - November 10
+
+New user instruction opens a bounded improvement experiment after the completed
+48+8-model reference below. Canonical main starts clean atf6bc29b. Astra and Sol
+agents are investigating separate ranking quality, return calibration and feature-group
+contributions; no old dataset/model/source artifact is reopened or replaced.
+
+Current operation: metadata inventory and frozen diagnostic design, before data jobs
+or refits. Senior Quant, Astra and ML engineer agree to analyze the existing48 saved
+validation prediction sets on identical masks. Root is locating the historical~0.67
+AUC claim; a six-month-history next-day-big-up candidate has0.665665 AUC but is not yet
+identified as the user's remembered four-month run. Do not claim a lost edge by
+comparing that classifier with63/252-session SPY-excess regression errors.
+
+Engineer owns investment/diagnostics.py, research/investment_diagnostics.py, their
+focused tests and CLI connection. Root owns plan/handoff/feature acceptance and job
+coordination. No heavy job is active yet. Next: implement/test reviewed diagnostic,
+run once on retained artifacts underlease, review measured attribution, freeze the
+smallest justified model experiment. Original source flags and2026 clocks stay intact.
 ## Completed investment training and evaluation - November 10
 
 The frozen experiment completed: **48 validation fits and 8 final research models**.

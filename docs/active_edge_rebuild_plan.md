@@ -1,5 +1,49 @@
 # Active Edge Rebuild Plan
 
+### Investment prediction-error diagnosis and bounded improvement - November 10
+
+Status: `in_progress`. The user explicitly authorizes diagnosing why news/financial
+inputs worsen forecasts and improving the models, using Astra research, Sol engineers
+and independent senior Quant/design/code review. Keep only canonical main and reuse
+existing data. The completed experiment below remains immutable reference evidence.
+
+First checkpoint: explain the measured prediction errors and reconcile the user's
+remembered four-month AUC near0.67 with exact retained target/horizon/split provenance.
+AUC measures ranking, whereas return MSE/MAE measure magnitude errors; neither may be
+substituted for the other or described as an investment return. Historical AUC matches
+remain unconfirmed until their original run metadata identifies the same experiment.
+
+Frozen diagnostic scope, agreed by independent Quant/Astra and ML engineering:
+- Read the existing48 saved validation prediction artifacts and pinned215-column
+  dataset; no models refitted, source values rebuilt, exclusions changed or rows dropped.
+- Check identical stock/decision/horizon/fold/scope populations before comparing124
+  technical/relationship versus215 full-feature predictions. Preserve all unknown outcomes.
+- Report equal-date MSE/MAE, forecast/target means and dispersion, covariance/ranking,
+  ROC-AUC for fixed positive net SPY-excess outcomes (pooled equal-date weights and
+  mean within-date AUC with class/coverage counts), and exact error decompositions.
+- Reconcile MSE relative to zero with E[p^2]-2E[p*y], and full-minus-technical MSE
+  with E[(p_full-p_technical)^2]+2E[(p_full-p_technical)*(p_technical-y)].
+- Attribute signed error contributions by existing year/date/sector and predeclared
+  finite-value coverage: news0/1-84/85 and financial0/1-5/6. Retain original global
+  date weights so subgroup contributions reconcile to overall error differences.
+  Tail/error concentration is explanatory only and cannot justify removing examples.
+- Reuse existing split/weighting/metric/publication/runtime tools; add only reusable
+  investment diagnostics consumers. Guard one heavy job at a time, <90% system RAM,
+  5GiB process budget plus0.75GiB headroom; retain all refusal and pause semantics.
+
+Exit gates: focused poison/identity/weight-reconciliation tests, affected Ruff/strict
+mypy, actual saved-data diagnostic, independent Quant interpretation and code review,
+then a frozen next experiment with an explicit improvement criterion. Joint215-versus124
+results cannot attribute harm separately to news or financials. A bounded factorial
+comparison can add209(news) and130(financial) views, reusing existing124/215 fits.
+Any calibration must learn only from causally prior purged training/OOF evidence;
+insufficient early annual history remains explicit. No parameter sweep, outcome-driven
+universe change, claimed untouched test or live activation is authorized by this plan.
+
+Ownership: Astra deep diagnosis/provenance; Sol ML engineer diagnostic implementation;
+independent Senior Sol Quant causal/economic design and actual result review; Sol code
+reviewer consolidated implementation review; root orchestration/docs/next experiment.
+No new model improvement is claimed before the frozen comparison is actually run.
 ### Investment dataset, training and SPY evaluation - November 10
 
 Status: `complete`. The requested join, conditional training and independent evaluation
