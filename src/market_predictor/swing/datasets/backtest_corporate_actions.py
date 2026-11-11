@@ -36,7 +36,12 @@ from market_predictor.swing.contracts.holding_accounting import (
 )
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.action_evidence import CorporateActionEvidence
-from market_predictor.swing.datasets.action_windows import ActionWindow, action_window
+from market_predictor.swing.datasets.action_windows import (
+    ActionWindow,
+    action_window,
+    holding_ends_before_distribution,
+    observed_economic_dates,
+)
 from market_predictor.swing.datasets.reviewed_action_dates import load_reviewed_action_dates
 from market_predictor.swing.datasets.reviewed_action_dispositions import load_reviewed_record_dispositions
 from market_predictor.swing.datasets.reviewed_cash_payouts import load_reviewed_cash_payouts
@@ -351,18 +356,8 @@ class BacktestCorporateActions:
                 except (KeyError, TypeError, ValueError):
                     return None
                 return "cash_distribution_does_not_change_raw_price_share_units"
-        dates: dict[str, date] = {}
         try:
-            for field in ("ex_date", "record_date", "payable_date", "due_bill_redemption_date", "effective_date"):
-                value = record.get(field)
-                if value in (None, ""):
-                    continue
-                if not isinstance(value, str):
-                    return None
-                parsed = date.fromisoformat(value)
-                if value != parsed.isoformat():
-                    return None
-                dates[field] = parsed
+            dates = observed_economic_dates(record)
         except (TypeError, ValueError):
             return None
         if reviewed is not None:
@@ -373,7 +368,7 @@ class BacktestCorporateActions:
         # Keep the boundary day itself gated and retain every known later date.
         if first > max(dates.values()):
             return "new_purchase_after_distribution_economic_dates"
-        if {"ex_date", "record_date", "payable_date"}.issubset(dates) and last < min(dates.values()):
+        if holding_ends_before_distribution(dates, last):
             return "holding_ends_before_distribution_economic_dates"
         return None
 

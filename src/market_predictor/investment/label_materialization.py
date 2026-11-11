@@ -65,7 +65,8 @@ def _identities(evidence: tuple[EvidenceReference, ...]) -> tuple[InvestmentSour
 
 def _compile_investment_holdings(*, decision: Mapping[str, Any], horizon: Literal[63, 252],
     reader: InvestmentSourceReader, membership: InvestmentSourceValidation,
-    action_source_validation: ActionSourceValidation, roles: tuple[HoldingRole, ...]) -> dict[str, Any]:
+    action_source_validation: ActionSourceValidation, roles: tuple[HoldingRole, ...],
+    reviewed_action_source_validation: ActionSourceValidation | None = None) -> dict[str, Any]:
     """Build only the requested holdings, with exact session and corporate-action evidence."""
     calendar = xcals.get_calendar("XNYS")
     raw_day = decision.get("decision_session", decision.get("session_date_et"))
@@ -82,6 +83,7 @@ def _compile_investment_holdings(*, decision: Mapping[str, Any], horizon: Litera
     if any(item.available_at is None for item in membership.evidence):
         reasons.append("membership_source_availability_unknown")
     membership_sources = _identities(membership.evidence)
+    membership_ready = not reasons and bool(membership_sources)
     sector_symbol = decision.get("sector_benchmark", decision.get("primary_benchmark"))
     components: dict[HoldingRole, tuple[str, str]] = {"stock": (str(decision["security_id"]), str(decision["ticker"])),
         "spy": ("benchmark:SPY", "SPY"), "qqq": ("benchmark:QQQ", "QQQ"),
@@ -94,7 +96,11 @@ def _compile_investment_holdings(*, decision: Mapping[str, Any], horizon: Litera
         observations = reader.read(identity, symbol, sessions, benchmark=role != "stock")
         gaps = list(observations.missing_reasons)
         position = f"{decision['decision_id']}:{role}:shares"
-        source_validation = action_source_validation(identity, observations.provider_symbol or symbol, sessions, position)
+        validator = action_source_validation
+        if (role == "stock" and reviewed_action_source_validation is not None and membership_ready
+                and not gaps and observations.provider_symbol == symbol):
+            validator = reviewed_action_source_validation
+        source_validation = validator(identity, observations.provider_symbol or symbol, sessions, position)
         gaps.extend(source_validation.missing_reasons)
         if not source_validation.evidence:
             gaps.append("corporate_action_coverage_evidence_missing")
@@ -167,10 +173,12 @@ def compile_investment_label(*, decision: Mapping[str, Any], horizon: Literal[63
 
 def compile_investment_spy_pair(*, decision: Mapping[str, Any], horizon: Literal[63, 252],
     reader: InvestmentSourceReader, membership: InvestmentSourceValidation,
-    action_source_validation: ActionSourceValidation) -> dict[str, Any]:
+    action_source_validation: ActionSourceValidation,
+    reviewed_action_source_validation: ActionSourceValidation | None = None) -> dict[str, Any]:
     """Compile stock and SPY without requiring auxiliary benchmark evidence."""
     row = _compile_investment_holdings(decision=decision, horizon=horizon, reader=reader, membership=membership,
-        action_source_validation=action_source_validation, roles=SPY_PAIR_ROLES)
+        action_source_validation=action_source_validation, roles=SPY_PAIR_ROLES,
+        reviewed_action_source_validation=reviewed_action_source_validation)
     pair = row.pop("target")
     row["outcome_available_at_utc"] = None if pair is None else pair["outcome_available_at_utc"]
     row["pair"] = pair

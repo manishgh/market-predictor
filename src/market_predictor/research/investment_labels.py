@@ -22,6 +22,7 @@ from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.investment.corporate_actions import InvestmentCorporateActions
+from market_predictor.investment.dataset import add_pins
 from market_predictor.investment.dividend_currencies import load_currency_corroborations, load_dividend_amount_corrections
 from market_predictor.investment.label_materialization import InvestmentSourceValidation, compile_investment_label
 from market_predictor.investment.label_sources import InvestmentSourceReader
@@ -199,7 +200,9 @@ def verified_investment_label_sources(root: Path, parsed: InvestmentLabelMateria
 def prepare_investment_label_components(root: Path, parsed: InvestmentLabelMaterializationRequest,
     policy: CorrectedOutcomePolicy, rows_file: ArtifactReference, raw_extension: VerifiedInvestmentRawExtension | None,
     evidence: CorporateActionEvidence, sources: dict[str, Any], pins: dict[str, str], policy_ref: EvidenceReference,
-    request_sha256: str) -> tuple[InvestmentCorporateActions, dict[str, Any]]:
+    request_sha256: str, *, relevance_action_ids: frozenset[str] = frozenset(),
+    reviewed_action_dates: SourcePin | None = None,
+    reviewed_parent_units: SourcePin | None = None) -> tuple[InvestmentCorporateActions, dict[str, Any]]:
     """Compose the same raw and corporate-action authorities for label and pair consumers."""
     currencies = {} if parsed.currency_manifest is None else load_investment_currency_evidence(root,
         Path(parsed.currency_manifest.path), parsed.currency_manifest.sha256, pins, interpretation_policy_sha256=request_sha256)
@@ -218,8 +221,9 @@ def prepare_investment_label_components(root: Path, parsed: InvestmentLabelMater
     actions = InvestmentCorporateActions(root, evidence, sources["action_index"], policy.official_windows,
         policy_ref, policy.numerical_end if raw_extension is None else raw_extension.outcome_end,
         currency_evidence=currencies, currency_corroborations=corroborations,
-        dividend_amount_corrections=corrections)
-    pins.update({str(_path(root, name)): digest for name, digest in actions.source_files.items()})
+        dividend_amount_corrections=corrections, relevance_action_ids=relevance_action_ids,
+        reviewed_action_dates=reviewed_action_dates, reviewed_parent_units=reviewed_parent_units)
+    add_pins(root, pins, {str(_path(root, name)): digest for name, digest in actions.source_files.items()})
     selection = sources["selection"]
     if raw_extension is not None:
         action_request = inside(root, policy.action_archive) / "_request.json"

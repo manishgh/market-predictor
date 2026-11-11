@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from collections import Counter, defaultdict
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from math import isclose, isfinite
 from pathlib import Path
@@ -223,6 +224,57 @@ def _coverage(rows: Iterable[dict[str, Any]], comparisons: dict[str, Any]) -> di
         "position_status_counts": positions, "complete_cohorts": sum(view["complete_dates"] for view in comparisons.values())}
 
 
+def comparison_sidecar_pins(root: Path, manifest: SourcePin, value: dict[str, Any]) -> tuple[SourcePin, SourcePin]:
+    parent_path = inside(root, manifest.path)
+    files = value.get("files")
+    require(parent_path.name == "_manifest.json" and isinstance(files, dict)
+        and set(files) == {"outcomes.json", "comparisons.json"},
+        "closed fixed-selection parent must have an exact manifest and named sidecar inventory")
+    assert isinstance(files, dict)
+    sidecars = []
+    for name in ("outcomes.json", "comparisons.json"):
+        child = parent_path.parent / name
+        require(inside(root, child) == child, "parent selection sidecar must be the named sibling file")
+        sidecars.append(SourcePin(path=str(child), sha256=files[name]))
+    return sidecars[0], sidecars[1]
+
+
+@dataclass(frozen=True)
+class FixedSelectionOutcomes:
+    manifest: dict[str, Any]
+    outcomes_pin: SourcePin
+    comparisons_pin: SourcePin
+    outcomes: dict[SelectedKey, dict[str, Any]]
+    comparisons: dict[str, Any]
+    cohorts: dict[str, list[dict[str, Any]]]
+
+
+def read_fixed_selection_outcomes(root: Path, pin: SourcePin, pins: dict[str, str]) -> FixedSelectionOutcomes:
+    parent = read_object(root, pin, pins)
+    require(parent.get("schema") == "market_predictor.investment_selection_outcomes"
+        and parent.get("scope") == "retrospective_research"
+        and parent.get("round_trip_stock_cost_bps") == 20 and parent.get("benchmark_basis") == "stock_net_minus_spy_gross"
+        and all(parent.get(flag) is False for flag in (*FLAGS, "selection_changed", "models_refitted", "original_labels_changed")),
+        "exclusions require a closed fixed-selection parent with the original stock/SPY cost policy")
+    outcomes_pin, comparisons_pin = comparison_sidecar_pins(root, pin, parent)
+    outcomes = _parent_rows(read_object(root, outcomes_pin, pins))
+    original = read_object(root, comparisons_pin, pins)
+    cohorts = _parent_cohorts(original, outcomes)
+    _validate_parent_report(parent, outcomes, original["views"], cohorts)
+    return FixedSelectionOutcomes(parent, outcomes_pin, comparisons_pin, outcomes, original["views"], cohorts)
+
+
+def exclusion_coverage(
+    outcomes: dict[SelectedKey, dict[str, Any]], original: dict[str, Any],
+    retained: dict[SelectedKey, dict[str, Any]], comparisons: dict[str, Any],
+) -> dict[str, Any]:
+    before, after = _coverage(outcomes.values(), original), _coverage(retained.values(), comparisons)
+    removed = {name: before[name] - after[name] for name in ("unique_keys", "selected_positions")}
+    removed.update({name: {status: before[name][status] - after[name][status] for status in OUTCOME_STATUSES}
+        for name in ("key_status_counts", "position_status_counts")})
+    return {"original": before, "removed": removed, "retained": after}
+
+
 def evaluate_investment_exclusions(*, root: Path, request: Path, request_sha256: str, output: Path) -> dict[str, Any]:
     """Publish a sensitivity evaluation derived entirely from the pinned parent outcomes."""
     root = root.resolve()
@@ -236,39 +288,19 @@ def evaluate_investment_exclusions(*, root: Path, request: Path, request_sha256:
         implementation = _implementation()
         pins = dict(implementation)
         parsed = InvestmentExclusionEvaluationRequest.model_validate_json(json.dumps(read_object(root, request_pin, pins)))
-        parent_path = inside(root, parsed.parent_manifest.path)
-        parent = read_object(root, parsed.parent_manifest, pins)
-        files = parent.get("files")
-        require(parent_path.name == "_manifest.json" and parent.get("schema") == "market_predictor.investment_selection_outcomes"
-            and parent.get("scope") == "retrospective_research"
-            and parent.get("round_trip_stock_cost_bps") == 20 and parent.get("benchmark_basis") == "stock_net_minus_spy_gross"
-            and all(parent.get(flag) is False for flag in (*FLAGS, "selection_changed", "models_refitted", "original_labels_changed"))
-            and isinstance(files, dict) and set(files) == {"outcomes.json", "comparisons.json"},
-            "exclusions require a closed fixed-selection parent with the original stock/SPY cost policy")
-        assert isinstance(files, dict)
-        sidecars = {}
-        for name in ("outcomes.json", "comparisons.json"):
-            child = parent_path.parent / name
-            require(inside(root, child) == child, "parent selection sidecar must be the named sibling file")
-            sidecars[name] = SourcePin(path=str(child), sha256=files[name])
-        outcomes_pin, comparisons_pin = sidecars["outcomes.json"], sidecars["comparisons.json"]
-        outcomes = _parent_rows(read_object(root, outcomes_pin, pins))
-        original = read_object(root, comparisons_pin, pins)
-        cohorts = _parent_cohorts(original, outcomes)
-        _validate_parent_report(parent, outcomes, original["views"], cohorts)
-        retained, comparisons, removed = _filter_cohorts(parsed.exclusions, cohorts, outcomes, original["views"])
-        before, after = _coverage(outcomes.values(), original["views"]), _coverage(retained.values(), comparisons)
-        removed_coverage = {name: before[name] - after[name] for name in ("unique_keys", "selected_positions")}
-        removed_coverage.update({name: {status: before[name][status] - after[name][status] for status in OUTCOME_STATUSES}
-            for name in ("key_status_counts", "position_status_counts")})
+        fixed = read_fixed_selection_outcomes(root, parsed.parent_manifest, pins)
+        parent = fixed.manifest
+        retained, comparisons, removed = _filter_cohorts(parsed.exclusions, fixed.cohorts, fixed.outcomes, fixed.comparisons)
+        coverage = exclusion_coverage(fixed.outcomes, fixed.comparisons, retained, comparisons)
         complete = all(view["date_count"] and view["complete_dates"] == view["date_count"] for view in comparisons.values())
         producer_export, producer_commit = producer_origin(implementation, pins)
         report = {
             "schema": SCHEMA, "scope": SCOPE, "status": "complete_research_only" if complete else "complete_with_explicit_gaps",
             "request": request_pin.model_dump(mode="json"), "parent_manifest": parsed.parent_manifest.model_dump(mode="json"),
-            "parent_outcomes": outcomes_pin.model_dump(mode="json"), "parent_comparisons": comparisons_pin.model_dump(mode="json"),
+            "parent_outcomes": fixed.outcomes_pin.model_dump(mode="json"),
+            "parent_comparisons": fixed.comparisons_pin.model_dump(mode="json"),
             "parent_selection_sha256": parent["selection_sha256"], "exclusions": removed,
-            "coverage": {"original": before, "removed": removed_coverage, "retained": after},
+            "coverage": coverage,
             "comparison_views": len(comparisons), "comparison_cohorts": parent["comparison_cohorts"],
             "empty_cohorts": sum(view["empty_dates"] for view in comparisons.values()),
             "round_trip_stock_cost_bps": parent["round_trip_stock_cost_bps"], "benchmark_basis": parent["benchmark_basis"],

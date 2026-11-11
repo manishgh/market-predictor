@@ -31,6 +31,7 @@ from market_predictor.research.investment_features import (
 from market_predictor.research.investment_forecast_adjustment import run_investment_forecast_adjustment
 from market_predictor.research.investment_labels import materialize_investment_labels
 from market_predictor.research.investment_ranking import train_investment_ranking
+from market_predictor.research.investment_remaining_outcomes import resolve_remaining_investment_outcomes
 from market_predictor.research.investment_selection_outcomes import resolve_investment_selection_outcomes
 from market_predictor.research.investment_training import train_investment_models
 from market_predictor.sources.alpaca import AlpacaSource
@@ -208,3 +209,11 @@ def register_investment_research_commands(app: typer.Typer) -> None:
                             request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
         """Recompare fixed selected outcomes after explicit post-observation exclusions."""
         _run(lambda: evaluate_investment_exclusions(root=root, request=request, request_sha256=request_sha256, output=output))
+
+    @app.command("resolve-remaining-investment-outcomes")
+    def resolve_remaining_outcomes(root: Path = typer.Option(...), request: Path = typer.Option(...),
+                                   request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
+        """Recover additional fixed survivor outcomes from retained action evidence."""
+        _run(lambda: resolve_remaining_investment_outcomes(
+            root=root, request=request, request_sha256=request_sha256, output=output,
+        ))

@@ -13,12 +13,15 @@ import exchange_calendars as xcals
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
+from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import resolve_inside_authority
+from market_predictor.investment.action_relevance import SUPPORTED_REASONS, InvestmentActionRelevance, RelevanceRecord
 from market_predictor.investment.dividend_currencies import CurrencyCorroboration, IssuerDividendAmountCorrection
 from market_predictor.investment.label_materialization import InvestmentSourceValidation
 from market_predictor.swing.contracts.corrected_outcomes import OfficialWindow
 from market_predictor.swing.contracts.holding_accounting import CorporateActionEvent, EvidenceReference, KnownMark, PositionLeg
+from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.action_evidence import CorporateActionEvidence
 from market_predictor.swing.datasets.action_windows import ActionWindow
 from market_predictor.swing.datasets.backtest_corporate_actions import _selected_pages
@@ -60,7 +63,9 @@ class InvestmentCorporateActions:
         official_windows: tuple[OfficialWindow, ...], policy_reference: EvidenceReference, numeric_end: date,
         currency_evidence: Mapping[str, tuple[dict[str, Any], EvidenceReference]] | None = None,
         currency_corroborations: Mapping[str, CurrencyCorroboration] | None = None,
-        dividend_amount_corrections: Mapping[str, IssuerDividendAmountCorrection] | None = None) -> None:
+        dividend_amount_corrections: Mapping[str, IssuerDividendAmountCorrection] | None = None,
+        *, relevance_action_ids: frozenset[str] = frozenset(), reviewed_action_dates: SourcePin | None = None,
+        reviewed_parent_units: SourcePin | None = None) -> None:
         self.root, self.evidence = root.resolve(), evidence
         self.actions, self.global_gaps = action_index
         self.official = official_windows
@@ -99,6 +104,8 @@ class InvestmentCorporateActions:
             for family, records in families.items() for record in records}
         observed: set[tuple[str, str, str]] = set()
         record_versions: dict[str, str] = {}
+        relevance_records: dict[tuple[str, str], RelevanceRecord] = {}
+        relevance_versions: dict[str, set[tuple[str, str]]] = {}
         calendar = xcals.get_calendar("XNYS")
         for name, (query, metadata_name, _, _) in _selected_pages(self.root, evidence, lambda: None).items():
             body_path = resolve_inside_authority(self.root, name)
@@ -129,6 +136,13 @@ class InvestmentCorporateActions:
                         raise DataReadinessError("investment action record absent from independently replayed projection")
                     observed.add(key)
                     action_id, symbol = record.get("id"), record.get("symbol")
+                    if isinstance(action_id, str) and action_id in relevance_action_ids:
+                        relevance_versions.setdefault(action_id, set()).add((family, record_hash))
+                        if family in {"name_changes", "spin_offs"}:
+                            locator = f"family={family};action_id={action_id};record_sha256={record_hash}"
+                            relevance_records[(query, action_id)] = RelevanceRecord(
+                                family, record, (ref(name, locator), *coverage[1:]),
+                            )
                     if not isinstance(action_id, str) or not isinstance(symbol, str):
                         continue
                     identity = symbol, action_id
@@ -232,6 +246,17 @@ class InvestmentCorporateActions:
             raise DataReadinessError("independent currency evidence contains unused or unsupported action IDs")
         if observed != accepted:
             raise DataReadinessError("investment action selected pages do not cover exact projection")
+        self.relevance: InvestmentActionRelevance | None = None
+        if relevance_action_ids or reviewed_action_dates is not None or reviewed_parent_units is not None:
+            exact = {key: item for key, item in relevance_records.items() if len(relevance_versions[key[1]]) == 1}
+            self.relevance = InvestmentActionRelevance(
+                self.root, exact, reviewed_action_dates, reviewed_parent_units, policy_reference,
+                memory_guard=lambda: guard("investment reviewed action relevance"),
+            )
+            for name, digest in self.relevance.source_files.items():
+                if name in self.source_files and self.source_files[name] != digest:
+                    raise DataReadinessError("investment reviewed action source pin conflicts")
+                self.source_files[name] = digest
         self.recheck()
 
     def recheck(self) -> None:
@@ -240,10 +265,23 @@ class InvestmentCorporateActions:
             if file_sha256(resolve_inside_authority(self.root, name)) != digest:
                 raise DataReadinessError("investment corporate-action source changed")
 
-    def validate_sources(self, identity: str, symbol: str, sessions: tuple[date, ...], position_id: str) -> InvestmentSourceValidation:
+    def _relevance_references(self, symbol: str, window: ActionWindow, first: date, last: date) -> tuple[EvidenceReference, ...]:
+        if (self.relevance is None or (symbol, window.action_id) in self.invalid
+                or (symbol, window.action_id) in self.unresolved_terms
+                or window.unavailable_reason not in SUPPORTED_REASONS or not window.intersects(first, last)):
+            return ()
+        return self.relevance.references(symbol, window.family, window.action_id, first, last)
+
+    def reviewed_relevance_ids(self, symbol: str, first: date, last: date) -> frozenset[str]:
+        """Find exact supported candidates without asserting raw ownership or economics."""
+        return frozenset(window.action_id for window in self.actions.get(symbol, ())
+            if self._relevance_references(symbol, window, first, last))
+
+    def validate_sources(self, identity: str, symbol: str, sessions: tuple[date, ...], position_id: str,
+                         *, reviewed_relevance: bool = False) -> InvestmentSourceValidation:
         first, last = sessions[0], sessions[-1]
         reasons = list(self.global_gaps)
-        refs = (*self.coverage.get(symbol, ()), self.policy_reference)
+        refs = [*self.coverage.get(symbol, ()), self.policy_reference]
         if (symbol not in self.coverage or self.process_first is None or self.process_last is None
             or first < self.process_first or last > min(self.process_last, self.numeric_end)):
             reasons.append("corporate_action_query_interval_unproven")
@@ -259,6 +297,9 @@ class InvestmentCorporateActions:
                 window = ActionWindow(window.action_id, window.family, special_term.day, special_term.day,
                     "corporate_terms_require_replay", requires_ownership_before_first_date=True)
             if not window.intersects(first, last):
+                continue
+            if reviewed_relevance and (relevance := self._relevance_references(symbol, window, first, last)):
+                refs.extend(relevance)
                 continue
             term = self.terms.get((symbol, window.action_id))
             if (term is None or (symbol, window.action_id) in self.invalid
@@ -308,7 +349,7 @@ class InvestmentCorporateActions:
             for claim, evidence in claims:
                 marks.append(KnownMark(position_id=claim, mark_at=calendar.session_close(day.isoformat()).to_pydatetime(),
                     value_per_unit=1.0, currency="USD", evidence=evidence))
-        return InvestmentSourceValidation(evidence=refs, missing_reasons=tuple(sorted(set(reasons))), events=tuple(events),
+        return InvestmentSourceValidation(evidence=tuple(refs), missing_reasons=tuple(sorted(set(reasons))), events=tuple(events),
             non_share_marks=tuple(marks), share_position_ids=tuple(positions),
             valuation_basis=("source_verified_entitlement_policy_valued_unpaid_receivable" if claims
                 else "observed_raw_prices_and_split_units"))

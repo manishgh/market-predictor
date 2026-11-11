@@ -27,7 +27,7 @@ from market_predictor.investment.dataset import (
 )
 from market_predictor.investment.diagnostics import CONTEXT, PREDICTION
 from market_predictor.investment.feature_ablation import ablation_profiles
-from market_predictor.investment.label_materialization import compile_investment_spy_pair
+from market_predictor.investment.label_materialization import ActionSourceValidation, compile_investment_spy_pair
 from market_predictor.investment.label_sources import InvestmentSourceReader
 from market_predictor.investment.ranking import RANKING_SCORE
 from market_predictor.investment.training import HORIZONS, SCOPES, SCORE_YEARS, investment_selection_diagnostics
@@ -47,6 +47,7 @@ from market_predictor.research.investment_labels import (
 )
 from market_predictor.research.investment_ranking import FAMILY, NEWS, RANKING_PROFILES
 from market_predictor.research.investment_training import FLAGS, RANKING_PROFILE
+from market_predictor.swing.contracts.corrected_outcomes import DecisionCorrection
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference, HoldingContract
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.corrected_outcome_admission import corrected_ticker
@@ -330,6 +331,52 @@ def _amended_label_request(root: Path, request: InvestmentSelectionOutcomeReques
     return InvestmentLabelMaterializationRequest.model_validate_json(json.dumps(data))
 
 
+def compile_selected_pair(
+    key: SelectedKey, row: dict[str, Any], decision: dict[str, Any], reader: InvestmentSourceReader,
+    sources: dict[str, Any], membership_ref: EvidenceReference, corrections: tuple[DecisionCorrection, ...],
+    action_source_validation: ActionSourceValidation,
+    reviewed_action_source_validation: ActionSourceValidation | None = None,
+) -> dict[str, Any]:
+    require(decision["status"] == "eligible" and decision["security_id"] == row["security_id"]
+        and decision["decision_session"] == row["decision_session"] and decision["ticker"] == row["ticker"],
+        "selected recovery roster identity or eligibility differs")
+    day = pd.Timestamp(decision["decision_session"]).date()
+    corrected = {**decision, "ticker": corrected_ticker(decision["security_id"], decision["ticker"], day, corrections)}
+    horizon = cast(Literal[63, 252], key[1])
+    pair = compile_investment_spy_pair(decision=corrected, horizon=horizon, reader=reader,
+        membership=_validate_membership_sources(sources=sources, row=corrected, horizon=horizon, evidence=membership_ref),
+        action_source_validation=action_source_validation, reviewed_action_source_validation=reviewed_action_source_validation)
+    require(all(pd.Timestamp(pair[name]) == pd.Timestamp(row[name]) for name in ("entry_time_utc", "economic_maturity_utc")),
+        "selected stock/SPY recovery differs from the frozen holding interval")
+    return pair
+
+
+def publish_selected_pair(
+    staged: Path, output: Path, key: SelectedKey, row: dict[str, Any], pair: dict[str, Any],
+    verified_at: datetime, proof_pins: dict[str, str],
+) -> None:
+    result = InvestmentSpyPairResult.model_validate_json(json.dumps(pair["pair"]))
+    require(result.status == "available" and result.decision_id == key[0] and result.horizon_sessions == key[1]
+        and result.holdings[0].security_id == row["security_id"]
+        and result.outcome_available_at_utc is not None
+        and verified_at <= result.outcome_available_at_utc <= datetime.now(UTC),
+        "recovered pair availability, identity or actual verification differs")
+    require(Path(key[0]).name == key[0] and key[0] not in {"", ".", ".."}, "selected decision ID escapes the pair directory")
+    relative = Path("pairs") / key[0] / f"{key[1]}.json"
+    path = staged / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_json_object(path, {"schema": "market_predictor.investment_selected_spy_pair_evidence",
+        "verified_at_utc": verified_at.isoformat(), "request": pair["request"], "specifications": pair["specifications"],
+        "result": pair["pair"]})
+    digest = file_sha256(path)
+    proof_pins[str(path)] = digest
+    row.update(status="recovered", stock_net_return=result.holdings[0].net_return,
+        spy_gross_return=result.holdings[1].gross_return, net_excess_vs_spy=result.net_excess_vs_spy,
+        verified_at_utc=verified_at.isoformat(), pair_missing_reasons=pair["missing_reasons"], pair_components=pair["components"],
+        outcome_available_at_utc=pair["outcome_available_at_utc"],
+        pair_proof=SourcePin(path=str(output / relative), sha256=digest).model_dump(mode="json"))
+
+
 def resolve_investment_selection_outcomes(*, root: Path, request: Path, request_sha256: str, output: Path) -> dict[str, Any]:
     """Retain every fixed position and resolve stock/SPY pairs from verified retained evidence."""
     root = root.resolve()
@@ -391,41 +438,13 @@ def resolve_investment_selection_outcomes(*, root: Path, request: Path, request_
                     guard("investment selected security outcome recovery")
                     previous_security = row["security_id"]
                 guard("investment selected stock/SPY pair", reclaim_unused_memory=False)
-                decision = dict(roster[key[0]])
-                require(decision["status"] == "eligible" and decision["security_id"] == row["security_id"]
-                    and decision["decision_session"] == row["decision_session"] and decision["ticker"] == row["ticker"],
-                    "selected recovery roster identity or eligibility differs")
-                decision["ticker"] = corrected_ticker(decision["security_id"], decision["ticker"],
-                    pd.Timestamp(decision["decision_session"]).date(), inputs.policy.decision_corrections)
-                horizon = cast(Literal[63, 252], key[1])
-                pair = compile_investment_spy_pair(decision=decision, horizon=horizon, reader=reader,
-                    membership=_validate_membership_sources(sources=sources, row=decision, horizon=horizon, evidence=membership_ref),
-                    action_source_validation=actions.validate_sources)
-                require(all(pd.Timestamp(pair[name]) == pd.Timestamp(row[name]) for name in ("entry_time_utc", "economic_maturity_utc")),
-                    "selected stock/SPY recovery differs from the frozen holding interval")
-                row["verified_at_utc"] = verified_at.isoformat()
-                row["pair_missing_reasons"] = pair["missing_reasons"]
-                row["pair_components"] = pair["components"]
-                if pair["status"] != "source_validated":
-                    continue
-                result = InvestmentSpyPairResult.model_validate_json(json.dumps(pair["pair"]))
-                require(result.status == "available" and result.decision_id == key[0] and result.horizon_sessions == key[1]
-                    and result.holdings[0].security_id == row["security_id"]
-                    and result.outcome_available_at_utc is not None
-                    and verified_at <= result.outcome_available_at_utc <= datetime.now(UTC),
-                    "recovered pair availability, identity or actual verification differs")
-                relative = Path("pairs") / key[0] / f"{horizon}.json"
-                path = staged / relative
-                path.parent.mkdir(parents=True, exist_ok=True)
-                write_json_object(path, {"schema": "market_predictor.investment_selected_spy_pair_evidence",
-                    "verified_at_utc": verified_at.isoformat(), "request": pair["request"], "specifications": pair["specifications"],
-                    "result": pair["pair"]})
-                digest = file_sha256(path)
-                proof_pins[str(path)] = digest
-                row.update(status="recovered", stock_net_return=result.holdings[0].net_return,
-                    spy_gross_return=result.holdings[1].gross_return, net_excess_vs_spy=result.net_excess_vs_spy,
-                    outcome_available_at_utc=pair["outcome_available_at_utc"],
-                    pair_proof=SourcePin(path=str(output / relative), sha256=digest).model_dump(mode="json"))
+                pair = compile_selected_pair(key, row, roster[key[0]], reader, sources, membership_ref,
+                    inputs.policy.decision_corrections, actions.validate_sources)
+                if pair["status"] == "source_validated":
+                    publish_selected_pair(staged, output, key, row, pair, verified_at, proof_pins)
+                else:
+                    row.update(verified_at_utc=verified_at.isoformat(), pair_missing_reasons=pair["missing_reasons"],
+                        pair_components=pair["components"])
             comparisons = _compare_cohorts(cohorts, outcomes)
             counts = Counter(row["status"] for row in outcomes.values())
             require(counts["reused_original"] == len(outcomes) - len(pending)

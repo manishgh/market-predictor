@@ -22,7 +22,8 @@ from tests.test_investment_dividend_currencies import model as currency_model
 
 def build(tmp_path: Path, records: dict[str, list[dict[str, Any]]], *, refresh_rate: float | None = None,
           symbol: str = "TEST", corroborations: dict[str, CurrencyCorroboration] | None = None,
-          amount_corrections: dict[str, IssuerDividendAmountCorrection] | None = None) -> InvestmentCorporateActions:
+          amount_corrections: dict[str, IssuerDividendAmountCorrection] | None = None,
+          relevance_action_ids: frozenset[str] = frozenset()) -> InvestmentCorporateActions:
     def write(name: str, data: dict[str, Any]) -> str:
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -60,7 +61,7 @@ def build(tmp_path: Path, records: dict[str, list[dict[str, Any]]], *, refresh_r
         refreshed[original["id"]] = ({**record, "original_record_sha256": json_sha256(original)}, ref)
     return InvestmentCorporateActions(tmp_path, evidence, reconcile_actions(evidence, {symbol}), (), policy,
         date(2024, 5, 28), currency_evidence=refreshed, currency_corroborations=corroborations,
-        dividend_amount_corrections=amount_corrections)
+        dividend_amount_corrections=amount_corrections, relevance_action_ids=relevance_action_ids)
 
 
 def dividend(identity: str = "div", ex: str = "2024-05-23") -> dict[str, Any]:

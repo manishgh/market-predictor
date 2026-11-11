@@ -38,6 +38,29 @@ class ActionWindow:
         return True
 
 
+def observed_economic_dates(
+    record: Mapping[str, Any], fields: tuple[str, ...] = _ENTITLEMENT_DATES,
+) -> dict[str, date]:
+    """Parse all present canonical dates without treating process dates as economic."""
+    dates: dict[str, date] = {}
+    for field in fields:
+        value = record.get(field)
+        if value in (None, ""):
+            continue
+        if not isinstance(value, str):
+            raise ValueError("economic date must be ISO text")
+        parsed = date.fromisoformat(value)
+        if value != parsed.isoformat():
+            raise ValueError("economic date must be canonical ISO text")
+        dates[field] = parsed
+    return dates
+
+
+def holding_ends_before_distribution(dates: Mapping[str, date], last: date) -> bool:
+    """Keep the earliest known date itself inside the unresolved boundary."""
+    return {"ex_date", "record_date", "payable_date"}.issubset(dates) and last < min(dates.values())
+
+
 def action_window(family: str, record: Mapping[str, Any]) -> ActionWindow:
     """Conservatively bound entitlement exposure from economic, not process, dates.
 
@@ -51,23 +74,14 @@ def action_window(family: str, record: Mapping[str, Any]) -> ActionWindow:
     if family not in _EX_DATE_FAMILIES | _EFFECTIVE_DATE_FAMILIES:
         return ActionWindow(identity, family, None, None, "unclassified_action_family")
     required = "ex_date" if family in _EX_DATE_FAMILIES else "effective_date"
-    parsed: dict[str, date] = {}
     ordinary_cash = family == "cash_dividends" and record.get("special") is False
     # Ancillary errors remain in the raw record for claim interpretation. They
     # cannot give a newly opened ex-date holding an earlier owner's entitlement.
     fields = ("ex_date",) if ordinary_cash else _ENTITLEMENT_DATES
-    for key in fields:
-        value = record.get(key)
-        if value is None or value == "":
-            continue
-        try:
-            if not isinstance(value, str):
-                raise ValueError("date must be ISO text")
-            parsed[key] = date.fromisoformat(value)
-            if parsed[key].isoformat() != value:
-                raise ValueError("date must be canonical ISO text")
-        except ValueError:
-            return ActionWindow(identity, family, None, None, "invalid_action_economic_date")
+    try:
+        parsed = observed_economic_dates(record, fields)
+    except ValueError:
+        return ActionWindow(identity, family, None, None, "invalid_action_economic_date")
     if required not in parsed:
         return ActionWindow(identity, family, None, None, "missing_action_economic_date")
     if (family in {"spin_offs", "rights_distributions", "stock_dividends"}
