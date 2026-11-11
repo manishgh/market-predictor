@@ -1,5 +1,66 @@
 # Active Edge Rebuild Handoff
 
+### Five-stock exclusion evaluation — November 11
+
+Status: `in_progress`. The user explicitly chose: "Exclude the five in a separate
+evaluation; preserve the original comparison." Exclude SLB (cik:0000087347), MDT
+(cik:0001613103), APA (cik:0001841666), EFX (cik:0000033185) and MAS (cik:0000062996)
+uniformly from every original selected cohort, including their already-known
+outcomes. Remove no other security, do not replace removed positions or rerank,
+and preserve the surviving selection order, holding intervals and original outcomes.
+This is a post-observation exclusion sensitivity, not an untouched investment test.
+Original comparison and all original evidence remain immutable. V1/beta is deferred.
+
+Freeze the audited parent outcome manifest
+data/research/investment_selected_outcomes_20261111/outcomes_bc2fb11/_manifest.json
+SHA256 5a7f62df2c378eeac5ce1c1bd96b181c02cea2836e846c0b55e0fcc4482f2ccb;
+outcomes.json SHA256 40b7dfdceb20dbb30c278446fa7f6b73bcc139b192daf0ba73fdc0e94a74777a;
+comparisons.json SHA256 b7cfac8e67860609669786ea7110feb8bf066a12d44210c9dd9cb9a58b0364f2.
+The independent parent audit is chat outputs/investment-selected-outcomes-independent-audit-20261111.json
+SHA256 d49fa9c3fd42c48125247393932eee71c19f9eb43aa1b5e2742585fd38361224.
+
+Implement one reusable typed exclusion-evaluation command. Validate the exact parent
+manifest and fixed-name sidecar hashes; validate all key/security/date/horizon links,
+ordered selection uniqueness and original coverage/counts/means before filtering.
+Use stable security identities, not ticker-only matching; reject unknown/duplicate
+or ambiguous exclusions. Reuse shared cohort arithmetic. Stock net returns already
+include the 20 bp round-trip stock cost; never charge it again. Compare equal-weight
+remaining stock returns with gross SPY on identical intervals and report the changed
+denominators. Keep unresolved survivors; an incomplete or empty date stays null and
+any such date keeps its full-period mean null. Preserve all 16 views and 29 dates.
+No new source collection, raw replay, target reconstruction, refit or model change.
+Trusted input boundary is the immutable, independently audited parent artifact;
+new report must state that it reuses parent verification rather than claim new raw
+source validation. Publish a separate immutable artifact with parent, request and
+new committed implementation pins, removed positions, retained rows and comparisons.
+No production, promotion, untouched-test or funded-portfolio claim is authorized.
+
+Read-only Quant metadata preflight, not a published child result: the rule removes
+78 distinct keys (51 unresolved and 27 verified), comprising 323 placements (225
+unresolved and 98 verified). Expected remainder: 3,892 keys, 10,469 placements,
+935 unknown keys and 2,394 unknown placements. Complete cohorts should increase
+49 to 89, while 11 already-complete cohorts change composition. All temporal views
+still lack a complete date; annual ranking held-out coverage should become 7/29 and
+quarterly 14/29. These expectations must be checked against actual publication.
+No result-driven adjustment of the five exclusions or replacement policy is allowed.
+
+Senior Sol Quant and independent Sol design reviewer approved this bounded design.
+ML engineer owns exclusion command/module, the minimal shared empty-cohort fix and
+tests; root owns source request, execution and documentation. Separate reviewer
+reviews code; Quant independently reconstructs actual child output. All work stays
+on canonical main. One heavy job at a time, shared lease and below-90% RAM guard.
+Commit/export implementation before the actual publication.
+
+Verification tier: component. Test parent hash/path tampering, key/date/horizon and
+count/mean mismatch, duplicates, stable-ID aliases, known and unknown exclusions,
+survivor order, no replacement, unchanged unaffected dates, exact equal weights and
+single cost, remaining unknowns and empty cohorts/views, immutable atomic output,
+and CLI registration. Run affected consumers, Ruff, strict mypy and whitespace.
+Then execute the actual retained-data command and independent arithmetic/selection
+audit. Record actual results in the three current documents and push closure.
+Rollback/failure behavior: refuse invalid input without publishing; preserve parent
+and any failed run evidence. Incomplete comparisons remain explicitly unavailable.
+
 ### Fixed selected-stock outcomes and after-cost SPY comparison — November 11
 
 Status: `complete` for the bounded retained-source recovery and measured comparison.
