@@ -77,7 +77,8 @@ Bounded remedy: recognize only the observed exact structured PAYMENT field shape
 explicit null ex-date, equal valid UTC-midnight date/paymentDate, USD one-share basis,
 explicit zero gross/net/CHF totals and exact nullable auxiliary fields; no unknown
 fields or coercion of missing/nonzero values. Require a unique one-to-one paired
-13-cell same-request gross row with blank ex-date, same payment date and zero USD/CHF,
+13-cell same-request gross row in the selected dividend's actual Brutto table,
+with blank ex-date, same payment date and zero USD/CHF,
 whose full dated wording matches the purchase-offer grammar with nonempty bounded
 offeror and positive finite USD offer price. No issuer/ticker/event/price whitelist.
 Preserve original entry indexes, exact positive target date/amount/uniqueness, strict
