@@ -276,7 +276,7 @@ def _compare_cohorts(cohorts: dict[str, list[dict[str, Any]]], outcomes: dict[Se
         for cohort in entries:
             rows = [outcomes[key] for key in cohort["keys"]]
             counts = Counter(row["status"] for row in rows)
-            complete = not counts["unresolved"]
+            complete = bool(rows) and not counts["unresolved"]
             row = {"decision_session": cohort["decision_session"], "security_ids": cohort["security_ids"],
                 "decision_ids": [key[0] for key in cohort["keys"]], "selected_positions": len(rows),
                 "reused_positions": counts["reused_original"], "recovered_positions": counts["recovered"],
@@ -284,7 +284,7 @@ def _compare_cohorts(cohorts: dict[str, list[dict[str, Any]]], outcomes: dict[Se
             for name in ("stock_net_return", "spy_gross_return", "net_excess_vs_spy"):
                 row[f"mean_{name}"] = fmean(value[name] for value in rows) if complete else None
             dates.append(row)
-        complete = all(date["complete"] for date in dates)
+        complete = bool(dates) and all(date["complete"] for date in dates)
         comparisons[view] = {"dates": dates, "date_count": len(dates), "complete_dates": sum(date["complete"] for date in dates),
             "selected_positions": sum(date["selected_positions"] for date in dates),
             "reused_positions": sum(date["reused_positions"] for date in dates),

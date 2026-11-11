@@ -21,6 +21,7 @@ from market_predictor.research.investment_coverage import plan_investment_covera
 from market_predictor.research.investment_currencies import collect_investment_dividend_currencies
 from market_predictor.research.investment_dataset import build_investment_dataset
 from market_predictor.research.investment_diagnostics import diagnose_investment_predictions
+from market_predictor.research.investment_exclusion_evaluation import evaluate_investment_exclusions
 from market_predictor.research.investment_feature_ablation import run_investment_feature_ablation
 from market_predictor.research.investment_features import (
     build_investment_features,
@@ -201,3 +202,9 @@ def register_investment_research_commands(app: typer.Typer) -> None:
         """Recover fixed selected stock/SPY outcomes from retained verified sources."""
         _run(lambda: resolve_investment_selection_outcomes(root=root, request=request,
             request_sha256=request_sha256, output=output))
+
+    @app.command("evaluate-investment-exclusions")
+    def evaluate_exclusions(root: Path = typer.Option(...), request: Path = typer.Option(...),
+                            request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
+        """Recompare fixed selected outcomes after explicit post-observation exclusions."""
+        _run(lambda: evaluate_investment_exclusions(root=root, request=request, request_sha256=request_sha256, output=output))
