@@ -30,6 +30,7 @@ from market_predictor.research.investment_features import (
 from market_predictor.research.investment_forecast_adjustment import run_investment_forecast_adjustment
 from market_predictor.research.investment_labels import materialize_investment_labels
 from market_predictor.research.investment_ranking import train_investment_ranking
+from market_predictor.research.investment_selection_outcomes import resolve_investment_selection_outcomes
 from market_predictor.research.investment_training import train_investment_models
 from market_predictor.sources.alpaca import AlpacaSource
 from market_predictor.sources.ictax import collect_ictax_archive, verify_ictax_archive
@@ -193,3 +194,10 @@ def register_investment_research_commands(app: typer.Typer) -> None:
                       request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
         """Fit the fixed within-date ranking target and compare saved return-model controls."""
         _run(lambda: train_investment_ranking(root=root, request=request, request_sha256=request_sha256, output=output))
+
+    @app.command("resolve-investment-selection-outcomes")
+    def resolve_selection_outcomes(root: Path = typer.Option(...), request: Path = typer.Option(...),
+                                   request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
+        """Recover fixed selected stock/SPY outcomes from retained verified sources."""
+        _run(lambda: resolve_investment_selection_outcomes(root=root, request=request,
+            request_sha256=request_sha256, output=output))

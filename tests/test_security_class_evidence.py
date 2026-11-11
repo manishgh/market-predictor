@@ -276,3 +276,67 @@ def test_body_limit_and_missing_body_fail_closed(tmp_path: Path, monkeypatch: py
         _extract(tmp_path, _document(_context("base"), _issuer("base"), _row("base")))
     with pytest.raises(DataReadinessError, match="missing"):
         extract_security_class_evidence(tmp_path / "missing.htm", "0" * 64, "1040971", "SLG")
+
+
+def _shared_stock_and_debt_symbol() -> str:
+    axis = "us-gaap:StatementClassOfStockAxis"
+    return _document(_context("base"), _issuer("base"),
+        _context("stock", dimensions=((axis, "us-gaap:CommonStockMember"),)),
+        _context("note", dimensions=((axis, "company:NotesDue2028Member"),)),
+        _context("other-note", dimensions=((axis, "company:NotesDue2033Member"),)),
+        _row("stock"), _row("note", title="3.125% Notes due 2028"),
+        _row("other-note", title="2.625% Notes due 2033"))
+
+
+def test_shared_symbol_selects_only_verified_equity_class(tmp_path: Path) -> None:
+    result = _extract(tmp_path, _shared_stock_and_debt_symbol())
+    assert result.trading_symbol.contextref == "stock"
+    assert result.security_title.value == "Common Stock, $0.01 par value"
+    assert result.issuer_cik.value == "0001040971"
+    assert {context.contextref for context in result.contexts} == {"base", "stock"}
+    stock_only = _document(_context("base"), _issuer("base"),
+        _context("stock", dimensions=(("us-gaap:StatementClassOfStockAxis", "us-gaap:CommonStockMember"),)), _row("stock"))
+    expected = _extract(tmp_path, stock_only)
+    assert {key: value for key, value in asdict(result).items() if key != "body_sha256"} == {
+        key: value for key, value in asdict(expected).items() if key != "body_sha256"}
+
+
+@pytest.mark.parametrize("change", [
+    lambda text: text.replace("3.125% Notes due 2028", "Preferred Shares"),
+    lambda text: text.replace("3.125% Notes due 2028", "Warrants for 3.125% Notes due 2028"),
+    lambda text: text.replace("company:NotesDue2028Member", "company:MixedEquityNotesDue2028Member"),
+    lambda text: text.replace("company:NotesDue2028Member", "company:NotesDueEquity2028Member"),
+    lambda text: text.replace("3.125% Notes due 2028", "Common Stock linked Notes due 2028"),
+    lambda text: text.replace("3.125% Notes due 2028", "Unknown security"),
+    lambda text: text.replace("company:NotesDue2028Member", "us-gaap:CommonStockMember"),
+    lambda text: text.replace("company:NotesDue2028Member", "company:SeniorBondsDue2028Member"),
+    lambda text: text.replace("company:NotesDue2033Member", "company:NotesDue2028Member"),
+    lambda text: text.replace('contextRef="note"', 'contextRef="stock"'),
+    lambda text: text.replace(_fact("SecurityExchangeName", "New York Stock Exchange", "note"), ""),
+    lambda text: text.replace(_fact("TradingSymbol", "SLG", "note"),
+        _fact("TradingSymbol", "SLG", "note") + _fact("TradingSymbol", "OTHER", "note")),
+    lambda text: text.replace(_context("note", dimensions=(("us-gaap:StatementClassOfStockAxis", "company:NotesDue2028Member"),)),
+        _context("note", dimensions=(("us-gaap:StatementClassOfStockAxis", "company:NotesDue2028Member"),), end="2021-12-31")),
+    lambda text: text.replace(_context("note", dimensions=(("us-gaap:StatementClassOfStockAxis", "company:NotesDue2028Member"),)),
+        _context("note", dimensions=(("us-gaap:StatementClassOfStockAxis", "company:NotesDue2028Member"),), entity="1492869")),
+    lambda text: text.replace(_issuer("base"), _issuer("base", "1492869")),
+])
+def test_shared_symbol_never_hides_unverified_competing_class(tmp_path: Path, change: Callable[[str], str]) -> None:
+    with pytest.raises(DataReadinessError):
+        _extract(tmp_path, change(_shared_stock_and_debt_symbol()))
+
+
+def test_debt_row_cannot_borrow_parent_issuer_context(tmp_path: Path) -> None:
+    original = _context("note", dimensions=(("us-gaap:StatementClassOfStockAxis", "company:NotesDue2028Member"),))
+    changed = _context("note", dimensions=(("us-gaap:StatementClassOfStockAxis", "company:NotesDue2028Member"),
+        ("srt:ConsolidatedEntitiesAxis", "srt:SubsidiariesMember")))
+    with pytest.raises(DataReadinessError, match="issuer association"):
+        _extract(tmp_path, _shared_stock_and_debt_symbol().replace(original, changed))
+
+
+def test_debt_context_padding_cannot_hide_duplicate_class(tmp_path: Path) -> None:
+    axis = "us-gaap:StatementClassOfStockAxis"
+    original = _context("other-note", dimensions=((axis, "company:NotesDue2033Member"),))
+    duplicate = _context("other-note", dimensions=((axis, "company:NotesDue2028Member"),), entity="0001040971")
+    with pytest.raises(DataReadinessError, match="distinct class context"):
+        _extract(tmp_path, _shared_stock_and_debt_symbol().replace(original, duplicate))

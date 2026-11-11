@@ -10,6 +10,7 @@ import pytest
 from market_predictor.investment.label_materialization import (
     InvestmentSourceValidation,
     compile_investment_label,
+    compile_investment_spy_pair,
 )
 from market_predictor.investment.label_sources import InvestmentObservations, InvestmentSourceReader
 from market_predictor.swing.contracts.holding_accounting import (
@@ -99,3 +100,46 @@ def test_nominal_dividend_claim_is_retained_without_fake_payment() -> None:
     assert all([event["kind"] for event in spec["events"]] == ["corporate_action"]
         for spec in row["specifications"].values())
     assert row["components"][0]["valuation_basis"] == "source_verified_entitlement_policy_valued_unpaid_receivable"
+
+
+@pytest.mark.parametrize("horizon", [63, 252])
+def test_pair_replays_exact_unchanged_stock_and_spy_without_auxiliary_components(horizon: Any) -> None:
+    membership = InvestmentSourceValidation((reference("membership"),))
+    actions = InvestmentSourceValidation((reference("action-absence"),))
+    prior = compile_investment_label(decision=decision(), horizon=horizon, reader=Reader(),
+        membership=membership, action_source_validation=lambda *_: actions)
+    requested = []
+
+    def pair_actions(identity: str, *_: Any) -> InvestmentSourceValidation:
+        requested.append(identity)
+        return actions
+
+    comparison = compile_investment_spy_pair(decision={**decision(), "sector_benchmark": "SPY"}, horizon=horizon,
+        reader=Reader(), membership=membership, action_source_validation=pair_actions)
+    assert requested == ["issuer:test", "benchmark:SPY"]
+    assert comparison["status"] == "source_validated" and "label_eligible" not in comparison
+    assert comparison["specifications"] == {role: prior["specifications"][role] for role in ("stock", "spy")}
+    assert comparison["pair"]["holdings"] == prior["target"]["holdings"][:2]
+    assert comparison["pair"]["net_excess_vs_spy"] == pytest.approx(-0.002)
+    assert comparison["outcome_available_at_utc"] == prior["label_available_at_utc"]
+
+
+@pytest.mark.parametrize("missing", ["stock", "spy", "membership"])
+def test_pair_keeps_missing_source_explicit_without_price_only_economics(missing: str) -> None:
+    def validate(identity: str, *_: Any) -> InvestmentSourceValidation:
+        role = "spy" if identity == "benchmark:SPY" else "stock"
+        return InvestmentSourceValidation((reference("actions"),), ("cash_entitlement_unverified",) if role == missing else ())
+
+    membership = InvestmentSourceValidation((reference("membership"),), ("membership_unverified",) if missing == "membership" else ())
+    result = compile_investment_spy_pair(decision=decision(), horizon=63, reader=Reader(),
+        membership=membership, action_source_validation=validate)
+    assert result["status"] == "unresolved" and result["pair"] is None and result["outcome_available_at_utc"] is None
+    assert result["missing_reasons"]
+    assert {component["role"] for component in result["components"]} == {"stock", "spy"}
+
+
+def test_pair_refuses_conflicting_stock_identity_even_with_complete_prices() -> None:
+    with pytest.raises(ValueError, match="distinct stock and SPY"):
+        compile_investment_spy_pair(decision={**decision(), "security_id": "benchmark:SPY"}, horizon=63, reader=Reader(),
+            membership=InvestmentSourceValidation((reference("membership"),)),
+            action_source_validation=lambda *_: InvestmentSourceValidation((reference("actions"),)))

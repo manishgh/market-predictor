@@ -190,29 +190,86 @@ def _extract(soup: BeautifulSoup, digest: str, expected_cik: str, target_ticker:
             contexts[contextref] = _context(context_tags[contextref])
         return InlineSourceFact(_attribute(tag, "name"), _text(tag), contextref, _attribute(tag, "format") or None)
 
+    def row_facts(symbol_tag: Tag) -> tuple[InlineSourceFact, InlineSourceFact, InlineSourceFact]:
+        symbol = fact(symbol_tag)
+        row = symbol_tag.find_parent("tr")
+        if row is None:
+            raise DataReadinessError("target TradingSymbol has no table row")
+        row_symbols = [tag for tag in tags["TradingSymbol"] if tag.find_parent("tr") is row]
+        if len(row_symbols) != 1:
+            raise DataReadinessError("ambiguous security classes in target table row")
+
+        def row_fact(concept: str) -> InlineSourceFact:
+            found = [tag for tag in tags[concept] if tag.find_parent("tr") is row]
+            if len(found) != 1:
+                raise DataReadinessError(f"target table row requires exactly one {concept}")
+            result = fact(found[0])
+            if result.contextref != symbol.contextref:
+                raise DataReadinessError("security title/exchange context mismatch")
+            return result
+
+        return symbol, row_fact("Security12bTitle"), row_fact("SecurityExchangeName")
+
+    def issuer_facts(security: ReportingContext) -> tuple[InlineSourceFact, InlineSourceFact]:
+        names = [fact(tag) for tag in tags["EntityRegistrantName"]]
+        ciks = [fact(tag) for tag in tags["EntityCentralIndexKey"]]
+        names = [item for item in names if _issuer_matches(contexts[item.contextref], security)]
+        ciks = [item for item in ciks if _issuer_matches(contexts[item.contextref], security)]
+        if len(names) != 1 or len(ciks) != 1:
+            raise DataReadinessError("missing or ambiguous issuer association")
+        name_context, cik_context = contexts[names[0].contextref], contexts[ciks[0].contextref]
+        if name_context.dimensions != cik_context.dimensions:
+            raise DataReadinessError("issuer name/CIK context dimensions mismatch")
+        if _cik(ciks[0].value) != expected_cik:
+            raise SecurityClassIssuerMismatch("explicit issuer CIK differs from expected CIK")
+        return names[0], ciks[0]
+
     matches = [tag for tag in tags["TradingSymbol"] if _text(tag) == target_ticker]
-    if len(matches) != 1:
+    if not matches:
         raise DataReadinessError("target TradingSymbol must occur exactly once")
-    ticker_tag = matches[0]
-    ticker = fact(ticker_tag)
-    row = ticker_tag.find_parent("tr")
-    if row is None:
-        raise DataReadinessError("target TradingSymbol has no table row")
-    row_symbols = [tag for tag in tags["TradingSymbol"] if tag.find_parent("tr") is row]
-    if len(row_symbols) != 1:
-        raise DataReadinessError("ambiguous security classes in target table row")
-
-    def row_fact(concept: str) -> InlineSourceFact:
-        found = [tag for tag in tags[concept] if tag.find_parent("tr") is row]
-        if len(found) != 1:
-            raise DataReadinessError(f"target table row requires exactly one {concept}")
-        result = fact(found[0])
-        if result.contextref != ticker.contextref:
-            raise DataReadinessError("security title/exchange context mismatch")
-        return result
-
-    title = row_fact("Security12bTitle")
-    exchange = row_fact("SecurityExchangeName")
+    if len(matches) == 1:
+        ticker, title, exchange = row_facts(matches[0])
+    else:
+        # Some registered notes use the same displayed symbol as the common stock.
+        # Validate every competing row; only an explicitly typed debt class can be
+        # excluded. Unknown securities and multiple equity rows remain ambiguous.
+        try:
+            rows = [row_facts(tag) for tag in matches]
+        except DataReadinessError as exc:
+            raise DataReadinessError("target TradingSymbol must occur exactly once unless all competing rows are verified") from exc
+        row_contexts = [contexts[row[0].contextref] for row in rows]
+        signatures = {(_cik(context.entity_identifier), context.entity_scheme, context.period, context.dimensions)
+            for context in row_contexts}
+        if len(signatures) != len(rows):
+            raise DataReadinessError("target TradingSymbol must occur exactly once per distinct class context")
+        issuers = [issuer_facts(contexts[row[0].contextref]) for row in rows]
+        equities = []
+        for index, (symbol, candidate_title, _) in enumerate(rows):
+            debt_title = re.search(r"\b(notes?|bonds?|debentures?)\b", candidate_title.value, re.IGNORECASE)
+            debt_only_title = re.fullmatch(r"[0-9]+(?:\.[0-9]+)?% Notes due [0-9]{4}", candidate_title.value, re.IGNORECASE)
+            if debt_title is None:
+                equities.append(index)
+                continue
+            members = [member for axis, member in contexts[symbol.contextref].dimensions if _stock_axis(axis)]
+            if (debt_only_title is None or len(members) != 1
+                or not re.fullmatch(r"\{https?://[^}]+\}Notes[A-Za-z0-9]*Due[A-Za-z0-9]+Member",
+                    members[0], re.IGNORECASE)
+                or re.search(r"Stock|Share|Equity|Warrant|Unit|Preferred|Common|Convertible|Mixed",
+                    members[0].split("}")[-1], re.IGNORECASE)):
+                raise DataReadinessError("competing debt title requires an unambiguous matching debt class member")
+            title_kind = debt_title[1].lower().rstrip("s")
+            if title_kind not in members[0].split("}")[-1].lower():
+                raise DataReadinessError("competing debt title and class member disagree")
+        if len(equities) != 1:
+            raise DataReadinessError("target TradingSymbol must occur exactly once for an equity class")
+        ticker, title, exchange = rows[equities[0]]
+        equity_issuer = issuers[equities[0]]
+        security_context = contexts[ticker.contextref]
+        for name, cik in issuers:
+            if (name.value != equity_issuer[0].value or _cik(cik.value) != _cik(equity_issuer[1].value)
+                or not _issuer_matches(contexts[name.contextref], security_context)
+                or not _issuer_matches(contexts[cik.contextref], security_context)):
+                raise DataReadinessError("competing listed security issuer or reporting context differs")
     stock_type = re.search(r"\b(common|ordinary|preferred|capital)\s+(stock|shares)\b", title.value, re.IGNORECASE)
     if stock_type is None or re.search(r"\b(notes|bonds|debentures)\b", title.value, re.IGNORECASE):
         raise DataReadinessError("unsupported non-stock security title")
@@ -246,21 +303,12 @@ def _extract(soup: BeautifulSoup, digest: str, expected_cik: str, target_ticker:
             r"\{https?://[^}]+\}CapitalClass([A-Z])Member", class_members[0])):
         raise DataReadinessError("capital stock requires an explicit matching class member")
 
-    names = [fact(tag) for tag in tags["EntityRegistrantName"]]
-    ciks = [fact(tag) for tag in tags["EntityCentralIndexKey"]]
-    names = [item for item in names if _issuer_matches(contexts[item.contextref], security)]
-    ciks = [item for item in ciks if _issuer_matches(contexts[item.contextref], security)]
-    if len(names) != 1 or len(ciks) != 1:
-        raise DataReadinessError("missing or ambiguous issuer association")
-    name_context, cik_context = contexts[names[0].contextref], contexts[ciks[0].contextref]
-    if name_context.dimensions != cik_context.dimensions:
-        raise DataReadinessError("issuer name/CIK context dimensions mismatch")
-    if _cik(ciks[0].value) != expected_cik:
-        raise SecurityClassIssuerMismatch("explicit issuer CIK differs from expected CIK")
-    selected = {item.contextref for item in (ticker, title, exchange, names[0], ciks[0])}
+    issuer_name, issuer_cik = issuer_facts(security)
+    selected = {item.contextref for item in (ticker, title, exchange, issuer_name, issuer_cik)}
     return SecurityClassEvidence(
-        digest, ticker, title, exchange, names[0], ciks[0], tuple(contexts[key] for key in sorted(selected)),
+        digest, ticker, title, exchange, issuer_name, issuer_cik, tuple(contexts[key] for key in sorted(selected)),
     )
+
 
 
 def extract_security_class_evidence(

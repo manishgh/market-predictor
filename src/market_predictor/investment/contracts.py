@@ -12,6 +12,7 @@ from market_predictor.swing.contracts.holding_accounting import HoldingContract,
 
 HoldingRole = Literal["stock", "spy", "qqq", "sector"]
 HOLDING_ROLES: tuple[HoldingRole, ...] = ("stock", "spy", "qqq", "sector")
+SPY_PAIR_ROLES: tuple[HoldingRole, ...] = ("stock", "spy")
 
 
 class InvestmentTargetPolicy(HoldingContract):
@@ -146,4 +147,75 @@ class InvestmentTargetResult(HoldingContract):
                 expected is not None and excess is not None and not math.isclose(expected, excess, abs_tol=1e-12)
             ):
                 raise ValueError("benchmark excess does not reconcile")
+        return self
+
+
+class InvestmentSpyPairRequest(HoldingContract):
+    """Separate stock/SPY economic comparison, with the original holding policy."""
+
+    contract: Literal["market_predictor.investment_spy_pair_request"] = "market_predictor.investment_spy_pair_request"
+    policy: InvestmentTargetPolicy
+    decision_id: Identifier
+    decision_session: date
+    decision_time_utc: Timestamp
+    sector: Identifier
+    sector_membership_source: InvestmentSourceIdentity
+    holdings: tuple[InvestmentHoldingBinding, ...]
+
+    @model_validator(mode="after")
+    def complete_pair(self) -> Self:
+        if tuple(binding.role for binding in self.holdings) != SPY_PAIR_ROLES:
+            raise ValueError("comparison must bind stock and SPY in canonical order")
+        stock, spy = self.holdings
+        if spy.security_id != "benchmark:SPY" or spy.symbol != "SPY" or (
+            stock.security_id == spy.security_id or stock.symbol == spy.symbol
+        ):
+            raise ValueError("comparison requires distinct stock and SPY identities and symbols")
+        if any(self.sector_membership_source not in binding.sources for binding in self.holdings):
+            raise ValueError("comparison holdings must bind the exact decision membership source")
+        return self
+
+    def sha256(self) -> str:
+        return json_sha256(self.model_dump(mode="json"))
+
+
+class InvestmentSpyPairResult(HoldingContract):
+    contract: Literal["market_predictor.investment_spy_pair_result"] = "market_predictor.investment_spy_pair_result"
+    request_sha256: Sha256
+    policy_sha256: Sha256
+    decision_id: Identifier
+    horizon_sessions: Literal[63, 252]
+    entry_time_utc: Timestamp
+    horizon_end_utc: Timestamp
+    holdings: tuple[InvestmentHoldingValue, ...]
+    net_excess_vs_spy: float | None
+    outcome_available_at_utc: Timestamp | None
+    status: Literal["available", "unavailable"]
+    missing_reasons: tuple[Identifier, ...]
+    scope: Literal["retrospective_research"] = "retrospective_research"
+    training_ready: Literal[False] = False
+    promotion_eligible: Literal[False] = False
+    production_eligible: Literal[False] = False
+
+    @model_validator(mode="after")
+    def consistent_pair(self) -> Self:
+        if tuple(value.role for value in self.holdings) != SPY_PAIR_ROLES or self.entry_time_utc >= self.horizon_end_utc:
+            raise ValueError("stock/SPY comparison requires both holdings and an ordered interval")
+        reasons = tuple(f"{value.role}:{reason}" for value in self.holdings for reason in value.missing_reasons)
+        if self.missing_reasons != reasons or (self.status == "available") != (not reasons):
+            raise ValueError("stock/SPY comparison reasons and availability differ")
+        if reasons:
+            if self.net_excess_vs_spy is not None or self.outcome_available_at_utc is not None:
+                raise ValueError("incomplete pair cannot claim stock/SPY economics")
+            return self
+        stock, spy = self.holdings
+        for value in self.holdings:
+            if (value.gross_return is None or value.net_return is None or value.label_available_at_utc is None
+                or not math.isclose(value.gross_return - 0.002, value.net_return, rel_tol=0, abs_tol=1e-12)):
+                raise ValueError("complete stock/SPY holdings require both returns, one cost and an actual clock")
+        clocks = tuple(value.label_available_at_utc for value in self.holdings if value.label_available_at_utc is not None)
+        assert stock.net_return is not None and spy.gross_return is not None
+        if (self.outcome_available_at_utc != max(self.horizon_end_utc, *clocks) or self.net_excess_vs_spy is None
+            or not math.isclose(stock.net_return - spy.gross_return, self.net_excess_vs_spy, rel_tol=0, abs_tol=1e-12)):
+            raise ValueError("complete pair must reconcile stock net against SPY gross and bind availability")
         return self

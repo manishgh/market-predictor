@@ -10,9 +10,12 @@ import pandas as pd
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.investment.contracts import (
     HOLDING_ROLES,
+    SPY_PAIR_ROLES,
     HoldingRole,
     InvestmentHoldingBinding,
     InvestmentHoldingValue,
+    InvestmentSpyPairRequest,
+    InvestmentSpyPairResult,
     InvestmentTargetRequest,
     InvestmentTargetResult,
 )
@@ -42,17 +45,9 @@ def _verify_sources(spec: HoldingSpecification, binding: InvestmentHoldingBindin
         raise ValueError("holding source inventory differs from consumed evidence")
 
 
-def project_investment_targets(
-    request: InvestmentTargetRequest, holdings: Mapping[HoldingRole, HoldingSpecification],
-) -> InvestmentTargetResult:
-    """Validate exact request bindings and select Nth marked value, never liquidating.
-
-    Source identities are checked, not source authority or coverage. Those independent
-    publication gates remain necessary before these research targets enter training.
-    """
-    request = InvestmentTargetRequest.model_validate_json(request.model_dump_json())
-    if set(holdings) != set(HOLDING_ROLES):
-        raise ValueError("target needs exactly stock, SPY, QQQ and sector holdings")
+def _project_holding_values(request: InvestmentTargetRequest | InvestmentSpyPairRequest,
+                            holdings: Mapping[HoldingRole, HoldingSpecification],
+                            ) -> tuple[datetime, tuple[datetime, ...], tuple[InvestmentHoldingValue, ...]]:
     calendar = xcals.get_calendar("XNYS")
     session = pd.Timestamp(request.decision_session)
     if not calendar.is_session(session):
@@ -89,6 +84,21 @@ def project_investment_targets(
         values.append(InvestmentHoldingValue(role=binding.role, security_id=spec.security_id,
             specification_sha256=binding.specification_sha256, gross_return=final.gross_return,
             net_return=final.net_return, label_available_at_utc=available, missing_reasons=tuple(sorted(reasons))))
+    return entry, ends, tuple(values)
+
+
+def project_investment_targets(
+    request: InvestmentTargetRequest, holdings: Mapping[HoldingRole, HoldingSpecification],
+) -> InvestmentTargetResult:
+    """Validate exact request bindings and select Nth marked value, never liquidating.
+
+    Source identities are checked, not source authority or coverage. Those independent
+    publication gates remain necessary before these research targets enter training.
+    """
+    request = InvestmentTargetRequest.model_validate_json(request.model_dump_json())
+    if set(holdings) != set(HOLDING_ROLES):
+        raise ValueError("target needs exactly stock, SPY, QQQ and sector holdings")
+    entry, ends, values = _project_holding_values(request, holdings)
     missing = tuple(f"{value.role}:{reason}" for value in values for reason in value.missing_reasons)
     stock = values[0]
     excess = [None if stock.net_return is None or benchmark.gross_return is None
@@ -100,4 +110,26 @@ def project_investment_targets(
         entry_time_utc=entry.astimezone(UTC), horizon_end_utc=ends[-1].astimezone(UTC), holdings=tuple(values),
         net_excess_vs_spy=excess[0], net_excess_vs_qqq=excess[1], net_excess_vs_sector=excess[2],
         label_available_at_utc=available, label_eligible=not missing,
+        status="unavailable" if missing else "available", missing_reasons=missing)
+
+
+def project_investment_spy_pair(
+    request: InvestmentSpyPairRequest, holdings: Mapping[HoldingRole, HoldingSpecification],
+) -> InvestmentSpyPairResult:
+    """Replay exact marked stock/SPY holdings without modifying the training target."""
+    request = InvestmentSpyPairRequest.model_validate_json(request.model_dump_json())
+    if set(holdings) != set(SPY_PAIR_ROLES):
+        raise ValueError("comparison needs exactly stock and SPY holdings")
+    entry, ends, values = _project_holding_values(request, holdings)
+    missing = tuple(f"{value.role}:{reason}" for value in values for reason in value.missing_reasons)
+    stock, spy = values
+    excess, available = None, None
+    if not missing:
+        assert stock.net_return is not None and spy.gross_return is not None
+        excess = stock.net_return - spy.gross_return
+        available = max(ends[-1], *(value.label_available_at_utc for value in values if value.label_available_at_utc is not None))
+    return InvestmentSpyPairResult(request_sha256=request.sha256(), policy_sha256=request.policy.sha256(),
+        decision_id=request.decision_id, horizon_sessions=request.policy.horizon_sessions,
+        entry_time_utc=entry.astimezone(UTC), horizon_end_utc=ends[-1].astimezone(UTC), holdings=values,
+        net_excess_vs_spy=excess, outcome_available_at_utc=available,
         status="unavailable" if missing else "available", missing_reasons=missing)

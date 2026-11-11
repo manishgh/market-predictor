@@ -12,13 +12,16 @@ import pandas as pd
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.investment.contracts import (
     HOLDING_ROLES,
+    SPY_PAIR_ROLES,
+    HoldingRole,
     InvestmentHoldingBinding,
     InvestmentSourceIdentity,
+    InvestmentSpyPairRequest,
     InvestmentTargetPolicy,
     InvestmentTargetRequest,
 )
 from market_predictor.investment.label_sources import InvestmentSourceReader
-from market_predictor.investment.targets import project_investment_targets
+from market_predictor.investment.targets import project_investment_spy_pair, project_investment_targets
 from market_predictor.swing.contracts.holding_accounting import (
     CashAvailabilityEvent,
     CorporateActionEvent,
@@ -60,15 +63,10 @@ def _identities(evidence: tuple[EvidenceReference, ...]) -> tuple[InvestmentSour
     return tuple(sources[name] for name in sorted(sources))
 
 
-def compile_investment_label(*, decision: Mapping[str, Any], horizon: Literal[63, 252],
+def _compile_investment_holdings(*, decision: Mapping[str, Any], horizon: Literal[63, 252],
     reader: InvestmentSourceReader, membership: InvestmentSourceValidation,
-    action_source_validation: ActionSourceValidation) -> dict[str, Any]:
-    """Keep every requested row; economics require all four lots with independently validated sources.
-
-    The corporate-action source validator must prove complete coverage and account for owned actions
-    over the exact interval. Any unresolved distribution, successor or claim stays
-    unavailable; no event-free return is reported as an economic diagnostic for it.
-    """
+    action_source_validation: ActionSourceValidation, roles: tuple[HoldingRole, ...]) -> dict[str, Any]:
+    """Build only the requested holdings, with exact session and corporate-action evidence."""
     calendar = xcals.get_calendar("XNYS")
     raw_day = decision.get("decision_session", decision.get("session_date_et"))
     day = date.fromisoformat(raw_day) if isinstance(raw_day, str) else raw_day
@@ -85,13 +83,14 @@ def compile_investment_label(*, decision: Mapping[str, Any], horizon: Literal[63
         reasons.append("membership_source_availability_unknown")
     membership_sources = _identities(membership.evidence)
     sector_symbol = decision.get("sector_benchmark", decision.get("primary_benchmark"))
-    components = ((str(decision["security_id"]), str(decision["ticker"])),
-        ("benchmark:SPY", "SPY"), ("benchmark:QQQ", "QQQ"),
-        (f"benchmark:{sector_symbol}", str(sector_symbol)))
-    specs = {}
+    components: dict[HoldingRole, tuple[str, str]] = {"stock": (str(decision["security_id"]), str(decision["ticker"])),
+        "spy": ("benchmark:SPY", "SPY"), "qqq": ("benchmark:QQQ", "QQQ"),
+        "sector": (f"benchmark:{sector_symbol}", str(sector_symbol))}
+    specs: dict[HoldingRole, HoldingSpecification] = {}
     bindings = []
     component_reports = []
-    for role, (identity, symbol) in zip(HOLDING_ROLES, components, strict=True):
+    for role in roles:
+        identity, symbol = components[role]
         observations = reader.read(identity, symbol, sessions, benchmark=role != "stock")
         gaps = list(observations.missing_reasons)
         position = f"{decision['decision_id']}:{role}:shares"
@@ -130,21 +129,49 @@ def compile_investment_label(*, decision: Mapping[str, Any], horizon: Literal[63
         specs[role] = spec
         bindings.append(InvestmentHoldingBinding(role=role, security_id=identity, symbol=symbol,
             specification_sha256=json_sha256(spec.model_dump(mode="json")), sources=sources))
-    result = None
-    request = None
+    result: dict[str, Any] | None = None
+    request: dict[str, Any] | None = None
     if not reasons:
-        request = InvestmentTargetRequest(policy=policy, decision_id=str(decision["decision_id"]), decision_session=day,
-            decision_time_utc=pd.Timestamp(decision["decision_time_utc"]).to_pydatetime(), sector=str(decision["sector"]),
-            sector_membership_source=membership_sources[0], holdings=tuple(bindings))
-        result = project_investment_targets(request, specs)
-        reasons.extend(result.missing_reasons)
+        arguments = {"policy": policy, "decision_id": str(decision["decision_id"]), "decision_session": day,
+            "decision_time_utc": pd.Timestamp(decision["decision_time_utc"]).to_pydatetime(), "sector": str(decision["sector"]),
+            "sector_membership_source": membership_sources[0], "holdings": tuple(bindings)}
+        if roles == HOLDING_ROLES:
+            target_request = InvestmentTargetRequest.model_validate(arguments)
+            request = target_request.model_dump(mode="json")
+            result = project_investment_targets(target_request, specs).model_dump(mode="json")
+        else:
+            pair_request = InvestmentSpyPairRequest.model_validate(arguments)
+            request = pair_request.model_dump(mode="json")
+            result = project_investment_spy_pair(pair_request, specs).model_dump(mode="json")
+        reasons.extend(result["missing_reasons"])
     return {"decision_id": str(decision["decision_id"]), "security_id": str(decision["security_id"]),
         "decision_session": day.isoformat(), "horizon_sessions": horizon, "policy_sha256": policy.sha256(),
         "entry_time_utc": entry.isoformat(), "economic_maturity_utc": ends[-1].isoformat(),
-        "label_available_at_utc": None if result is None else result.model_dump(mode="json")["label_available_at_utc"],
-        "status": "source_validated" if not reasons else "unresolved", "label_eligible": not reasons,
+        "status": "source_validated" if not reasons else "unresolved",
         "missing_reasons": sorted(set(reasons)), "components": component_reports,
-        "request": None if request is None else request.model_dump(mode="json"),
-        "target": None if result is None else result.model_dump(mode="json"),
+        "request": request, "target": result,
         "specifications": {role: spec.model_dump(mode="json") for role, spec in specs.items()},
         "training_ready": False, "promotion_eligible": False, "production_eligible": False}
+
+
+def compile_investment_label(*, decision: Mapping[str, Any], horizon: Literal[63, 252],
+    reader: InvestmentSourceReader, membership: InvestmentSourceValidation,
+    action_source_validation: ActionSourceValidation) -> dict[str, Any]:
+    """Compile the unchanged four-role investment training label."""
+    row = _compile_investment_holdings(decision=decision, horizon=horizon, reader=reader, membership=membership,
+        action_source_validation=action_source_validation, roles=HOLDING_ROLES)
+    row["label_available_at_utc"] = None if row["target"] is None else row["target"]["label_available_at_utc"]
+    row["label_eligible"] = not row["missing_reasons"]
+    return row
+
+
+def compile_investment_spy_pair(*, decision: Mapping[str, Any], horizon: Literal[63, 252],
+    reader: InvestmentSourceReader, membership: InvestmentSourceValidation,
+    action_source_validation: ActionSourceValidation) -> dict[str, Any]:
+    """Compile stock and SPY without requiring auxiliary benchmark evidence."""
+    row = _compile_investment_holdings(decision=decision, horizon=horizon, reader=reader, membership=membership,
+        action_source_validation=action_source_validation, roles=SPY_PAIR_ROLES)
+    pair = row.pop("target")
+    row["outcome_available_at_utc"] = None if pair is None else pair["outcome_available_at_utc"]
+    row["pair"] = pair
+    return row

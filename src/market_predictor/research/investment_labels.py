@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
@@ -24,6 +27,7 @@ from market_predictor.investment.label_materialization import InvestmentSourceVa
 from market_predictor.investment.label_sources import InvestmentSourceReader
 from market_predictor.investment.source_extensions import (
     InvestmentRawSourceExtension,
+    VerifiedInvestmentRawExtension,
     compose_investment_raw_extension,
     verify_investment_raw_extension,
 )
@@ -35,11 +39,15 @@ from market_predictor.research.investment_label_reuse import (
     producer_origin,
     verify_parent_checkpoints,
 )
+from market_predictor.swing.contracts.corrected_outcomes import CorrectedOutcomePolicy
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference, HoldingContract, Timestamp
 from market_predictor.swing.contracts.holding_materialization import SourcePin
-from market_predictor.swing.datasets.action_evidence import load_corporate_action_evidence
+from market_predictor.swing.datasets.action_evidence import CorporateActionEvidence, load_corporate_action_evidence
 from market_predictor.swing.datasets.corrected_outcome_admission import corrected_ticker
-from market_predictor.swing.datasets.corrected_outcomes import load_corrected_outcome_policy, verified_corrected_research_sources
+from market_predictor.swing.datasets.corrected_outcomes import (
+    load_corrected_outcome_policy,
+    verified_corrected_research_sources,
+)
 
 
 class InvestmentLabelMaterializationRequest(HoldingContract):
@@ -136,6 +144,98 @@ def _save_rows(directory: Path, records: list[dict[str, Any]]) -> None:
     write_json_object(directory / "labels.json", {"rows": records})
 
 
+@dataclass(frozen=True)
+class InvestmentLabelInputs:
+    request: InvestmentLabelMaterializationRequest
+    rows: list[dict[str, Any]]
+    frozen_roster_rows: int
+    roster_rows: ArtifactReference
+    membership: ArtifactReference
+    policy: CorrectedOutcomePolicy
+
+
+def read_investment_label_inputs(root: Path, request_ref: ArtifactReference, pins: dict[str, str]) -> InvestmentLabelInputs:
+    """Read the frozen roster and label source policy under the caller's preparation lease."""
+    parsed = InvestmentLabelMaterializationRequest.model_validate_json(_read(root, request_ref, pins))
+    roster = _object(root, parsed.roster_manifest, pins)
+    if roster.get("schema") != "market_predictor.investment_coverage_roster" or roster.get("status") != "roster_complete":
+        raise DataReadinessError("investment labels require complete frozen roster")
+    for name, digest in roster["source_files"].items():
+        pins[str(_path(root, name))] = digest
+    _check(root, pins)
+    parent = Path(parsed.roster_manifest.path).parent
+    rows_file = ArtifactReference(path=str(parent / "roster.json"), sha256=roster["files"]["roster.json"])
+    rows = _object(root, rows_file, pins)["rows"]
+    if len(rows) != roster["declared_rows"] or len({row["decision_id"] for row in rows}) != len(rows):
+        raise DataReadinessError("investment roster population count or unique decisions differ")
+    frozen_roster_rows = len(rows)
+    if parsed.decision_ids is not None:
+        requested_ids = set(parsed.decision_ids)
+        if len(requested_ids) != len(parsed.decision_ids) or not requested_ids.issubset(
+            {row["decision_id"] for row in rows}
+        ):
+            raise DataReadinessError("selected decision IDs must be unique and present in the full frozen roster")
+        rows = [row for row in rows if row["decision_id"] in requested_ids]
+    coverage_request = _object(root, ArtifactReference(path=str(parent / "request.json"),
+        sha256=roster["files"]["request.json"]), pins)
+    membership_pin = ArtifactReference.model_validate_json(json.dumps(coverage_request["membership"]))
+    _read(root, membership_pin, pins)
+    policy = load_corrected_outcome_policy(root, Path(parsed.target_config.path), parsed.target_config.sha256)
+    return InvestmentLabelInputs(parsed, rows, frozen_roster_rows, rows_file, membership_pin, policy)
+
+
+@contextmanager
+def verified_investment_label_sources(root: Path, parsed: InvestmentLabelMaterializationRequest,
+    policy: CorrectedOutcomePolicy) -> Iterator[tuple[VerifiedInvestmentRawExtension | None, CorporateActionEvidence, dict[str, Any]]]:
+    raw_extension = (None if parsed.raw_source_extension is None
+        else verify_investment_raw_extension(root, parsed.raw_source_extension))
+    evidence = load_corporate_action_evidence(root=root, config=Path(policy.action_config.path), archive=Path(policy.action_archive),
+        expected_audit_sha256=policy.action_audit_sha256, memory_guard=lambda: guard("investment action evidence"))
+    with verified_corrected_research_sources(root, Path(parsed.target_config.path), parsed.target_config.sha256,
+        policy, evidence, memory_guard=lambda: guard("investment label source replay")) as sources:
+        yield raw_extension, evidence, sources
+
+
+def prepare_investment_label_components(root: Path, parsed: InvestmentLabelMaterializationRequest,
+    policy: CorrectedOutcomePolicy, rows_file: ArtifactReference, raw_extension: VerifiedInvestmentRawExtension | None,
+    evidence: CorporateActionEvidence, sources: dict[str, Any], pins: dict[str, str], policy_ref: EvidenceReference,
+    request_sha256: str) -> tuple[InvestmentCorporateActions, dict[str, Any]]:
+    """Compose the same raw and corporate-action authorities for label and pair consumers."""
+    currencies = {} if parsed.currency_manifest is None else load_investment_currency_evidence(root,
+        Path(parsed.currency_manifest.path), parsed.currency_manifest.sha256, pins, interpretation_policy_sha256=request_sha256)
+    corroborations = {}
+    if parsed.currency_corroboration_manifest is not None:
+        corroboration_pin = parsed.currency_corroboration_manifest
+        _read(root, corroboration_pin, pins)
+        corroborations = load_currency_corroborations(root, Path(corroboration_pin.path),
+            corroboration_pin.sha256, policy_sha256=request_sha256)
+    corrections = {}
+    if parsed.dividend_amount_corrections_manifest is not None:
+        correction_pin = parsed.dividend_amount_corrections_manifest
+        _read(root, correction_pin, pins)
+        corrections = load_dividend_amount_corrections(root, Path(correction_pin.path),
+            correction_pin.sha256, policy_sha256=request_sha256)
+    actions = InvestmentCorporateActions(root, evidence, sources["action_index"], policy.official_windows,
+        policy_ref, policy.numerical_end if raw_extension is None else raw_extension.outcome_end,
+        currency_evidence=currencies, currency_corroborations=corroborations,
+        dividend_amount_corrections=corrections)
+    pins.update({str(_path(root, name)): digest for name, digest in actions.source_files.items()})
+    selection = sources["selection"]
+    if raw_extension is not None:
+        action_request = inside(root, policy.action_archive) / "_request.json"
+        selection = compose_investment_raw_extension(root=root, extension=raw_extension,
+            parent_selection=selection, parent_selection_pin=policy.source_selection,
+            roster_rows_pin=SourcePin(path=rows_file.path, sha256=rows_file.sha256),
+            action_query_pin=SourcePin(path=action_request.relative_to(root).as_posix(),
+                sha256=sources["source_files"][action_request.relative_to(root).as_posix()]),
+            corroborations=corroborations)
+        for name, digest in raw_extension.source_files.items():
+            if name in pins and pins[name] != digest:
+                raise DataReadinessError("investment raw extension conflicts with parent source pins")
+            pins[name] = digest
+    return actions, selection
+
+
 def materialize_investment_labels(*, root: Path, request: Path, request_sha256: str, output: Path,
     parent_receipt: SourcePin | None = None) -> dict[str, Any]:
     """Preload action replay, then retain its one shared source lease through publication."""
@@ -148,37 +248,11 @@ def materialize_investment_labels(*, root: Path, request: Path, request_sha256: 
         guard("investment label preparation")
         pins = dict(_implementation())
         request_ref = ArtifactReference(path=str(request), sha256=request_sha256)
-        parsed = InvestmentLabelMaterializationRequest.model_validate_json(_read(root, request_ref, pins))
-        roster = _object(root, parsed.roster_manifest, pins)
-        if roster.get("schema") != "market_predictor.investment_coverage_roster" or roster.get("status") != "roster_complete":
-            raise DataReadinessError("investment labels require complete frozen roster")
-        for name, digest in roster["source_files"].items():
-            pins[str(_path(root, name))] = digest
-        _check(root, pins)
-        parent = Path(parsed.roster_manifest.path).parent
-        rows_file = ArtifactReference(path=str(parent / "roster.json"), sha256=roster["files"]["roster.json"])
-        rows = _object(root, rows_file, pins)["rows"]
-        if len(rows) != roster["declared_rows"] or len({row["decision_id"] for row in rows}) != len(rows):
-            raise DataReadinessError("investment roster population count or unique decisions differ")
-        frozen_roster_rows = len(rows)
-        if parsed.decision_ids is not None:
-            requested_ids = set(parsed.decision_ids)
-            if len(requested_ids) != len(parsed.decision_ids) or not requested_ids.issubset(
-                {row["decision_id"] for row in rows}
-            ):
-                raise DataReadinessError("selected decision IDs must be unique and present in the full frozen roster")
-            rows = [row for row in rows if row["decision_id"] in requested_ids]
-        coverage_request = _object(root, ArtifactReference(path=str(parent / "request.json"),
-            sha256=roster["files"]["request.json"]), pins)
-        membership_pin = ArtifactReference.model_validate_json(json.dumps(coverage_request["membership"]))
-        _read(root, membership_pin, pins)
-        policy = load_corrected_outcome_policy(root, Path(parsed.target_config.path), parsed.target_config.sha256)
-    raw_extension = (None if parsed.raw_source_extension is None
-        else verify_investment_raw_extension(root, parsed.raw_source_extension))
-    evidence = load_corporate_action_evidence(root=root, config=Path(policy.action_config.path), archive=Path(policy.action_archive),
-        expected_audit_sha256=policy.action_audit_sha256, memory_guard=lambda: guard("investment action evidence"))
-    with verified_corrected_research_sources(root, Path(parsed.target_config.path), parsed.target_config.sha256,
-        policy, evidence, memory_guard=lambda: guard("investment label source replay")) as sources:
+        inputs = read_investment_label_inputs(root, request_ref, pins)
+    parsed, policy = inputs.request, inputs.policy
+    rows, frozen_roster_rows = inputs.rows, inputs.frozen_roster_rows
+    membership_pin = inputs.membership
+    with verified_investment_label_sources(root, parsed, policy) as (raw_extension, evidence, sources):
         pins.update({str(_path(root, name)): digest for name, digest in sources["source_files"].items()})
         implementation = dict(_implementation())
         identity_inputs: dict[str, Any] = {"request_sha256": request_sha256, "implementation": implementation}
@@ -204,38 +278,8 @@ def materialize_investment_labels(*, root: Path, request: Path, request_sha256: 
         membership_ref = EvidenceReference(reference=membership_pin.path, artifact_sha256=membership_pin.sha256,
             record_locator="current independent verification of reconstructed historical security membership intervals",
             interpretation_policy_sha256=request_sha256, retrieved_at=verified_at, available_at=verified_at)
-        currencies = {} if parsed.currency_manifest is None else load_investment_currency_evidence(root,
-            Path(parsed.currency_manifest.path), parsed.currency_manifest.sha256, pins, interpretation_policy_sha256=request_sha256)
-        corroborations = {}
-        if parsed.currency_corroboration_manifest is not None:
-            corroboration_pin = parsed.currency_corroboration_manifest
-            _read(root, corroboration_pin, pins)
-            corroborations = load_currency_corroborations(root, Path(corroboration_pin.path),
-                corroboration_pin.sha256, policy_sha256=request_sha256)
-        corrections = {}
-        if parsed.dividend_amount_corrections_manifest is not None:
-            correction_pin = parsed.dividend_amount_corrections_manifest
-            _read(root, correction_pin, pins)
-            corrections = load_dividend_amount_corrections(root, Path(correction_pin.path),
-                correction_pin.sha256, policy_sha256=request_sha256)
-        actions = InvestmentCorporateActions(root, evidence, sources["action_index"], policy.official_windows,
-            policy_ref, policy.numerical_end if raw_extension is None else raw_extension.outcome_end,
-            currency_evidence=currencies, currency_corroborations=corroborations,
-            dividend_amount_corrections=corrections)
-        pins.update({str(_path(root, name)): digest for name, digest in actions.source_files.items()})
-        selection = sources["selection"]
-        if raw_extension is not None:
-            action_request = inside(root, policy.action_archive) / "_request.json"
-            selection = compose_investment_raw_extension(root=root, extension=raw_extension,
-                parent_selection=selection, parent_selection_pin=policy.source_selection,
-                roster_rows_pin=SourcePin(path=rows_file.path, sha256=rows_file.sha256),
-                action_query_pin=SourcePin(path=action_request.relative_to(root).as_posix(),
-                    sha256=sources["source_files"][action_request.relative_to(root).as_posix()]),
-                corroborations=corroborations)
-            for name, digest in raw_extension.source_files.items():
-                if name in pins and pins[name] != digest:
-                    raise DataReadinessError("investment raw extension conflicts with parent source pins")
-                pins[name] = digest
+        actions, selection = prepare_investment_label_components(root, parsed, policy, inputs.roster_rows, raw_extension,
+            evidence, sources, pins, policy_ref, request_sha256)
         groups: dict[str, list[dict[str, Any]]] = {}
         for original in rows:
             row = dict(original)
