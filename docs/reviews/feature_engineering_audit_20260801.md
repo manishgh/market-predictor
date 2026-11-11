@@ -63,6 +63,36 @@ shared SEC class extractor and tests; independent design/code and senior Quant
 reviews approve this demonstrated remedy. Verify the retained source and poison
 cases, then revisit only the prior unresolved selected-class reserve using the
 committed parser. Any new proofs still pass full dated identity/dividend validators.
+Additional retained-source remedy frozen November 11 before implementation:
+EL-2024 structured body 43f511e429aa579caf2328ea88a96e6b093d32125f611239391f487344437a0f
+and AAP-2023 body f0acc7b5eab3c57135de71c1c975ccd83922a2c9a9df3dbbae189aa8b57289e2
+contain exact positive target dividends (2024-05-31 USD0.66 and 2023-04-13 USD1.50),
+but an unrelated null-exDate zero PAYMENT makes the current whole-payload date loop
+reject them. Paired gross bodies 7c0da16293b7a441b685d62b81ec6b7e835196ac88f22bb73793e0a32866d10a
+and 3bc4928fafd9650a22767f51894986764e98f404d12dce5b42464cf43da12d55 identify those
+zero rows as separately dated purchase offers, not dividend payments. Do not infer
+that the remaining 72 similarly reported events have the same cause.
+
+Bounded remedy: recognize only the observed exact structured PAYMENT field shape,
+explicit null ex-date, equal valid UTC-midnight date/paymentDate, USD one-share basis,
+explicit zero gross/net/CHF totals and exact nullable auxiliary fields; no unknown
+fields or coercion of missing/nonzero values. Require a unique one-to-one paired
+13-cell same-request gross row with blank ex-date, same payment date and zero USD/CHF,
+whose full dated wording matches the purchase-offer grammar with nonempty bounded
+offeror and positive finite USD offer price. No issuer/ticker/event/price whitelist.
+Preserve original entry indexes, exact positive target date/amount/uniqueness, strict
+all-other-payment parsing, ownership, source hashes, requests, ISIN and gross context.
+Unknown/nonzero/malformed/ambiguous rows remain refused. No resolver index waiver.
+Senior Quant approves the evidence-based grammar. Independent design/code review,
+missing/duplicate/paid/date/request poison tests and actual two-source replay are
+required. Engineer owns dividend_currencies.py and its affected tests; root owns
+scope/source execution. Reuse the exact frozen 453-event supplemental request
+b2c6f67f5cb5c591af92d1b3fbe3bea1910db7db54388f2f4dd842d13d622a20 and all 4,587 prior
+assertions. The unpublished 5b557be supplemental attempt was stopped at
+2026-11-11T00:16:05.657942+00:00 before output existed, to run once with the final
+reviewed producer; preserve its log as superseded execution evidence. No published
+source, target or selection was overwritten. Commit/export before actual recovery.
+
 Independent Sol design review approved before implementation. Root owns selected
 inventory, retained anchor reserve and docs; engineer owns shared pair materialization
 and publication/evaluation; senior Quant audits source remedies and actual outcomes;
