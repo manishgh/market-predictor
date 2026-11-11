@@ -1,5 +1,119 @@
 # Active Edge Rebuild Handoff
 
+### Retained dividend currency and held-stock actions — November 11
+
+Status: `in_progress`. Current user authorizes further remaining currency and
+corporate-action recovery with retained data, Sol engineering and independent senior
+Quant/design/code review. Canonical main only; V1/beta deferred. The previous bounded
+distribution checkpoint is closed at main 5be656b2701ad003cd9cd23f09ae96b1cc72742e.
+
+Direct parent: data/research/investment_distribution_outcomes_20261111/distributions_f4c34aa/_manifest.json
+SHA256 32a2163f939c3077bb0ed8ecd444b8430367b4ddcf8b2b7312852b6056285157.
+Independent audit SHA256 5e28f129f9cdb1764a80ca8eaa583d66c5e646c39bbb1352673ca56afe909e03.
+Freeze all 3,177 known dictionaries, proof references and clocks, 715 unknown keys,
+3,892 total keys, 10,469 ordered placements, 464 cohorts and 16 comparison views.
+Exclusions stay SLB, MDT, APA, EFX and MAS with the exact inherited stable identities.
+Preserve every original comparison, source byte, label/model and all prior source
+authorities. No new exclusions, reranking, replacements, refits, downloads, deletions,
+amount corrections, training/feature changes, API changes or later sealed SEC use.
+Keep 20 bp stock cost once and gross SPY on the same interval. Incomplete and empty
+cohorts and full-period results remain unavailable. This is post-observation sensitivity.
+
+Frozen currency scope: 33 exact original cash-action IDs, consisting of 18 explicit
+ordinary common-share class candidates (FOX 7, PARA 7, GOOGL 4) and 15 candidates
+whose retained annual tax payload includes an unrelated documented zero-value row.
+Forty unknown holdings have only these covered currency reasons; the broader exact
+ID-triggered attempt set may retain independent gaps. The nine projected FOX cohort
+opportunities are coverage-only diagnostics, never a return-selection criterion or
+a recovery/performance promise. No GOOG capital-class extension, opaque NKE row,
+positive TECH null-date amount, PARA stock-or-cash election, AVGO payable conflict,
+FCX rate inference, FANG incomplete legs or BBWI/HWM alias rule is admitted.
+
+Existing StockCompositeIdentity and canonical tax replay remain the source of truth.
+For explicit classes require actual dated ownership, the held SEC common-share class
+letter and independently identical class/issuer in both ICTax lookup and calculation,
+exact provider CUSIP-to-tax ISIN, unique exact USD ex-date/gross amount/payment date,
+and all normal raw and amount checks. No generic competing-class waiver or new mode
+flag. Match issuer case/whitespace only, retain substantive words and punctuation.
+Unrelated zero rows require exact structured zero/non-income/no-ex-date fields and
+unique matching actual Brutto table/date/zero row with a closed full German grammar
+for purchase offers, share-only exchanges, own-share repurchases or share-only mergers.
+Cash alternatives, ambiguity, extra clauses, positive amounts and malformed thousands
+grouping remain unsupported. These annotations never waive the separate action book.
+Preserve existing accepted purchase-offer evidence locators and ordinary behavior.
+
+Use the existing dividend-resolution entry point with the frozen 33-event request,
+unchanged eleven archive pins and full retained cross-version census. Preserve the
+current 4,647 assertion objects from d44edb18dd08958e34934acecea3777ba39ed755c075360815458401b74ae3c3
+as an identical ordered prefix and unchanged two amount corrections 9a44ec36….
+Publish only genuinely source-validated additions. The held outcome request's new
+optional currency_corroborations SourcePin must be cumulative and append-only.
+Positive currency evidence must bind its supplying manifest/action to the actual
+holding event/mark/source references with current verification availability.
+
+Held-stock scope: exactly two typed actions in reviewed_held_stock_actions, a new
+optional SourcePin. ReviewedHeldStockActions contains tagged ReviewedHoldingSplit
+and ReviewedRegularCash facts bound to stable security, ticker, original record hash,
+CUSIP, dated stock-class proof, actual official source and independent tax where cash.
+Stage the two exact class-proof bytes inside canonical data before consumption; no
+external-path admission bypass. No hard-coded ticker behavior or generic source waiver.
+TSLA: exact retained issuer 3-for-1 split, record August 17 2022, payable August 24,
+ex/effective August 25 open, provider due-bill redemption August 26. Seven selected
+holdings open strictly before record and mature strictly after redemption, with every
+raw unadjusted SIP session. Apply one ordinary continuing-share units x3 event at ex
+open through the existing evaluator; no cash or daughter position. Require exact
+unique source variant and reject simultaneous/conflicting actions and boundary lots.
+PFE: exact retained issuer HTTP200 history row (Regular Cash, USD0.41, ex July27 2023,
+record July28, payable September5), exact reviewed provider record fab16df8…,
+dated Pfizer common class and ICTax US7170811035 exact gross/payment. Seven windows
+open before ex and mature after ex. Preserve original foreign:true bytes. The typed
+proof establishes this ordinary nominal unpaid claim at ex under the existing label
+policy; it does not infer withholding, reinvestment or spendable payment. The refused
+direct press release remains excluded. All independent raw/membership gaps remain.
+
+Lineage/orchestration: append the two optional source roles; inherited cash completion,
+recipient identity, reviewed dates and parent-unit pins remain exact. Verify cumulative
+currency and held-action fact additions without replacing any old object/nested pin.
+Read latest failed-attempt reasons from validated prior sidecars into an in-memory
+map with source provenance; do not rewrite historical unresolved rows. Retry only
+unknown holdings with newly supplied exact action IDs recorded in those latest
+reasons. Preserve all carried failed/unattempted rows verbatim and original ancestor
+unknown mask. A recovered pair must contain the positive triggering manifest/action
+evidence in its actual specification; do not misclassify it as negative irrelevance.
+Retain known rows/proofs/clocks and reconstruct every ordered cohort independently.
+
+Source discovery pins (under C:/Users/manis/Documents/Codex/2026-11-05/c-project-market-predictor/outputs):
+residual-currency-scope.json SHA256 c411653cff54aba8ac517fa0ba81ae6be4cdac884578d15064519eeda6261263
+residual-currency-request.json SHA256 f70f0811ed361eba7af9ff41c56426b04d3d801364c2ed0ffa0430376f913f10
+residual-held-stock-action-source-facts-20261111.json SHA256 a3ccb1fffdc4ef9ec5dc7fd29e177cd2a8fedab945afd5bcd5a253f8ffcfc787
+residual-pfe-replay-20261111.json SHA256 f7480a76f9f853d8c2ee003ef8d6e229e269fc2675ac4e371a91f0f9010eea89
+The pinned TSLA/PFE source bundle also binds exact issuer/index/transport and raw
+session receipts. CCL/ILMN/F/BBWI/LLY discoveries are non-admitting future leads.
+
+Ownership: currency engineer owns dividend_currencies, dividend_resolution if needed,
+currency tests and bounded input builder. Action engineer owns reviewed_held_stock_actions,
+corporate_actions and label-component integration plus their tests and fact builder.
+Root owns request/lineage/orchestration and their tests, authoritative docs, publication
+and commits. Coordinate shared imports/signatures before writes. Senior Quant reviews
+source meaning/design and independently audits the real run. A separate Sol reviewer
+performs one consolidated design/code review and reviews supported corrections.
+
+Verification tier: component. Test exact positive classes and unrelated zero rows,
+class/issuer/lookup/date/payment/amount/source/table poisons, opaque/positive/cash-election
+rows, wrong Swiss grouping and preserved ordinary behavior. Test held action kind,
+source/index/hash/record/CUSIP/owner/date/ratio conflicts, strict window boundaries,
+simultaneous actions, double split application, and existing nominal cash accounting.
+Test parent cycles, source replacement/removal, altered known rows/proofs/clocks,
+latest-attempt provenance, no retrigger from carried facts, exact positive evidence
+bindings, fixed ordering/costs and null incomplete means. Run affected source consumers,
+Ruff and strict mypy; fixture tests do not substitute for retained-data producer runs.
+Commit/export first, execute normal dividend resolver then full held-outcome recovery,
+and independently audit new pairs, all prior known rows/proofs and all 464 cohorts.
+One heavy job at a time under the normal shared lease; system RAM strictly below90%,
+5 GiB process budget/headroom and bounded120-second pause. No guard bypass.
+Close/push measured results on main. Unsupported facts leave the original unknown
+outcome in place; no fabricated return, reduced selection denominator or promotion.
+
 ### Additional retained distribution outcomes — November 11
 
 Status: `complete` for the bounded retained-distribution recovery and independent
