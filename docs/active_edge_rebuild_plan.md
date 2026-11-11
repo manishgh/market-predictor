@@ -2,64 +2,141 @@
 
 ### Five-stock exclusion evaluation — November 11
 
-Status: `in_progress`. The user explicitly chose: "Exclude the five in a separate
-evaluation; preserve the original comparison." Exclude SLB (cik:0000087347), MDT
-(cik:0001613103), APA (cik:0001841666), EFX (cik:0000033185) and MAS (cik:0000062996)
-uniformly from every original selected cohort, including their already-known
-outcomes. Remove no other security, do not replace removed positions or rerank,
-and preserve the surviving selection order, holding intervals and original outcomes.
-This is a post-observation exclusion sensitivity, not an untouched investment test.
-Original comparison and all original evidence remain immutable. V1/beta is deferred.
+Status: `complete` for the user-authorized separate exclusion evaluation. Original
+comparison remains unchanged. Excluded stable identities: SLB cik:0000087347,
+MDT cik:0001613103, APA cik:0001841666, EFX cik:0000033185 and MAS cik:0000062996.
+The same rule removed all their selected positions, including known outcomes.
+No replacements, reranking, refits, downloads, source reconstruction or API changes
+occurred. Every surviving outcome dictionary, order and verification clock is reused
+unchanged. Equal weights are recalculated over the smaller remaining cohort.
+V1/beta stays deferred; no model promotion or fully trained-model claim is made.
 
-Freeze the audited parent outcome manifest
-data/research/investment_selected_outcomes_20261111/outcomes_bc2fb11/_manifest.json
+This is a post-observation exclusion sensitivity. It does not establish an unbiased
+investment universe or out-of-sample stock-exclusion policy. The implementation is
+reusable for explicit stable-identity exclusions and does not hardcode these stocks.
+Its typed request pins the parent and exclusion reasons; parent count/identity/date/
+horizon/order/hash/arithmetic mismatches refuse publication. Shared cohort math now
+also handles empty dates/views as unavailable. Stock net values already include
+the 20 bp (0.20 percentage point) round-trip cost: it is not charged again. SPY
+remains the gross benchmark on the same interval. Unknown survivors and empty dates
+keep cohort returns null; any incomplete date keeps the full-period view mean null.
+
+Actual publication removed 78 distinct decision/horizon holding keys: 51 unknown
+and 27 previously verified. They account for 323 placements: 225 unknown and 98
+verified. The remainder contains 3,892 distinct keys and 10,469 placements, with
+935 unknown keys and 2,394 unknown placements. Coverage improves from 49/464 to
+89/464 complete cohorts; all 40 newly complete cohorts are held-out-stock views.
+Eleven already-complete cohorts also change composition. No cohort is empty.
+All eight temporal views still have zero complete dates, and all 16 full-period
+means remain null. Removing five stocks does not resolve the other missing facts.
+
+The annual ranking candidate now has 7/29 complete held-out-stock dates: 1 beats
+SPY after stock costs and 6 trail it. The quarterly candidate has 14/29 complete
+dates: 4 beat SPY and 10 trail it. These are descriptive counts for the available
+dates, not independent trials or a full-period success rate. No overall SPY edge
+has been established. Monthly 63/252-session cohorts overlap and are not a funded
+portfolio; do not compound their returns or average only complete dates as a
+substitute for missing full-period results. Composition changes are not model gains.
+
+Implementation commit: 2a1a3526ee02b984ea4ff747928de217f7e22ef6; canonical main only.
+Result: data/research/investment_exclusion_evaluation_20261111/exclusions_2a1a352/_manifest.json
+SHA256 dd6d83ca839ac293d903d684d18d6fb7c383e2ec5c74889a1ca9d5d6b13e6237; completed 2026-11-11T09:36:58.680648+00:00.
+Request: data/research/investment_exclusion_evaluation_20261111/inputs/request.json
+SHA256 4e1e452b09a19dbfd14757bd377512210a6e23a40fe4c9f9d6978a12633cea22.
+Parent: data/research/investment_selected_outcomes_20261111/outcomes_bc2fb11/_manifest.json
 SHA256 5a7f62df2c378eeac5ce1c1bd96b181c02cea2836e846c0b55e0fcc4482f2ccb;
-outcomes.json SHA256 40b7dfdceb20dbb30c278446fa7f6b73bcc139b192daf0ba73fdc0e94a74777a;
-comparisons.json SHA256 b7cfac8e67860609669786ea7110feb8bf066a12d44210c9dd9cb9a58b0364f2.
-The independent parent audit is chat outputs/investment-selected-outcomes-independent-audit-20261111.json
-SHA256 d49fa9c3fd42c48125247393932eee71c19f9eb43aa1b5e2742585fd38361224.
+parent audit SHA256 d49fa9c3fd42c48125247393932eee71c19f9eb43aa1b5e2742585fd38361224.
+The new command rechecks consumed parent files, not all historical raw sources;
+the earlier independently audited source lineage is reused by immutable reference.
+Independent senior Sol Quant child audit: C:/Users/manis/Documents/Codex/2026-11-05/c-project-market-predictor/outputs/investment-exclusion-evaluation-independent-audit-20261111.json
+SHA256 3c81171f7c0a6884fbfb3d05dc07eaa3c0434b9395b401625095ed84c68e4cf5, completed 2026-11-11T09:37:55.705930+00:00.
+It independently reconstructed all 464 cohorts and survivor rows/clocks, exclusions,
+cost arithmetic, null full-period results and source/export hashes. The arithmetic
+uses no production comparison functions. Parent data and historical results remain
+byte-identical. Audit helper SHA256 504fcc7f46e6334587d952ec21ce6d6bd0d2269608fcc89d1fcee58527649395.
 
-Implement one reusable typed exclusion-evaluation command. Validate the exact parent
-manifest and fixed-name sidecar hashes; validate all key/security/date/horizon links,
-ordered selection uniqueness and original coverage/counts/means before filtering.
-Use stable security identities, not ticker-only matching; reject unknown/duplicate
-or ambiguous exclusions. Reuse shared cohort arithmetic. Stock net returns already
-include the 20 bp round-trip stock cost; never charge it again. Compare equal-weight
-remaining stock returns with gross SPY on identical intervals and report the changed
-denominators. Keep unresolved survivors; an incomplete or empty date stays null and
-any such date keeps its full-period mean null. Preserve all 16 views and 29 dates.
-No new source collection, raw replay, target reconstruction, refit or model change.
-Trusted input boundary is the immutable, independently audited parent artifact;
-new report must state that it reuses parent verification rather than claim new raw
-source validation. Publish a separate immutable artifact with parent, request and
-new committed implementation pins, removed positions, retained rows and comparisons.
-No production, promotion, untouched-test or funded-portfolio claim is authorized.
+Validation tier: component. Final focused checks passed: 28 tests in 5.12 seconds,
+with no skips, using tests/test_investment_exclusion_evaluation.py and
+tests/test_investment_selection_outcomes.py through the normal shared-lease wrapper
+chat outputs/run_investment_component_checks.py. Ruff passed on all four changed
+paths, strict mypy passed on the three changed source modules, and whitespace passed.
+Final check log: chat outputs/investment-exclusion-final-checks-20261111b.log,
+SHA256 f21ae8900e2fcc280fc0d809d29a5b49ae9937a04eacb763b4529df1401bfc0d.
+Independent Sol design/code review approved the implementation and audit helper.
+Full-suite, release, model-training, serving and promotion checks were not run;
+this change derives a separate research comparison from previously audited data.
 
-Read-only Quant metadata preflight, not a published child result: the rule removes
-78 distinct keys (51 unresolved and 27 verified), comprising 323 placements (225
-unresolved and 98 verified). Expected remainder: 3,892 keys, 10,469 placements,
-935 unknown keys and 2,394 unknown placements. Complete cohorts should increase
-49 to 89, while 11 already-complete cohorts change composition. All temporal views
-still lack a complete date; annual ranking held-out coverage should become 7/29 and
-quarterly 14/29. These expectations must be checked against actual publication.
-No result-driven adjustment of the five exclusions or replacement policy is allowed.
+Actual execution used chat outputs/run_committed_research.py with command
+evaluate-investment-exclusions, producer 2a1a3526ee02b984ea4ff747928de217f7e22ef6,
+the pinned request above and output
+data/research/investment_exclusion_evaluation_20261111/exclusions_2a1a352.
+The immutable source export contains 472 files; _export.json SHA256
+e32c9ecaae9e08057412361993d3a4b53cc37dff25415faeb0c8a0f0d619314a.
+Execution log: chat outputs/investment-exclusion-evaluation-20261111.log.
+The run exited 0 at 2026-11-11T09:36:59.300917+00:00. Its normal memory guard
+paused at 90.13% system usage and resumed 5.14 seconds later at 89.85%; no bypass
+or changed memory threshold was used. Heavy jobs remained serialized.
 
-Senior Sol Quant and independent Sol design reviewer approved this bounded design.
-ML engineer owns exclusion command/module, the minimal shared empty-cohort fix and
-tests; root owns source request, execution and documentation. Separate reviewer
-reviews code; Quant independently reconstructs actual child output. All work stays
-on canonical main. One heavy job at a time, shared lease and below-90% RAM guard.
-Commit/export implementation before the actual publication.
+Independent audit entry point: chat outputs/run_investment_exclusion_evaluation_audit.ps1
+with ResultManifestPath, ManifestSha256, ProducerCommit and ProducerExportSha256
+bound to this published result. The reviewed helper is
+chat outputs/audit_investment_exclusion_evaluation.py, SHA256
+504fcc7f46e6334587d952ec21ce6d6bd0d2269608fcc89d1fcee58527649395;
+runner SHA256 67f8d36530a47959d2cf0d64e7d4b5cd6a5ce2a44e5d550a2d63eb2ed6ab5522.
+Inputs, outputs and logs are immutable; a future independent run needs fresh output
+paths. Documentation-only closure uses reference/history and whitespace checks.
 
-Verification tier: component. Test parent hash/path tampering, key/date/horizon and
-count/mean mismatch, duplicates, stable-ID aliases, known and unknown exclusions,
-survivor order, no replacement, unchanged unaffected dates, exact equal weights and
-single cost, remaining unknowns and empty cohorts/views, immutable atomic output,
-and CLI registration. Run affected consumers, Ruff, strict mypy and whitespace.
-Then execute the actual retained-data command and independent arithmetic/selection
-audit. Record actual results in the three current documents and push closure.
-Rollback/failure behavior: refuse invalid input without publishing; preserve parent
-and any failed run evidence. Incomplete comparisons remain explicitly unavailable.
+| Horizon / feature profile / evaluation scope | Complete dates before → after | Removed placements | Remaining placements | Unknown placements |
+| --- | ---: | ---: | ---: | ---: |
+| 252 / all_features / security_transfer | 4 → 9 of 29 | 21 | 211 | 30 |
+| 252 / all_features / temporal | 0 → 0 of 29 | 32 | 1085 | 317 |
+| 252 / technical_news / security_transfer | 2 → 6 of 29 | 26 | 206 | 40 |
+| 252 / technical_news / temporal | 0 → 0 of 29 | 31 | 1086 | 336 |
+| 252 / technical_relationships / security_transfer | 3 → 8 of 29 | 26 | 206 | 34 |
+| 252 / technical_relationships / temporal | 0 → 0 of 29 | 28 | 1089 | 330 |
+| 252 / within_date_return_rank / security_transfer | 3 → 7 of 29 | 17 | 215 | 38 |
+| 252 / within_date_return_rank / temporal | 0 → 0 of 29 | 20 | 1097 | 346 |
+| 63 / all_features / security_transfer | 8 → 15 of 29 | 15 | 217 | 21 |
+| 63 / all_features / temporal | 0 → 0 of 29 | 14 | 1103 | 196 |
+| 63 / technical_news / security_transfer | 8 → 13 of 29 | 16 | 216 | 20 |
+| 63 / technical_news / temporal | 0 → 0 of 29 | 16 | 1101 | 214 |
+| 63 / technical_relationships / security_transfer | 12 → 17 of 29 | 14 | 218 | 18 |
+| 63 / technical_relationships / temporal | 0 → 0 of 29 | 17 | 1100 | 211 |
+| 63 / within_date_return_rank / security_transfer | 9 → 14 of 29 | 16 | 216 | 24 |
+| 63 / within_date_return_rank / temporal | 0 → 0 of 29 | 14 | 1103 | 219 |
+
+All complete ranking-candidate cohorts on held-out stocks are listed below. The
+full 16-view comparison, including controls and unavailable dates, is retained in
+comparisons.json beside the result manifest; outcomes.json preserves survivor rows.
+
+| Horizon | Selection date | Stocks retained | Stock net | SPY gross | Difference (percentage points) | Original date complete? |
+| ---: | --- | ---: | ---: | ---: | ---: | --- |
+| 252 | 2022-06-30 | 8 | +21.8864% | +19.5858% | +2.3006 | yes |
+| 252 | 2022-08-31 | 6 | -3.0964% | +16.4989% | -19.5953 | no |
+| 252 | 2022-09-30 | 8 | +11.3324% | +18.5607% | -7.2283 | yes |
+| 252 | 2022-10-31 | 7 | -13.2113% | +10.0039% | -23.2152 | no |
+| 252 | 2022-11-30 | 5 | +4.6590% | +13.9049% | -9.2460 | no |
+| 252 | 2022-12-30 | 7 | +23.6724% | +23.6891% | -0.0167 | no |
+| 252 | 2024-05-28 | 7 | +12.9701% | +13.4827% | -0.5125 | yes |
+| 63 | 2022-03-31 | 8 | -24.1287% | -15.5508% | -8.5779 | yes |
+| 63 | 2022-06-30 | 7 | +3.9828% | -3.2328% | +7.2156 | no |
+| 63 | 2022-08-31 | 8 | +3.7171% | +4.1707% | -0.4536 | yes |
+| 63 | 2022-09-30 | 8 | +4.2994% | +6.4062% | -2.1068 | yes |
+| 63 | 2022-10-31 | 7 | +18.9546% | +5.7521% | +13.2025 | no |
+| 63 | 2022-12-30 | 7 | +25.5538% | +7.3071% | +18.2467 | yes |
+| 63 | 2023-02-28 | 7 | -2.6585% | +6.6453% | -9.3038 | no |
+| 63 | 2023-04-28 | 8 | +21.9878% | +10.5804% | +11.4074 | yes |
+| 63 | 2023-07-31 | 7 | -16.6135% | -9.6449% | -6.9686 | yes |
+| 63 | 2023-09-29 | 7 | +9.9954% | +11.8598% | -1.8644 | no |
+| 63 | 2023-10-31 | 8 | +8.6016% | +17.1532% | -8.5516 | yes |
+| 63 | 2024-01-31 | 8 | +2.6687% | +3.5728% | -0.9041 | yes |
+| 63 | 2024-02-29 | 8 | -3.8587% | +2.9913% | -6.8500 | yes |
+| 63 | 2024-05-28 | 7 | +6.4983% | +7.1601% | -0.6618 | no |
+
+Next work remains the source/identity/action facts affecting the 935 retained
+unknown keys, or a separately frozen model improvement experiment. Do not add more
+exclusions after inspecting their returns or treat these partial results as grounds
+to promote the model. No additional experiment or V1/beta checkpoint is active.
 
 ### Fixed selected-stock outcomes and after-cost SPY comparison — November 11
 
