@@ -2,6 +2,21 @@
 
 ### Retained dividend currency and held-stock actions — November 11
 
+Implementation checkpoint: main 72eedcf4bde54a043ccb11d60a1de1070f58a79e is
+committed and pushed. Immutable export has 478 source files, manifest SHA256
+5484eb2d86a58798aae5457d2d3f301ec20063af8de098c0ad896fe31148190f.
+Consolidated Sol code review approved the exact action/time/units/source bindings.
+The component run passed 412/413 tests; the new unbound-source test was rejected
+by an earlier source-identity check than intended. Its fixture now uses a distinct
+unpinned source; the entire 33-test outcome file passes, so all 413 cases are covered
+on the final code. Ruff passes across investment/research and the 12 affected test
+files; strict mypy passes all six changed source files. The broader 85-source mypy
+run reports one pre-existing unchanged swing_oof_policy_evaluation.py:507 import
+export error for MAXIMUM_SYSTEM_USED_PERCENT; that unrelated source is not changed.
+The immutable dividend resolver is running against the frozen request. Its actual
+result and the full holding replay/independent audit are still pending. No recovery
+or performance result is claimed by these software checks.
+
 Status: `in_progress`. Current user authorizes further remaining currency and
 corporate-action recovery with retained data, Sol engineering and independent senior
 Quant/design/code review. Canonical main only; V1/beta deferred. The previous bounded
