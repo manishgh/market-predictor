@@ -607,3 +607,135 @@ def test_currency_manifest_explicit_scale_bound_is_separate_from_receipts(tmp_pa
     with pytest.raises(DataReadinessError, match="byte bound"):
         load_currency_corroborations(tmp_path, path, pin(path)["sha256"], policy_sha256=POLICY)
     assert dividend_currencies.MAX_MANIFEST_BYTES == 4 * 1024**2
+
+def purchase_offer_fixture(tmp_path: Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], list[str]]:
+    original, item = fixture(tmp_path)
+    paid = 1562803200000  # 2019-07-11T00:00:00Z
+    entry = {"type": "PAYMENT", "name": "calculation:payment_title",
+        "currency": {"categoryShortName": "CURREN", "shortName": "USD"}, "nominalQuantity": 1,
+        "date": paid, "exDate": None, "paymentDate": paid, "variant": None, "percent": None,
+        "value": 0, "valueTotal": 0, "exchangeRate": 0.882125, "valueChf": 0, "valueTotalChf": 0, "taxValueChf": None,
+        "withHoldingTax": None, "paymentValueTotalChfWithHoldingTax": 0, "valuePrefix": None,
+        "paymentValueTotalChfWithoutHoldingTax": 0, "remark": None, "sign": ""}
+    row = ["11.07.2019 Kaufofferte der Example Holdings LLC zum Preis von USD 65.75 pro Aktie",
+        "", "", "", "", "", "11.07.", "", "USD", "0.00", "", "0.00", ""]
+    return original, item, entry, row
+
+
+def add_purchase_offer(tmp_path: Path, item: dict[str, Any], entries: list[dict[str, Any]], rows: list[list[str]],
+                       *, separate_table: bool = False) -> None:
+    # The matched dividend retains its actual index in the original structured entries.
+    replace_tax(item, lambda payload: payload["data"]["calculationDetails"]["entries"].__setitem__(slice(0, 0), entries))
+    item["tax"]["entry_index"] += len(entries)
+    gross_path = Path(item["tax"]["gross_context"]["body"]["path"])
+    gross = json.loads(gross_path.read_bytes())
+    markup = "".join("<tr>" + "".join(f"<td>{value}</td>" for value in row) + "</tr>" for row in rows)
+    if separate_table:
+        gross["data"]["html"] += f"<table><thead><th>Brutto</th></thead><tbody>{markup}</tbody></table>"
+    else:
+        gross["data"]["html"] = gross["data"]["html"].replace("</tbody>", markup + "</tbody>")
+    item["tax"]["gross_context"] = captured(tmp_path / "gross-offer.json", json.dumps(gross).encode())
+
+
+def test_exact_retained_purchase_offer_shape_preserves_target_index_and_amount(tmp_path: Path) -> None:
+    original, item, entry, row = purchase_offer_fixture(tmp_path)
+    add_purchase_offer(tmp_path, item, [entry], [row])
+    assertion = model(item)
+    refs = assertion.validates_against(original, tmp_path, POLICY)
+    assert assertion.tax.entry_index == 1 and assertion.tax.gross_amount == "1.383619"
+    assert any("/entries/1/currency" in ref.record_locator for ref in refs)
+    assert any("zero-purchase-offer-entry-to-gross-row=0:1" in ref.record_locator for ref in refs)
+    item["tax"]["entry_index"] = 0
+    with pytest.raises(DataReadinessError, match="absent or ambiguous"):
+        model(item).validates_against(original, tmp_path, POLICY)
+
+
+@pytest.mark.parametrize("poison", [
+    "missing_ex_date", "extra_field", "nonzero", "string_zero", "boolean_zero", "foreign", "quantity",
+    "different_payment_date", "invalid_midnight", "outside_date_range", "undated_positive", "invalid_other_date", "duplicate_structured",
+    "missing_gross", "duplicate_gross", "ambiguous_sibling", "wrong_wording", "blank_offeror",
+    "wrong_full_date", "zero_offer_price", "gross_nonzero", "chf_nonzero",
+])
+def test_malformed_or_unpaired_purchase_offer_keeps_all_dates_strict(tmp_path: Path, poison: str) -> None:
+    original, item, entry, row = purchase_offer_fixture(tmp_path)
+    entries, rows = [entry], [row]
+    match = "not UTC midnight"
+    if poison == "missing_ex_date":
+        entry.pop("exDate")
+    elif poison == "extra_field":
+        entry["paidAmount"] = 1
+    elif poison == "nonzero":
+        entry["paymentValueTotalChfWithoutHoldingTax"] = 1
+    elif poison == "string_zero":
+        entry["value"] = "0"
+    elif poison == "boolean_zero":
+        entry["value"] = False
+    elif poison == "foreign":
+        entry["currency"]["shortName"] = "CHF"
+    elif poison == "quantity":
+        entry["nominalQuantity"] = True
+    elif poison == "different_payment_date":
+        entry["paymentDate"] += 86_400_000
+    elif poison == "invalid_midnight":
+        entry["date"] += 1
+        entry["paymentDate"] += 1
+    elif poison == "outside_date_range":
+        entry["date"] = entry["paymentDate"] = 253402300800000
+    elif poison == "undated_positive":
+        entries.append({"type": "PAYMENT", "exDate": None, "value": 1})
+    elif poison == "invalid_other_date":
+        entries.append({"type": "PAYMENT", "exDate": 1568937600001, "value": 1})
+    elif poison == "duplicate_structured":
+        entries.append(copy.deepcopy(entry))
+    elif poison == "missing_gross":
+        rows.clear()
+    elif poison == "duplicate_gross":
+        rows.append(list(row))
+    elif poison == "ambiguous_sibling":
+        rows.append(["unknown entry", "", "", "", "", "", row[6], "", "USD", "10.00", "", "9.00", ""])
+    elif poison == "wrong_wording":
+        row[0] += " bezahlt"
+    elif poison == "blank_offeror":
+        row[0] = row[0].replace("Example Holdings LLC", "")
+    elif poison == "wrong_full_date":
+        row[0] = row[0].replace("2019", "2018")
+    elif poison == "zero_offer_price":
+        row[0] = row[0].replace("65.75", "0.00")
+    elif poison == "gross_nonzero":
+        row[9] = "0.01"
+    else:
+        row[11] = "0.01"
+    add_purchase_offer(tmp_path, item, entries, rows)
+    with pytest.raises(DataReadinessError, match=match):
+        model(item).validates_against(original, tmp_path, POLICY)
+
+
+def test_purchase_offer_must_share_target_gross_table_and_request(tmp_path: Path) -> None:
+    original, item, entry, row = purchase_offer_fixture(tmp_path)
+    add_purchase_offer(tmp_path, item, [entry], [row], separate_table=True)
+    with pytest.raises(DataReadinessError, match="outside the target gross table"):
+        model(item).validates_against(original, tmp_path, POLICY)
+    receipt_path = Path(item["tax"]["gross_context"]["receipt"]["path"])
+    receipt = json.loads(receipt_path.read_bytes())
+    receipt["request"]["valorNumber"] = 123
+    item["tax"]["gross_context"]["receipt"] = write_json(receipt_path, receipt)
+    with pytest.raises(DataReadinessError, match="structured/HTML request identity differs"):
+        model(item).validates_against(original, tmp_path, POLICY)
+
+
+@pytest.mark.parametrize("nested", ["offer_cells", "brutto_header"])
+def test_nested_markup_cannot_certify_purchase_offer_table_ownership(tmp_path: Path, nested: str) -> None:
+    original, item, entry, row = purchase_offer_fixture(tmp_path)
+    add_purchase_offer(tmp_path, item, [entry], [row])
+    gross_path = Path(item["tax"]["gross_context"]["body"]["path"])
+    gross = json.loads(gross_path.read_bytes())
+    html = gross["data"]["html"]
+    if nested == "offer_cells":
+        html = html.replace(f"<tr><td>{row[0]}</td>", f"<tr><table><td>{row[0]}</td>")
+        html = html.replace("</tr></tbody>", "</table></tr></tbody>")
+    else:
+        html = html.replace("<th>Brutto</th>", "<th><table>Brutto</table></th>")
+    gross["data"]["html"] = html
+    item["tax"]["gross_context"] = captured(gross_path, json.dumps(gross).encode())
+    with pytest.raises(DataReadinessError, match="outside the target gross table"):
+        model(item).validates_against(original, tmp_path, POLICY)

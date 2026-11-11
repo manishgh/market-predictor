@@ -296,24 +296,60 @@ class _GrossRows(HTMLParser):
         self.rows: list[list[str]] = []
         self.row: list[str] | None = None
         self.cell: list[str] | None = None
+        self.row_tables: list[int | None] = []
+        self.brutto_tables: set[int] = set()
+        self.table_stack: list[int] = []
+        self.table_count = 0
+        self.row_table: int | None = None
+        self.cell_table: int | None = None
+        self.header: list[str] | None = None
+        self.header_table: int | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag == "tr":
+        if tag == "table":
+            # A nested table can still contribute legacy flattened cells. It
+            # cannot certify same-table ownership for the new exception.
+            if self.row is not None:
+                self.row_table = None
+            if self.header is not None:
+                self.header_table = None
+            self.table_count += 1
+            self.table_stack.append(self.table_count)
+        elif tag == "tr":
             self.row = []
+            self.row_table = self.table_stack[-1] if self.table_stack else None
+        elif tag == "th" and self.table_stack:
+            self.header = []
+            self.header_table = self.table_stack[-1]
         elif tag == "td" and self.row is not None:
             self.cell = []
+            self.cell_table = self.table_stack[-1] if self.table_stack else None
+            if self.cell_table != self.row_table:
+                self.row_table = None
 
     def handle_data(self, data: str) -> None:
         if self.cell is not None:
             self.cell.append(data)
+        if self.header is not None:
+            self.header.append(data)
 
     def handle_endtag(self, tag: str) -> None:
+        table = self.table_stack[-1] if self.table_stack else None
         if tag == "td" and self.cell is not None and self.row is not None:
+            if self.cell_table != table:
+                self.row_table = None
             self.row.append(" ".join(" ".join(self.cell).split()))
             self.cell = None
         elif tag == "tr" and self.row is not None:
             self.rows.append(self.row)
+            self.row_tables.append(self.row_table if self.row_table == table else None)
             self.row = None
+        elif tag == "th" and self.header is not None:
+            if table is not None and self.header_table == table and " ".join(" ".join(self.header).split()) == "Brutto":
+                self.brutto_tables.add(table)
+            self.header = None
+        elif tag == "table" and self.table_stack:
+            self.table_stack.pop()
 
 
 def _pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -467,6 +503,77 @@ def _date_ms(value: object) -> date:
     if isinstance(value, bool) or not isinstance(value, int) or value % 86_400_000:
         raise DividendEvidenceUnavailable("tax distribution ex-date is not UTC midnight milliseconds")
     return datetime.fromtimestamp(value / 1000, UTC).date()
+
+
+_OFFER_ZERO_FIELDS = ("value", "valueTotal", "valueChf", "valueTotalChf",
+    "paymentValueTotalChfWithHoldingTax", "paymentValueTotalChfWithoutHoldingTax")
+_OFFER_NULL_FIELDS = ("exDate", "variant", "percent", "taxValueChf", "withHoldingTax", "valuePrefix", "remark")
+_OFFER_FIELDS = {"type", "name", "currency", "nominalQuantity", "date", "paymentDate", "exchangeRate", "sign",
+    *_OFFER_ZERO_FIELDS, *_OFFER_NULL_FIELDS}
+_OFFER_TEXT = re.compile(
+    r"(?P<day>[0-9]{2}\.[0-9]{2}\.[0-9]{4}) Kaufofferte der "
+    r"(?P<offeror>[^<>\x00-\x1f]{1,160}) zum Preis von USD (?P<price>[0-9]{1,16}(?:\.[0-9]{1,12})?) pro Aktie"
+)
+
+
+def _purchase_offer_gross_row(entry: dict[str, Any], rows: list[list[str]]) -> int | None:
+    """Bind the retained zero PAYMENT shape to an explicit purchase-offer disclosure."""
+    if (set(entry) != _OFFER_FIELDS or entry["type"] != "PAYMENT" or entry["name"] != "calculation:payment_title"
+        or entry["currency"] != {"categoryShortName": "CURREN", "shortName": "USD"}
+        or type(entry["nominalQuantity"]) is not int or entry["nominalQuantity"] != 1 or entry["sign"] != ""
+        or any(entry[field] is not None for field in _OFFER_NULL_FIELDS)
+        or any(type(entry[field]) not in (int, Decimal) or entry[field] != 0 for field in _OFFER_ZERO_FIELDS)
+        or type(entry["exchangeRate"]) not in (int, Decimal) or entry["exchangeRate"] <= 0):
+        return None
+    if type(entry["date"]) is not int or type(entry["paymentDate"]) is not int or entry["date"] != entry["paymentDate"]:
+        return None
+    try:
+        paid = _date_ms(entry["paymentDate"])
+    except (OverflowError, OSError, ValueError):
+        return None
+    # Decide uniqueness before interpreting the annotation text or any zero fields.
+    candidates = [index for index, row in enumerate(rows)
+        if len(row) > 6 and row[5] == "" and row[6] == paid.strftime("%d.%m.")]
+    if len(candidates) != 1:
+        return None
+    index = candidates[0]
+    row = rows[index]
+    if row[1:] != ["", "", "", "", "", paid.strftime("%d.%m."), "", "USD", "0.00", "", "0.00", ""]:
+        return None
+    match = _OFFER_TEXT.fullmatch(row[0])
+    if (match is None or match["day"] != paid.strftime("%d.%m.%Y") or not match["offeror"].strip()
+        or _decimal(match["price"]) <= 0):
+        return None
+    return index
+
+
+def _tax_payment_matches(entries: list[Any], table: _GrossRows | None, ex_date: date
+                         ) -> tuple[list[tuple[int, dict[str, Any]]], dict[int, int]]:
+    matches: list[tuple[int, dict[str, Any]]] = []
+    offers: dict[int, int] = {}
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict) or entry.get("type") != "PAYMENT":
+            continue
+        offer_row = _purchase_offer_gross_row(entry, table.rows) if table is not None and entry.get("exDate") is None else None
+        if offer_row is not None and offer_row not in offers.values():
+            offers[index] = offer_row
+        elif _date_ms(entry.get("exDate")) == ex_date:
+            matches.append((index, entry))
+    return matches, offers
+
+
+def _tax_gross_table(root: Path, source: CapturedCurrencySource, policy_sha256: str,
+                     structured_receipt: dict[str, Any]) -> tuple[_GrossRows, tuple[EvidenceReference, ...]]:
+    raw, receipt, refs = _captured(root, source, policy_sha256, {"www.ictax.admin.ch", "ictax.admin.ch"})
+    payload = _json(raw)
+    html = payload.get("data", {}).get("html")
+    if receipt.get("request") != structured_receipt.get("request"):
+        raise DataReadinessError("tax structured/HTML request identity differs")
+    if payload.get("status") != "SUCCESS" or not isinstance(html, str) or "Brutto" not in _text(html):
+        raise DividendEvidenceUnavailable("tax gross-column semantic context differs")
+    table = _GrossRows()
+    table.feed(html)
+    return table, refs
 
 
 def _original_action(original: Mapping[str, Any], action_id: str, digest: str, symbol: str, ex_date: date) -> None:
@@ -629,8 +736,11 @@ class CurrencyCorroboration(HoldingContract):
         entries = payload["data"]["calculationDetails"]["entries"]
         if not isinstance(entries, list) or len(entries) > 128:
             raise DataReadinessError("tax distribution entries exceed bounded shape")
-        matches = [(i, e) for i, e in enumerate(entries) if isinstance(e, dict) and e.get("type") == "PAYMENT"
-                   and _date_ms(e.get("exDate")) == self.ex_date]
+        table: _GrossRows | None = None
+        gross_refs: tuple[EvidenceReference, ...] = ()
+        if any(isinstance(entry, dict) and entry.get("type") == "PAYMENT" and entry.get("exDate") is None for entry in entries):
+            table, gross_refs = _tax_gross_table(root, self.tax.gross_context, policy_sha256, receipt)
+        matches, offers = _tax_payment_matches(entries, table, self.ex_date)
         if len(matches) != 1 or matches[0][0] != self.tax.entry_index:
             raise DividendEvidenceUnavailable("tax distribution ex-date is absent or ambiguous")
         entry = matches[0][1]
@@ -644,16 +754,8 @@ class CurrencyCorroboration(HoldingContract):
         if (amount_correction is not None
             and tax_amount - effective_amount != _decimal(self.tax_resolved_value_difference)):
             raise DataReadinessError("tax-minus-resolved distribution amount comparison differs")
-        html_raw, html_receipt, found = _captured(root, self.tax.gross_context, policy_sha256,
-            {"www.ictax.admin.ch", "ictax.admin.ch"})
-        html_payload = _json(html_raw)
-        html = html_payload.get("data", {}).get("html")
-        if html_receipt.get("request") != receipt.get("request"):
-            raise DataReadinessError("tax structured/HTML request identity differs")
-        if html_payload.get("status") != "SUCCESS" or not isinstance(html, str) or "Brutto" not in _text(html):
-            raise DividendEvidenceUnavailable("tax gross-column semantic context differs")
-        table = _GrossRows()
-        table.feed(html)
+        if table is None:
+            table, gross_refs = _tax_gross_table(root, self.tax.gross_context, policy_sha256, receipt)
         gross_rows = [index for index, row in enumerate(table.rows)
             if len(row) == 13 and row[5] == self.ex_date.strftime("%d.%m.") and row[8] == "USD"
             and _decimal(row[9]) == tax_amount]
@@ -661,7 +763,13 @@ class CurrencyCorroboration(HoldingContract):
             raise DividendEvidenceUnavailable("tax amount/currency is absent or ambiguous in gross table column")
         gross_locator = (f"/data/html;gross-table-row={gross_rows[0]};ex-date={self.ex_date.isoformat()};"
             f"currency-column=8:USD;gross-column=9:{self.tax.gross_amount}")
-        refs.extend(ref.model_copy(update={"record_locator": gross_locator}) for ref in found)
+        if offers:
+            target_table = table.row_tables[gross_rows[0]]
+            if target_table not in table.brutto_tables or any(table.row_tables[row] != target_table for row in offers.values()):
+                raise DividendEvidenceUnavailable("tax purchase-offer disclosure is outside the target gross table")
+            offer_locators = ",".join(f"{entry}:{row}" for entry, row in offers.items())
+            gross_locator += f";zero-purchase-offer-entry-to-gross-row={offer_locators}"
+        refs.extend(ref.model_copy(update={"record_locator": gross_locator}) for ref in gross_refs)
         if self.issuer_rate is None:
             if provider_amount != tax_amount:
                 raise DividendEvidenceUnavailable("independent distribution amount differs from provider rate")
