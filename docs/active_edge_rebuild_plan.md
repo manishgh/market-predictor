@@ -2,159 +2,114 @@
 
 ### Additional retained distribution outcomes — November 11
 
-Status: `in_progress`. User's remaining-outcome recovery continues with existing
-retained evidence, the same five exclusions, fixed stock selections, SPY after
-costs, Sol engineering and senior Quant/design/code review. Main only; V1/beta deferred.
-The prior bounded action-relevance step is closed and independently audited.
+Status: `complete` for the bounded retained-distribution recovery and independent
+comparison; 715 of the original 935 unknown holding outcomes
+still lack sufficient evidence. Across both steps, 220/935 were recovered.
+This does not complete every outcome or establish model profitability.
+Sol engineering, independent design/code review and senior Quant audit completed.
+Canonical main only. V1/beta remains deferred.
 
-Direct parent: data/research/investment_remaining_outcomes_20261111/remaining_9e59bb0/_manifest.json
-SHA256 996ba93d91c59bea09ca59b5a0f6c93b72e5368499f5092d64152f3bcce8af22; producer 9e59bb0fb3506b9ad5b7e5f18098148bf5d4bf5f.
-Parent independent audit: C:/Users/manis/Documents/Codex/2026-11-05/c-project-market-predictor/outputs/investment-remaining-outcomes-independent-audit-20261111.json
-SHA256 dc2adc3d2cbce9de2215b2fb1896f84b47643c5d9b10bfd04e3ea10ac9f95fa9. Freeze all 3125 known parent outcome dictionaries,
-proof references and clocks verbatim, all 3,892 keys, 10,469 ordered placements,
-16 views/464 cohorts, five exclusions, original roster, labels, model and source
-versions. No replacements, reranking, refits, further exclusions, downloads or
-source deletions. The current parent has 767 unknown keys. New facts must not
-backdate outcome verification. Stock cost stays 20 bp once and SPY gross on the
-same interval. Empty/incomplete cohort and full-period values remain unavailable.
+The five stable-identity exclusions remain SLB cik:0000087347, MDT cik:0001613103,
+APA cik:0001841666, EFX cik:0000033185 and MAS cik:0000062996. All 3,892 keys,
+10,469 ordered selection placements, 464 monthly cohorts and 16 comparison views
+are preserved. All 3,125 previously known rows, proof references and availability
+clocks are unchanged. The earlier 168 pair proof bytes remain unchanged. No training,
+refit, reranking, replacement, additional exclusion or data download occurred.
+Historical raw data, targets and original comparisons remain preserved.
 
-Bounded new fact: an exact completed historical special cash distribution cannot
-create entitlement for a fresh holding opened strictly after every validated
-economic date and completed-payment upper bound. This is negative relevance only;
-no cash leg, PaymentEvent, split interpretation, or special=false mutation. Preserve
-the ordinary cash/StockCompositeIdentity admission gates. Five MOS holdings crossing
-the event remain outside this rule. Other gaps and official exceptions survive.
+This step attempted 55 of the remaining 767 unknown keys and
+recovered 52; 712 were outside the supported
+new action rules. Attempted by ticker: {"DVN": 19, "MOS": 24, "WAT": 12}.
+Recovered by ticker: {"DVN": 16, "MOS": 24, "WAT": 12}.
+Exact retained SEC and tax evidence proves completed special cash distributions for
+fresh later MOS/DVN purchases. The WAT rule proves an existing regular-way recipient
+class over the entire holding, with matching source/recipient provider records and
+maturity strictly before all distribution dates. Neither rule creates cash or shares,
+changes a special dividend into an ordinary one, or supplies missing crossing-period
+entitlement. New evidence and outcomes retain current verification clocks.
 
-Reviewed source discovery (non-admitting, to be replayed through typed contracts):
-chat outputs/investment_remaining_outcome_discoveries_20261111.json SHA256
-2639a4c462efee0edb7517cc034ee92769a8e09075d830d6b5ad0fb9a9a4c25b.
-MOS provider action 8828d201-a982-436f-be69-d438e08211ee, stable cik:0001285785,
-CUSIP 61945C103 / ISIN US61945C1036, USD 0.25, ex March 14, record March 15,
-provider/tax payment March 30, 2023. February 22 issuer declaration gives amount,
-record and announced distribution. May 17 issuer EX-99.1 confirms actual distribution
-in First Quarter 2023; May 3 issuer 8-K/EX-99.1 explicitly establish quarter ended
-March 31, 2023. March 31 is the conservative completion upper bound, not an invented
-payment date or an assumption that fiscal Q1 always ends in March.
-DVN action 720ed155-87cb-4705-944a-93eda7ebbde1, stable cik:0001090012,
-CUSIP 25179M103 / ISIN US25179M1036, USD 0.26, ex August 13, provider record
-August 14 and provider/tax payment October 1, 2020. August announcement supplies
-Barnett-related $100m declaration context only; it does not assert August 14 or
-$0.26 per share. October 29 issuer EX-99.1 proves completed Barnett sale and actual
-$0.26 special distribution on October 1. Keep each term's real source explicit.
-Metadata opportunity: 24 strict-post MOS keys and 19 strict-post DVN keys, of which
-40 have no other recorded gap and three DVN keys have independent currency gaps.
-These are candidate counts, not recovered outcomes or guaranteed successful proofs.
+Remaining evidence census: C:/Users/manis/Documents/Codex/2026-11-05/c-project-market-predictor/outputs/investment-distribution-residual-census-20261111.json
+SHA256 dd346b00304b16007427dc9a7218ffd77bd53a57b3d66ec1b90798c558fe87ac.
+715 unique decision and horizon holdings remain unresolved across 116 stable securities and 1,845 selected placements. Counts use the latest failed attempt for 91 holdings and stored outcome reasons for 624. Each holding counts once per cause and causes overlap. The remaining gaps affect 360 holdings for USD dividend proof, 185 for corporate-action terms, 135 for cash entitlement, 109 for raw segment binding, 56 for economic dates, 40 for distribution or due-bill bounds, 18 for official exceptions, 11 for raw security identity, and one for an unsupported unit-split participant field. The original unresolved row histories also retain superseded blockers, including 138 cash-entitlement, 112 economic-date and 47 due-bill or entitlement-bound entries.
 
-Second narrowly reviewed timing case: an independently proved existing recipient
-common-stock class marked strictly before all later distribution dates. Retained
-discovery chat outputs/investment_remaining_strict_pre_action_discovery_20261111.json
-SHA256 3324c9204ba381e66c4785b049f3d908ddca0a5dac0c6eaf09f01490d79224ac
-binds all 12 WAT keys to complete raw SIP 1Day intervals under cik:0001000697 and
-pre-existing WAT common stock. Both WAT and BDX selected provider queries contain
-the same exact BDX/WAT event 2d714944-6685-4e1e-9b5c-277d276bbe41 with record
-February 5 and ex/payable February 10, 2026; all maturities are no later than
-May 30, 2025. No continuity to the future recipient CUSIP is asserted or needed.
-Require both exact captured participant records, valid closed record shape/rates,
-all canonical ex/record/payable dates and every extra observed date, unambiguous
-versions, existing regular-way common class and exact raw stable ownership over
-the full holding interval. The SEC common-class cover must precede the event
-boundary. Reject when-issued/newly issued classes, aliases, missing/contradictory
-or revised terms, boundaries/crossings and all independent gaps. A missing due-bill
-redemption alone cannot create a pre-event entitlement for this existing class;
-do not infer a due-bill date or broaden post-event handling. Attach both participant
-body/transport refs and exact class manifest/SEC cover/ownership refs to the actual
-stock holding specification. The first parent-only result still refuses all 12 and
-remains unchanged. WAB recipient cases lack required dates and stay unavailable;
-none of 41 AMZN/GOOG/GOOGL/NVDA split gaps satisfies this strict pre-event test.
-Combined metadata opportunity: 55 scoped holdings, with 52 sole recorded blockers.
+Stock returns subtract 20 bp (0.20 percentage point) round-trip cost exactly once;
+SPY is gross over the same interval. Complete cohorts increased from
+96 to 101 of 464. Incomplete/empty
+cohorts and all 16 full-period means remain unavailable. The annual ranking candidate
+has 7/29 complete held-out-stock cohorts: 1 above SPY after stock
+costs and 6 below. Its quarterly counterpart has 17/29:
+5 above and 12 below. These partial, overlapping monthly
+63/252-session cohorts are not a funded portfolio or an untouched final test.
+They cannot establish an overall SPY edge or justify model promotion.
 
-Typed source-pinned completed_cash_distributions is optional on the existing
-remaining-outcome request. Facts bind exact provider family/action/semantic hash,
-stable security_id, ticker, CIK, valid CUSIP/ISIN, USD per-share gross, provider dates,
-dated unique stock class, paired tax source and issuer declaration/completion/period
-authorities. Replay the exact structured PAYMENT paymentDate and the SAME unique
-Brutto row's payment date, not just ex-date/gross. Neither actual tax source supplies
-recordDate. Bind canonical provider dates and refuse contradictions, duplicate/conflicting
-actions, revisions, due bills, unexpected terms, wrong class/currency/payment dates,
-wrong held stable identity/ticker and missing raw or membership evidence.
+Implementation: f4c34aae146102383ff79c108ddf1c5645beafb3.
+Immutable export SHA256 6a1f01b3179be10548afe2e24e886e7fa5e3c55a34058e69bfde7d6c2aade542.
+Result: data/research/investment_distribution_outcomes_20261111/distributions_f4c34aa/_manifest.json
+SHA256 32a2163f939c3077bb0ed8ecd444b8430367b4ddcf8b2b7312852b6056285157; completed 2026-11-11T13:50:33.716885+00:00.
+Request: C:\project\market-predictor\data\research\investment_distribution_outcomes_20261111\inputs\request.json
+SHA256 45a54d55096a3903a625f8a0474339c9598f4ba8f25e6f3299ff4e42c835204e.
+Completed cash facts: data/research/investment_distribution_outcomes_20261111/inputs/completed-cash-distributions.json
+SHA256 0f0353d6102f6f87ee7a3f1dfa8b863e321c50fe2d77dd618bfe8fe61bc0684f.
+Existing recipient authority SHA256 d770a67e113e4146c8b14555601fd08f9306f8a49b878828d171970f43950741.
+Parent result: data/research/investment_remaining_outcomes_20261111/remaining_9e59bb0/_manifest.json
+SHA256 996ba93d91c59bea09ca59b5a0f6c93b72e5368499f5092d64152f3bcce8af22. Reviewed dates f82330c6… and parent units 7a231d88… unchanged.
 
-Reuse bounded exact SEC archive/index/receipt replay extracted from the existing
-stock-class path. Verify exact CIK/accession/acceptance, source/shard/member hashes,
-request/transport clocks, selected primary or explicit EX-99 row, HTTPS SEC URL and
-no redirect. Do not use a collection-opening helper that mutates uncommitted files.
-The stock-class wrapper keeps its existing primary, form, class and historical
-cutoff checks. Completion quotations must be exact, contextual and unambiguously
-completed, with the amount and event linked to an exact paid date or explicitly
-proved closed issuer period. Conditional/scheduled language is not completed payment.
-Use reusable typed facts and source replay, with independent Quant meaning review;
-do not add issuer-specific code paths or unverified operator booleans.
+Independent senior Quant audit: C:/Users/manis/Documents/Codex/2026-11-05/c-project-market-predictor/outputs/investment-distribution-outcomes-independent-audit-20261111.json
+SHA256 5e28f129f9cdb1764a80ca8eaa583d66c5e646c39bbb1352673ca56afe909e03; helper SHA256 8d7d8aae3d3c75ab9f8c5167ba2e81ed8c82b6ba317abfb817683365da4e0f4a.
+Completed 2026-11-11T14:03:02.294168+00:00; 15351 source files rechecked,
+all unchanged. Before/after inventory SHA256 327ef554c7de7a514cd5c19d3c8f037af7b38ad4dd7f68de82ccdac3fc8e5b56.
+The auditor independently reconstructed every new stock/SPY pair, source semantics,
+all 464 cohort calculations, exact placements, costs and unavailable-period rules.
 
-Optional existing_recipient_stock_identity binds the already-amended raw extension's
-EXACT stock_identity manifest and verified (stable ID, ticker) stock_proofs map.
-This is a source-authority role, not an eligibility Boolean or ticker allowlist.
-Activate the existing-recipient pre-event rule only with this exact bound authority;
-replay the class over the exact holding sessions after raw/membership validation,
-using the caller-owned identity cache and attaching its actual source references.
-Old requests without the source role keep their parent-only behavior. Carried
-recipient authority must match exactly and supplies context without retrying old gaps.
+The first audit stopped before pair replay because its helper compared the raw SEC
+request-file hash with the collection's semantic request hash. The reviewed audit-only
+correction verifies both independently and requires their exact manifest linkage.
+Actual retained request acceptance plus four changed-request poison cases passed.
+Original helper/runner bytes and failed log are preserved; producer, input and outcome
+bytes were not changed. Failed log SHA256
+70cd0ff5deb12a1a87556a1d7ac00f229ad607535d3efc4a27d6195cecb10301.
+Focused audit regression helper SHA256
+fb5e919a753b39111695aba07b455572f2bcc73480efbeb4a441fcc1230d60c2;
+regression log SHA256 108dbd00338756e9ca406f592e8d756fdb3710af24aa797559e809d9487995cf.
+Successful audit log SHA256 f9ed0bb8b47b2a7a80fb975d803b377637678bd2df37c822ee1264c3b36cbf63.
 
-Incremental lineage must accept a finite pinned chain of prior remaining results,
-detect cycles, validate exact parent sidecars/attempts/proofs/counts/cohort arithmetic,
-and preserve every previous known outcome and clock. Keep the original exclusion
-and full ancestor unknown mask for prior identity/currency amendment validation.
-Carried reviewed dates/parent units must match exactly. Completed facts are cumulative
-and append-only: prior objects and source pins must remain identical by action ID;
-duplicates, changed facts or conflicting pins refuse. Cash attempts require newly
-supplied completed action IDs/families already recorded as that survivor's unresolved
-action reason, with exact stable identity/ticker and a proved
-strict fresh-entry boundary. An unrelated new event for the same ticker cannot
-trigger an attempt. Every recovered pair must attach its triggering new action proof.
-Carried name/spin/cash evidence remains active context for those pairs, not a reason
-to retry unchanged earlier failures. New attempts enumerate current unknown keys;
-prior attempt files remain pinned. A newly supplied recipient source role may also
-trigger exact recorded recipient-side spin gaps meeting its strict pre-event rule,
-stable ID/ticker and verified class requirements; require the triggering proof on
-every recovered pair. An unchanged carried role cannot retry the same old gaps.
-No prediction matrix replay or refitting.
+Component checks and final review: C:/Users/manis/Documents/Codex/2026-11-05/c-project-market-predictor/outputs/investment-distribution-final-checks-20261111.json
+SHA256 f309220b59c119ec9245bbbba0452227367afa571a2670733909cddba6b2f111.
+The initial 13-file component suite passed 430 tests and caught one serialized class-evidence shape regression. The reviewed fix restored the original seven-field public shape and added cold/warm jurisdiction-cache coverage. The final six-file affected rerun passed 292 tests in 33.31 seconds; unaffected component results remain valid. Final Ruff over 16 changed paths and strict mypy over 11 production sources passed. Exact MOS/DVN source-only replay passed after the final code change and rechecked 176 retained sources. Parent-ledger focused tests separately passed 27 cases; its bounded real-parent read checked all 168 previous pair proofs and original ordering. The independent Sol code reviewer approved the implementation and class-shape fix with no outstanding finding; senior Quant approved the source semantics and separately reviewed audit helper. Repository-wide release tests were deliberately not run for this component checkpoint.
+The normal shared heavy-job lease, strictly below 90% system RAM policy, 5 GiB process
+budget/headroom and bounded pressure pause remain. Exact identity cache hits still
+check memory, sessions, source pins and ownership; only repeated cleanup is avoided.
+No repository-wide suite, product release or production-model approval is claimed.
 
-Additional observed runtime remedy: a 20-second nonblocking sample of the running
-9e59bb0 producer recorded 360 valid samples (9 sampling errors), 335 in explicit
-memory reclamation and 347 in stock identity replay. Raw sample SHA256
-086eafbe1775a62883447f59311e4fe68f8b30643722e600de5f2f63676cd3c6 at chat
-outputs/live-remaining-outcomes-13820-nonblocking-20261111.raw. This is a local
-hotspot, not a whole-run timing attribution. Before guard, compute only the bounded
-resolved-root/full-proof cache key. Skip initial cleanup only when cache source_root
-matches and that exact proof is already loaded; call the SAME memory guard exactly
-once before cache mutation, pin propagation, new source reads or session replay.
-Cold/missing/wrong-root caches retain full cleanup. Pressure polling, system RAM
-strictly below 90%, process budget, headroom, bounded pause and heavy lease remain.
-Cached hits still independently validate requested sessions, ownership, evidence,
-pins and clocks. No change to already frozen or running producers; no speedup claim.
+Actual producer log: C:/Users/manis/Documents/Codex/2026-11-05/c-project-market-predictor/outputs/investment-distribution-outcomes-20261111.log
+SHA256 c1754caa8997c9a381afe68141f14508f1eef855bacd1e22416edeef869a70c0.
+The immutable producer exited successfully at 2026-11-11T13:50:59.611940Z,
+63 minutes 38.7 seconds after launch. This is an observed run duration, not a
+controlled performance comparison. All reviewed input bytes remained unchanged.
 
-Ownership: root owns investment_remaining_parent.py/request/lineage tests and the
-narrow replay_stock_identity cache-guard change/tests. Engineer owns new SEC/cash
-proof modules, shared tax replay extraction, corporate action/label integration,
-orchestration imports and focused tests. Engineer waits for root's stock_identity
-guard edit before extracting _class_anchor in that file. Root owns artifacts,
-publication and the three authoritative docs. Quant owns semantic source review
-and independent audit; independent design/code reviewer checks consolidated diff.
+| Horizon / feature profile / evaluation scope | Complete dates before → after | Unknown placements |
+| --- | ---: | ---: |
+| 252 / all_features / security_transfer | 9 → 9 of 29 | 28 |
+| 252 / all_features / temporal | 0 → 0 of 29 | 258 |
+| 252 / technical_news / security_transfer | 6 → 7 of 29 | 38 |
+| 252 / technical_news / temporal | 0 → 0 of 29 | 265 |
+| 252 / technical_relationships / security_transfer | 8 → 9 of 29 | 31 |
+| 252 / technical_relationships / temporal | 0 → 0 of 29 | 260 |
+| 252 / within_date_return_rank / security_transfer | 7 → 7 of 29 | 36 |
+| 252 / within_date_return_rank / temporal | 0 → 0 of 29 | 285 |
+| 63 / all_features / security_transfer | 16 → 16 of 29 | 14 |
+| 63 / all_features / temporal | 0 → 0 of 29 | 141 |
+| 63 / technical_news / security_transfer | 16 → 17 of 29 | 15 |
+| 63 / technical_news / temporal | 0 → 0 of 29 | 148 |
+| 63 / technical_relationships / security_transfer | 18 → 19 of 29 | 13 |
+| 63 / technical_relationships / temporal | 0 → 0 of 29 | 140 |
+| 63 / within_date_return_rank / security_transfer | 16 → 17 of 29 | 17 |
+| 63 / within_date_return_rank / temporal | 0 → 0 of 29 | 156 |
 
-Verification tier: component. Poison wrong issuer/index/document/URL/hash/capture,
-empty/conditional/ambiguous completion, inconsistent paid/period/gross/date/class,
-tax row/payment/lookup mismatch, duplicate/revised/due-bill events, exact strict
-opening boundary and crossing, wrong held stable ID, ordinary-special gate unchanged,
-no generated economic event, source-pin conflicts and parent proof/order/clock changes.
-Recipient tests also reject missing/conflicting counterpart queries, absent or changed
-class authority, when-issued/new classes, unsupported class title/exchange, class
-cover after the event boundary, missing dates, aliases and maturity on the first
-economic date. Default parent-only behavior remains unchanged without its source role.
-Cache tests cover exact hit versus miss/no cache/different proof/wrong root, changed
-sessions, pin conflicts and memory refusal before cached facts are used. Run original
-class/currency/action/label/remaining consumers, runtime pressure tests, Ruff, strict
-mypy and whitespace. Serialize heavy jobs. Commit/export before actual replay;
-independent senior Quant replays new pairs, source claims and all 464 cohorts.
-Close and push measured results. Failure retains every unresolved holding and reports
-the missing fact; no fabricated return, waived evidence or additional exclusion.
+Next work must address the explicit residual source gaps without changing selections
+or silently discarding missing holdings. The pinned outcomes and attempts retain
+each missing reason. Current unknowns cannot be counted as zero returns or omitted
+from a full-period SPY comparison. V1/beta remains later than demonstrated improvement.
 
 ### Remaining retained holding outcomes — November 11
 
