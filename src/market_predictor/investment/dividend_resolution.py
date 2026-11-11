@@ -132,6 +132,7 @@ def resolve_investment_dividends(*, root: Path, request: SourcePin, output: Path
     pins: dict[str, str] = {}
     producer = Path(__file__).resolve()
     producer_paths = (producer, producer.with_name("dividend_currencies.py"), producer.with_name("stock_identity.py"),
+        producer.with_name("sec_document_evidence.py"),
         producer.parents[1] / "universe/security_class_evidence.py", producer.parents[1] / "sources/ictax.py")
     implementations = {str(path): file_sha256(path) for path in producer_paths}
 

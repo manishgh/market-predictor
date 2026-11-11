@@ -16,7 +16,13 @@ from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import resolve_inside_authority
-from market_predictor.investment.action_relevance import SUPPORTED_REASONS, InvestmentActionRelevance, RelevanceRecord
+from market_predictor.investment.action_relevance import (
+    SUPPORTED_REASONS,
+    ExistingRecipientStockAuthority,
+    InvestmentActionRelevance,
+    RelevanceRecord,
+)
+from market_predictor.investment.completed_cash_distributions import ReviewedCompletedCashDistribution, verify_completed_cash_fact
 from market_predictor.investment.dividend_currencies import CurrencyCorroboration, IssuerDividendAmountCorrection
 from market_predictor.investment.label_materialization import InvestmentSourceValidation
 from market_predictor.swing.contracts.corrected_outcomes import OfficialWindow
@@ -65,7 +71,10 @@ class InvestmentCorporateActions:
         currency_corroborations: Mapping[str, CurrencyCorroboration] | None = None,
         dividend_amount_corrections: Mapping[str, IssuerDividendAmountCorrection] | None = None,
         *, relevance_action_ids: frozenset[str] = frozenset(), reviewed_action_dates: SourcePin | None = None,
-        reviewed_parent_units: SourcePin | None = None) -> None:
+        reviewed_parent_units: SourcePin | None = None,
+        completed_cash_manifest: SourcePin | None = None,
+        completed_cash_facts: Mapping[str, ReviewedCompletedCashDistribution] | None = None,
+        recipient_stock_authority: ExistingRecipientStockAuthority | None = None) -> None:
         self.root, self.evidence = root.resolve(), evidence
         self.actions, self.global_gaps = action_index
         self.official = official_windows
@@ -138,8 +147,8 @@ class InvestmentCorporateActions:
                     action_id, symbol = record.get("id"), record.get("symbol")
                     if isinstance(action_id, str) and action_id in relevance_action_ids:
                         relevance_versions.setdefault(action_id, set()).add((family, record_hash))
-                        if family in {"name_changes", "spin_offs"}:
-                            locator = f"family={family};action_id={action_id};record_sha256={record_hash}"
+                        if family in {"name_changes", "spin_offs", "cash_dividends"}:
+                            locator = f"family={family};action_id={action_id};record_sha256={record_hash};query={query}"
                             relevance_records[(query, action_id)] = RelevanceRecord(
                                 family, record, (ref(name, locator), *coverage[1:]),
                             )
@@ -247,11 +256,27 @@ class InvestmentCorporateActions:
         if observed != accepted:
             raise DataReadinessError("investment action selected pages do not cover exact projection")
         self.relevance: InvestmentActionRelevance | None = None
-        if relevance_action_ids or reviewed_action_dates is not None or reviewed_parent_units is not None:
+        if (relevance_action_ids or reviewed_action_dates is not None or reviewed_parent_units is not None
+                or completed_cash_facts or recipient_stock_authority is not None):
             exact = {key: item for key, item in relevance_records.items() if len(relevance_versions[key[1]]) == 1}
+            completed = {}
+            for action_id, fact in (completed_cash_facts or {}).items():
+                guard("investment reviewed completed cash proof")
+                retained = exact.get((fact.ticker, action_id))
+                same_date = [record for record in evidence.records_by_symbol.get(fact.ticker, {}).get("cash_dividends", [])
+                    if record.get("symbol") == fact.ticker and record.get("ex_date") == fact.ex_date.isoformat()]
+                if (completed_cash_manifest is None or retained is None or retained.family != "cash_dividends"
+                        or same_date != [retained.record]):
+                    raise DataReadinessError("completed cash proof lacks one exact same-date provider action")
+                completed[action_id] = verify_completed_cash_fact(
+                    self.root, fact, retained.record, completed_cash_manifest, policy_reference.interpretation_policy_sha256,
+                    self.source_files, stock_identity_cache, stock_identity_cache,
+                    memory_guard=lambda: guard("completed cash SEC source"),
+                )
             self.relevance = InvestmentActionRelevance(
                 self.root, exact, reviewed_action_dates, reviewed_parent_units, policy_reference,
-                memory_guard=lambda: guard("investment reviewed action relevance"),
+                memory_guard=lambda: guard("investment reviewed action relevance"), completed_cash=completed,
+                recipients=recipient_stock_authority, stock_cache=stock_identity_cache, recipient_source_files=self.source_files,
             )
             for name, digest in self.relevance.source_files.items():
                 if name in self.source_files and self.source_files[name] != digest:
@@ -265,17 +290,38 @@ class InvestmentCorporateActions:
             if file_sha256(resolve_inside_authority(self.root, name)) != digest:
                 raise DataReadinessError("investment corporate-action source changed")
 
-    def _relevance_references(self, symbol: str, window: ActionWindow, first: date, last: date) -> tuple[EvidenceReference, ...]:
-        if (self.relevance is None or (symbol, window.action_id) in self.invalid
-                or (symbol, window.action_id) in self.unresolved_terms
-                or window.unavailable_reason not in SUPPORTED_REASONS or not window.intersects(first, last)):
+    def _relevance_window(self, symbol: str, window: ActionWindow, first: date, last: date) -> bool:
+        key = symbol, window.action_id
+        unresolved = self.unresolved_terms.get(key)
+        permitted = unresolved == "ordinary_domestic_cash_entitlement_unproven" if window.family == "cash_dividends" else unresolved is None
+        return (permitted and key not in self.invalid and key not in self.terms
+            and window.unavailable_reason in SUPPORTED_REASONS and window.intersects(first, last))
+
+    def _relevance_references(
+        self, symbol: str, window: ActionWindow, first: date, last: date,
+        *, security_id: str = "", sessions: tuple[date, ...] = (),
+    ) -> tuple[EvidenceReference, ...]:
+        if self.relevance is None or not self._relevance_window(symbol, window, first, last):
             return ()
-        return self.relevance.references(symbol, window.family, window.action_id, first, last)
+        return self.relevance.references(symbol, window.family, window.action_id, first, last,
+            security_id=security_id, sessions=sessions)
 
     def reviewed_relevance_ids(self, symbol: str, first: date, last: date) -> frozenset[str]:
-        """Find exact supported candidates without asserting raw ownership or economics."""
+        """Find exact supported initial candidates without asserting raw ownership or economics."""
         return frozenset(window.action_id for window in self.actions.get(symbol, ())
             if self._relevance_references(symbol, window, first, last))
+
+    def new_distribution_relevance_ids(
+        self, security_id: str, symbol: str, first: date, last: date,
+        *, new_cash_ids: frozenset[str], recipient_source_added: bool,
+    ) -> frozenset[str]:
+        relevance = self.relevance
+        if relevance is None:
+            return frozenset()
+        return frozenset(window.action_id for window in self.actions.get(symbol, ())
+            if self._relevance_window(symbol, window, first, last)
+            and relevance.is_new_distribution_candidate(security_id, symbol, window.family, window.action_id, first, last,
+                new_cash_ids=new_cash_ids, recipient_source_added=recipient_source_added))
 
     def validate_sources(self, identity: str, symbol: str, sessions: tuple[date, ...], position_id: str,
                          *, reviewed_relevance: bool = False) -> InvestmentSourceValidation:
@@ -298,7 +344,9 @@ class InvestmentCorporateActions:
                     "corporate_terms_require_replay", requires_ownership_before_first_date=True)
             if not window.intersects(first, last):
                 continue
-            if reviewed_relevance and (relevance := self._relevance_references(symbol, window, first, last)):
+            if reviewed_relevance and (relevance := self._relevance_references(
+                symbol, window, first, last, security_id=identity, sessions=sessions,
+            )):
                 refs.extend(relevance)
                 continue
             term = self.terms.get((symbol, window.action_id))

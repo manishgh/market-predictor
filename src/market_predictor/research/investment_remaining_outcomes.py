@@ -2,34 +2,22 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from functools import partial
 from pathlib import Path
-from typing import Any, Literal
-
-from pydantic import model_validator
+from typing import Any
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.runtime_memory import guard
-from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
-from market_predictor.investment.action_relevance import SUPPORTED_REASONS
+from market_predictor.investment.completed_cash_distributions import (
+    new_completed_cash_ids,
+    read_completed_cash_facts,
+)
 from market_predictor.investment.dataset import add_pins, read_object, recheck_sources, require
 from market_predictor.investment.label_sources import InvestmentSourceReader
-from market_predictor.research.investment_exclusion_evaluation import (
-    SCHEMA as EXCLUSION_SCHEMA,
-)
-from market_predictor.research.investment_exclusion_evaluation import (
-    InvestmentExclusionEvaluationRequest,
-    _coverage,
-    _filter_cohorts,
-    _parent_cohorts,
-    comparison_sidecar_pins,
-    exclusion_coverage,
-    read_fixed_selection_outcomes,
-)
+from market_predictor.research.investment_exclusion_evaluation import _coverage
 from market_predictor.research.investment_features import _publish
 from market_predictor.research.investment_label_reuse import producer_origin
 from market_predictor.research.investment_labels import (
@@ -37,11 +25,16 @@ from market_predictor.research.investment_labels import (
     read_investment_label_inputs,
     verified_investment_label_sources,
 )
+from market_predictor.research.investment_remaining_parent import (
+    InvestmentRemainingOutcomeRequest,
+    compare_survivor_cohorts,
+    distribution_action_ids,
+    potential_action_ids,
+    read_remaining_outcome_parent,
+)
 from market_predictor.research.investment_selection_outcomes import (
     InvestmentSelectionOutcomeRequest,
-    SelectedKey,
     _amended_label_request,
-    _compare_cohorts,
     _reference,
     compile_selected_pair,
     publish_selected_pair,
@@ -50,78 +43,9 @@ from market_predictor.research.investment_selection_outcomes import (
     _implementation as selection_implementation,
 )
 from market_predictor.research.investment_training import FLAGS
-from market_predictor.swing.contracts.holding_accounting import EvidenceReference, HoldingContract
+from market_predictor.swing.contracts.holding_accounting import EvidenceReference
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.corrected_outcome_admission import corrected_ticker
-
-
-class InvestmentRemainingOutcomeRequest(HoldingContract):
-    schema_version: Literal["market_predictor.investment_remaining_outcome_request"]
-    scope: Literal["post_observation_sensitivity"]
-    parent_manifest: SourcePin
-    reviewed_action_dates: SourcePin | None = None
-    reviewed_parent_units: SourcePin | None = None
-
-    @model_validator(mode="after")
-    def parent_units_require_dates(self) -> InvestmentRemainingOutcomeRequest:
-        if self.reviewed_parent_units is not None and self.reviewed_action_dates is None:
-            raise ValueError("reviewed parent share units require their reviewed action dates")
-        return self
-
-
-@dataclass(frozen=True)
-class SurvivorOutcomes:
-    manifest: dict[str, Any]
-    outcomes_pin: SourcePin
-    comparisons_pin: SourcePin
-    ancestor_pin: SourcePin
-    ancestor: dict[str, Any]
-    original_unknowns: dict[SelectedKey, dict[str, Any]]
-    rows: dict[SelectedKey, dict[str, Any]]
-    comparisons: dict[str, Any]
-    cohorts: dict[str, list[dict[str, Any]]]
-
-
-def _read_survivors(root: Path, pin: SourcePin, pins: dict[str, str]) -> SurvivorOutcomes:
-    manifest = read_object(root, pin, pins)
-    require(manifest.get("schema") == EXCLUSION_SCHEMA and manifest.get("scope") == "post_observation_sensitivity"
-        and manifest.get("status") in {"complete_with_explicit_gaps", "complete_research_only"}
-        and manifest.get("round_trip_stock_cost_bps") == 20 and manifest.get("benchmark_basis") == "stock_net_minus_spy_gross"
-        and manifest.get("outcome_verification_basis") == "pinned_parent_outcomes"
-        and all(manifest.get(flag) is False for flag in (*FLAGS, "reranked", "replacements_added",
-            "models_refitted", "original_labels_changed", "training_ready")),
-        "remaining outcomes require the closed pinned exclusion comparison")
-    exclusion = InvestmentExclusionEvaluationRequest.model_validate_json(json.dumps(
-        read_object(root, SourcePin.model_validate(manifest["request"]), pins)))
-    ancestor_pin = exclusion.parent_manifest
-    require(ancestor_pin == SourcePin.model_validate(manifest["parent_manifest"]), "exclusion ancestor pin differs")
-    ancestor = read_fixed_selection_outcomes(root, ancestor_pin, pins)
-    require(ancestor.outcomes_pin == SourcePin.model_validate(manifest["parent_outcomes"])
-        and ancestor.comparisons_pin == SourcePin.model_validate(manifest["parent_comparisons"])
-        and manifest["parent_selection_sha256"] == ancestor.manifest["selection_sha256"],
-        "exclusion ancestor outcomes, comparisons or ordered selections differ")
-    retained, comparison, removed = _filter_cohorts(exclusion.exclusions, ancestor.cohorts, ancestor.outcomes, ancestor.comparisons)
-    outcomes_pin, comparisons_pin = comparison_sidecar_pins(root, pin, manifest)
-    actual_rows = read_object(root, outcomes_pin, pins)
-    actual_comparisons = read_object(root, comparisons_pin, pins)
-    require(json_sha256(actual_rows) == json_sha256({"rows": list(retained.values())})
-        and json_sha256(actual_comparisons) == json_sha256({"views": comparison})
-        and manifest["exclusions"] == removed
-        and manifest["coverage"] == exclusion_coverage(ancestor.outcomes, ancestor.comparisons, retained, comparison)
-        and manifest["comparison_views"] == len(comparison)
-        and manifest["comparison_cohorts"] == sum(view["date_count"] for view in comparison.values())
-        and manifest["empty_cohorts"] == sum(view["empty_dates"] for view in comparison.values()),
-        "exclusion survivors, original clocks, coverage or ordered placements differ")
-    original_unknowns = {key: {**row, "status": "unresolved"} for key, row in ancestor.outcomes.items()
-        if row["original_status"] == "unresolved"}
-    return SurvivorOutcomes(manifest, outcomes_pin, comparisons_pin, ancestor_pin, ancestor.manifest, original_unknowns,
-        retained, comparison, _parent_cohorts(actual_comparisons, retained))
-
-
-def _potential_action_ids(row: dict[str, Any]) -> frozenset[str]:
-    return frozenset(parts[3] for reason in row["pair_missing_reasons"]
-        if len(parts := reason.split(":")) == 5 and parts[:2] == ["stock", "action"]
-        and parts[2] in {"name_changes", "spin_offs"} and parts[4] in SUPPORTED_REASONS)
 
 
 def _reviewed_action_ids(root: Path, request: InvestmentRemainingOutcomeRequest, pins: dict[str, str]) -> frozenset[str]:
@@ -130,19 +54,13 @@ def _reviewed_action_ids(root: Path, request: InvestmentRemainingOutcomeRequest,
         for record in read_object(root, pin, pins)["records"])
 
 
-def _comparison(parent: SurvivorOutcomes, rows: dict[SelectedKey, dict[str, Any]]) -> dict[str, Any]:
-    """Keep all original removal evidence and replay only economics and completeness."""
-    replayed = _compare_cohorts(parent.cohorts, rows)
-    return {view: {**parent.comparisons[view], **result,
-        "dates": [{**old, **new} for old, new in zip(parent.comparisons[view]["dates"], result["dates"], strict=True)]}
-        for view, result in replayed.items()}
-
-
 def _implementation() -> dict[str, str]:
     package = Path(__file__).resolve().parents[1]
     return {**selection_implementation(), **{str(package / name): file_sha256(package / name) for name in (
         "commands/investment_research.py", "research/investment_remaining_outcomes.py",
-        "research/investment_exclusion_evaluation.py", "investment/action_relevance.py",
+        "research/investment_exclusion_evaluation.py", "research/investment_remaining_parent.py",
+        "investment/action_relevance.py", "investment/completed_cash_distributions.py",
+        "investment/sec_document_evidence.py",
         "swing/datasets/reviewed_action_dates.py", "swing/datasets/reviewed_parent_units.py",
         "swing/datasets/reviewed_action_sources.py", "swing/datasets/action_windows.py",
     )}}
@@ -161,7 +79,22 @@ def resolve_remaining_investment_outcomes(*, root: Path, request: Path, request_
         implementation = _implementation()
         pins = dict(implementation)
         parsed = InvestmentRemainingOutcomeRequest.model_validate_json(json.dumps(read_object(root, request_pin, pins)))
-        parent = _read_survivors(root, parsed.parent_manifest, pins)
+        parent = read_remaining_outcome_parent(root, parsed.parent_manifest, pins)
+        previous = parent.request
+        if previous is not None:
+            require(parsed.reviewed_action_dates == previous.reviewed_action_dates
+                and parsed.reviewed_parent_units == previous.reviewed_parent_units
+                and (previous.existing_recipient_stock_identity is None
+                    or parsed.existing_recipient_stock_identity == previous.existing_recipient_stock_identity),
+                "remaining recovery changed a carried reviewed date, unit or recipient authority")
+        prior_cash = read_completed_cash_facts(root, None if previous is None else previous.completed_cash_distributions, pins)
+        cash = read_completed_cash_facts(root, parsed.completed_cash_distributions, pins)
+        added_cash = new_completed_cash_ids(prior_cash, cash)
+        recipient_added = parsed.existing_recipient_stock_identity is not None and (
+            previous is None or previous.existing_recipient_stock_identity is None)
+        additional = previous is not None or bool(cash) or recipient_added
+        require(not additional or bool(added_cash) or recipient_added,
+            "remaining recovery adds no new completed cash or existing-recipient evidence")
         ancestor_request_pin = SourcePin.model_validate(parent.ancestor["request"])
         ancestor_request = InvestmentSelectionOutcomeRequest.model_validate_json(json.dumps(
             read_object(root, ancestor_request_pin, pins)))
@@ -173,8 +106,11 @@ def resolve_remaining_investment_outcomes(*, root: Path, request: Path, request_
         amended = _amended_label_request(root, ancestor_request, inputs.request, parent.original_unknowns, pins)
         roster = {row["decision_id"]: row for row in inputs.rows}
         unknown = {key: row for key, row in parent.rows.items() if row["status"] == "unresolved"}
-        candidate_ids = {key: _potential_action_ids(row) for key, row in unknown.items()}
-        action_ids = _reviewed_action_ids(root, parsed, pins).union(*candidate_ids.values())
+        new_cash = {action_id: cash[action_id] for action_id in added_cash}
+        candidate_ids = {key: (distribution_action_ids(row, new_cash, recipient_added) if additional else potential_action_ids(row))
+            for key, row in unknown.items()}
+        action_ids = _reviewed_action_ids(root, parsed, pins).union(cash, *candidate_ids.values(),
+            *(potential_action_ids(unknown[key]) for key, ids in candidate_ids.items() if ids))
         require(inputs.request.decision_ids is None and all(key[0] in roster for key in unknown),
             "remaining outcomes require the original full fixed decision roster")
 
@@ -190,7 +126,9 @@ def resolve_remaining_investment_outcomes(*, root: Path, request: Path, request_
             interpretation_policy_sha256=request_sha256, retrieved_at=verified_at, available_at=verified_at)
         actions, raw_selection = prepare_investment_label_components(root, amended, inputs.policy, inputs.roster_rows,
             extension, evidence, sources, pins, policy_ref, request_sha256, relevance_action_ids=action_ids,
-            reviewed_action_dates=parsed.reviewed_action_dates, reviewed_parent_units=parsed.reviewed_parent_units)
+            reviewed_action_dates=parsed.reviewed_action_dates, reviewed_parent_units=parsed.reviewed_parent_units,
+            completed_cash_manifest=parsed.completed_cash_distributions, completed_cash_facts=cash,
+            existing_recipient_stock_identity=parsed.existing_recipient_stock_identity)
         reader = InvestmentSourceReader(root, raw_selection, request_sha256)
         producer_export, producer_commit = producer_origin(implementation, pins)
         report: dict[str, Any] = {
@@ -225,10 +163,12 @@ def resolve_remaining_investment_outcomes(*, root: Path, request: Path, request_
                 decision = roster[key[0]]
                 symbol = corrected_ticker(row["security_id"], row["ticker"], date.fromisoformat(row["decision_session"]),
                     inputs.policy.decision_corrections)
-                eligible_ids = candidate_ids[key] & actions.reviewed_relevance_ids(
-                    symbol, datetime.fromisoformat(row["entry_time_utc"]).date(),
-                    datetime.fromisoformat(row["economic_maturity_utc"]).date(),
-                )
+                first = datetime.fromisoformat(row["entry_time_utc"]).date()
+                last = datetime.fromisoformat(row["economic_maturity_utc"]).date()
+                supported = (actions.new_distribution_relevance_ids(row["security_id"], symbol, first, last,
+                    new_cash_ids=added_cash, recipient_source_added=recipient_added) if additional
+                    else actions.reviewed_relevance_ids(symbol, first, last))
+                eligible_ids = candidate_ids[key] & supported
                 if not eligible_ids:
                     continue
                 if row["security_id"] != previous_security:
@@ -243,7 +183,8 @@ def resolve_remaining_investment_outcomes(*, root: Path, request: Path, request_
                 if pair["status"] != "source_validated":
                     continue
                 proof_ids = {part.removeprefix("action_id=")
-                    for ref in pair["specifications"]["stock"]["entry_evidence"] if ";relevance=" in ref["record_locator"]
+                    for ref in pair["specifications"]["stock"]["entry_evidence"]
+                    if ref["record_locator"].startswith("family=") and ";relevance=" in ref["record_locator"]
                     for part in ref["record_locator"].split(";") if part.startswith("action_id=")}
                 require(eligible_ids.issubset(proof_ids), "recovered holding lacks its selected action relevance proof")
                 recovered = dict(row)
@@ -251,7 +192,7 @@ def resolve_remaining_investment_outcomes(*, root: Path, request: Path, request_
                 rows[key] = recovered
                 attempt["status"] = "recovered"
 
-            comparisons = _comparison(parent, rows)
+            comparisons = compare_survivor_cohorts(parent, rows)
             attempted = sum(row["status"] != "unattempted" for row in attempts.values())
             recovered_count = len(proof_pins)
             report.update(attempted_keys=attempted, unattempted_keys=len(unknown) - attempted,
@@ -262,6 +203,7 @@ def resolve_remaining_investment_outcomes(*, root: Path, request: Path, request_
                 report["status"] = "complete_research_only"
             reader.recheck()
             actions.recheck()
+            add_pins(root, pins, actions.source_files)
             add_pins(root, pins, reader.source_files)
             guard("remaining investment outcome publication")
             write_json_object(staged / "outcomes.json", {"rows": list(rows.values())})

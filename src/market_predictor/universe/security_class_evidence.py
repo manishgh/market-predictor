@@ -16,7 +16,8 @@ from market_predictor.core.path_integrity import resolve_existing_file_inside
 _XBRLI = "http://www.xbrl.org/2003/instance"
 _XBRLDI = "http://xbrl.org/2006/xbrldi"
 _INLINE = {"http://www.xbrl.org/2013/inlineXBRL", "http://www.xbrl.org/2008/inlineXBRL"}
-_CONCEPTS = {"TradingSymbol", "Security12bTitle", "SecurityExchangeName", "EntityRegistrantName", "EntityCentralIndexKey"}
+_INCORPORATION = "EntityIncorporationStateCountryCode"
+_CONCEPTS = {"TradingSymbol", "Security12bTitle", "SecurityExchangeName", "EntityRegistrantName", "EntityCentralIndexKey", _INCORPORATION}
 _MAX_BODY_BYTES = 16 * 1024 * 1024
 
 
@@ -162,7 +163,7 @@ def _issuer_matches(candidate: ReportingContext, security: ReportingContext) -> 
     )
 
 
-def _extract(soup: BeautifulSoup, digest: str, expected_cik: str, target_ticker: str) -> SecurityClassEvidence:
+def _extract(soup: BeautifulSoup, digest: str, expected_cik: str, target_ticker: str) -> tuple[SecurityClassEvidence, str | None]:
     tags: dict[str, list[Tag]] = {concept: [] for concept in _CONCEPTS}
     context_tags: dict[str, Tag] = {}
     for tag in soup.find_all(True):
@@ -305,16 +306,28 @@ def _extract(soup: BeautifulSoup, digest: str, expected_cik: str, target_ticker:
 
     issuer_name, issuer_cik = issuer_facts(security)
     selected = {item.contextref for item in (ticker, title, exchange, issuer_name, issuer_cik)}
-    return SecurityClassEvidence(
+    incorporation = None
+    if issuer_name.contextref == issuer_cik.contextref:
+        same_context = [tag for tag in tags[_INCORPORATION] if _attribute(tag, "contextref") == issuer_name.contextref]
+        if len(same_context) == 1:
+            try:
+                code = _text(same_context[0])
+                if re.fullmatch(r"[A-Z]{2}", code):
+                    incorporation = code
+            except DataReadinessError:
+                # Unsupported optional evidence does not affect class admission.
+                pass
+    facts = SecurityClassEvidence(
         digest, ticker, title, exchange, issuer_name, issuer_cik, tuple(contexts[key] for key in sorted(selected)),
     )
+    return facts, incorporation
 
 
 
-def extract_security_class_evidence(
+def extract_security_class_and_jurisdiction(
     path: Path, expected_sha256: str, expected_cik: str, target_ticker: str,
-) -> SecurityClassEvidence:
-    """Read one bounded retained body and return explicit, unambiguous source facts.
+) -> tuple[SecurityClassEvidence, str | None]:
+    """Read one bounded retained body with an optional same-context jurisdiction.
 
     Only bytes matching the caller's pinned digest are parsed. Unsupported contexts,
     transformed facts and ambiguous associations fail closed with DataReadinessError.
@@ -341,3 +354,11 @@ def extract_security_class_evidence(
         return _extract(soup, digest, cik, target_ticker)
     finally:
         soup.decompose()
+
+
+def extract_security_class_evidence(
+    path: Path, expected_sha256: str, expected_cik: str, target_ticker: str,
+) -> SecurityClassEvidence:
+    """Read exact retained class and issuer facts with the original public shape."""
+    facts, _ = extract_security_class_and_jurisdiction(path, expected_sha256, expected_cik, target_ticker)
+    return facts

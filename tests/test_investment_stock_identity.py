@@ -1,6 +1,7 @@
 """Synthetic retained envelopes exercise identity bounds without price outcomes."""
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import date
 from pathlib import Path
@@ -13,8 +14,11 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.investment import stock_identity as identity
+from market_predictor.investment.sec_document_evidence import RetainedSecDocument
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from tests.test_security_class_evidence import _context, _document, _extract, _issuer, _row
+
+_CLASS_ANCHOR = identity._class_anchor
 
 
 def _json(path: Path, value: dict[str, Any]) -> SourcePin:
@@ -129,6 +133,30 @@ def test_caller_cache_reuses_class_parsing_but_checks_each_interval(scope):
     assert not replay(scope, "2024-05-31", cache=cache).missing_reasons
     assert replay(scope, "2024-06-03", cache=cache).missing_reasons
     assert scope["calls"] == ["parse"]
+
+
+def test_same_context_jurisdiction_reuses_only_exact_class_proof_cache(scope, monkeypatch):
+    root = scope["root"]
+    proof = scope["proof"]
+    tagged = '<ix:nonNumeric name="dei:EntityIncorporationStateCountryCode" contextRef="base">DE</ix:nonNumeric>'
+    body = _document(_context("base"), _issuer("base") + tagged, _row("base", ticker="TEST")).encode()
+    scope["proof"] = proof.model_copy(update={"anchor": proof.anchor.model_copy(update={"body_sha256": hashlib.sha256(body).hexdigest()})})
+    physical = root / "cold-anchor.zip"
+    physical.write_bytes(b"synthetic exact archived stock fixture")
+    calls = []
+
+    def document(_root, _anchor, _issuer, files, _cache, **_kwargs):
+        calls.append("read")
+        files[str(physical)] = file_sha256(physical)
+        return RetainedSecDocument(body, physical, "member", physical, "index", "b" * 64, "8-K",
+            pd.Timestamp("2024-05-01T12:00:00Z"), pd.Timestamp("2026-11-09T10:00:00Z"), pd.Timestamp("2026-11-09T10:00:00Z"))
+
+    monkeypatch.setattr(identity, "_class_anchor", _CLASS_ANCHOR)
+    monkeypatch.setattr(identity, "read_retained_sec_document", document)
+    cache = {}
+    assert replay(scope, "2024-05-30", cache=cache).issuer_incorporation_code == "DE"
+    assert replay(scope, "2024-05-31", cache=cache).issuer_incorporation_code == "DE"
+    assert calls == ["read"]
 
 
 def test_mutated_authority_file_is_rejected_before_source_facts(scope):

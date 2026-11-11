@@ -17,6 +17,7 @@ from market_predictor.investment.action_relevance import action_relevance_reason
 from market_predictor.investment.label_materialization import InvestmentSourceValidation, compile_investment_spy_pair
 from market_predictor.research import investment_labels
 from market_predictor.research import investment_remaining_outcomes as module
+from market_predictor.research.investment_remaining_parent import read_exclusion_survivors
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.reviewed_action_dates import ReviewedActionDate
 from market_predictor.swing.datasets.reviewed_parent_units import ReviewedParentSpinUnits
@@ -197,7 +198,8 @@ def test_incremental_publication_keeps_fixed_survivors_and_original_clocks(
             return InvestmentSourceValidation((evidence if reviewed_relevance else policy_ref,),
                 ("companion_gap",) if reviewed_relevance and status == "unresolved" else ())
 
-        return SimpleNamespace(validate_sources=validate, reviewed_relevance_ids=lambda *_: frozenset({"name"}), recheck=lambda: None), {}
+        return SimpleNamespace(validate_sources=validate, reviewed_relevance_ids=lambda *_: frozenset({"name"}),
+            source_files={}, recheck=lambda: None), {}
 
     monkeypatch.setattr(module, "prepare_investment_label_components", components)
     output = tmp_path / "remaining"
@@ -243,7 +245,7 @@ def test_repacked_survivor_clock_is_refused(tmp_path: Path, parent: tuple[Path, 
     report["files"]["outcomes.json"] = child_pin["sha256"]
     manifest_pin = SourcePin.model_validate(_write(manifest, report))
     with pytest.raises(DataReadinessError, match="original clocks"):
-        module._read_survivors(tmp_path, manifest_pin, {})
+        read_exclusion_survivors(tmp_path, manifest_pin, {})
 
 
 def test_action_source_merge_cannot_repin_a_previously_consumed_file(

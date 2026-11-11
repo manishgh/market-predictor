@@ -21,6 +21,8 @@ from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
+from market_predictor.investment.action_relevance import ExistingRecipientStockAuthority
+from market_predictor.investment.completed_cash_distributions import ReviewedCompletedCashDistribution
 from market_predictor.investment.corporate_actions import InvestmentCorporateActions
 from market_predictor.investment.dataset import add_pins
 from market_predictor.investment.dividend_currencies import load_currency_corroborations, load_dividend_amount_corrections
@@ -79,7 +81,7 @@ def _implementation() -> dict[str, str]:
         "research/investment_currencies.py", "research/investment_features.py",
         "investment/label_sources.py", "investment/label_materialization.py", "investment/corporate_actions.py",
         "investment/dividend_currencies.py", "investment/raw_acquisition.py", "investment/source_extensions.py",
-        "investment/stock_identity.py", "universe/security_class_evidence.py",
+        "investment/stock_identity.py", "investment/sec_document_evidence.py", "universe/security_class_evidence.py",
         "catalysts/sec_filings/document_collection.py",
         "investment/contracts.py", "investment/targets.py", "swing/contracts/holding_accounting.py",
         "swing/evaluation/holding_accounting.py", "swing/labels/holding_paths.py", "swing/labels/holding_identity.py",
@@ -202,7 +204,10 @@ def prepare_investment_label_components(root: Path, parsed: InvestmentLabelMater
     evidence: CorporateActionEvidence, sources: dict[str, Any], pins: dict[str, str], policy_ref: EvidenceReference,
     request_sha256: str, *, relevance_action_ids: frozenset[str] = frozenset(),
     reviewed_action_dates: SourcePin | None = None,
-    reviewed_parent_units: SourcePin | None = None) -> tuple[InvestmentCorporateActions, dict[str, Any]]:
+    reviewed_parent_units: SourcePin | None = None,
+    completed_cash_manifest: SourcePin | None = None,
+    completed_cash_facts: dict[str, ReviewedCompletedCashDistribution] | None = None,
+    existing_recipient_stock_identity: SourcePin | None = None) -> tuple[InvestmentCorporateActions, dict[str, Any]]:
     """Compose the same raw and corporate-action authorities for label and pair consumers."""
     currencies = {} if parsed.currency_manifest is None else load_investment_currency_evidence(root,
         Path(parsed.currency_manifest.path), parsed.currency_manifest.sha256, pins, interpretation_policy_sha256=request_sha256)
@@ -218,11 +223,21 @@ def prepare_investment_label_components(root: Path, parsed: InvestmentLabelMater
         _read(root, correction_pin, pins)
         corrections = load_dividend_amount_corrections(root, Path(correction_pin.path),
             correction_pin.sha256, policy_sha256=request_sha256)
+    recipient_authority = None
+    if existing_recipient_stock_identity is not None:
+        expected = None if raw_extension is None else raw_extension.request.stock_identity
+        if (raw_extension is None or expected is None or expected.sha256 != existing_recipient_stock_identity.sha256
+                or inside(root, expected.path) != inside(root, existing_recipient_stock_identity.path)):
+            raise DataReadinessError("existing recipient class authority must be the exact amended raw stock identity manifest")
+        recipient_authority = ExistingRecipientStockAuthority(existing_recipient_stock_identity,
+            {(proof.security_id, proof.ticker): proof for proof in raw_extension.stock_proofs})
     actions = InvestmentCorporateActions(root, evidence, sources["action_index"], policy.official_windows,
         policy_ref, policy.numerical_end if raw_extension is None else raw_extension.outcome_end,
         currency_evidence=currencies, currency_corroborations=corroborations,
         dividend_amount_corrections=corrections, relevance_action_ids=relevance_action_ids,
-        reviewed_action_dates=reviewed_action_dates, reviewed_parent_units=reviewed_parent_units)
+        reviewed_action_dates=reviewed_action_dates, reviewed_parent_units=reviewed_parent_units,
+        completed_cash_manifest=completed_cash_manifest, completed_cash_facts=completed_cash_facts,
+        recipient_stock_authority=recipient_authority)
     add_pins(root, pins, {str(_path(root, name)): digest for name, digest in actions.source_files.items()})
     selection = sources["selection"]
     if raw_extension is not None:

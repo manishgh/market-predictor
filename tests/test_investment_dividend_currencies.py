@@ -461,6 +461,17 @@ def test_resolved_and_original_tax_comparisons_cannot_be_reinterpreted(tmp_path:
             amount_correction=None if variant == "unused" else correction)
 
 
+def test_resolved_comparison_failure_remains_fatal_when_gross_row_is_also_unavailable(tmp_path: Path) -> None:
+    original, currency, item = correction_fixture(tmp_path)
+    currency["tax_resolved_value_difference"] = currency["tax_value_difference"]
+    path = Path(currency["tax"]["gross_context"]["body"]["path"])
+    payload = json.loads(path.read_text())
+    payload["data"]["html"] = payload["data"]["html"].replace("<td>USD</td>", "<td>EUR</td>")
+    currency["tax"]["gross_context"] = captured(path, json.dumps(payload).encode())
+    with pytest.raises(DataReadinessError, match="tax-minus-resolved"):
+        model(currency).validates_against(original, tmp_path, POLICY, amount_correction=correction_model(item))
+
+
 @pytest.mark.parametrize("field,value", [("original_record_sha256", "b" * 64), ("action_id", "other-action"),
     ("symbol", "OTHER"), ("ex_date", "2020-06-18"), ("original_rate", "1.3662418"),
     ("corrected_gross_amount", "1.3662419999999999999999"), ("isin", "US78462F1031"), ("cusip", "46090E103")])
@@ -591,8 +602,14 @@ def test_stock_composite_requires_exact_dated_class_and_provider_cusip(tmp_path,
         refs = model(item).validates_against(original, tmp_path, POLICY, stock_identity_cache={})
         assert any("provider-only CUSIP=78462F103" in r.record_locator for r in refs)
     else:
+        candidate = model(item)
         with pytest.raises(DataReadinessError):
-            model(item).validates_against(original, tmp_path, POLICY)
+            candidate.validates_against(original, tmp_path, POLICY)
+        if variant in ("tax_category", "tax_preferred"):
+            assert candidate.identity.tax_identity_observation["tax_category_name"] == (
+                "BOND" if variant == "tax_category" else "SHARE")
+            assert candidate.identity.tax_identity_observation["tax_type_name"] == (
+                "SHARE.PREFERRED" if variant == "tax_preferred" else "SHARE.COMMON")
 
 
 def test_currency_manifest_explicit_scale_bound_is_separate_from_receipts(tmp_path, monkeypatch):

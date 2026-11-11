@@ -6,7 +6,7 @@ import io
 import json
 import re
 import zipfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from html.parser import HTMLParser
@@ -95,36 +95,11 @@ class StockCompositeIdentity(HoldingContract):
 
     def validates_tax_identity(self, calculation: Mapping[str, Any], lookup: CapturedCurrencySource | None,
                                root: Path, policy_sha256: str) -> tuple[EvidenceReference, ...]:
-        if (calculation.get("instrumentGroup") != "SHARE" or not isinstance(calculation.get("name"), str)
-            or not calculation["name"].strip()):
-            raise DividendEvidenceUnavailable("stock tax instrument group/name missing or unsupported")
-        if lookup is None:
-            raise DividendEvidenceUnavailable("stock tax classification source missing")
-        raw, receipt, refs = _captured(root, lookup, policy_sha256, {"www.ictax.admin.ch", "ictax.admin.ch"})
-        payload = _json(raw)
-        records = payload.get("security")
-        if (payload.get("total") != 1 or payload.get("count") != 1 or not isinstance(records, list) or len(records) != 1
-            or not isinstance(records[0], dict) or receipt.get("request", {}).get("isin") != calculation.get("isin")
-            or records[0].get("isin") != calculation.get("isin") or records[0].get("vn") != calculation.get("valorNumber")):
-            raise DataReadinessError("stock tax lookup exact ISIN/valor/request binding differs")
-        record = records[0]
-        observation = {"tax_security_name": calculation["name"], "tax_instrument_group": calculation["instrumentGroup"],
-            "tax_institution": record.get("institution"), "tax_category_name": record.get("categoryName"),
-            "tax_type_name": record.get("typeName"), "tax_type_description": record.get("typeDescription"),
-            "sec_issuer_name": self._issuer_name, "sec_security_title": self._security_title,
-            "cusip_provenance": self.cusip_provenance, "lookup_source": lookup.model_dump(mode="json")}
-        self._tax_identity_observation = observation
-        category = record.get("categoryName")
-        class_text = " ".join(str(record.get(field) or "") for field in ("name", "typeName", "typeDescription"))
-        explicit_non_common = re.search(
-            r"\b(preferred|preference|ADR|ADS|bonds?|notes?|debentures?|Vorzugsaktien)\b|deposit[ao]ry", class_text,
-            re.IGNORECASE)
-        calculation_non_common = re.search(
-            r"\b(preferred|preference)\s+(stock|shares)\b|\b(ADR|ADS|bonds?|notes?|debentures?)\b|deposit[ao]ry",
-            calculation["name"], re.IGNORECASE)
-        official_common = re.search(r"\b(common|ordinary)\s+(stock|shares)\b", self._security_title, re.IGNORECASE)
-        if category not in (None, "", "SHARE") or explicit_non_common or calculation_non_common or official_common is None:
-            raise DividendEvidenceUnavailable("stock tax classification contradicts direct common/ordinary stock")
+        def remember(observation: dict[str, Any]) -> None:
+            self._tax_identity_observation = observation
+
+        refs, _ = replay_stock_tax_class(calculation, lookup, root, policy_sha256,
+            issuer_name=self._issuer_name, security_title=self._security_title, observe=remember)
         return refs
 
     def validates_against(self, original: Mapping[str, Any], root: Path, policy_sha256: str,
@@ -417,6 +392,16 @@ def _captured(root: Path, source: CapturedCurrencySource, policy_sha256: str,
     return raw, receipt, refs
 
 
+def valid_cusip(value: object) -> bool:
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Z0-9]{8}[0-9]", value):
+        return False
+    total = 0
+    for index, character in enumerate(value[:8]):
+        weighted = int(character, 36) * (1 + index % 2)
+        total += weighted // 10 + weighted % 10
+    return (total + int(value[-1])) % 10 == 0
+
+
 def _isin(cusip: str) -> str:
     prefix = "US" + cusip
     for check in range(10):
@@ -642,6 +627,121 @@ class IssuerDividendAmountCorrection(HoldingContract):
             symbol=self.symbol, ex_date=self.ex_date, original_rate=original_amount, gross_amount=corrected, evidence=refs)
 
 
+def replay_stock_tax_class(
+    calculation: Mapping[str, Any], lookup: CapturedCurrencySource | None,
+    root: Path, policy_sha256: str, *, issuer_name: str, security_title: str,
+    observe: Callable[[dict[str, Any]], None] | None = None,
+) -> tuple[tuple[EvidenceReference, ...], dict[str, Any]]:
+    if (calculation.get("instrumentGroup") != "SHARE" or not isinstance(calculation.get("name"), str)
+        or not calculation["name"].strip()):
+        raise DividendEvidenceUnavailable("stock tax instrument group/name missing or unsupported")
+    if lookup is None:
+        raise DividendEvidenceUnavailable("stock tax classification source missing")
+    raw, receipt, refs = _captured(root, lookup, policy_sha256, {"www.ictax.admin.ch", "ictax.admin.ch"})
+    payload = _json(raw)
+    records = payload.get("security")
+    if (payload.get("total") != 1 or payload.get("count") != 1 or not isinstance(records, list) or len(records) != 1
+        or not isinstance(records[0], dict) or receipt.get("request", {}).get("isin") != calculation.get("isin")
+        or records[0].get("isin") != calculation.get("isin") or records[0].get("vn") != calculation.get("valorNumber")):
+        raise DataReadinessError("stock tax lookup exact ISIN/valor/request binding differs")
+    record = records[0]
+    observation = {"tax_security_name": calculation["name"], "tax_instrument_group": calculation["instrumentGroup"],
+        "tax_institution": record.get("institution"), "tax_category_name": record.get("categoryName"),
+        "tax_type_name": record.get("typeName"), "tax_type_description": record.get("typeDescription"),
+        "sec_issuer_name": issuer_name, "sec_security_title": security_title,
+        "cusip_provenance": "provider_original_cash_action", "lookup_source": lookup.model_dump(mode="json")}
+    if observe is not None:
+        observe(observation)
+    category = record.get("categoryName")
+    class_text = " ".join(str(record.get(field) or "") for field in ("name", "typeName", "typeDescription"))
+    explicit_non_common = re.search(
+        r"\b(preferred|preference|ADR|ADS|bonds?|notes?|debentures?|Vorzugsaktien)\b|deposit[ao]ry", class_text,
+        re.IGNORECASE)
+    calculation_non_common = re.search(
+        r"\b(preferred|preference)\s+(stock|shares)\b|\b(ADR|ADS|bonds?|notes?|debentures?)\b|deposit[ao]ry",
+        calculation["name"], re.IGNORECASE)
+    official_common = re.search(r"\b(common|ordinary)\s+(stock|shares)\b", security_title, re.IGNORECASE)
+    if category not in (None, "", "SHARE") or explicit_non_common or calculation_non_common or official_common is None:
+        raise DividendEvidenceUnavailable("stock tax classification contradicts direct common/ordinary stock")
+    return refs, observation
+
+
+def replay_tax_currency_event(
+    root: Path, tax: TaxCurrencyEvent, ex_date: date, provider_amount: Decimal,
+    difference: Decimal, policy_sha256: str,
+    *, stock_tax_validation: Callable[[Mapping[str, Any]], tuple[EvidenceReference, ...]] | None = None,
+    payable_date: date | None = None, record_date: date | None = None,
+    resolved_comparison: tuple[Decimal, Decimal] | None = None,
+) -> tuple[Decimal, tuple[EvidenceReference, ...]]:
+    """Replay structured and Brutto evidence, with an exact payment match when requested."""
+    refs: list[EvidenceReference] = []
+    raw, receipt, found = _captured(root, tax.source, policy_sha256, {"www.ictax.admin.ch", "ictax.admin.ch"})
+    tax_locator = (f"/data/calculation/isin={tax.isin};"
+        f"/data/calculationDetails/entries/{tax.entry_index}/currency/shortName=USD;"
+        f"/data/calculationDetails/entries/{tax.entry_index}/value={tax.gross_amount}")
+    refs.extend(ref.model_copy(update={"record_locator": tax_locator}) for ref in found)
+    payload = _json(raw)
+    if payload.get("status") != "SUCCESS" or payload.get("error") is not None:
+        raise DataReadinessError("tax distribution response unsuccessful")
+    calculation = payload["data"]["calculation"]
+    request = receipt.get("request", {})
+    if (calculation.get("isin") != tax.isin or request.get("isin") != tax.isin
+        or request.get("referenceDate") != calculation.get("referenceDate")
+        or request.get("valorNumber") != calculation.get("valorNumber")):
+        raise DataReadinessError("tax distribution request/security identity differs")
+    if (calculation.get("quotationType") != "PIECE" or type(calculation.get("quantity")) is not int
+        or calculation.get("quantity") != 1):
+        raise DividendEvidenceUnavailable("tax distribution per-share basis differs")
+    if stock_tax_validation is not None:
+        refs.extend(stock_tax_validation(calculation))
+    entries = payload["data"]["calculationDetails"]["entries"]
+    if not isinstance(entries, list) or len(entries) > 128:
+        raise DataReadinessError("tax distribution entries exceed bounded shape")
+    table: _GrossRows | None = None
+    gross_refs: tuple[EvidenceReference, ...] = ()
+    if any(isinstance(entry, dict) and entry.get("type") == "PAYMENT" and entry.get("exDate") is None for entry in entries):
+        table, gross_refs = _tax_gross_table(root, tax.gross_context, policy_sha256, receipt)
+    matches, offers = _tax_payment_matches(entries, table, ex_date)
+    if len(matches) != 1 or matches[0][0] != tax.entry_index:
+        raise DividendEvidenceUnavailable("tax distribution ex-date is absent or ambiguous")
+    entry = matches[0][1]
+    tax_amount = _decimal(entry.get("value"))
+    if (entry.get("currency", {}).get("shortName") != "USD" or type(entry.get("nominalQuantity")) is not int
+        or entry.get("nominalQuantity") != 1
+        or tax_amount <= 0 or provider_amount <= 0 or tax_amount != _decimal(tax.gross_amount)
+        or tax_amount - provider_amount != difference):
+        raise DataReadinessError("tax currency/gross value/per-share comparison differs")
+    if resolved_comparison is not None:
+        resolved_amount, resolved_difference = resolved_comparison
+        if tax_amount - resolved_amount != resolved_difference:
+            raise DataReadinessError("tax-minus-resolved distribution amount comparison differs")
+    if table is None:
+        table, gross_refs = _tax_gross_table(root, tax.gross_context, policy_sha256, receipt)
+    gross_rows = [index for index, row in enumerate(table.rows)
+        if len(row) == 13 and row[5] == ex_date.strftime("%d.%m.") and row[8] == "USD"
+        and _decimal(row[9]) == tax_amount]
+    if len(gross_rows) != 1:
+        raise DividendEvidenceUnavailable("tax amount/currency is absent or ambiguous in gross table column")
+    gross_locator = (f"/data/html;gross-table-row={gross_rows[0]};ex-date={ex_date.isoformat()};"
+        f"currency-column=8:USD;gross-column=9:{tax.gross_amount}")
+    if payable_date is not None:
+        row_index = gross_rows[0]
+        if (_date_ms(entry.get("paymentDate")) != payable_date or _date_ms(entry.get("date")) != payable_date
+                or table.rows[row_index][6] != payable_date.strftime("%d.%m.")
+                or table.row_tables[row_index] not in table.brutto_tables
+                or (entry.get("recordDate") is not None and _date_ms(entry["recordDate"]) != record_date)):
+            raise DividendEvidenceUnavailable("completed tax distribution payment or record date differs")
+        gross_locator += f";payment-date={payable_date.isoformat()}"
+    if offers:
+        target_table = table.row_tables[gross_rows[0]]
+        if target_table not in table.brutto_tables or any(table.row_tables[row] != target_table for row in offers.values()):
+            raise DividendEvidenceUnavailable("tax purchase-offer disclosure is outside the target gross table")
+        offer_locators = ",".join(f"{entry}:{row}" for entry, row in offers.items())
+        gross_locator += f";zero-purchase-offer-entry-to-gross-row={offer_locators}"
+    refs.extend(ref.model_copy(update={"record_locator": gross_locator}) for ref in gross_refs)
+    return tax_amount, tuple(refs)
+
+
 class CurrencyCorroboration(HoldingContract):
     method: Literal["exact_tax_event", "issuer_rate_tax_currency_bridge"]
     action_id: Identifier
@@ -714,62 +814,20 @@ class CurrencyCorroboration(HoldingContract):
                 or self.identity.fund_name not in joined):
                 raise DividendEvidenceUnavailable("official source does not prove quoted ticker/CUSIP/fund identity")
         refs.extend(found)
-        raw, receipt, found = _captured(root, self.tax.source, policy_sha256, {"www.ictax.admin.ch", "ictax.admin.ch"})
-        tax_locator = (f"/data/calculation/isin={self.tax.isin};"
-            f"/data/calculationDetails/entries/{self.tax.entry_index}/currency/shortName=USD;"
-            f"/data/calculationDetails/entries/{self.tax.entry_index}/value={self.tax.gross_amount}")
-        refs.extend(ref.model_copy(update={"record_locator": tax_locator}) for ref in found)
-        payload = _json(raw)
-        if payload.get("status") != "SUCCESS" or payload.get("error") is not None:
-            raise DataReadinessError("tax distribution response unsuccessful")
-        calculation = payload["data"]["calculation"]
-        request = receipt.get("request", {})
-        if (calculation.get("isin") != self.tax.isin or request.get("isin") != self.tax.isin
-            or request.get("referenceDate") != calculation.get("referenceDate")
-            or request.get("valorNumber") != calculation.get("valorNumber")):
-            raise DataReadinessError("tax distribution request/security identity differs")
-        if (calculation.get("quotationType") != "PIECE" or type(calculation.get("quantity")) is not int
-            or calculation.get("quantity") != 1):
-            raise DividendEvidenceUnavailable("tax distribution per-share basis differs")
-        if isinstance(self.identity, StockCompositeIdentity):
-            refs.extend(self.identity.validates_tax_identity(calculation, self.tax.lookup, root, policy_sha256))
-        entries = payload["data"]["calculationDetails"]["entries"]
-        if not isinstance(entries, list) or len(entries) > 128:
-            raise DataReadinessError("tax distribution entries exceed bounded shape")
-        table: _GrossRows | None = None
-        gross_refs: tuple[EvidenceReference, ...] = ()
-        if any(isinstance(entry, dict) and entry.get("type") == "PAYMENT" and entry.get("exDate") is None for entry in entries):
-            table, gross_refs = _tax_gross_table(root, self.tax.gross_context, policy_sha256, receipt)
-        matches, offers = _tax_payment_matches(entries, table, self.ex_date)
-        if len(matches) != 1 or matches[0][0] != self.tax.entry_index:
-            raise DividendEvidenceUnavailable("tax distribution ex-date is absent or ambiguous")
-        entry = matches[0][1]
-        tax_amount = _decimal(entry.get("value"))
         provider_amount = _decimal(original.get("rate"))
-        if (entry.get("currency", {}).get("shortName") != "USD" or type(entry.get("nominalQuantity")) is not int
-            or entry.get("nominalQuantity") != 1
-            or tax_amount <= 0 or provider_amount <= 0 or tax_amount != _decimal(self.tax.gross_amount)
-            or tax_amount - provider_amount != _decimal(self.tax_value_difference)):
-            raise DataReadinessError("tax currency/gross value/per-share comparison differs")
-        if (amount_correction is not None
-            and tax_amount - effective_amount != _decimal(self.tax_resolved_value_difference)):
-            raise DataReadinessError("tax-minus-resolved distribution amount comparison differs")
-        if table is None:
-            table, gross_refs = _tax_gross_table(root, self.tax.gross_context, policy_sha256, receipt)
-        gross_rows = [index for index, row in enumerate(table.rows)
-            if len(row) == 13 and row[5] == self.ex_date.strftime("%d.%m.") and row[8] == "USD"
-            and _decimal(row[9]) == tax_amount]
-        if len(gross_rows) != 1:
-            raise DividendEvidenceUnavailable("tax amount/currency is absent or ambiguous in gross table column")
-        gross_locator = (f"/data/html;gross-table-row={gross_rows[0]};ex-date={self.ex_date.isoformat()};"
-            f"currency-column=8:USD;gross-column=9:{self.tax.gross_amount}")
-        if offers:
-            target_table = table.row_tables[gross_rows[0]]
-            if target_table not in table.brutto_tables or any(table.row_tables[row] != target_table for row in offers.values()):
-                raise DividendEvidenceUnavailable("tax purchase-offer disclosure is outside the target gross table")
-            offer_locators = ",".join(f"{entry}:{row}" for entry, row in offers.items())
-            gross_locator += f";zero-purchase-offer-entry-to-gross-row={offer_locators}"
-        refs.extend(ref.model_copy(update={"record_locator": gross_locator}) for ref in gross_refs)
+        identity = self.identity
+        stock_validation = None
+        if isinstance(identity, StockCompositeIdentity):
+            def validate_tax_identity(calculation: Mapping[str, Any]) -> tuple[EvidenceReference, ...]:
+                return identity.validates_tax_identity(calculation, self.tax.lookup, root, policy_sha256)
+
+            stock_validation = validate_tax_identity
+        tax_amount, tax_refs = replay_tax_currency_event(
+            root, self.tax, self.ex_date, provider_amount, _decimal(self.tax_value_difference), policy_sha256,
+            stock_tax_validation=stock_validation, resolved_comparison=None if amount_correction is None
+                else (effective_amount, _decimal(self.tax_resolved_value_difference)),
+        )
+        refs.extend(tax_refs)
         if self.issuer_rate is None:
             if provider_amount != tax_amount:
                 raise DividendEvidenceUnavailable("independent distribution amount differs from provider rate")

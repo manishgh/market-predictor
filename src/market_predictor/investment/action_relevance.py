@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -11,7 +11,14 @@ from typing import Any
 
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
+from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside
+from market_predictor.investment.completed_cash_distributions import (
+    COMPLETED_CASH_RELEVANCE,
+    VerifiedCompletedCashDistribution,
+)
+from market_predictor.investment.dividend_currencies import valid_cusip
+from market_predictor.investment.stock_identity import StockIdentityProof, StockIdentityUnavailable, replay_stock_identity
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.action_windows import holding_ends_before_distribution, observed_economic_dates
@@ -30,14 +37,25 @@ def _symbol(value: object) -> bool:
     return isinstance(value, str) and re.fullmatch(r"[A-Z0-9][A-Z0-9.-]*", value) is not None
 
 
-def _cusip(value: object) -> bool:
-    if not isinstance(value, str) or not re.fullmatch(r"[A-Z0-9]{8}[0-9]", value):
-        return False
-    total = 0
-    for index, character in enumerate(value[:8]):
-        weighted = int(character, 36) * (1 + index % 2)
-        total += weighted // 10 + weighted % 10
-    return (total + int(value[-1])) % 10 == 0
+RECIPIENT_PRE_DISTRIBUTION_RELEVANCE = "existing_recipient_common_stock_holding_ends_before_distribution"
+_REGULAR_STOCK_EXCHANGES = frozenset({
+    "new york stock exchange", "nyse", "nyse american", "nyse american llc",
+    "nasdaq", "the nasdaq stock market llc", "nasdaq global select market", "the nasdaq global select market",
+    "nasdaq global market", "the nasdaq global market", "nasdaq capital market", "the nasdaq capital market",
+    "cboe bzx exchange", "cboe bzx exchange, inc.",
+})
+
+
+def _spin_terms_supported(record: Mapping[str, Any]) -> bool:
+    source, daughter = record.get("source_symbol"), record.get("new_symbol")
+    source_cusip, daughter_cusip = record.get("source_cusip"), record.get("new_cusip")
+    source_rate, daughter_rate = record.get("source_rate"), record.get("new_rate")
+    return (_SPIN_FIELDS.issubset(record) and not set(record) - (_SPIN_FIELDS | _SPIN_DATES)
+        and _symbol(source) and _symbol(daughter) and source != daughter
+        and valid_cusip(source_cusip) and valid_cusip(daughter_cusip) and source_cusip != daughter_cusip
+        and type(source_rate) in (int, float) and source_rate == 1
+        and isinstance(daughter_rate, (int, float)) and not isinstance(daughter_rate, bool)
+        and math.isfinite(daughter_rate) and daughter_rate > 0)
 
 
 def action_relevance_reason(
@@ -57,7 +75,7 @@ def action_relevance_reason(
         old, new = record.get("old_symbol"), record.get("new_symbol")
         old_cusip, new_cusip = record.get("old_cusip"), record.get("new_cusip")
         if (not _NAME_FIELDS.issubset(record) or set(record) - (_NAME_FIELDS | {"effective_date"})
-                or not (_symbol(old) and _symbol(new) and _cusip(old_cusip) and _cusip(new_cusip))
+                or not (_symbol(old) and _symbol(new) and valid_cusip(old_cusip) and valid_cusip(new_cusip))
                 or symbol not in (old, new)):
             return None
         if set(record) == _NAME_FIELDS and old_cusip == new_cusip:
@@ -71,15 +89,7 @@ def action_relevance_reason(
         return None
     if family != "spin_offs":
         return None
-    source, daughter = record.get("source_symbol"), record.get("new_symbol")
-    source_cusip, daughter_cusip = record.get("source_cusip"), record.get("new_cusip")
-    source_rate, daughter_rate = record.get("source_rate"), record.get("new_rate")
-    if (not _SPIN_FIELDS.issubset(record) or set(record) - (_SPIN_FIELDS | _SPIN_DATES)
-            or source != symbol or not (_symbol(source) and _symbol(daughter)) or source == daughter
-            or not (_cusip(source_cusip) and _cusip(daughter_cusip)) or source_cusip == daughter_cusip
-            or type(source_rate) not in (int, float) or source_rate != 1
-            or not isinstance(daughter_rate, (int, float)) or isinstance(daughter_rate, bool)
-            or not math.isfinite(daughter_rate) or daughter_rate <= 0):
+    if record.get("source_symbol") != symbol or not _spin_terms_supported(record):
         return None
     if "record_date" in dates and "payable_date" in dates and dates["record_date"] > dates["payable_date"]:
         return None
@@ -102,6 +112,20 @@ class RelevanceRecord:
     evidence: tuple[EvidenceReference, ...]
 
 
+@dataclass(frozen=True)
+class ExistingRecipientStockAuthority:
+    manifest: SourcePin
+    proofs: Mapping[tuple[str, str], StockIdentityProof]
+
+
+@dataclass(frozen=True)
+class _RecipientCandidate:
+    recipient: RelevanceRecord
+    source: RelevanceRecord
+    proof: StockIdentityProof
+    first_distribution_date: date
+
+
 class InvestmentActionRelevance:
     """Bind a scoped provider record and reviewed official fact to each omitted event."""
 
@@ -109,8 +133,17 @@ class InvestmentActionRelevance:
         self, root: Path, records: dict[tuple[str, str], RelevanceRecord],
         dates_pin: SourcePin | None, parent_pin: SourcePin | None, policy: EvidenceReference,
         *, memory_guard: Callable[[], None],
+        completed_cash: Mapping[str, VerifiedCompletedCashDistribution] | None = None,
+        recipients: ExistingRecipientStockAuthority | None = None,
+        stock_cache: dict[str, Any] | None = None,
+        recipient_source_files: MutableMapping[str, str] | None = None,
     ) -> None:
         self.records = records
+        self.root, self.policy = root, policy
+        self.completed_cash = {} if completed_cash is None else completed_cash
+        self.recipients = recipients
+        self.stock_cache = {} if stock_cache is None else stock_cache
+        self.recipient_source_files = {} if recipient_source_files is None else recipient_source_files
         by_action = {key[1]: (item.family, item.record) for key, item in records.items()}
         self.dates, date_pins = load_reviewed_action_dates(root, dates_pin, by_action, memory_guard=memory_guard)
         self.parent_units, unit_pins = load_reviewed_parent_spin_units(
@@ -143,12 +176,84 @@ class InvestmentActionRelevance:
                         retrieved_at=captured, available_at=captured))
                 self.official[action] = (*self.official.get(action, ()), *evidence)
 
+    def _recipient_candidate(self, security_id: str, symbol: str, action_id: str, last: date) -> _RecipientCandidate | None:
+        if self.recipients is None:
+            return None
+        recipient = self.records.get((symbol, action_id))
+        proof = self.recipients.proofs.get((security_id, symbol))
+        if (recipient is None or recipient.family != "spin_offs" or proof is None
+                or (proof.security_id, proof.ticker) != (security_id, symbol)
+                or not re.match(r"^common (?:stock|shares)\b", proof.security_title, re.I)
+                or re.search(r"\bwhen[- ](?:issued|distributed)\b", proof.security_title, re.I)):
+            return None
+        record = recipient.record
+        source_symbol = record.get("source_symbol")
+        if not isinstance(source_symbol, str):
+            return None
+        parent = self.records.get((source_symbol, action_id))
+        if (record.get("new_symbol") != symbol or not _spin_terms_supported(record)
+                or parent is None or parent.family != "spin_offs" or json_sha256(parent.record) != json_sha256(record)):
+            return None
+        try:
+            dates = observed_economic_dates(record)
+            if (not observed_economic_dates(record, ("process_date",))
+                    or not holding_ends_before_distribution(dates, last)
+                    or dates["record_date"] > dates["payable_date"]):
+                return None
+        except ValueError:
+            return None
+        return _RecipientCandidate(recipient, parent, proof, min(dates.values()))
+
+    def is_new_distribution_candidate(
+        self, security_id: str, symbol: str, family: str, action_id: str, first: date, last: date,
+        *, new_cash_ids: frozenset[str], recipient_source_added: bool,
+    ) -> bool:
+        if family == "cash_dividends" and action_id in new_cash_ids:
+            fact = self.completed_cash.get(action_id)
+            return fact is not None and bool(fact.references(security_id, symbol, first))
+        return (family == "spin_offs" and recipient_source_added
+            and self._recipient_candidate(security_id, symbol, action_id, last) is not None)
+
+    def _recipient_references(
+        self, security_id: str, symbol: str, action_id: str, sessions: tuple[date, ...],
+    ) -> tuple[EvidenceReference, ...]:
+        candidate = self._recipient_candidate(security_id, symbol, action_id, sessions[-1])
+        if candidate is None or self.recipients is None:
+            return ()
+        try:
+            identity = replay_stock_identity(self.root, candidate.proof, sessions=sessions, cache=self.stock_cache,
+                source_files=self.recipient_source_files, interpretation_sha256=self.policy.interpretation_policy_sha256)
+        except StockIdentityUnavailable:
+            return ()
+        if (identity.proven_sessions != sessions or identity.missing_reasons or identity.competing_class_tickers
+                or identity.exchange.strip().casefold() not in _REGULAR_STOCK_EXCHANGES or not identity.evidence
+                or identity.anchor_accepted_at_utc.date() >= candidate.first_distribution_date):
+            return ()
+        manifest = self.recipients.manifest
+        class_ref = EvidenceReference(reference=manifest.path, artifact_sha256=manifest.sha256,
+            interpretation_policy_sha256=self.policy.interpretation_policy_sha256,
+            record_locator=f"existing regular-way recipient class;action_id={action_id};security_id={security_id};ticker={symbol}",
+            retrieved_at=identity.verified_at_utc, available_at=identity.verified_at_utc)
+        record, *transport = candidate.recipient.evidence
+        binding = record.model_copy(update={"record_locator": f"{record.record_locator};relevance={RECIPIENT_PRE_DISTRIBUTION_RELEVANCE}"})
+        return (binding, *transport, *candidate.source.evidence, class_ref, *identity.evidence)
+
     def references(
         self, symbol: str, family: str, action_id: str, first: date, last: date,
+        *, security_id: str = "", sessions: tuple[date, ...] = (),
     ) -> tuple[EvidenceReference, ...]:
         item = self.records.get((symbol, action_id))
         if item is None or item.family != family:
             return ()
+        if family == "cash_dividends":
+            fact = self.completed_cash.get(action_id)
+            if fact is not None and (cash_refs := fact.references(security_id, symbol, first)):
+                record, *transport = item.evidence
+                binding = record.model_copy(update={"record_locator": f"{record.record_locator};relevance={COMPLETED_CASH_RELEVANCE}"})
+                return (binding, *transport, *cash_refs)
+            return ()
+        if family == "spin_offs" and sessions and item.record.get("new_symbol") == symbol:
+            return self._recipient_references(security_id, symbol, action_id, sessions)
         reason = action_relevance_reason(
             family, item.record, symbol, first, last, self.dates.get(action_id), self.parent_units.get(action_id),
         )
