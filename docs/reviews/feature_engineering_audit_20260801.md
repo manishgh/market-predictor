@@ -13,9 +13,61 @@ on the final code. Ruff passes across investment/research and the 12 affected te
 files; strict mypy passes all six changed source files. The broader 85-source mypy
 run reports one pre-existing unchanged swing_oof_policy_evaluation.py:507 import
 export error for MAXIMUM_SYSTEM_USED_PERCENT; that unrelated source is not changed.
-The immutable dividend resolver is running against the frozen request. Its actual
-result and the full holding replay/independent audit are still pending. No recovery
-or performance result is claimed by these software checks.
+Execution is environment_pending because system RAM exceeded the agreed ceiling.
+The canonical resolver ran from 2026-11-11T17:11:49.711614Z to
+2026-11-11T17:59:44.434954Z. All eleven archive checks finished; the worker reached
+the final dividend publication source recheck. After repeated bounded pauses, it
+stopped with exit 2 when system memory remained above 90% for 120.1728 seconds
+(observed 92.0421% at timeout). No guard was bypassed. A later check without the
+worker still measured 94.06% system use, so an immediate retry is not justified.
+The resolver output directory does not exist; no partial assertions or outcome
+results were published. Both worker processes exited and the heavy-job lease was
+released. The baseline therefore remains 3,177 known and 715 unknown holdings,
+101/464 complete cohorts, and zero available full-period comparisons. The 83
+candidate attempts (54 whose recorded gaps are addressed, 29 with independent
+gaps) are source-scope arithmetic only, not successful recoveries.
+
+The full holding request, full replay and independent result audit are NOT yet run.
+The user has been asked to free RAM; continue the existing authorized task when
+RAM permits. Do not refit, rerank, change exclusions, backdate clocks or lower the
+90% guard. Keep the canonical producer export and existing input files unchanged.
+Retry the same resolve-investment-dividends request from producer
+72eedcf4bde54a043ccb11d60a1de1070f58a79e through outputs/run_committed_research.py.
+Request: data/research/investment_currency_action_outcomes_20261111/inputs/dividend-request.json,
+SHA256 f70f0811ed361eba7af9ff41c56426b04d3d801364c2ed0ffa0430376f913f10.
+Output: data/research/investment_currency_action_outcomes_20261111/dividend_resolution_72eedcf
+(still absent, so reusable). Use a NEW exclusive log, e.g.
+outputs/currency-action-dividend-resolution-20261111b.log. Preserve the failed log.
+After a successful 33-event resolver result, run the prepared request builder,
+then resolve-remaining-investment-outcomes to a new outcomes_72eedcf directory
+using the same immutable producer. Run the independent Quant audit only after
+publication, summarize remaining evidence gaps, and close this checkpoint with
+actual results. No recovery/performance or complete-checkpoint claim is made.
+
+The canonical held-stock input is already staged and must be reused:
+data/research/investment_currency_action_outcomes_20261111/inputs/held-stock-actions.json
+SHA256 57cbe45fc98070ce5aaa37cbedd6070a871c3f322ff6fe29bef913c6a850cbca.
+The sibling proofs/stock-class-tsla.json is
+443a454de4c46d4edea9855bdb881124d484e3b94fdc888f5af90e5030a3edbb;
+proofs/stock-class-pfe.json is
+46e4baea641635a8547ef95d3063716bc61270a2ae62cfebc54e6a82a092fb9d.
+The real source-only check verified both facts and rechecked 164 files; its
+held-stock-actions-source-preflight-20261111.json SHA256 is
+b19651d344e1f948a1d5bc98dc33c2d6e0ac9f501bce14b62cdbf86c899dbbd0.
+This verifies source terms, not the still-unrun full holding returns.
+
+Operational evidence under the chat workspace outputs directory:
+
+- currency-action-dividend-resolution-20261111.log SHA256 787f55e6b5f059cb67ecb1dcc3aa9230379f64582f56f1dfec8d9277c0697038
+- run_committed_research.py SHA256 5c145c49fc0b9be4b85418ac6dfd963dec381fddebade9285dfb6946e442f8b3
+- build_currency_action_outcome_request.py SHA256 eccf00d3c9bd788f561145455add17bdbc087ae63da180d24b51bfa6c328f706
+- audit_investment_currency_action_outcomes.py SHA256 0e12dcc602db748c5e9e7705aaf09ff914d032d5c916ab1cf58a39dfb691b54b
+- run_investment_currency_action_outcome_audit.ps1 SHA256 7b973bac9ae5299d5a955e751badd127747f90e75ac8e7acd74797b2d874b6b7
+- summarize_currency_action_outcomes.py SHA256 02fd6689af2a2975bd86236b3385cf1591599be94352d89f6d71bebfd70e51e9
+
+The senior Quant helper independently checked all 33 retained tax records and
+12 exact stock-class covers while preparing the audit. That bounded source check
+does not replace the still-unrun audit of produced holdings and SPY economics.
 
 Status: `in_progress`. Current user authorizes further remaining currency and
 corporate-action recovery with retained data, Sol engineering and independent senior
