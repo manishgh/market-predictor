@@ -284,10 +284,11 @@ def replay_stock_identity(root: Path, proof: StockIdentityProof, *, sessions: tu
     A caller-owned cache is bounded by the finite declared proof population.
     """
     root = root.resolve()
-    guard("stock identity replay")
+    key = str(root) + ":" + json_sha256(proof.model_dump(mode="json"))
+    exact_cache_hit = cache is not None and cache.get("source_root") == str(root) and cache.get(key) is not None
+    guard("stock identity replay", reclaim_unused_memory=not exact_cache_hit)
     if not sessions or tuple(sorted(set(sessions))) != sessions:
         raise DataReadinessError("stock identity requires exact ordered nonempty sessions")
-    key = str(root) + ":" + json_sha256(proof.model_dump(mode="json"))
     cache = {} if cache is None else cache
     if cache.setdefault("source_root", str(root)) != str(root):
         raise DataReadinessError("stock identity cache cannot cross source roots")

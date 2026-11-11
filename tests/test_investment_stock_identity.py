@@ -25,7 +25,7 @@ def _json(path: Path, value: dict[str, Any]) -> SourcePin:
 
 @pytest.fixture
 def scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    monkeypatch.setattr(identity, "guard", lambda *args: None)
+    monkeypatch.setattr(identity, "guard", lambda *args, **kwargs: None)
     relation = {"security_id": "issuer:class-a", "ticker": "TEST", "sec_cik": "0001040971",
         "effective_from_utc": pd.Timestamp("2019-07-09T04:00:00Z"),
         "effective_to_utc": pd.Timestamp("2024-06-03T04:00:00Z")}
@@ -143,7 +143,7 @@ def _real_class_proof(tmp_path, monkeypatch, *, cofolder=False, body_cik="000000
     from market_predictor.research import sec_page_collection as runner
     from tests.test_sec_filing_documents import ABT, ABT_CIK, _collect, _Edgar, _ok, _page, _scripts, _url
 
-    monkeypatch.setattr(identity, "guard", lambda *args: None)
+    monkeypatch.setattr(identity, "guard", lambda *args, **kwargs: None)
     monkeypatch.setattr(runner, "_guard", lambda: None)
     monkeypatch.setattr(documents, "RETRY_WAITS_SECONDS", (0.0, 0.0))
     monkeypatch.delenv("MARKET_PREDICTOR_RUNTIME_DIR", raising=False)
