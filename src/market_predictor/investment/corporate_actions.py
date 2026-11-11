@@ -25,6 +25,12 @@ from market_predictor.investment.action_relevance import (
 from market_predictor.investment.completed_cash_distributions import ReviewedCompletedCashDistribution, verify_completed_cash_fact
 from market_predictor.investment.dividend_currencies import CurrencyCorroboration, IssuerDividendAmountCorrection
 from market_predictor.investment.label_materialization import InvestmentSourceValidation
+from market_predictor.investment.reviewed_held_stock_actions import (
+    ReviewedHeldStockAction,
+    ReviewedHoldingSplit,
+    VerifiedHeldStockAction,
+    verify_held_stock_action,
+)
 from market_predictor.swing.contracts.corrected_outcomes import OfficialWindow
 from market_predictor.swing.contracts.holding_accounting import CorporateActionEvent, EvidenceReference, KnownMark, PositionLeg
 from market_predictor.swing.contracts.holding_materialization import SourcePin
@@ -74,7 +80,9 @@ class InvestmentCorporateActions:
         reviewed_parent_units: SourcePin | None = None,
         completed_cash_manifest: SourcePin | None = None,
         completed_cash_facts: Mapping[str, ReviewedCompletedCashDistribution] | None = None,
-        recipient_stock_authority: ExistingRecipientStockAuthority | None = None) -> None:
+        recipient_stock_authority: ExistingRecipientStockAuthority | None = None,
+        reviewed_held_stock_actions_manifest: SourcePin | None = None,
+        reviewed_held_stock_actions: Mapping[str, ReviewedHeldStockAction] | None = None) -> None:
         self.root, self.evidence = root.resolve(), evidence
         self.actions, self.global_gaps = action_index
         self.official = official_windows
@@ -115,6 +123,9 @@ class InvestmentCorporateActions:
         record_versions: dict[str, str] = {}
         relevance_records: dict[tuple[str, str], RelevanceRecord] = {}
         relevance_versions: dict[str, set[tuple[str, str]]] = {}
+        held_facts = {} if reviewed_held_stock_actions is None else reviewed_held_stock_actions
+        relevance_action_ids = relevance_action_ids.union(held_facts)
+        self.held_stock_actions: dict[tuple[str, str], tuple[VerifiedHeldStockAction, _Term]] = {}
         calendar = xcals.get_calendar("XNYS")
         for name, (query, metadata_name, _, _) in _selected_pages(self.root, evidence, lambda: None).items():
             body_path = resolve_inside_authority(self.root, name)
@@ -147,7 +158,7 @@ class InvestmentCorporateActions:
                     action_id, symbol = record.get("id"), record.get("symbol")
                     if isinstance(action_id, str) and action_id in relevance_action_ids:
                         relevance_versions.setdefault(action_id, set()).add((family, record_hash))
-                        if family in {"name_changes", "spin_offs", "cash_dividends"}:
+                        if family in {"name_changes", "spin_offs", "cash_dividends"} or action_id in held_facts:
                             locator = f"family={family};action_id={action_id};record_sha256={record_hash};query={query}"
                             relevance_records[(query, action_id)] = RelevanceRecord(
                                 family, record, (ref(name, locator), *coverage[1:]),
@@ -260,6 +271,26 @@ class InvestmentCorporateActions:
                 or completed_cash_facts or recipient_stock_authority is not None):
             exact = {key: item for key, item in relevance_records.items() if len(relevance_versions[key[1]]) == 1}
             completed = {}
+            for action_id, held in held_facts.items():
+                guard("investment reviewed held-stock action proof")
+                family = "forward_splits" if isinstance(held, ReviewedHoldingSplit) else "cash_dividends"
+                retained = exact.get((held.ticker, action_id))
+                same_date_actions = [record for record in evidence.records_by_symbol.get(held.ticker, {}).get(family, [])
+                    if record.get("symbol") == held.ticker and record.get("ex_date") == held.ex_date.isoformat()]
+                if (reviewed_held_stock_actions_manifest is None or retained is None or retained.family != family
+                        or same_date_actions != [retained.record]):
+                    raise DataReadinessError("reviewed held-stock proof lacks one exact same-date provider action")
+                verified = verify_held_stock_action(
+                    self.root, held, retained.record, reviewed_held_stock_actions_manifest,
+                    policy_reference.interpretation_policy_sha256, self.source_files, stock_identity_cache,
+                    memory_guard=lambda: guard("reviewed held-stock action source"),
+                )
+                held_key = held.ticker, action_id
+                if held_key in self.terms:
+                    raise DataReadinessError("reviewed held-stock action conflicts with existing verified terms")
+                term = _Term(action_id, held.ticker, family, held.ex_date, verified.value,
+                             (*retained.evidence, *verified.evidence))
+                self.held_stock_actions[held_key] = verified, term
             for action_id, fact in (completed_cash_facts or {}).items():
                 guard("investment reviewed completed cash proof")
                 retained = exact.get((fact.ticker, action_id))
@@ -323,6 +354,34 @@ class InvestmentCorporateActions:
             and relevance.is_new_distribution_candidate(security_id, symbol, window.family, window.action_id, first, last,
                 new_cash_ids=new_cash_ids, recipient_source_added=recipient_source_added))
 
+    def _held_stock_action(
+        self, security_id: str, symbol: str, window: ActionWindow, first: date, last: date,
+    ) -> tuple[VerifiedHeldStockAction, _Term] | None:
+        key = symbol, window.action_id
+        bound = self.held_stock_actions.get(key)
+        if bound is None or window.unavailable_reason != "corporate_terms_require_replay":
+            return None
+        verified, term = bound
+        if (window.family != term.family or not window.intersects(first, last)
+                or not verified.covers(security_id, symbol, first, last)):
+            return None
+        if isinstance(verified.fact, ReviewedHoldingSplit):
+            if key not in self.invalid or key in self.unresolved_terms:
+                return None
+        elif key in self.invalid or self.unresolved_terms.get(key) != "ordinary_domestic_cash_entitlement_unproven":
+            return None
+        return bound
+
+    def verified_currency_action_ids(self, symbol: str, action_ids: frozenset[str]) -> frozenset[str]:
+        return frozenset(action_id for action_id in action_ids
+            if (key := (symbol, action_id)) not in self.invalid and (term := self.terms.get(key)) is not None
+            and term.family == "cash_dividends" and any(ref.record_locator.startswith("currency corroboration;action_id=")
+                                                       for ref in term.evidence))
+
+    def reviewed_held_stock_action_ids(self, security_id: str, symbol: str, first: date, last: date) -> frozenset[str]:
+        return frozenset(window.action_id for window in self.actions.get(symbol, ())
+            if self._held_stock_action(security_id, symbol, window, first, last) is not None)
+
     def validate_sources(self, identity: str, symbol: str, sessions: tuple[date, ...], position_id: str,
                          *, reviewed_relevance: bool = False) -> InvestmentSourceValidation:
         first, last = sessions[0], sessions[-1]
@@ -342,14 +401,28 @@ class InvestmentCorporateActions:
                     "reviewed_cash_distribution_resolution_unavailable", "corporate_terms_require_replay"}):
                 window = ActionWindow(window.action_id, window.family, special_term.day, special_term.day,
                     "corporate_terms_require_replay", requires_ownership_before_first_date=True)
-            if not window.intersects(first, last):
+            key = symbol, window.action_id
+            term = self.terms.get(key)
+            intersects = window.intersects(first, last)
+            if (reviewed_relevance and term is not None and key not in self.invalid
+                    and term.family == window.family == "cash_dividends"
+                    and window.unavailable_reason == "corporate_terms_require_replay"
+                    and (intersects or (window.requires_ownership_before_first_date and term.day == first))):
+                refs.extend(ref for ref in term.evidence
+                            if ref.record_locator.startswith("currency corroboration;action_id="))
+            if not intersects:
                 continue
             if reviewed_relevance and (relevance := self._relevance_references(
                 symbol, window, first, last, security_id=identity, sessions=sessions,
             )):
                 refs.extend(relevance)
                 continue
-            term = self.terms.get((symbol, window.action_id))
+            held = self._held_stock_action(identity, symbol, window, first, last) if reviewed_relevance else None
+            if held is not None and held[1].day in sessions:
+                verified, held_term = held
+                refs.append(verified.binding)
+                selected[held_term.action_id] = held_term
+                continue
             if (term is None or (symbol, window.action_id) in self.invalid
                 or window.unavailable_reason != "corporate_terms_require_replay" or term.family != window.family):
                 reason = self.unresolved_terms.get((symbol, window.action_id), window.unavailable_reason)

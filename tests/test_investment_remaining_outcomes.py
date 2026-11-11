@@ -134,7 +134,7 @@ def test_reviewed_callback_requires_exact_stock_raw_and_membership(gap: str) -> 
         assert {row["reference"] for row in result["specifications"]["spy"]["entry_evidence"]} >= {"ordinary"}
 
 
-@pytest.mark.parametrize("status", ["recovered", "unresolved", "unattempted"])
+@pytest.mark.parametrize("status", ["recovered", "unresolved", "unattempted", "unbound_evidence"])
 def test_incremental_publication_keeps_fixed_survivors_and_original_clocks(
     tmp_path: Path, parent: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, status: str,
 ) -> None:
@@ -191,7 +191,11 @@ def test_incremental_publication_keeps_fixed_survivors_and_original_clocks(
     def components(*args: Any, **kwargs: Any) -> tuple[Any, dict[str, Any]]:
         assert kwargs["relevance_action_ids"] == ({"name"} if status != "unattempted" else set())
         policy_ref = args[-2]
+        args[7][str(Path(policy_ref.reference).resolve())] = policy_ref.artifact_sha256
         evidence = policy_ref.model_copy(update={"record_locator": "family=name_changes;action_id=name;relevance=reviewed"})
+        if status == "unbound_evidence":
+            unbound = _write(tmp_path / "unbound-source.json", {})
+            evidence = evidence.model_copy(update={"reference": unbound["path"], "artifact_sha256": unbound["sha256"]})
 
         def validate(identity: str, *_: Any, reviewed_relevance: bool = False) -> InvestmentSourceValidation:
             calls.append((identity, reviewed_relevance))
@@ -203,6 +207,13 @@ def test_incremental_publication_keeps_fixed_survivors_and_original_clocks(
 
     monkeypatch.setattr(module, "prepare_investment_label_components", components)
     output = tmp_path / "remaining"
+    if status == "unbound_evidence":
+        with pytest.raises(DataReadinessError, match="triggering action relevance proof"):
+            module.resolve_remaining_investment_outcomes(root=tmp_path, request=Path(new_request["path"]),
+                request_sha256=new_request["sha256"], output=output)
+        assert not output.exists()
+        assert file_sha256(exclusion_manifest) == parent_hash
+        return
     result = module.resolve_remaining_investment_outcomes(root=tmp_path, request=Path(new_request["path"]),
         request_sha256=new_request["sha256"], output=output)
     child_rows = _read(output / "outcomes.json")["rows"]

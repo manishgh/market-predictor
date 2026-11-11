@@ -87,6 +87,7 @@ class StockCompositeIdentity(HoldingContract):
     cusip_provenance: Literal["provider_original_cash_action"]
     _issuer_name: str = PrivateAttr(default="")
     _security_title: str = PrivateAttr(default="")
+    _explicit_tax_class: str | None = PrivateAttr(default=None)
     _tax_identity_observation: dict[str, Any] = PrivateAttr(default_factory=dict)
 
     @property
@@ -99,7 +100,8 @@ class StockCompositeIdentity(HoldingContract):
             self._tax_identity_observation = observation
 
         refs, _ = replay_stock_tax_class(calculation, lookup, root, policy_sha256,
-            issuer_name=self._issuer_name, security_title=self._security_title, observe=remember)
+            issuer_name=self._issuer_name, security_title=self._security_title, observe=remember,
+            explicit_class=self._explicit_tax_class)
         return refs
 
     def validates_against(self, original: Mapping[str, Any], root: Path, policy_sha256: str,
@@ -120,9 +122,18 @@ class StockCompositeIdentity(HoldingContract):
                 source_files=pins, interpretation_sha256=policy_sha256, cache=cache)
         except StockIdentityUnavailable as exc:
             raise DividendEvidenceUnavailable(str(exc)) from exc
-        if (replayed.missing_reasons or replayed.competing_class_tickers
-            or replayed.proven_sessions != (date.fromisoformat(original["ex_date"]),)):
+        if replayed.missing_reasons or replayed.proven_sessions != (date.fromisoformat(original["ex_date"]),):
             raise DividendEvidenceUnavailable("stock composite dated class identity missing or multiple share classes unresolved")
+        self._explicit_tax_class = None
+        if replayed.competing_class_tickers:
+            match = re.fullmatch(
+                r"Class ([A-Z]) Common Stock(?:, (?:par value \$[0-9]+(?:\.[0-9]+)? per share|"
+                r"\$[0-9]+(?:\.[0-9]+)? par value))?",
+                replayed.security_title, re.IGNORECASE | re.ASCII,
+            )
+            if match is None:
+                raise DividendEvidenceUnavailable("stock composite dated class identity missing or multiple share classes unresolved")
+            self._explicit_tax_class = match[1].upper()
         self._issuer_name = replayed.issuer_name
         self._security_title = replayed.security_title
         refs = list(replayed.evidence)
@@ -133,7 +144,8 @@ class StockCompositeIdentity(HoldingContract):
         captures = [r.retrieved_at for r in refs]
         available = [r.available_at for r in refs if r.available_at is not None]
         refs.append(EvidenceReference(reference=self.proof.path, artifact_sha256=self.proof.sha256,
-            record_locator="SEC dated stock-class proof; provider-only CUSIP=" + self.cusip,
+            record_locator=("SEC dated stock-class proof; provider-only CUSIP=" + self.cusip
+                + (f"; SEC common-stock class={self._explicit_tax_class}" if self._explicit_tax_class is not None else "")),
             interpretation_policy_sha256=policy_sha256, retrieved_at=max(captures),
             available_at=max(available) if available else max(captures)))
         return tuple(refs)
@@ -495,14 +507,53 @@ _OFFER_ZERO_FIELDS = ("value", "valueTotal", "valueChf", "valueTotalChf",
 _OFFER_NULL_FIELDS = ("exDate", "variant", "percent", "taxValueChf", "withHoldingTax", "valuePrefix", "remark")
 _OFFER_FIELDS = {"type", "name", "currency", "nominalQuantity", "date", "paymentDate", "exchangeRate", "sign",
     *_OFFER_ZERO_FIELDS, *_OFFER_NULL_FIELDS}
-_OFFER_TEXT = re.compile(
-    r"(?P<day>[0-9]{2}\.[0-9]{2}\.[0-9]{4}) Kaufofferte der "
-    r"(?P<offeror>[^<>\x00-\x1f]{1,160}) zum Preis von USD (?P<price>[0-9]{1,16}(?:\.[0-9]{1,12})?) pro Aktie"
+_ANNOTATION_DAY = r"(?P<day>[0-9]{2}\.[0-9]{2}\.[0-9]{4})"
+_ANNOTATION_NAME = r"[^<>:=\x00-\x1f]{1,160}?"
+_ANNOTATION_COMPANY = re.compile(r"[A-Z][A-Za-z.'-]*(?:,? (?:[A-Z][A-Za-z.'-]*|&))*")
+_ANNOTATION_CASH_CLAUSE = re.compile(
+    r"\b(?:or|oder|wahlweise|alternativ(?:e)?|plus|zuzüglich|bar|barzahlung|barabfindung|abfindung|"
+    r"cash|payment|USD|CHF|EUR)\b", re.IGNORECASE,
+)
+_ANNOTATION_DECIMAL = r"[0-9]{1,16}(?:\.[0-9]{1,12})?"
+_OFFER_INTRO = _ANNOTATION_DAY + r" Kaufofferte der (?P<offeror>[^<>\x00-\x1f]{1,160}) zum Preis von USD "
+_OFFER_TEXT = re.compile(_OFFER_INTRO + rf"(?P<price>{_ANNOTATION_DECIMAL}) pro Aktie")
+_GROUPED_OFFER_TEXT = re.compile(_OFFER_INTRO + r"(?P<price>[1-9][0-9]{0,2}(?:'[0-9]{3}){1,5}(?:\.[0-9]{1,12})?) pro Aktie")
+_REPURCHASE_TEXT = re.compile(_ANNOTATION_DAY + r" Rückkauf eigener Aktien")
+_STOCK_EXCHANGE_TEXT = re.compile(
+    _ANNOTATION_DAY + r" (?P<kind>Umtauschofferte|Fusion/Umtausch): "
+    rf"1 Akt\. (?P<issuer>{_ANNOTATION_NAME}) von USD (?P<origin>{_ANNOTATION_DECIMAL}) nom\. = "
+    rf"(?P<ratio>{_ANNOTATION_DECIMAL}) Akt\. (?P<recipient>{_ANNOTATION_NAME}) von (?:je )?USD "
+    rf"(?P<destination>{_ANNOTATION_DECIMAL}) nom\. \(VN [0-9]{{1,12}}\)"
 )
 
 
-def _purchase_offer_gross_row(entry: dict[str, Any], rows: list[list[str]]) -> int | None:
-    """Bind the retained zero PAYMENT shape to an explicit purchase-offer disclosure."""
+def _annotation_company_name(value: str) -> bool:
+    return _ANNOTATION_COMPANY.fullmatch(value) is not None and _ANNOTATION_CASH_CLAUSE.search(value) is None
+
+
+def _zero_annotation_kind(text: str, paid: date) -> str | None:
+    full_date = paid.strftime("%d.%m.%Y")
+    for kind, pattern in (("purchase_offer", _OFFER_TEXT), ("grouped_price_purchase_offer", _GROUPED_OFFER_TEXT)):
+        match = pattern.fullmatch(text)
+        if match is None or match["day"] != full_date or not match["offeror"].strip():
+            continue
+        if kind != "purchase_offer" and not _annotation_company_name(match["offeror"]):
+            continue
+        if _decimal(match["price"].replace("'", "")) > 0:
+            return kind
+    match = _REPURCHASE_TEXT.fullmatch(text)
+    if match is not None and match["day"] == full_date:
+        return "issuer_repurchase"
+    match = _STOCK_EXCHANGE_TEXT.fullmatch(text)
+    if (match is None or match["day"] != full_date or not _annotation_company_name(match["issuer"])
+        or not _annotation_company_name(match["recipient"])
+        or any(_decimal(match[key]) <= 0 for key in ("origin", "ratio", "destination"))):
+        return None
+    return "exchange_offer" if match["kind"] == "Umtauschofferte" else "stock_only_merger_exchange"
+
+
+def _zero_annotation_gross_row(entry: dict[str, Any], rows: list[list[str]]) -> tuple[int, str] | None:
+    """Pair a typed zero PAYMENT with a specific informational gross-table row."""
     if (set(entry) != _OFFER_FIELDS or entry["type"] != "PAYMENT" or entry["name"] != "calculation:payment_title"
         or entry["currency"] != {"categoryShortName": "CURREN", "shortName": "USD"}
         or type(entry["nominalQuantity"]) is not int or entry["nominalQuantity"] != 1 or entry["sign"] != ""
@@ -525,26 +576,28 @@ def _purchase_offer_gross_row(entry: dict[str, Any], rows: list[list[str]]) -> i
     row = rows[index]
     if row[1:] != ["", "", "", "", "", paid.strftime("%d.%m."), "", "USD", "0.00", "", "0.00", ""]:
         return None
-    match = _OFFER_TEXT.fullmatch(row[0])
-    if (match is None or match["day"] != paid.strftime("%d.%m.%Y") or not match["offeror"].strip()
-        or _decimal(match["price"]) <= 0):
-        return None
-    return index
+    kind = _zero_annotation_kind(row[0], paid)
+    return (index, kind) if kind is not None else None
 
 
 def _tax_payment_matches(entries: list[Any], table: _GrossRows | None, ex_date: date
-                         ) -> tuple[list[tuple[int, dict[str, Any]]], dict[int, int]]:
+                         ) -> tuple[list[tuple[int, dict[str, Any]]], dict[int, tuple[int, str]]]:
     matches: list[tuple[int, dict[str, Any]]] = []
-    offers: dict[int, int] = {}
+    annotations: dict[int, tuple[int, str]] = {}
+    paired_rows: set[int] = set()
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict) or entry.get("type") != "PAYMENT":
             continue
-        offer_row = _purchase_offer_gross_row(entry, table.rows) if table is not None and entry.get("exDate") is None else None
-        if offer_row is not None and offer_row not in offers.values():
-            offers[index] = offer_row
+        annotation = (
+            _zero_annotation_gross_row(entry, table.rows)
+            if table is not None and entry.get("exDate") is None else None
+        )
+        if annotation is not None and annotation[0] not in paired_rows:
+            annotations[index] = annotation
+            paired_rows.add(annotation[0])
         elif _date_ms(entry.get("exDate")) == ex_date:
             matches.append((index, entry))
-    return matches, offers
+    return matches, annotations
 
 
 def _tax_gross_table(root: Path, source: CapturedCurrencySource, policy_sha256: str,
@@ -631,6 +684,7 @@ def replay_stock_tax_class(
     calculation: Mapping[str, Any], lookup: CapturedCurrencySource | None,
     root: Path, policy_sha256: str, *, issuer_name: str, security_title: str,
     observe: Callable[[dict[str, Any]], None] | None = None,
+    explicit_class: str | None = None,
 ) -> tuple[tuple[EvidenceReference, ...], dict[str, Any]]:
     if (calculation.get("instrumentGroup") != "SHARE" or not isinstance(calculation.get("name"), str)
         or not calculation["name"].strip()):
@@ -663,7 +717,36 @@ def replay_stock_tax_class(
     official_common = re.search(r"\b(common|ordinary)\s+(stock|shares)\b", security_title, re.IGNORECASE)
     if category not in (None, "", "SHARE") or explicit_non_common or calculation_non_common or official_common is None:
         raise DividendEvidenceUnavailable("stock tax classification contradicts direct common/ordinary stock")
+    if explicit_class is not None:
+        label = f"Namenaktien {explicit_class}"
+        issuer = " ".join(issuer_name.casefold().split())
+        calculation_name = calculation["name"].rsplit(", ", 2)
+        institution = record.get("institution")
+        lookup_url = receipt.get("url", receipt.get("source_url"))
+        if (not issuer or not isinstance(institution, str) or " ".join(institution.casefold().split()) != issuer
+            or len(calculation_name) != 3 or " ".join(calculation_name[0].casefold().split()) != issuer
+            or calculation_name[1:] != [label, "US"] or record.get("name") != label
+            or category != "SHARE" or record.get("typeName") != "SHARE.NOMINAL"
+            or record.get("typeDescription") != "Registered shares"
+            or not isinstance(lookup_url, str) or urlparse(lookup_url).path != "/lsi/api/security"):
+            raise DividendEvidenceUnavailable("tax lookup and calculation do not prove the exact SEC common-stock class and issuer")
+        locator = f"tax lookup exact ISIN/valor and issuer={institution};registered-share class={explicit_class}"
+        refs = tuple(ref.model_copy(update={"record_locator": locator}) for ref in refs)
     return refs, observation
+
+
+def _original_cash_dates(original: Mapping[str, Any] | None, ex_date: date) -> tuple[date, date]:
+    payable = None if original is None else original.get("payable_date")
+    record = None if original is None else original.get("record_date")
+    if not isinstance(payable, str) or not isinstance(record, str):
+        raise DividendEvidenceUnavailable("new tax corroboration requires exact provider payment and record dates")
+    try:
+        paid_day, record_day = date.fromisoformat(payable), date.fromisoformat(record)
+    except ValueError as exc:
+        raise DividendEvidenceUnavailable("new tax corroboration requires exact provider payment and record dates") from exc
+    if paid_day.isoformat() != payable or record_day.isoformat() != record or not ex_date <= record_day <= paid_day:
+        raise DividendEvidenceUnavailable("new tax corroboration requires exact provider payment and record dates")
+    return paid_day, record_day
 
 
 def replay_tax_currency_event(
@@ -672,6 +755,8 @@ def replay_tax_currency_event(
     *, stock_tax_validation: Callable[[Mapping[str, Any]], tuple[EvidenceReference, ...]] | None = None,
     payable_date: date | None = None, record_date: date | None = None,
     resolved_comparison: tuple[Decimal, Decimal] | None = None,
+    original_cash_action: Mapping[str, Any] | None = None,
+    explicit_stock_class: bool = False,
 ) -> tuple[Decimal, tuple[EvidenceReference, ...]]:
     """Replay structured and Brutto evidence, with an exact payment match when requested."""
     refs: list[EvidenceReference] = []
@@ -701,7 +786,7 @@ def replay_tax_currency_event(
     gross_refs: tuple[EvidenceReference, ...] = ()
     if any(isinstance(entry, dict) and entry.get("type") == "PAYMENT" and entry.get("exDate") is None for entry in entries):
         table, gross_refs = _tax_gross_table(root, tax.gross_context, policy_sha256, receipt)
-    matches, offers = _tax_payment_matches(entries, table, ex_date)
+    matches, annotations = _tax_payment_matches(entries, table, ex_date)
     if len(matches) != 1 or matches[0][0] != tax.entry_index:
         raise DividendEvidenceUnavailable("tax distribution ex-date is absent or ambiguous")
     entry = matches[0][1]
@@ -724,6 +809,9 @@ def replay_tax_currency_event(
         raise DividendEvidenceUnavailable("tax amount/currency is absent or ambiguous in gross table column")
     gross_locator = (f"/data/html;gross-table-row={gross_rows[0]};ex-date={ex_date.isoformat()};"
         f"currency-column=8:USD;gross-column=9:{tax.gross_amount}")
+    new_annotations = {index: (row, kind) for index, (row, kind) in annotations.items() if kind != "purchase_offer"}
+    if payable_date is None and (explicit_stock_class or new_annotations):
+        payable_date, record_date = _original_cash_dates(original_cash_action, ex_date)
     if payable_date is not None:
         row_index = gross_rows[0]
         if (_date_ms(entry.get("paymentDate")) != payable_date or _date_ms(entry.get("date")) != payable_date
@@ -732,12 +820,16 @@ def replay_tax_currency_event(
                 or (entry.get("recordDate") is not None and _date_ms(entry["recordDate"]) != record_date)):
             raise DividendEvidenceUnavailable("completed tax distribution payment or record date differs")
         gross_locator += f";payment-date={payable_date.isoformat()}"
-    if offers:
+    if annotations:
         target_table = table.row_tables[gross_rows[0]]
-        if target_table not in table.brutto_tables or any(table.row_tables[row] != target_table for row in offers.values()):
-            raise DividendEvidenceUnavailable("tax purchase-offer disclosure is outside the target gross table")
-        offer_locators = ",".join(f"{entry}:{row}" for entry, row in offers.items())
-        gross_locator += f";zero-purchase-offer-entry-to-gross-row={offer_locators}"
+        if target_table not in table.brutto_tables or any(table.row_tables[row] != target_table for row, _ in annotations.values()):
+            raise DividendEvidenceUnavailable("tax zero-payment disclosure is outside the target gross table")
+        offer_locators = ",".join(f"{entry}:{row}" for entry, (row, kind) in annotations.items() if kind == "purchase_offer")
+        if offer_locators:
+            gross_locator += f";zero-purchase-offer-entry-to-gross-row={offer_locators}"
+        if new_annotations:
+            locators = ",".join(f"{entry}:{row}:{kind}" for entry, (row, kind) in new_annotations.items())
+            gross_locator += f";zero-information-entry-to-gross-row={locators}"
     refs.extend(ref.model_copy(update={"record_locator": gross_locator}) for ref in gross_refs)
     return tax_amount, tuple(refs)
 
@@ -755,6 +847,7 @@ class CurrencyCorroboration(HoldingContract):
     tax_value_difference: Identifier
     tax_resolved_value_difference: Identifier | None = None
     special_cash_distribution: OccSpecialCashDistribution | None = None
+    _supplying_manifest: tuple[CurrencyArtifactPin, str] | None = PrivateAttr(default=None)
     _validated_evidence: tuple[EvidenceReference, ...] = PrivateAttr(default=())
 
     @model_validator(mode="after")
@@ -773,6 +866,8 @@ class CurrencyCorroboration(HoldingContract):
                           amount_correction: IssuerDividendAmountCorrection | None = None,
                           stock_identity_cache: dict[str, Any] | None = None) -> tuple[EvidenceReference, ...]:
         """Replay separate currency and optional cash-class evidence; retain provider terms."""
+        if self._supplying_manifest is not None and self._supplying_manifest[1] != policy_sha256:
+            raise DataReadinessError("currency corroboration supplying manifest interpretation policy differs")
         special_refs: tuple[EvidenceReference, ...] = ()
         if self.special_cash_distribution is None:
             _original_action(original, self.action_id, self.original_record_sha256, self.symbol, self.ex_date)
@@ -826,6 +921,8 @@ class CurrencyCorroboration(HoldingContract):
             root, self.tax, self.ex_date, provider_amount, _decimal(self.tax_value_difference), policy_sha256,
             stock_tax_validation=stock_validation, resolved_comparison=None if amount_correction is None
                 else (effective_amount, _decimal(self.tax_resolved_value_difference)),
+            original_cash_action=original,
+            explicit_stock_class=isinstance(identity, StockCompositeIdentity) and identity._explicit_tax_class is not None,
         )
         refs.extend(tax_refs)
         if self.issuer_rate is None:
@@ -837,6 +934,15 @@ class CurrencyCorroboration(HoldingContract):
             refs.extend(found)
             if issuer_amount != effective_amount:
                 raise DataReadinessError("issuer gross distribution rate differs from resolved economic amount")
+        if self._supplying_manifest is not None:
+            manifest_pin, _ = self._supplying_manifest
+            verified_at = datetime.now(UTC)
+            refs.append(EvidenceReference(
+                reference=manifest_pin.path, artifact_sha256=manifest_pin.sha256,
+                record_locator=(f"currency corroboration;action_id={self.action_id};"
+                    f"original_record_sha256={self.original_record_sha256}"),
+                interpretation_policy_sha256=policy_sha256, retrieved_at=verified_at, available_at=verified_at,
+            ))
         unique: dict[str, EvidenceReference] = {}
         for ref in refs:
             previous = unique.get(ref.reference)
@@ -856,15 +962,17 @@ def load_currency_corroborations(root: Path, manifest: Path, sha256: str, *, pol
     """Load closed typed assertions; source admission occurs against each actual action."""
     guard("investment dividend currency manifest")
     # Strict JSON parsing rejects duplicate fields before Pydantic's typed JSON parser.
-    raw = _read(root, CurrencyArtifactPin(path=manifest.as_posix(), sha256=sha256), MAX_CURRENCY_MANIFEST_BYTES)
+    manifest_pin = CurrencyArtifactPin(path=manifest.as_posix(), sha256=sha256)
+    raw = _read(root, manifest_pin, MAX_CURRENCY_MANIFEST_BYTES)
     _json(raw)
     parsed = CurrencyCorroborationManifest.model_validate_json(raw)
+    if re.fullmatch(r"[0-9a-f]{64}", policy_sha256) is None:
+        raise DataReadinessError("independent currency interpretation policy hash differs")
     result: dict[str, CurrencyCorroboration] = {}
     for item in parsed.corroborations:
         if item.action_id in result:
             raise DataReadinessError("independent currency manifest repeats action ID")
-        if re.fullmatch(r"[0-9a-f]{64}", policy_sha256) is None:
-            raise DataReadinessError("independent currency interpretation policy hash differs")
+        item._supplying_manifest = (manifest_pin, policy_sha256)
         result[item.action_id] = item
     return result
 

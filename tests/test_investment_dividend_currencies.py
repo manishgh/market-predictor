@@ -756,3 +756,131 @@ def test_nested_markup_cannot_certify_purchase_offer_table_ownership(tmp_path: P
     item["tax"]["gross_context"] = captured(gross_path, json.dumps(gross).encode())
     with pytest.raises(DataReadinessError, match="outside the target gross table"):
         model(item).validates_against(original, tmp_path, POLICY)
+
+
+def _exact_provider_payment(tmp_path: Path, original: dict[str, Any], item: dict[str, Any]) -> None:
+    original.update(payable_date="2019-10-31", record_date="2019-09-23")
+    item["original_record_sha256"] = json_sha256(original)
+    paid = int(datetime.fromisoformat("2019-10-31T00:00:00+00:00").timestamp() * 1000)
+    replace_tax(item, lambda payload: payload["data"]["calculationDetails"]["entries"][0].update(
+        date=paid, paymentDate=paid))
+    path = Path(item["tax"]["gross_context"]["body"]["path"])
+    payload = json.loads(path.read_bytes())
+    payload["data"]["html"] = payload["data"]["html"].replace("<td>20.09.</td><td></td>", "<td>20.09.</td><td>31.10.</td>")
+    item["tax"]["gross_context"] = captured(tmp_path / "gross-exact-payment.json", json.dumps(payload).encode())
+
+
+@pytest.mark.parametrize("variant", [
+    "valid", "class_lookup", "class_calculation", "issuer_lookup", "issuer_calculation",
+    "tax_lookup_endpoint", "capital_stock", "wrong_provider_payable", "unrelated_gross_table",
+])
+def test_competing_common_stock_requires_independently_matched_class_issuer_and_dates(tmp_path, monkeypatch, variant):
+    from types import SimpleNamespace
+
+    from market_predictor.investment import stock_identity
+    from market_predictor.swing.contracts.holding_accounting import EvidenceReference
+
+    original, item = fixture(tmp_path)
+    original["cusip"] = "78462F103"
+    _exact_provider_payment(tmp_path, original, item)
+    if variant == "wrong_provider_payable":
+        original["payable_date"] = "2019-11-01"
+        item["original_record_sha256"] = json_sha256(original)
+    if variant == "unrelated_gross_table":
+        path = Path(item["tax"]["gross_context"]["body"]["path"])
+        gross = json.loads(path.read_bytes())
+        gross["data"]["html"] = gross["data"]["html"].replace(
+            "</thead><tbody>", "</thead></table><table><tbody>")
+        item["tax"]["gross_context"] = captured(path, json.dumps(gross).encode())
+    authority = write_json(tmp_path / "official.json", {"synthetic_test_only": True})
+    title = "Class B Common Stock, par value $0.01 per share"
+    if variant == "capital_stock":
+        title = "Class B Capital Stock, par value $0.01 per share"
+    proof = {"security_id": "stock:one", "ticker": "SPY", "sec_cik": "0000000001", "security_title": title,
+        "identity_authority": authority, "membership_authority": authority, "anchor": {"collection_manifest": authority,
+            "receipt_artifact": authority, "unit_id": "test-only-unit", "body_sha256": authority["sha256"],
+            "filing_metadata": authority}}
+    item["identity"] = {"kind": "stock_composite", "cusip": "78462F103",
+        "proof": write_json(tmp_path / "proof.json", proof), "cusip_provenance": "provider_original_cash_action"}
+    ref = EvidenceReference(reference=authority["path"], artifact_sha256=authority["sha256"],
+        record_locator="test-only SEC class", interpretation_policy_sha256=POLICY,
+        retrieved_at=datetime.fromisoformat(CAPTURE), available_at=datetime.fromisoformat(CAPTURE))
+    result = SimpleNamespace(issuer_name="EXAMPLE INC.", security_title=title, evidence=(ref,), missing_reasons=(),
+        competing_class_tickers=("OTHER",), proven_sessions=(date.fromisoformat(original["ex_date"]),))
+    monkeypatch.setattr(stock_identity, "replay_stock_identity", lambda *args, **kwargs: result)
+    calc_label = "Namenaktien A" if variant == "class_calculation" else "Namenaktien B"
+    calc_issuer = "Other Inc." if variant == "issuer_calculation" else "Example Inc."
+    replace_tax(item, lambda payload: payload["data"]["calculation"].update(
+        name=f"{calc_issuer}, {calc_label}, US", instrumentGroup="SHARE"))
+    lookup = {"total": 1, "count": 1, "security": [{
+        "isin": "US78462F1030", "vn": 45088, "institution": "Example Inc" if variant == "issuer_lookup" else "Example Inc.",
+        "name": "Namenaktien A" if variant == "class_lookup" else "Namenaktien B",
+        "categoryName": "SHARE", "typeName": "SHARE.NOMINAL", "typeDescription": "Registered shares"}]}
+    item["tax"]["lookup"] = captured(tmp_path / "lookup.json", json.dumps(lookup).encode())
+    if variant != "tax_lookup_endpoint":
+        path = Path(item["tax"]["lookup"]["receipt"]["path"])
+        receipt = json.loads(path.read_bytes())
+        receipt["url"] = "https://www.ictax.admin.ch/lsi/api/security"
+        item["tax"]["lookup"]["receipt"] = write_json(path, receipt)
+    if variant != "valid":
+        match = "payment or record date differs" if variant == "unrelated_gross_table" else None
+        with pytest.raises(DataReadinessError, match=match):
+            model(item).validates_against(original, tmp_path, POLICY)
+        return
+    refs = model(item).validates_against(original, tmp_path, POLICY)
+    assert any("SEC common-stock class=B" in r.record_locator for r in refs)
+    assert any("registered-share class=B" in r.record_locator for r in refs)
+    assert any("payment-date=2019-10-31" in r.record_locator for r in refs)
+
+
+@pytest.mark.parametrize(("text", "kind"), [
+    ("Kaufofferte der Example LLC zum Preis von USD 1'394.75 pro Aktie", "grouped_price_purchase_offer"),
+    ("Rückkauf eigener Aktien", "issuer_repurchase"),
+    ("Umtauschofferte: 1 Akt. Example Inc. von USD 2.50 nom. = 12.0298 Akt. Other Inc. von je USD 0.0001 nom. (VN 125483017)",
+     "exchange_offer"),
+    ("Fusion/Umtausch: 1 Akt. Example Inc. von USD 1.00 nom. = 0.255 Akt. Other Inc. von USD 0.01 nom. (VN 1330331)",
+     "stock_only_merger_exchange"),
+    ("Kaufofferte der Example LLC zum Preis von USD 1'39.75 pro Aktie", None),
+    ("Rückkauf eigener Aktien bezahlt", None),
+    ("Kaufofferte der Example LLC or Cash zum Preis von USD 1'394.75 pro Aktie", None),
+    ("Umtauschofferte: 1 Akt. Example Inc. Oder Barzahlung von USD 2.50 nom. = 1 Akt. Other Inc. von USD 0.01 nom. (VN 1330331)",
+     None),
+    ("Fusion/Umtausch: 1 Akt. Example Inc. von USD 1.00 nom. = 1 Akt. Other Inc. oder USD 15.00 in bar "
+     "von USD 0.01 nom. (VN 1330331)", None),
+    ("Fusion/Umtausch: 1 Akt. Example Inc. von USD 1.00 nom. = 1 Akt. Other Inc. von USD 0.01 nom. (VN 1330331) oder USD 15.00 in bar",
+     None),
+])
+def test_exact_zero_information_annotation_keeps_cash_election_outside_currency_proof(tmp_path, text, kind):
+    original, item, entry, row = purchase_offer_fixture(tmp_path)
+    _exact_provider_payment(tmp_path, original, item)
+    row[0] = f"11.07.2019 {text}"
+    add_purchase_offer(tmp_path, item, [entry], [row])
+    if kind is None:
+        with pytest.raises(DataReadinessError, match="not UTC midnight"):
+            model(item).validates_against(original, tmp_path, POLICY)
+        return
+    refs = model(item).validates_against(original, tmp_path, POLICY)
+    assert any(f"zero-information-entry-to-gross-row=0:1:{kind}" in r.record_locator for r in refs)
+    original["payable_date"] = "2019-11-01"
+    item["original_record_sha256"] = json_sha256(original)
+    with pytest.raises(DataReadinessError, match="payment or record date differs"):
+        model(item).validates_against(original, tmp_path, POLICY)
+
+
+def test_loaded_currency_replay_binds_manifest_action_and_current_verification(tmp_path: Path) -> None:
+    original, item = fixture(tmp_path)
+    manifest = tmp_path / "supplying-currency-manifest.json"
+    ref = write_json(manifest, {"schema": "market_predictor.investment_dividend_currency_corroborations",
+        "corroborations": [item]})
+    corroboration = load_currency_corroborations(tmp_path, manifest, ref["sha256"], policy_sha256=POLICY)[original["id"]]
+    assert corroboration.model_dump(mode="json") == model(item).model_dump(mode="json")
+    with pytest.raises(DataReadinessError, match="supplying manifest interpretation policy differs"):
+        corroboration.validates_against(original, tmp_path, "b" * 64)
+    refs = corroboration.validates_against(original, tmp_path, POLICY)
+    binding, = [e for e in refs if e.reference == manifest.as_posix()]
+    assert binding.artifact_sha256 == ref["sha256"]
+    assert binding.record_locator == (
+        f"currency corroboration;action_id={original['id']};original_record_sha256={json_sha256(original)}")
+    assert binding.interpretation_policy_sha256 == POLICY
+    assert binding.retrieved_at == binding.available_at
+    assert binding.retrieved_at > datetime.fromisoformat(CAPTURE)

@@ -28,6 +28,7 @@ from market_predictor.investment.dataset import add_pins
 from market_predictor.investment.dividend_currencies import load_currency_corroborations, load_dividend_amount_corrections
 from market_predictor.investment.label_materialization import InvestmentSourceValidation, compile_investment_label
 from market_predictor.investment.label_sources import InvestmentSourceReader
+from market_predictor.investment.reviewed_held_stock_actions import ReviewedHeldStockAction
 from market_predictor.investment.source_extensions import (
     InvestmentRawSourceExtension,
     VerifiedInvestmentRawExtension,
@@ -207,7 +208,10 @@ def prepare_investment_label_components(root: Path, parsed: InvestmentLabelMater
     reviewed_parent_units: SourcePin | None = None,
     completed_cash_manifest: SourcePin | None = None,
     completed_cash_facts: dict[str, ReviewedCompletedCashDistribution] | None = None,
-    existing_recipient_stock_identity: SourcePin | None = None) -> tuple[InvestmentCorporateActions, dict[str, Any]]:
+    existing_recipient_stock_identity: SourcePin | None = None,
+    reviewed_held_stock_actions_manifest: SourcePin | None = None,
+    reviewed_held_stock_actions: dict[str, ReviewedHeldStockAction] | None = None,
+) -> tuple[InvestmentCorporateActions, dict[str, Any]]:
     """Compose the same raw and corporate-action authorities for label and pair consumers."""
     currencies = {} if parsed.currency_manifest is None else load_investment_currency_evidence(root,
         Path(parsed.currency_manifest.path), parsed.currency_manifest.sha256, pins, interpretation_policy_sha256=request_sha256)
@@ -237,7 +241,9 @@ def prepare_investment_label_components(root: Path, parsed: InvestmentLabelMater
         dividend_amount_corrections=corrections, relevance_action_ids=relevance_action_ids,
         reviewed_action_dates=reviewed_action_dates, reviewed_parent_units=reviewed_parent_units,
         completed_cash_manifest=completed_cash_manifest, completed_cash_facts=completed_cash_facts,
-        recipient_stock_authority=recipient_authority)
+        recipient_stock_authority=recipient_authority,
+        reviewed_held_stock_actions_manifest=reviewed_held_stock_actions_manifest,
+        reviewed_held_stock_actions=reviewed_held_stock_actions)
     add_pins(root, pins, {str(_path(root, name)): digest for name, digest in actions.source_files.items()})
     selection = sources["selection"]
     if raw_extension is not None:

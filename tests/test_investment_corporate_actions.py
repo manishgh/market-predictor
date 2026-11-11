@@ -9,9 +9,23 @@ import pytest
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
+from market_predictor.investment import corporate_actions
 from market_predictor.investment.corporate_actions import InvestmentCorporateActions
-from market_predictor.investment.dividend_currencies import CurrencyCorroboration, IssuerDividendAmountCorrection
+from market_predictor.investment.dividend_currencies import (
+    CurrencyArtifactPin,
+    CurrencyCorroboration,
+    IssuerDividendAmountCorrection,
+)
+from market_predictor.investment.reviewed_held_stock_actions import (
+    HELD_STOCK_ACTION_LOCATOR,
+    ReviewedHeldStockAction,
+    ReviewedHoldingSplit,
+    ReviewedRegularCash,
+    VerifiedHeldStockAction,
+    _checked_provider_record,
+)
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference
+from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.action_evidence import CorporateActionEvidence
 from market_predictor.swing.datasets.action_windows import ActionWindow
 from market_predictor.swing.datasets.corrected_outcome_admission import reconcile_actions
@@ -23,7 +37,8 @@ from tests.test_investment_dividend_currencies import model as currency_model
 def build(tmp_path: Path, records: dict[str, list[dict[str, Any]]], *, refresh_rate: float | None = None,
           symbol: str = "TEST", corroborations: dict[str, CurrencyCorroboration] | None = None,
           amount_corrections: dict[str, IssuerDividendAmountCorrection] | None = None,
-          relevance_action_ids: frozenset[str] = frozenset()) -> InvestmentCorporateActions:
+          relevance_action_ids: frozenset[str] = frozenset(),
+          held_facts: dict[str, ReviewedHeldStockAction] | None = None) -> InvestmentCorporateActions:
     def write(name: str, data: dict[str, Any]) -> str:
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -59,9 +74,11 @@ def build(tmp_path: Path, records: dict[str, list[dict[str, Any]]], *, refresh_r
             record_locator="exact refreshed USD provider record", interpretation_policy_sha256="c" * 64,
             retrieved_at=datetime(2026, 11, 7, tzinfo=UTC), available_at=datetime(2026, 11, 7, tzinfo=UTC))
         refreshed[original["id"]] = ({**record, "original_record_sha256": json_sha256(original)}, ref)
+    held_pin = None if held_facts is None else SourcePin(path="held.json", sha256=write("held.json", {}))
     return InvestmentCorporateActions(tmp_path, evidence, reconcile_actions(evidence, {symbol}), (), policy,
         date(2024, 5, 28), currency_evidence=refreshed, currency_corroborations=corroborations,
-        dividend_amount_corrections=amount_corrections, relevance_action_ids=relevance_action_ids)
+        dividend_amount_corrections=amount_corrections, relevance_action_ids=relevance_action_ids,
+        reviewed_held_stock_actions_manifest=held_pin, reviewed_held_stock_actions=held_facts)
 
 
 def dividend(identity: str = "div", ex: str = "2024-05-23") -> dict[str, Any]:
@@ -247,3 +264,119 @@ def test_special_cash_with_simultaneous_split_still_requires_distribution_basis(
         symbol="SPY", corroborations={original["id"]: currency_model(item)})
     result = actions.validate_sources("benchmark:SPY", "SPY", (date(2019, 9, 19), date(2019, 9, 20)), "owned")
     assert any("simultaneous_split_distribution_basis_unproven" in reason for reason in result.missing_reasons)
+
+HELD_IDENTITY = "cik:0000000001"
+
+
+def _reviewed_split_record() -> tuple[dict[str, Any], ReviewedHoldingSplit]:
+    record = {"id": "reviewed-split", "symbol": "TEST", "cusip": "88160R101", "old_rate": 1, "new_rate": 3,
+              "record_date": "2024-05-20", "payable_date": "2024-05-21", "ex_date": "2024-05-22",
+              "due_bill_redemption_date": "2024-05-23", "process_date": "2024-05-22"}
+    fact = ReviewedHoldingSplit.model_construct(kind="held_stock_split", action_id=record["id"],
+        retained_record_sha256=json_sha256(record), security_id=HELD_IDENTITY, ticker="TEST", cusip="88160R101",
+        record_date=date(2024, 5, 20), payable_date=date(2024, 5, 21), ex_date=date(2024, 5, 22),
+        due_bill_redemption_date=date(2024, 5, 23))
+    return record, fact
+
+
+def _fixture_held_verifier(
+    root: Path, fact: ReviewedHeldStockAction, original: dict[str, Any], manifest: SourcePin,
+    policy: str, files: dict[str, str], cache: dict[str, Any], *, memory_guard: Any,
+) -> VerifiedHeldStockAction:
+    value = _checked_provider_record(fact, original)
+    captured = datetime(2026, 11, 7, tzinfo=UTC)
+    binding = EvidenceReference(reference=manifest.path, artifact_sha256=manifest.sha256,
+        interpretation_policy_sha256=policy, record_locator=f"{HELD_STOCK_ACTION_LOCATOR};action_id={fact.action_id}",
+        retrieved_at=captured, available_at=captured)
+    return VerifiedHeldStockAction(fact, value, binding, (binding,))
+
+
+def test_reviewed_whole_window_split_adds_three_units_only_after_exact_event(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(corporate_actions, "verify_held_stock_action", _fixture_held_verifier)
+    record, fact = _reviewed_split_record()
+    action = build(tmp_path, {"forward_splits": [record]}, held_facts={fact.action_id: fact})
+    sessions = tuple(date(2024, 5, day) for day in (17, 20, 21, 22, 23, 24))
+    assert action.reviewed_held_stock_action_ids(HELD_IDENTITY, "TEST", sessions[0], sessions[-1]) == {fact.action_id}
+    assert action.validate_sources(HELD_IDENTITY, "TEST", sessions, "owned").missing_reasons
+    assert action.validate_sources("cik:0000000002", "TEST", sessions, "owned", reviewed_relevance=True).missing_reasons
+    for partial in (sessions[1:], sessions[:-1]):
+        blocked = action.validate_sources(HELD_IDENTITY, "TEST", partial, "owned", reviewed_relevance=True)
+        assert blocked.missing_reasons and not blocked.events
+    result = action.validate_sources(HELD_IDENTITY, "TEST", sessions, "owned", reviewed_relevance=True)
+    assert not result.missing_reasons and not result.non_share_marks
+    event, = result.events
+    leg, = event.legs
+    assert event.effective_at == datetime(2024, 5, 22, 13, 30, tzinfo=UTC)
+    assert event.treatment == "replace" and leg.kind == "tradable_shares" and leg.units_per_owned_unit == 3
+    assert result.share_position_ids == ("owned",) * 3 + (leg.position_id,) * 3
+    [binding] = [ref for ref in result.evidence if ref.record_locator.startswith(HELD_STOCK_ACTION_LOCATOR)]
+    assert binding in event.evidence
+
+
+@pytest.mark.parametrize("change", [
+    {"new_rate": 4}, {"old_rate": True}, {"revised": False}, {"process_date": "2024-05-21"},
+    {"due_bill_redemption_date": "2024-05-24"}, {"cusip": "717081103"}, {"symbol": "OTHER"},
+])
+def test_reviewed_split_refuses_changed_provider_terms_even_when_hash_matches(change: dict[str, Any]) -> None:
+    record, fact = _reviewed_split_record()
+    record.update(change)
+    fact = fact.model_copy(update={"retained_record_sha256": json_sha256(record)})
+    with pytest.raises(DataReadinessError, match="provider terms"):
+        _checked_provider_record(fact, record)
+
+
+def test_reviewed_split_refuses_a_same_date_peer_and_keeps_simultaneous_conflict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(corporate_actions, "verify_held_stock_action", _fixture_held_verifier)
+    record, fact = _reviewed_split_record()
+    with pytest.raises(DataReadinessError, match="exact same-date"):
+        build(tmp_path, {"forward_splits": [record, {**record, "id": "another-split"}]},
+              held_facts={fact.action_id: fact})
+    actions = build(tmp_path, {"forward_splits": [record], "cash_dividends": [dividend(ex="2024-05-22")]},
+                    held_facts={fact.action_id: fact})
+    sessions = tuple(date(2024, 5, day) for day in (17, 20, 21, 22, 23, 24))
+    result = actions.validate_sources(HELD_IDENTITY, "TEST", sessions, "owned", reviewed_relevance=True)
+    assert "simultaneous_split_distribution_basis_unproven:2024-05-22" in result.missing_reasons
+
+
+def test_reviewed_regular_cash_creates_only_nominal_claim_for_prior_owner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(corporate_actions, "verify_held_stock_action", _fixture_held_verifier)
+    record = {"id": "regular", "symbol": "TEST", "cusip": "717081103", "foreign": True, "special": False,
+              "rate": 0.41, "ex_date": "2024-05-23", "record_date": "2024-05-24",
+              "payable_date": "2024-05-28", "process_date": "2024-05-28"}
+    fact = ReviewedRegularCash.model_construct(kind="regular_cash", action_id=record["id"],
+        retained_record_sha256=json_sha256(record), security_id=HELD_IDENTITY, ticker="TEST", cusip="717081103",
+        record_date=date(2024, 5, 24), payable_date=date(2024, 5, 28), ex_date=date(2024, 5, 23), gross_amount="0.41")
+    action = build(tmp_path, {"cash_dividends": [record]}, held_facts={fact.action_id: fact})
+    assert action.validate_sources(HELD_IDENTITY, "TEST", SESSIONS, "owned").missing_reasons
+    result = action.validate_sources(HELD_IDENTITY, "TEST", SESSIONS, "owned", reviewed_relevance=True)
+    assert not result.missing_reasons
+    event, = result.events
+    leg, = event.legs
+    assert event.effective_at == datetime(2024, 5, 23, 13, 30, tzinfo=UTC)
+    assert leg.kind == "unpaid_proceeds" and leg.units_per_owned_unit == 0.41
+    assert len(result.non_share_marks) == 3
+    assert all(mark.value_per_unit == 1.0 and mark.evidence == event.evidence for mark in result.non_share_marks)
+    entered_ex = action.validate_sources(HELD_IDENTITY, "TEST", SESSIONS[1:], "owned", reviewed_relevance=True)
+    assert not entered_ex.events and not entered_ex.non_share_marks and not entered_ex.missing_reasons
+
+
+def test_verified_currency_marker_at_ex_open_does_not_create_entitlement(tmp_path: Path) -> None:
+    original, item = currency_fixture(tmp_path, bridge=True)
+    currency = currency_model(item)
+    path = tmp_path / "currency-manifest.json"
+    path.write_text("{}")
+    currency._supplying_manifest = CurrencyArtifactPin(path=str(path), sha256=file_sha256(path)), "c" * 64
+    actions = build(tmp_path, {"cash_dividends": [original]}, symbol="SPY", corroborations={original["id"]: currency})
+    sessions = (date(2019, 9, 20), date(2019, 9, 23))
+    assert actions.verified_currency_action_ids("SPY", frozenset({original["id"], "unknown"})) == {original["id"]}
+    ordinary = actions.validate_sources("benchmark:SPY", "SPY", sessions, "owned")
+    reviewed = actions.validate_sources("benchmark:SPY", "SPY", sessions, "owned", reviewed_relevance=True)
+    assert not reviewed.events and not reviewed.non_share_marks and not reviewed.missing_reasons
+    added, = set(reviewed.evidence) - set(ordinary.evidence)
+    assert added.record_locator.startswith(f"currency corroboration;action_id={original['id']};")

@@ -294,3 +294,178 @@ def test_remaining_lineage_refuses_bad_links_or_repeated_authority(
     with pytest.raises(DataReadinessError, match=message):
         ledger.read_remaining_outcome_parent(tmp_path, _pin(manifest), {})
 
+
+
+@pytest.fixture
+def failed_parent(tmp_path: Path, chain: tuple[Path, Path]) -> ledger.SurvivorOutcomes:
+    first, second = chain
+    report = _read(first)
+    attempts = _read(first.parent / "attempts.json")
+    failed = next(attempt for attempt in attempts["rows"] if attempt["decision_id"] == "apr-c")
+    failed.update(status="unresolved", relevance_action_ids=["spin"],
+        attempted_at_utc=(datetime.fromisoformat(report["verified_at_utc"]) + timedelta(seconds=1)).isoformat(),
+        missing_reasons=["stock:action:cash_dividends:currency-target:dividend_usd_currency_unproven"])
+    _write_sidecar(first, "attempts.json", attempts)
+    report = _read(first)
+    report["attempted_keys"] += 1
+    report["unattempted_keys"] -= 1
+    _write(first, report)
+    alternate = _read(second)
+    carry = _write_ledger(tmp_path, _pin(first), tmp_path / "carry", "", datetime.fromisoformat(alternate["verified_at_utc"]),
+        SourcePin.model_validate(alternate["reviewed_action_dates"]),
+        SourcePin.model_validate(alternate["existing_recipient_stock_identity"]))
+    parent = ledger.read_remaining_outcome_parent(tmp_path, _pin(carry), {})
+    assert parent.rows["apr-c", 63]["pair_missing_reasons"] == ["stock:action:spin_offs:spin:unbounded_entitlement_or_due_bill_dates"]
+    latest = parent.latest_failed_attempts["apr-c", 63]
+    assert latest.attempts_pin == _pin(first.parent / "attempts.json")
+    assert latest.attempted_at_utc == datetime.fromisoformat(failed["attempted_at_utc"])
+    assert parent.latest_reasons(("apr-c", 63)) == tuple(failed["missing_reasons"])
+    return parent
+
+
+def _currency_context(
+    root: Path, parent: ledger.SurvivorOutcomes, *, owner_id: str = "cik:0000000003",
+) -> tuple[ledger.SurvivorOutcomes, dict[str, Any], dict[str, Any]]:
+    source = _write(root / "retained-source.json", {})
+    owner = _write(root / "dated-class.json", {
+        "security_id": owner_id, "ticker": "C", "sec_cik": "0000000003", "security_title": "Common Stock",
+        "identity_authority": source, "membership_authority": source,
+        "anchor": {"collection_manifest": source, "receipt_artifact": source, "unit_id": "retained",
+            "body_sha256": "c" * 64, "filing_metadata": source},
+    })
+    captured = {"body": source, "receipt": source}
+    item = {"method": "exact_tax_event", "action_id": "currency-target", "original_record_sha256": "a" * 64,
+        "symbol": "C", "ex_date": "2024-05-17", "currency": "USD", "tax_value_difference": "0",
+        "tax": {"source": captured, "gross_context": captured, "isin": "US7170811035", "entry_index": 0, "gross_amount": "1.25"},
+        "identity": {"kind": "stock_composite", "cusip": "717081103", "proof": owner,
+            "cusip_provenance": "provider_original_cash_action"}}
+    prior = {**item, "action_id": "existing-assertion"}
+    content = {"schema": ledger.CURRENCY_SCHEMA, "corroborations": [prior]}
+    baseline = _write(root / "base-currency.json", content)
+    parent = replace(parent, ancestor={**parent.ancestor, "currency_corroborations": baseline})
+    return parent, content, item
+
+
+def _prepare_currency(
+    root: Path, parent: ledger.SurvivorOutcomes, content: dict[str, Any], pins: dict[str, str],
+) -> tuple[ledger.InvestmentRemainingOutcomeRequest, ledger.RemainingEvidence]:
+    assert parent.request is not None
+    currency = SourcePin.model_validate(_write(root / "new-currency.json", content))
+    request = parent.request.model_copy(update={"currency_corroborations": currency})
+    return request, ledger.prepare_remaining_evidence(root, parent, request, pins)
+
+
+@pytest.mark.parametrize("owner_id", ["cik:0000000003", "cik:0000000009"])
+def test_currency_candidates_use_latest_pinned_failure_and_stable_owner(
+    tmp_path: Path, failed_parent: ledger.SurvivorOutcomes, owner_id: str,
+) -> None:
+    parent, manifest, item = _currency_context(tmp_path, failed_parent, owner_id=owner_id)
+    manifest["corroborations"].append(item)
+    _, evidence = _prepare_currency(tmp_path, parent, manifest, {})
+    key = ("apr-c", 63)
+    assert evidence.candidate_ids(parent, key) == ({"currency-target"} if owner_id.endswith("3") else set())
+    assert evidence.candidate_ids(replace(parent, latest_failed_attempts={}), key) == set()
+    for poison in ("spy:action:cash_dividends:currency-target:dividend_usd_currency_unproven",
+                   "stock:action:cash_dividends:another-id:dividend_usd_currency_unproven",
+                   "stock:action:cash_dividends:currency-target:ordinary_domestic_cash_entitlement_unproven"):
+        latest = replace(parent.latest_failed_attempts[key], missing_reasons=(poison,))
+        assert evidence.candidate_ids(replace(parent, latest_failed_attempts={key: latest}), key) == set()
+
+
+@pytest.mark.parametrize(("poison", "message"), [
+    ("remove", "ordered prefix"),
+    ("replace", "ordered prefix"),
+    ("duplicate", "repeats an action ID"),
+    ("shape", "manifest shape"),
+    ("nested_pin", "conflicting source pins"),
+    ("carried", "added no completed cash"),
+    ("remove_carried", "removed carried currency"),
+])
+def test_currency_manifest_is_cumulative_and_append_only(
+    tmp_path: Path, failed_parent: ledger.SurvivorOutcomes, poison: str, message: str,
+) -> None:
+    parent, manifest, item = _currency_context(tmp_path, failed_parent)
+    if poison == "remove":
+        manifest["corroborations"] = [item]
+    elif poison == "replace":
+        manifest["corroborations"][0] = {**manifest["corroborations"][0], "original_record_sha256": "b" * 64}
+        manifest["corroborations"].append(item)
+    elif poison == "duplicate":
+        manifest["corroborations"].append(dict(item, action_id="existing-assertion"))
+    elif poison == "shape":
+        manifest["unreviewed"] = True
+    elif poison == "nested_pin":
+        tax = item["tax"]
+        item["tax"] = {**tax, "source": {**tax["source"], "body": {**tax["source"]["body"], "sha256": "b" * 64}}}
+        manifest["corroborations"].append(item)
+    else:
+        manifest["corroborations"].append(item)
+        request, _ = _prepare_currency(tmp_path, parent, manifest, {})
+        with pytest.raises(DataReadinessError, match=message):
+            ledger.prepare_remaining_evidence(tmp_path, replace(parent, request=request),
+                request if poison == "carried" else request.model_copy(update={"currency_corroborations": None}), {})
+        return
+    with pytest.raises(DataReadinessError, match=message):
+        _prepare_currency(tmp_path, parent, manifest, {})
+
+
+@pytest.mark.parametrize("poison", [
+    "none", "entry_only", "entry_missing", "amount", "event_time", "stock_owner", "claim_mark", "wrong_pin",
+    "wrong_policy", "backdate", "ex_open", "ex_open_claim",
+])
+def test_positive_currency_proof_is_bound_to_actual_stock_entitlement(
+    tmp_path: Path, failed_parent: ledger.SurvivorOutcomes, poison: str,
+) -> None:
+    parent, manifest, item = _currency_context(tmp_path, failed_parent)
+    manifest["corroborations"].append(item)
+    pins: dict[str, str] = {}
+    request, evidence = _prepare_currency(tmp_path, parent, manifest, pins)
+    request_pin = SourcePin.model_validate(_write(tmp_path / "positive-request.json", request.model_dump(mode="json")))
+    assert evidence.currency_pin is not None
+    verified = datetime.now(UTC) - timedelta(seconds=1)
+    ref = reference(evidence.currency_pin.path).model_copy(update={
+        "artifact_sha256": evidence.currency_pin.sha256, "interpretation_policy_sha256": request_pin.sha256,
+        "record_locator": "currency corroboration;action_id=currency-target;original_record_sha256=" + "a" * 64,
+        "available_at": verified, "retrieved_at": verified,
+    }).model_dump(mode="json")
+    action = "holding:stock:shares:action:currency-target"
+    entry = "2024-05-01T13:30:00Z"
+    ex_open = "2024-05-17T13:30:00Z"
+    security = "cik:0000000003"
+    event = {"kind": "corporate_action", "event_id": action, "treatment": "distribution", "owned_security_id": security,
+        "effective_at": ex_open, "evidence": [ref],
+        "legs": [{"kind": "unpaid_proceeds", "position_id": action + ":unpaid", "security_id": security,
+            "currency": "USD", "face_value_per_unit": 1.0, "units_per_owned_unit": 1.25}]}
+    mark = {"status": "known", "position_id": action + ":unpaid", "currency": "USD", "value_per_unit": 1.0, "evidence": [ref]}
+    specification = {"security_id": security, "initial_position_id": "holding:stock:shares", "initial_entry_timestamp": entry,
+        "entry_evidence": [ref], "events": [event], "marks": [mark]}
+    if poison == "entry_only":
+        event["evidence"] = []
+    elif poison == "entry_missing":
+        specification["entry_evidence"] = []
+    elif poison == "amount":
+        event["legs"][0]["units_per_owned_unit"] = 9.0
+    elif poison == "event_time":
+        event["effective_at"] = "2024-05-17T14:00:00Z"
+    elif poison == "stock_owner":
+        event["owned_security_id"] = "cik:0000000009"
+    elif poison == "claim_mark":
+        mark["evidence"] = []
+    elif poison == "wrong_pin":
+        ref["artifact_sha256"] = "b" * 64
+    elif poison == "wrong_policy":
+        ref["interpretation_policy_sha256"] = "b" * 64
+    elif poison == "backdate":
+        ref["available_at"] = "2024-05-17T14:00:00Z"
+    elif poison in {"ex_open", "ex_open_claim"}:
+        specification["initial_entry_timestamp"] = ex_open
+        if poison == "ex_open":
+            specification.update(events=[], marks=[])
+    if poison in {"none", "ex_open"}:
+        ledger.verify_remaining_trigger_evidence(tmp_path, request_pin, evidence, specification, ["currency-target"], pins,
+            verified_at=verified, outcome_available_at=verified)
+    else:
+        with pytest.raises(DataReadinessError, match="positive manifest proof|ex-open entry"):
+            ledger.verify_remaining_trigger_evidence(tmp_path, request_pin, evidence, specification, ["currency-target"], pins,
+                verified_at=verified, outcome_available_at=verified)
+
