@@ -1,5 +1,104 @@
 # Active Edge Rebuild Handoff
 
+### Remaining retained holding outcomes — November 11
+
+Status: `in_progress`. User authorizes resolving the 935 remaining holding outcomes,
+keeping SLB/MDT/APA/EFX/MAS excluded, reusing existing data and comparing stock net
+returns against SPY after costs. Canonical main only; Sol engineering, independent
+design/code review and senior Quant audit; V1/beta remains deferred.
+
+Freeze parent data/research/investment_exclusion_evaluation_20261111/exclusions_2a1a352/_manifest.json
+SHA256 dd6d83ca839ac293d903d684d18d6fb7c383e2ec5c74889a1ca9d5d6b13e6237 and parent audit
+chat outputs/investment-exclusion-evaluation-independent-audit-20261111.json SHA256
+3c81171f7c0a6884fbfb3d05dc07eaa3c0434b9395b401625095ed84c68e4cf5.
+Preserve exactly 3,892 decision/horizon keys, 10,469 ordered placements, 16 views,
+29 dates/view and the five existing stable-ID exclusions. All 2,957 known survivor
+rows and verification clocks remain verbatim; no replacement, reselection, refit,
+additional exclusion, raw deletion, cost change or training-label overwrite.
+New returns must use the shared stock/SPY pair compiler and holding kernel with
+20 bp stock cost once and gross SPY on identical intervals. Incomplete or empty
+dates and their full-period views remain null. New facts get current verification
+clocks; historical outcomes and parent artifacts remain immutable.
+
+Current bounded implementation step: incremental survivor recovery plus narrowly
+shared action relevance already supported by retained evidence. Typed request:
+schema_version market_predictor.investment_remaining_outcome_request, scope
+post_observation_sensitivity, parent_manifest, reviewed_action_dates and
+reviewed_parent_units source pins. CLI resolve-remaining-investment-outcomes.
+Replay direct parent/ancestor lineage and fixed rosters without refitting or
+re-reading saved prediction matrices. Validate prior append-only identity/currency
+amendments against the ancestor's full original unknown mask, not the narrowed
+survivor population; economically compile only remaining in-scope unknown keys.
+Reuse source/role/holding/proof construction; no parallel accounting implementation.
+Retain unresolved rows verbatim and record current attempted reasons/clocks in an
+attempts sidecar. Successful rows get new exact source/specification/result proof.
+Record attempted and unattempted keys explicitly; no claiming all 935 were replayed
+if only source-supported candidates were attempted. Preserve every fixed cohort.
+
+Approved action rules, after exact record/version/class/raw/membership verification:
+1. Generic exact six-field name-only records with equal valid old/new CUSIP and
+   exact query/symbol participants preserve units. No manual ticker/action allowlist.
+   Reject ambiguous versions, cross-family collisions, unsupported extra fields,
+   raw aliases or other unresolved source/official/action facts.
+2. Existing reviewed official name-change dates may establish holdings strictly
+   before the date, or a fresh same-symbol raw holding strictly after it. Date
+   crossings and boundary-day ambiguity remain unavailable.
+3. Existing reviewed parent-spin class/unit and regular-way date proofs may show
+   a parent marked holding ending before ex-date, or a fresh parent purchase on/after
+   the proven regular-way ex-date. No daughter valuation, payout or simulated sale
+   is inferred; crossing holdings remain unresolved.
+4. Reuse the shared negative-only pre-distribution rule for a held parent whose
+   maturity strictly precedes every observed economic date, with canonical verified
+   ex/record/payable dates all present and exact parent/daughter participants. Include
+   every additional observed economic date in the minimum. Reject contradictory or
+   cancelled records, malformed dates/participants, daughter-side positions, boundaries
+   and crossings. This is not a generic post-date or missing due-bill waiver.
+
+Official facts remain pinned to existing reviewed loaders, exact action IDs, family,
+original record hashes, class and transport/body/request receipts. Source pins:
+data/research/swing_backtest_reviewed_action_dates_remaining_final_20261025.json
+SHA256 f82330c6cedb57152f8904ba6c007d911cf57bf8dc923230ba017f2cb0e5328d;
+data/research/swing_backtest_reviewed_parent_spin_units_remaining_final_20261025.json
+SHA256 7a231d88133128ed98823de9098f27157f1360e2065e792f7e9320ff4e6fd09d.
+Scoped derived subsets, if required, must preserve exact fact objects and provenance.
+Attach relevance evidence to every new pair's actual holding specification, not
+just a global manifest. Raw availability and ownership are prerequisites; an optional
+stock-only reviewed callback must not alter old/default four-role or pair behavior.
+All independent global, source, official and companion action gaps survive.
+
+Metadata opportunity counts are not recoveries: approximately 107 name-only/date
+sole blockers (including only 23 of 28 APTV holdings strictly before its official
+December 17, 2024 change), 13 reviewed-spin sole blockers (10 MMM, 3 DHR), and
+60 future-spin sole blockers (WDC20, BDX5, WAT12, LEN12, FTV7, DD4). Actual raw replay
+and independent audit decide admissibility. Remaining split, successor, currency,
+class and raw segment problems are open; existing MOS/DVN issuer facts are discovery
+leads and do not authorize cash admission in this first step. No new downloads.
+
+Directly observed runtime remedy, reviewed before implementation: the previous
+20-second nonblocking sample put 371/377 samples in explicit GC during extension
+hash verification. Preserve both complete rechecks and a process/system memory guard
+before every file hash. Only explicit reclamation cadence changes: first/new chunk,
+32 files or next size exceeding 8 MiB, and every >8 MiB file; oversized files reset
+the chunk. Other per-file guards use reclaim_unused_memory=False, which retains all
+process/system checks and full pressure polling. Preserve mapping order, streaming
+hash bytes, path checks, tamper refusal, shared lease, <90% ceiling and pause limits.
+No source decoding/caching or whole-run speedup claim. Root owns source_extensions.py
+and its focused runtime tests; ML engineer owns incremental source/role/action
+integration, CLI and related tests. No overlapping file edits.
+
+Verification tier: component. Exact parent/exclusion/order/key/clock preservation;
+source/action/class/hash/version poison; one-day boundary and crossing tests;
+raw/membership/official/companion-gap refusal; exact single cost and null incomplete
+means; source-proof clocks; immutable atomic output. Runtime checks exercise every
+guard-before-hash, chunk/oversize boundary, tamper and memory refusal on lightweight
+guard paths. Run affected consumers and pressure regressions, Ruff, strict mypy,
+whitespace. Commit/export before actual retained-data replay, then independent
+senior Quant reconstruction of recovered pairs and all cohort arithmetic.
+One heavy job at a time, normal memory policy, and no workers left after completion.
+Close this measured step and push documentation before starting another amendment.
+Failure: refuse invalid source/publication, retain parent and all unresolved keys,
+and report the exact missing facts rather than inventing outcomes or dropping stocks.
+
 ### Five-stock exclusion evaluation — November 11
 
 Status: `complete` for the user-authorized separate exclusion evaluation. Original
