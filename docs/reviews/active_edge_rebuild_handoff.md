@@ -2,103 +2,145 @@
 
 ### Remaining retained holding outcomes — November 11
 
-Status: `in_progress`. User authorizes resolving the 935 remaining holding outcomes,
-keeping SLB/MDT/APA/EFX/MAS excluded, reusing existing data and comparing stock net
-returns against SPY after costs. Canonical main only; Sol engineering, independent
-design/code review and senior Quant audit; V1/beta remains deferred.
+Status: `complete` for this bounded retained-action recovery step; 767
+of the original 935 unknown decision/horizon holding outcomes remain unresolved.
+This is not completion of every remaining outcome or model promotion.
+The five stable-identity exclusions remain SLB cik:0000087347, MDT cik:0001613103,
+APA cik:0001841666, EFX cik:0000033185 and MAS cik:0000062996. Canonical main only.
+Sol engineering, independent design/code review and senior Quant audit completed.
+V1/beta remains deferred. No training, refit, reranking, replacement, further exclusion,
+data download, raw deletion or historical target/model/source overwrite occurred.
 
-Freeze parent data/research/investment_exclusion_evaluation_20261111/exclusions_2a1a352/_manifest.json
-SHA256 dd6d83ca839ac293d903d684d18d6fb7c383e2ec5c74889a1ca9d5d6b13e6237 and parent audit
-chat outputs/investment-exclusion-evaluation-independent-audit-20261111.json SHA256
-3c81171f7c0a6884fbfb3d05dc07eaa3c0434b9395b401625095ed84c68e4cf5.
-Preserve exactly 3,892 decision/horizon keys, 10,469 ordered placements, 16 views,
-29 dates/view and the five existing stable-ID exclusions. All 2,957 known survivor
-rows and verification clocks remain verbatim; no replacement, reselection, refit,
-additional exclusion, raw deletion, cost change or training-label overwrite.
-New returns must use the shared stock/SPY pair compiler and holding kernel with
-20 bp stock cost once and gross SPY on identical intervals. Incomplete or empty
-dates and their full-period views remain null. New facts get current verification
-clocks; historical outcomes and parent artifacts remain immutable.
+Actual recovery attempted 256 of the 935 unknown holdings and verified
+168 additional stock/SPY outcomes; 679 were outside the
+source-supported action rules. Failed and unattempted survivor rows remain verbatim.
+All 2,957 already-known rows and clocks are unchanged. The new comparison preserves
+3,892 distinct decision/horizon keys, 10,469 ordered placements, 16 views and 464
+monthly cohorts. Complete cohorts increased from 89 to
+96 of 464. Every incomplete cohort and all 16 full-period
+means remain unavailable. attempts.json records the actual attempt scope, current
+clocks and remaining reasons; outcomes.json keeps every survivor and pair proof.
 
-Current bounded implementation step: incremental survivor recovery plus narrowly
-shared action relevance already supported by retained evidence. Typed request:
-schema_version market_predictor.investment_remaining_outcome_request, scope
-post_observation_sensitivity, parent_manifest, reviewed_action_dates and
-reviewed_parent_units source pins. CLI resolve-remaining-investment-outcomes.
-Replay direct parent/ancestor lineage and fixed rosters without refitting or
-re-reading saved prediction matrices. Validate prior append-only identity/currency
-amendments against the ancestor's full original unknown mask, not the narrowed
-survivor population; economically compile only remaining in-scope unknown keys.
-Reuse source/role/holding/proof construction; no parallel accounting implementation.
-Retain unresolved rows verbatim and record current attempted reasons/clocks in an
-attempts sidecar. Successful rows get new exact source/specification/result proof.
-Record attempted and unattempted keys explicitly; no claiming all 935 were replayed
-if only source-supported candidates were attempted. Preserve every fixed cohort.
+New outcomes reuse the established raw stock/SPY holding compiler and accounting
+kernel. Stock returns subtract the 20 bp (0.20 percentage point) round-trip cost
+exactly once; SPY is gross over the identical interval. Only exact, unambiguous
+same-CUSIP name-only records, existing reviewed official name/parent-spin facts,
+and parent holdings strictly before all observed distribution economic dates can
+remove an irrelevant-action gap. Valid raw ownership and membership are prerequisites.
+Boundary/crossing ambiguity and independent cash, split, successor, class, official
+or raw-source gaps remain. All 12 WAT daughter-side cases fail the parent-only rule.
+Parent marked holdings are not described as simulated pre-event sales. New facts
+carry current verification clocks and original provider/official receipts in the
+actual holding specifications. Prior amendments use the full ancestor unknown mask.
 
-Approved action rules, after exact record/version/class/raw/membership verification:
-1. Generic exact six-field name-only records with equal valid old/new CUSIP and
-   exact query/symbol participants preserve units. No manual ticker/action allowlist.
-   Reject ambiguous versions, cross-family collisions, unsupported extra fields,
-   raw aliases or other unresolved source/official/action facts.
-2. Existing reviewed official name-change dates may establish holdings strictly
-   before the date, or a fresh same-symbol raw holding strictly after it. Date
-   crossings and boundary-day ambiguity remain unavailable.
-3. Existing reviewed parent-spin class/unit and regular-way date proofs may show
-   a parent marked holding ending before ex-date, or a fresh parent purchase on/after
-   the proven regular-way ex-date. No daughter valuation, payout or simulated sale
-   is inferred; crossing holdings remain unresolved.
-4. Reuse the shared negative-only pre-distribution rule for a held parent whose
-   maturity strictly precedes every observed economic date, with canonical verified
-   ex/record/payable dates all present and exact parent/daughter participants. Include
-   every additional observed economic date in the minimum. Reject contradictory or
-   cancelled records, malformed dates/participants, daughter-side positions, boundaries
-   and crossings. This is not a generic post-date or missing due-bill waiver.
+The annual ranking candidate has 7/29 complete held-out-stock cohorts:
+1 above SPY after stock costs and 6 below. Its quarterly
+counterpart has 16/29 complete cohorts: 5 above and
+11 below. These are partial descriptive comparisons, not an
+overall success rate. Monthly 63/252-session holdings overlap; their cohort returns
+are not a funded portfolio and cannot be compounded or averaged over available dates
+to replace missing full-period results. No overall SPY edge is established.
+This remains a post-observation exclusion sensitivity, not an untouched test.
 
-Official facts remain pinned to existing reviewed loaders, exact action IDs, family,
-original record hashes, class and transport/body/request receipts. Source pins:
-data/research/swing_backtest_reviewed_action_dates_remaining_final_20261025.json
-SHA256 f82330c6cedb57152f8904ba6c007d911cf57bf8dc923230ba017f2cb0e5328d;
-data/research/swing_backtest_reviewed_parent_spin_units_remaining_final_20261025.json
-SHA256 7a231d88133128ed98823de9098f27157f1360e2065e792f7e9320ff4e6fd09d.
-Scoped derived subsets, if required, must preserve exact fact objects and provenance.
-Attach relevance evidence to every new pair's actual holding specification, not
-just a global manifest. Raw availability and ownership are prerequisites; an optional
-stock-only reviewed callback must not alter old/default four-role or pair behavior.
-All independent global, source, official and companion action gaps survive.
+Implementation: 9e59bb0fb3506b9ad5b7e5f18098148bf5d4bf5f (main).
+Immutable producer export SHA256 7fda788652ba3180855528ef5dda68edb4deae5c8c866a18ba353022b3139361.
+Result: data/research/investment_remaining_outcomes_20261111/remaining_9e59bb0/_manifest.json
+SHA256 996ba93d91c59bea09ca59b5a0f6c93b72e5368499f5092d64152f3bcce8af22; completed 2026-11-11T11:45:13.166869+00:00.
+Request: data/research/investment_remaining_outcomes_20261111/inputs/request.json
+SHA256 a13198ddb4e8a98aefdd2555070d70f6f64ff2d71ce493b731564dc305d3c546.
+Parent: data/research/investment_exclusion_evaluation_20261111/exclusions_2a1a352/_manifest.json
+SHA256 dd6d83ca839ac293d903d684d18d6fb7c383e2ec5c74889a1ca9d5d6b13e6237.
+Parent audit SHA256 3c81171f7c0a6884fbfb3d05dc07eaa3c0434b9395b401625095ed84c68e4cf5.
+Reviewed dates f82330c6cedb57152f8904ba6c007d911cf57bf8dc923230ba017f2cb0e5328d
+and parent units 7a231d88133128ed98823de9098f27157f1360e2065e792f7e9320ff4e6fd09d
+remain unchanged. The original five-stock and unexcluded comparisons are preserved.
 
-Metadata opportunity counts are not recoveries: approximately 107 name-only/date
-sole blockers (including only 23 of 28 APTV holdings strictly before its official
-December 17, 2024 change), 13 reviewed-spin sole blockers (10 MMM, 3 DHR), and
-48 future-spin sole blockers (WDC20, BDX5, LEN12, FTV7, DD4). The 12 WAT
-keys are daughter-side and remain outside the approved parent-only rule. Actual raw replay
-and independent audit decide admissibility. Remaining split, successor, currency,
-class and raw segment problems are open; existing MOS/DVN issuer facts are discovery
-leads and do not authorize cash admission in this first step. No new downloads.
+Independent senior Quant audit: C:/Users/manis/Documents/Codex/2026-11-05/c-project-market-predictor/outputs/investment-remaining-outcomes-independent-audit-20261111.json
+SHA256 dc2adc3d2cbce9de2215b2fb1896f84b47643c5d9b10bfd04e3ea10ac9f95fa9; helper SHA256 7b91572f959ec85ee7a4f890b147d598b502ee806757bc7b9d269c15c39a5625.
+Completed 2026-11-11T12:01:23.119679+00:00. It independently checked every new pair,
+all original survivor rows/clocks, exact action relevance, source/export hashes,
+all 464 cohort calculations, ordering, exclusions, cost and unavailable-period rules.
+All 15,288 source rechecks were unchanged. The first audit refused repeated provider
+references in 20 pairs; independent review proved each repeat fully identical and
+authorized, with no cash or unit duplication. The corrected audit revalidates every
+occurrence, requires complete equality, and checks exact mark-reference multiplicity;
+11 targeted poison checks passed. No published source, outcome or return was changed.
+The failed audit log SHA256 is
+1696f4b8f10502fdd1b715e5fc341e125ac1ca3c6d3231f9607d0eb4e681601f;
+successful audit log SHA256 is
+0c703c793e7e6f3c200565abd370ea2addd30cd82cfbcb0826ba721f44021718.
+Original helper/runner bytes remain preserved. The producer completed in 68 minutes
+27 seconds, with log SHA256
+a7366fbfc0512528f1c61dce45f994ee2874d49d615bd51801e53d577165dae3.
+This elapsed duration is a run observation, not a controlled speedup measurement.
 
-Directly observed runtime remedy, reviewed before implementation: the previous
-20-second nonblocking sample put 371/377 samples in explicit GC during extension
-hash verification. Preserve both complete rechecks and a process/system memory guard
-before every file hash. Only explicit reclamation cadence changes: first/new chunk,
-32 files or next size exceeding 8 MiB, and every >8 MiB file; oversized files reset
-the chunk. Other per-file guards use reclaim_unused_memory=False, which retains all
-process/system checks and full pressure polling. Preserve mapping order, streaming
-hash bytes, path checks, tamper refusal, shared lease, <90% ceiling and pause limits.
-No source decoding/caching or whole-run speedup claim. Root owns source_extensions.py
-and its focused runtime tests; ML engineer owns incremental source/role/action
-integration, CLI and related tests. No overlapping file edits.
+Component verification: 131 focused tests (12.78 s), plus 20 original label consumer
+tests (3.75 s); Ruff 17 affected paths and strict mypy 10 source modules passed.
+Final logs under chat outputs: investment-remaining-outcome-component-checks-20261111d.log
+SHA256 46b910edd4ddbe9e074c735a58b0f329592953157c8913e634e3946547a99873;
+investment-remaining-outcome-label-consumers-20261111.log SHA256
+3a20a45540a95491b96e56a869aca662fb6713d4cbb1c590ed2d63dd558bfe7b.
+Runtime source-recheck change e8f1ab2 separately passed 66 pressure/tamper/cadence
+tests (3.24 s), Ruff and strict mypy. Its log SHA256 is
+5119fdf95642b0d92bb912eae47ba67408864bac65fb447f7b2c53daef00dea8.
+Both full source rechecks and the memory guard before every file hash are retained;
+only explicit GC cadence changes (32 files / 8 MiB, with oversized-file boundaries).
+The normal shared lease, strictly below 90% system RAM policy, process budget and
+bounded pressure pause remain active. No full-suite/product release claim is made.
 
-Verification tier: component. Exact parent/exclusion/order/key/clock preservation;
-source/action/class/hash/version poison; one-day boundary and crossing tests;
-raw/membership/official/companion-gap refusal; exact single cost and null incomplete
-means; source-proof clocks; immutable atomic output. Runtime checks exercise every
-guard-before-hash, chunk/oversize boundary, tamper and memory refusal on lightweight
-guard paths. Run affected consumers and pressure regressions, Ruff, strict mypy,
-whitespace. Commit/export before actual retained-data replay, then independent
-senior Quant reconstruction of recovered pairs and all cohort arithmetic.
-One heavy job at a time, normal memory policy, and no workers left after completion.
-Close this measured step and push documentation before starting another amendment.
-Failure: refuse invalid source/publication, retain parent and all unresolved keys,
-and report the exact missing facts rather than inventing outcomes or dropping stocks.
+| Horizon / feature profile / evaluation scope | Complete dates before → after | Unknown placements |
+| --- | ---: | ---: |
+| 252 / all_features / security_transfer | 9 → 9 of 29 | 29 |
+| 252 / all_features / temporal | 0 → 0 of 29 | 278 |
+| 252 / technical_news / security_transfer | 6 → 6 of 29 | 40 |
+| 252 / technical_news / temporal | 0 → 0 of 29 | 295 |
+| 252 / technical_relationships / security_transfer | 8 → 8 of 29 | 33 |
+| 252 / technical_relationships / temporal | 0 → 0 of 29 | 287 |
+| 252 / within_date_return_rank / security_transfer | 7 → 7 of 29 | 38 |
+| 252 / within_date_return_rank / temporal | 0 → 0 of 29 | 310 |
+| 63 / all_features / security_transfer | 15 → 16 of 29 | 18 |
+| 63 / all_features / temporal | 0 → 0 of 29 | 150 |
+| 63 / technical_news / security_transfer | 13 → 16 of 29 | 17 |
+| 63 / technical_news / temporal | 0 → 0 of 29 | 156 |
+| 63 / technical_relationships / security_transfer | 17 → 18 of 29 | 15 |
+| 63 / technical_relationships / temporal | 0 → 0 of 29 | 149 |
+| 63 / within_date_return_rank / security_transfer | 14 → 16 of 29 | 18 |
+| 63 / within_date_return_rank / temporal | 0 → 0 of 29 | 163 |
+
+All complete held-out-stock ranking-candidate cohorts follow. The full 16-view
+comparison, including controls and incomplete dates, is in comparisons.json.
+
+| Horizon | Selection date | Stocks | Stock net | SPY gross | Difference (percentage points) |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 252 | 2022-06-30 | 8 | +21.8864% | +19.5858% | +2.3006 |
+| 252 | 2022-08-31 | 6 | -3.0964% | +16.4989% | -19.5953 |
+| 252 | 2022-09-30 | 8 | +11.3324% | +18.5607% | -7.2283 |
+| 252 | 2022-10-31 | 7 | -13.2113% | +10.0039% | -23.2152 |
+| 252 | 2022-11-30 | 5 | +4.6590% | +13.9049% | -9.2460 |
+| 252 | 2022-12-30 | 7 | +23.6724% | +23.6891% | -0.0167 |
+| 252 | 2024-05-28 | 7 | +12.9701% | +13.4827% | -0.5125 |
+| 63 | 2022-03-31 | 8 | -24.1287% | -15.5508% | -8.5779 |
+| 63 | 2022-06-30 | 7 | +3.9828% | -3.2328% | +7.2156 |
+| 63 | 2022-08-31 | 8 | +3.7171% | +4.1707% | -0.4536 |
+| 63 | 2022-09-30 | 8 | +4.2994% | +6.4062% | -2.1068 |
+| 63 | 2022-10-31 | 7 | +18.9546% | +5.7521% | +13.2025 |
+| 63 | 2022-11-30 | 6 | +6.5541% | -0.6846% | +7.2388 |
+| 63 | 2022-12-30 | 7 | +25.5538% | +7.3071% | +18.2467 |
+| 63 | 2023-02-28 | 7 | -2.6585% | +6.6453% | -9.3038 |
+| 63 | 2023-04-28 | 8 | +21.9878% | +10.5804% | +11.4074 |
+| 63 | 2023-07-31 | 7 | -16.6135% | -9.6449% | -6.9686 |
+| 63 | 2023-09-29 | 7 | +9.9954% | +11.8598% | -1.8644 |
+| 63 | 2023-10-31 | 8 | +8.6016% | +17.1532% | -8.5516 |
+| 63 | 2024-01-31 | 8 | +2.6687% | +3.5728% | -0.9041 |
+| 63 | 2024-02-29 | 8 | -3.8587% | +2.9913% | -6.8500 |
+| 63 | 2024-04-30 | 8 | -6.5900% | +10.2096% | -16.7996 |
+| 63 | 2024-05-28 | 7 | +6.4983% | +7.1601% | -0.6618 |
+
+Next source work must retain these exact selections and verified facts. Retained
+MOS special-cash and DVN paid-distribution issuer documents are discovery evidence;
+they require a separately frozen typed entitlement/completion proof before any
+admission. Other unresolved dividend, split, ownership and candle gaps must stay
+explicit. Do not add exclusions after inspecting returns or promote the model.
 
 ### Five-stock exclusion evaluation — November 11
 
