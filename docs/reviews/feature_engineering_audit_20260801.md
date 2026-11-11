@@ -1,5 +1,161 @@
 # Current Feature Engineering Audit
 
+### Additional retained distribution outcomes — November 11
+
+Status: `in_progress`. User's remaining-outcome recovery continues with existing
+retained evidence, the same five exclusions, fixed stock selections, SPY after
+costs, Sol engineering and senior Quant/design/code review. Main only; V1/beta deferred.
+The prior bounded action-relevance step is closed and independently audited.
+
+Direct parent: data/research/investment_remaining_outcomes_20261111/remaining_9e59bb0/_manifest.json
+SHA256 996ba93d91c59bea09ca59b5a0f6c93b72e5368499f5092d64152f3bcce8af22; producer 9e59bb0fb3506b9ad5b7e5f18098148bf5d4bf5f.
+Parent independent audit: C:/Users/manis/Documents/Codex/2026-11-05/c-project-market-predictor/outputs/investment-remaining-outcomes-independent-audit-20261111.json
+SHA256 dc2adc3d2cbce9de2215b2fb1896f84b47643c5d9b10bfd04e3ea10ac9f95fa9. Freeze all 3125 known parent outcome dictionaries,
+proof references and clocks verbatim, all 3,892 keys, 10,469 ordered placements,
+16 views/464 cohorts, five exclusions, original roster, labels, model and source
+versions. No replacements, reranking, refits, further exclusions, downloads or
+source deletions. The current parent has 767 unknown keys. New facts must not
+backdate outcome verification. Stock cost stays 20 bp once and SPY gross on the
+same interval. Empty/incomplete cohort and full-period values remain unavailable.
+
+Bounded new fact: an exact completed historical special cash distribution cannot
+create entitlement for a fresh holding opened strictly after every validated
+economic date and completed-payment upper bound. This is negative relevance only;
+no cash leg, PaymentEvent, split interpretation, or special=false mutation. Preserve
+the ordinary cash/StockCompositeIdentity admission gates. Five MOS holdings crossing
+the event remain outside this rule. Other gaps and official exceptions survive.
+
+Reviewed source discovery (non-admitting, to be replayed through typed contracts):
+chat outputs/investment_remaining_outcome_discoveries_20261111.json SHA256
+2639a4c462efee0edb7517cc034ee92769a8e09075d830d6b5ad0fb9a9a4c25b.
+MOS provider action 8828d201-a982-436f-be69-d438e08211ee, stable cik:0001285785,
+CUSIP 61945C103 / ISIN US61945C1036, USD 0.25, ex March 14, record March 15,
+provider/tax payment March 30, 2023. February 22 issuer declaration gives amount,
+record and announced distribution. May 17 issuer EX-99.1 confirms actual distribution
+in First Quarter 2023; May 3 issuer 8-K/EX-99.1 explicitly establish quarter ended
+March 31, 2023. March 31 is the conservative completion upper bound, not an invented
+payment date or an assumption that fiscal Q1 always ends in March.
+DVN action 720ed155-87cb-4705-944a-93eda7ebbde1, stable cik:0001090012,
+CUSIP 25179M103 / ISIN US25179M1036, USD 0.26, ex August 13, provider record
+August 14 and provider/tax payment October 1, 2020. August announcement supplies
+Barnett-related $100m declaration context only; it does not assert August 14 or
+$0.26 per share. October 29 issuer EX-99.1 proves completed Barnett sale and actual
+$0.26 special distribution on October 1. Keep each term's real source explicit.
+Metadata opportunity: 24 strict-post MOS keys and 19 strict-post DVN keys, of which
+40 have no other recorded gap and three DVN keys have independent currency gaps.
+These are candidate counts, not recovered outcomes or guaranteed successful proofs.
+
+Second narrowly reviewed timing case: an independently proved existing recipient
+common-stock class marked strictly before all later distribution dates. Retained
+discovery chat outputs/investment_remaining_strict_pre_action_discovery_20261111.json
+SHA256 3324c9204ba381e66c4785b049f3d908ddca0a5dac0c6eaf09f01490d79224ac
+binds all 12 WAT keys to complete raw SIP 1Day intervals under cik:0001000697 and
+pre-existing WAT common stock. Both WAT and BDX selected provider queries contain
+the same exact BDX/WAT event 2d714944-6685-4e1e-9b5c-277d276bbe41 with record
+February 5 and ex/payable February 10, 2026; all maturities are no later than
+May 30, 2025. No continuity to the future recipient CUSIP is asserted or needed.
+Require both exact captured participant records, valid closed record shape/rates,
+all canonical ex/record/payable dates and every extra observed date, unambiguous
+versions, existing regular-way common class and exact raw stable ownership over
+the full holding interval. The SEC common-class cover must precede the event
+boundary. Reject when-issued/newly issued classes, aliases, missing/contradictory
+or revised terms, boundaries/crossings and all independent gaps. A missing due-bill
+redemption alone cannot create a pre-event entitlement for this existing class;
+do not infer a due-bill date or broaden post-event handling. Attach both participant
+body/transport refs and exact class manifest/SEC cover/ownership refs to the actual
+stock holding specification. The first parent-only result still refuses all 12 and
+remains unchanged. WAB recipient cases lack required dates and stay unavailable;
+none of 41 AMZN/GOOG/GOOGL/NVDA split gaps satisfies this strict pre-event test.
+Combined metadata opportunity: 55 scoped holdings, with 52 sole recorded blockers.
+
+Typed source-pinned completed_cash_distributions is optional on the existing
+remaining-outcome request. Facts bind exact provider family/action/semantic hash,
+stable security_id, ticker, CIK, valid CUSIP/ISIN, USD per-share gross, provider dates,
+dated unique stock class, paired tax source and issuer declaration/completion/period
+authorities. Replay the exact structured PAYMENT paymentDate and the SAME unique
+Brutto row's payment date, not just ex-date/gross. Neither actual tax source supplies
+recordDate. Bind canonical provider dates and refuse contradictions, duplicate/conflicting
+actions, revisions, due bills, unexpected terms, wrong class/currency/payment dates,
+wrong held stable identity/ticker and missing raw or membership evidence.
+
+Reuse bounded exact SEC archive/index/receipt replay extracted from the existing
+stock-class path. Verify exact CIK/accession/acceptance, source/shard/member hashes,
+request/transport clocks, selected primary or explicit EX-99 row, HTTPS SEC URL and
+no redirect. Do not use a collection-opening helper that mutates uncommitted files.
+The stock-class wrapper keeps its existing primary, form, class and historical
+cutoff checks. Completion quotations must be exact, contextual and unambiguously
+completed, with the amount and event linked to an exact paid date or explicitly
+proved closed issuer period. Conditional/scheduled language is not completed payment.
+Use reusable typed facts and source replay, with independent Quant meaning review;
+do not add issuer-specific code paths or unverified operator booleans.
+
+Optional existing_recipient_stock_identity binds the already-amended raw extension's
+EXACT stock_identity manifest and verified (stable ID, ticker) stock_proofs map.
+This is a source-authority role, not an eligibility Boolean or ticker allowlist.
+Activate the existing-recipient pre-event rule only with this exact bound authority;
+replay the class over the exact holding sessions after raw/membership validation,
+using the caller-owned identity cache and attaching its actual source references.
+Old requests without the source role keep their parent-only behavior. Carried
+recipient authority must match exactly and supplies context without retrying old gaps.
+
+Incremental lineage must accept a finite pinned chain of prior remaining results,
+detect cycles, validate exact parent sidecars/attempts/proofs/counts/cohort arithmetic,
+and preserve every previous known outcome and clock. Keep the original exclusion
+and full ancestor unknown mask for prior identity/currency amendment validation.
+Carried reviewed dates/parent units must match exactly. Completed facts are cumulative
+and append-only: prior objects and source pins must remain identical by action ID;
+duplicates, changed facts or conflicting pins refuse. Cash attempts require newly
+supplied completed action IDs/families already recorded as that survivor's unresolved
+action reason, with exact stable identity/ticker and a proved
+strict fresh-entry boundary. An unrelated new event for the same ticker cannot
+trigger an attempt. Every recovered pair must attach its triggering new action proof.
+Carried name/spin/cash evidence remains active context for those pairs, not a reason
+to retry unchanged earlier failures. New attempts enumerate current unknown keys;
+prior attempt files remain pinned. A newly supplied recipient source role may also
+trigger exact recorded recipient-side spin gaps meeting its strict pre-event rule,
+stable ID/ticker and verified class requirements; require the triggering proof on
+every recovered pair. An unchanged carried role cannot retry the same old gaps.
+No prediction matrix replay or refitting.
+
+Additional observed runtime remedy: a 20-second nonblocking sample of the running
+9e59bb0 producer recorded 360 valid samples (9 sampling errors), 335 in explicit
+memory reclamation and 347 in stock identity replay. Raw sample SHA256
+086eafbe1775a62883447f59311e4fe68f8b30643722e600de5f2f63676cd3c6 at chat
+outputs/live-remaining-outcomes-13820-nonblocking-20261111.raw. This is a local
+hotspot, not a whole-run timing attribution. Before guard, compute only the bounded
+resolved-root/full-proof cache key. Skip initial cleanup only when cache source_root
+matches and that exact proof is already loaded; call the SAME memory guard exactly
+once before cache mutation, pin propagation, new source reads or session replay.
+Cold/missing/wrong-root caches retain full cleanup. Pressure polling, system RAM
+strictly below 90%, process budget, headroom, bounded pause and heavy lease remain.
+Cached hits still independently validate requested sessions, ownership, evidence,
+pins and clocks. No change to already frozen or running producers; no speedup claim.
+
+Ownership: root owns investment_remaining_parent.py/request/lineage tests and the
+narrow replay_stock_identity cache-guard change/tests. Engineer owns new SEC/cash
+proof modules, shared tax replay extraction, corporate action/label integration,
+orchestration imports and focused tests. Engineer waits for root's stock_identity
+guard edit before extracting _class_anchor in that file. Root owns artifacts,
+publication and the three authoritative docs. Quant owns semantic source review
+and independent audit; independent design/code reviewer checks consolidated diff.
+
+Verification tier: component. Poison wrong issuer/index/document/URL/hash/capture,
+empty/conditional/ambiguous completion, inconsistent paid/period/gross/date/class,
+tax row/payment/lookup mismatch, duplicate/revised/due-bill events, exact strict
+opening boundary and crossing, wrong held stable ID, ordinary-special gate unchanged,
+no generated economic event, source-pin conflicts and parent proof/order/clock changes.
+Recipient tests also reject missing/conflicting counterpart queries, absent or changed
+class authority, when-issued/new classes, unsupported class title/exchange, class
+cover after the event boundary, missing dates, aliases and maturity on the first
+economic date. Default parent-only behavior remains unchanged without its source role.
+Cache tests cover exact hit versus miss/no cache/different proof/wrong root, changed
+sessions, pin conflicts and memory refusal before cached facts are used. Run original
+class/currency/action/label/remaining consumers, runtime pressure tests, Ruff, strict
+mypy and whitespace. Serialize heavy jobs. Commit/export before actual replay;
+independent senior Quant replays new pairs, source claims and all 464 cohorts.
+Close and push measured results. Failure retains every unresolved holding and reports
+the missing fact; no fabricated return, waived evidence or additional exclusion.
+
 ### Remaining retained holding outcomes — November 11
 
 Status: `complete` for this bounded retained-action recovery step; 767
