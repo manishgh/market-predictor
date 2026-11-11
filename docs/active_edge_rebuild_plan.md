@@ -1,111 +1,259 @@
 # Active Edge Rebuild Plan
-### Fixed selected-stock outcome recovery and SPY comparison November 11
 
-Status: `in_progress`. User authorizes resolving the missing selected outcomes,
-keeping selections fixed, then comparing SPY after costs; Sol engineering and senior
-Quant review, retained data, canonical main only, V1/beta deferred.
+### Fixed selected-stock outcomes and after-cost SPY comparison — November 11
 
-Freeze ranking report 47ffb2985416aea654c8c226f9f6215c94254aaf888dda1273ae1445d1e6079a
-from implementation bc8d593. Preserve all 16 profile/horizon/scope selection lists,
-all 29 dates per view, ordered securities and their original unit/prediction pins.
-The metadata-only inventory contains 3,970 unique selected decision/horizon keys,
-1,199 unknown keys across 150 securities. Of these, 1,192 have stock-role gaps and
-seven have the EPAM sector/SPY distinctness gap. Overlapping reason counts are
-619 currency, 219 missing action dates, 198 corporate terms, 198 ordinary cash
-entitlement, 181 raw bindings, 120 due-bill dates and 11 raw identity reasons.
-Inventory: chat outputs/investment-selected-outcome-inventory-20261111.json,
-SHA256 2f927c991f3d77b87d4f593c097f31a7b3f1779ceb08e2ac150d5759ad05942d.
+Status: `complete` for the bounded retained-source recovery and measured comparison.
+Unproven investment performance and remaining source gaps are explicitly open;
+this is not model promotion, a funded portfolio result or a fully trained model claim.
+Code is committed/pushed on canonical main: outcome implementation 5b557be28556063f9132021417851c96c0d0d31e,
+final source remedy/producer bc2fb1174364e7ecc0dc21ba627ea5294df33f63. The immutable final export
+contains 471 source files. No extra checkout, downloads, exclusions, refits or API
+changes occurred. V1/beta remains deferred.
 
-Bounded work: (1) recover demonstrated source facts from retained evidence using
-existing identity, dividend and action validators; (2) publish a separate fixed-
-selection stock/SPY outcome overlay; (3) report complete selected cohorts after
-the existing 20 bp stock cost once, against gross SPY. Reuse original verified
-holding outcomes and clocks. Deduplicate recovery work only, never portfolio
-positions. Preserve original training labels, research eligibility, models, raw
-bytes and every original source verification clock; no refit or reselection.
+The actual replay preserved all 16 views, 29 dates/view, 464 cohorts and 10,792
+ordered selected placements (3,970 distinct decision/horizon holding keys).
+It reused all 2,771 original verified values and clocks, recovered
+213 of the original 1,199 unknown keys, and retained
+986 unresolved keys without replacement, zero filling or deletion.
+Recovered keys span 26 securities
+and 570 selected placements across the 16 views;
+unresolved keys span 132 securities.
+49/464 cohorts now have every selected return verified.
+The cost is 20 basis points once per stock holding; SPY is gross on the same interval.
+Incomplete dates have null returns; any incomplete date leaves its full-period view
+mean null. Monthly 63/252-session holding cohorts overlap: do not compound their means
+or describe these as a funded monthly strategy. Inspected history remains development
+research, not untouched/prospective performance. No original target, model, input,
+source bytes or historical verification timestamp was changed.
 
-Earlier retained SEC primary anchors may be examined in frozen metadata order,
-not price/outcome order: the prior discovery searched only three recent filings.
-Use the existing exact class parser and full source/ownership replay; no issuer,
-class, currency or source waiver. New proofs/receipts get fresh artifacts and clocks.
-Existing official tax archives can then be resolved with admitted dated class proof.
-Other corporate actions require exact class, date, entitlement and valuation facts;
-an acquirer lot may be unaffected only with independent exact-class ownership proof.
-Unproven mergers, successor cash, special distributions and due-bill dates stay gaps.
-Any source-algorithm change needs a concrete retained example and focused review.
+Actual execution began 2026-11-11T00:59:41.120228+00:00; source verification clock
+2026-11-11T01:30:24.186766+00:00; report completed 2026-11-11T03:13:19.250998+00:00.
+Execution log: C:/Users/manis/Documents/Codex/2026-11-05/c-project-market-predictor/outputs/investment-selected-outcomes-20261111.log.
+Outcome report: data/research/investment_selected_outcomes_20261111/outcomes_bc2fb11/_manifest.json
+SHA256 5a7f62df2c378eeac5ce1c1bd96b181c02cea2836e846c0b55e0fcc4482f2ccb.
+Request SHA256 28555f0eee9f35ec994327baee749db20a2501b9ed3880fb9edd6f928b8d848f.
+Independent senior Sol Quant audit: C:/Users/manis/Documents/Codex/2026-11-05/c-project-market-predictor/outputs/investment-selected-outcomes-independent-audit-20261111.json
+SHA256 d49fa9c3fd42c48125247393932eee71c19f9eb43aa1b5e2742585fd38361224; completed 2026-11-11T03:32:39.653666+00:00.
+The independent audit reconstructed original selections, old values/clocks, every
+recovered pair's raw bars/action accounting and costs, all 464 cohorts/16 views,
+source amendments and immutable file hashes. Software tests alone are not this
+actual-data evidence.
+It rehashed 21,133 distinct evidence files, all unchanged,
+and independently replayed all 19 appended identity proofs and 149 new currency
+assertions from the two source passes.
+The first audit attempt stopped on its canonical-root restriction for 11 historical
+implementation files already pinned by the accepted dataset. Preserve failed log
+chat outputs/investment-selected-outcomes-independent-audit-20261111a.log and old
+helper audit_investment_selected_outcomes_3dadaf6b.py. The independently reviewed
+helper correction binds exactly those 11 paths and their digests to the frozen
+ranking/training-request/dataset chain, then byte-hashes and rechecks each file;
+all other external paths remain rejected. Published producer artifacts were unchanged.
+Successful audit helper SHA256: cb229673d88058eebcf876b5ceb9e88f8aaec99acefe79943cf49f0d2f882827.
 
-The stock/SPY pair is a separate retrospective evaluation contract, not a replacement
-for four-holding training targets. Reuse shared role specification construction and
-the holding kernel; auxiliary QQQ/sector gaps stay explicit. All required stock/SPY
-marks, actions, identity, membership, source hashes and actual clocks must pass;
-terminal arithmetic alone cannot admit a path. EPAM needs fresh exact two-role proof.
+Retained source recovery preserved all 391 original class proofs and appended 19
+verified proofs (410 total), including the April 25 Microsoft cover identified by
+body 8db90640757a0a7f635851caf04c37155c0c962b4607c1176e844ef9f4c3bbd3.
+The common-stock parser now separates explicitly tagged debt-note rows while refusing
+unknown/mixed/reused contexts. The dividend parser admits an undated zero PAYMENT
+only when its exact field shape and uniquely matching purchase-offer annotation in
+the selected dividend's actual Brutto table prove it is not a distribution; all
+other date, amount, source and entitlement checks remain strict. No ticker or
+purchase-price whitelist was introduced. The two demonstrated EL/AAP examples and
+all actually admitted events were replayed from retained captures. A separate bounded
+independent source audit reproduced all 60 supplemental assertions, including 49
+with purchase-offer annotations, and rehashed 111 source pins; receipt
+C:/Users/manis/Documents/Codex/2026-11-05/c-project-market-predictor/outputs/investment-selected-dividend-offer-annotations-20261111.json SHA256 768fdce34b7c9f62bc8abdfac7a755951b59a9e2c04bb29a1e33c047c0399f37.
+The first dividend pass added 89 assertions to 4,498;
+the supplemental pass added 60 to the preserved 4,587,
+for 4647 total. 393 of
+453 supplemental requested events remain unavailable. The superseded unpublished
+5b557be supplemental attempt was stopped before output at 2026-11-11T00:16:05.657942+00:00;
+its log is preserved, and the same frozen request ran using the final source code.
 
-Freeze stock net vs SPY gross as primary; any cost-matched SPY net diagnostic is
-separate. Unknown selected positions remain present and make the date return null;
-any incomplete date makes full-period aggregate null. No zero filling, dropping,
-replacement or favorable-date selection. Report original/resolved/remaining gaps
-with denominator, known complete cohorts and after-cost differences without claiming
-a funded portfolio. A funded monthly comparison requires complete required paths
-and a separately frozen capital/exit/settlement policy; it cannot compound overlapping
-63/252-session cohort means. No live/API/promotion change or untouched-test claim.
+Validation: component tier, 324 focused tests for the outcome/pair/class change,
+71 affected tests after the final import/type correction, and 283 final affected
+tests for the tax annotation remedy; counts overlap and are not a unique-test total.
+Ruff/strict mypy and whitespace passed for affected files/packages. Real score/label
+metadata replay verified all placements, 2,771 values/clocks and 909 pins. The retained
+MSFT parser and EL/AAP parser-level checks passed. Independent Sol design/code and
+senior Quant reviews approved the supported corrections. Full-suite, release,
+serving and promotion checks were deliberately not run for this research component.
+Recorded execution entry points (completed; output paths are immutable and must not
+be reused for a new run): chat outputs/run_investment_selection_outcomes.py with
+--command resolve-investment-selection-outcomes, --producer-commit bc2fb1174364e7ecc0dc21ba627ea5294df33f63,
+--request data/research/investment_selected_outcomes_20261111/inputs/outcome-request.json,
+--request-sha256 28555f0eee9f35ec994327baee749db20a2501b9ed3880fb9edd6f928b8d848f,
+--output data/research/investment_selected_outcomes_20261111/outcomes_bc2fb11 and
+--log outputs/investment-selected-outcomes-20261111.log. The accepted independent
+audit command is chat outputs/run_investment_selected_outcomes_audit.ps1
+-ManifestSha256 5a7f62df2c378eeac5ce1c1bd96b181c02cea2836e846c0b55e0fcc4482f2ccb; it binds the exact producer and both source
+passes. Successful log chat outputs/investment-selected-outcomes-independent-audit-20261111b.log
+SHA256 fc8ed80765638a328a15b12ceb3f2ca45bdc19ec548b7bcc3c1ecff025e38e37.
+Retained focused-check logs in chat outputs: investment-selected-outcome-component-checks-20261111.log
+(324 passed), investment-selected-outcome-post-type-checks-20261111.log (71 passed),
+investment-purchase-offer-component-checks-20261111b.log (283 passed),
+investment-selected-outcome-static-checks-20261111b.log and
+investment-purchase-offer-static-checks-20261111.log. Tests used the exclusive lease
+wrapper run_investment_component_checks.py. Do not rerun unchanged research just to
+recreate narrative evidence. Documentation closure requires reference and whitespace
+checks, not another training or full-suite run.
+Normal exclusive lease and below-90% RAM guard stayed active; no bypass was used.
+A bounded 20-second nonblocking runtime sample showed movement from extension hash
+checks into segment binding after action/currency replay. Explicit memory cleanup
+occupied 371/377 samples in that slice, not a whole-run attribution. The original
+producer continued unchanged; no sampling of locals or second heavy job occurred.
+Profile: chat outputs/live-selected-outcomes-66372-nonblocking-20261111.raw, SHA256
+37bee430689360d7f9bb51e97adfc2341b4c61d17b566513ee0a598f17ffc7e0.
 
-Concrete source remedy frozen before implementation: the retained Microsoft primary
-0001193125-24-011295/1 (body SHA256 d77cc55e023c715c88934119a4333112f9285d56066d6d77b6be12f69dcce247)
-has three tagged MSFT symbols: common stock and two explicitly titled debt notes.
-The current extractor rejects the repeated symbol before classifying those rows.
-Extend only repeated-symbol handling: verify every row, exact same-row tagged
-facts, issuer/period and class context; exclude only positively identified debt
-with a matching distinct debt member. Preserve entity/consolidation dimensions.
-Require exactly one remaining equity row and all existing equity checks. Duplicate
-equities, unknown/mixed titles, reused/malformed contexts and incompatible issuer
-or class facts still fail. Single-symbol behavior is unchanged. Root owns the
-shared SEC class extractor and tests; independent design/code and senior Quant
-reviews approve this demonstrated remedy. Verify the retained source and poison
-cases, then revisit only the prior unresolved selected-class reserve using the
-committed parser. Any new proofs still pass full dated identity/dividend validators.
-Additional retained-source remedy frozen November 11 before implementation:
-EL-2024 structured body 43f511e429aa579caf2328ea88a96e6b093d32125f611239391f487344437a0f
-and AAP-2023 body f0acc7b5eab3c57135de71c1c975ccd83922a2c9a9df3dbbae189aa8b57289e2
-contain exact positive target dividends (2024-05-31 USD0.66 and 2023-04-13 USD1.50),
-but an unrelated null-exDate zero PAYMENT makes the current whole-payload date loop
-reject them. Paired gross bodies 7c0da16293b7a441b685d62b81ec6b7e835196ac88f22bb73793e0a32866d10a
-and 3bc4928fafd9650a22767f51894986764e98f404d12dce5b42464cf43da12d55 identify those
-zero rows as separately dated purchase offers, not dividend payments. Do not infer
-that the remaining 72 similarly reported events have the same cause.
+| Horizon / feature profile / scope | Complete dates | Recovered placements | Unresolved placements |
+| --- | ---: | ---: | ---: |
+| 252 / all_features / security_transfer | 4/29 | 6 | 48 |
+| 252 / all_features / temporal | 0/29 | 58 | 341 |
+| 252 / technical_news / security_transfer | 2/29 | 11 | 58 |
+| 252 / technical_news / temporal | 0/29 | 65 | 358 |
+| 252 / technical_relationships / security_transfer | 3/29 | 15 | 51 |
+| 252 / technical_relationships / temporal | 0/29 | 68 | 349 |
+| 252 / within_date_return_rank / security_transfer | 3/29 | 22 | 50 |
+| 252 / within_date_return_rank / temporal | 0/29 | 72 | 359 |
+| 63 / all_features / security_transfer | 8/29 | 12 | 32 |
+| 63 / all_features / temporal | 0/29 | 55 | 205 |
+| 63 / technical_news / security_transfer | 8/29 | 12 | 32 |
+| 63 / technical_news / temporal | 0/29 | 47 | 225 |
+| 63 / technical_relationships / security_transfer | 12/29 | 14 | 28 |
+| 63 / technical_relationships / temporal | 0/29 | 46 | 220 |
+| 63 / within_date_return_rank / security_transfer | 9/29 | 20 | 35 |
+| 63 / within_date_return_rank / temporal | 0/29 | 47 | 228 |
 
-Bounded remedy: recognize only the observed exact structured PAYMENT field shape,
-explicit null ex-date, equal valid UTC-midnight date/paymentDate, USD one-share basis,
-explicit zero gross/net/CHF totals and exact nullable auxiliary fields; no unknown
-fields or coercion of missing/nonzero values. Require a unique one-to-one paired
-13-cell same-request gross row in the selected dividend's actual Brutto table,
-with blank ex-date, same payment date and zero USD/CHF,
-whose full dated wording matches the purchase-offer grammar with nonempty bounded
-offeror and positive finite USD offer price. No issuer/ticker/event/price whitelist.
-Preserve original entry indexes, exact positive target date/amount/uniqueness, strict
-all-other-payment parsing, ownership, source hashes, requests, ISIN and gross context.
-Unknown/nonzero/malformed/ambiguous rows remain refused. No resolver index waiver.
-Senior Quant approves the evidence-based grammar. Independent design/code review,
-missing/duplicate/paid/date/request poison tests and actual two-source replay are
-required. Engineer owns dividend_currencies.py and its affected tests; root owns
-scope/source execution. Reuse the exact frozen 453-event supplemental request
-b2c6f67f5cb5c591af92d1b3fbe3bea1910db7db54388f2f4dd842d13d622a20 and all 4,587 prior
-assertions. The unpublished 5b557be supplemental attempt was stopped at
-2026-11-11T00:16:05.657942+00:00 before output existed, to run once with the final
-reviewed producer; preserve its log as superseded execution evidence. No published
-source, target or selection was overwritten. Commit/export before actual recovery.
+All complete dated cohorts are listed below, including unfavorable comparisons.
+These are equal-weight holding returns for each stated decision date and horizon,
+not a return across the entire evaluation period. No available-date average is
+substituted for missing dates. A 20 bp stock round-trip cost is 0.20 percentage
+points deducted once from each stock holding; SPY is the gross benchmark.
 
-Independent Sol design review approved before implementation. Root owns selected
-inventory, retained anchor reserve and docs; engineer owns shared pair materialization
-and publication/evaluation; senior Quant audits source remedies and actual outcomes;
-separate reviewer checks design and consolidated code. One heavy job at a time with
-normal lease and <90% RAM guard. Commit/export before actual new publication.
-Tests: exact frozen selection tamper/refusal, dedup without position loss, unchanged
-old target behavior, source/identity/date poison, every missing selected outcome
-retained, cost once, no hidden full-period mean, actual verification clocks and
-exact shared holding arithmetic. Focused affected consumers, Ruff/strict mypy,
-retained-data execution and independent replay are required. Recheck old bytes.
-Exit: publish measured recoverable outcomes and honest complete/incomplete SPY
-comparison, or document exact externally missing evidence; never fabricate closure.
+| Horizon / feature profile / scope | Decision date | Stocks | Stock net return | SPY gross return | Difference (percentage points) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 252 / all_features / security_transfer | 2022-06-30 | 8 | +24.3139% | +19.5858% | +4.7281 |
+| 252 / all_features / security_transfer | 2022-07-29 | 8 | +13.0258% | +13.1620% | -0.1362 |
+| 252 / all_features / security_transfer | 2023-01-31 | 8 | -1.0705% | +22.3644% | -23.4348 |
+| 252 / all_features / security_transfer | 2024-05-28 | 8 | +17.0689% | +13.4827% | +3.5862 |
+| 252 / technical_news / security_transfer | 2022-06-30 | 8 | +24.3139% | +19.5858% | +4.7281 |
+| 252 / technical_news / security_transfer | 2024-05-28 | 8 | +12.5124% | +13.4827% | -0.9703 |
+| 252 / technical_relationships / security_transfer | 2022-06-30 | 8 | +24.3139% | +19.5858% | +4.7281 |
+| 252 / technical_relationships / security_transfer | 2022-09-30 | 8 | +7.6531% | +18.5607% | -10.9077 |
+| 252 / technical_relationships / security_transfer | 2024-05-28 | 8 | +16.1239% | +13.4827% | +2.6412 |
+| 252 / within_date_return_rank / security_transfer | 2022-06-30 | 8 | +21.8864% | +19.5858% | +2.3006 |
+| 252 / within_date_return_rank / security_transfer | 2022-09-30 | 8 | +11.3324% | +18.5607% | -7.2283 |
+| 252 / within_date_return_rank / security_transfer | 2024-05-28 | 8 | +6.3784% | +13.4827% | -7.1042 |
+| 63 / all_features / security_transfer | 2022-06-30 | 8 | -0.8117% | -3.2328% | +2.4212 |
+| 63 / all_features / security_transfer | 2022-12-30 | 8 | +24.2324% | +7.3071% | +16.9254 |
+| 63 / all_features / security_transfer | 2023-01-31 | 8 | -14.9412% | +1.7609% | -16.7021 |
+| 63 / all_features / security_transfer | 2023-03-31 | 8 | +6.1798% | +8.9466% | -2.7668 |
+| 63 / all_features / security_transfer | 2023-07-31 | 8 | -17.7403% | -9.6449% | -8.0954 |
+| 63 / all_features / security_transfer | 2024-02-29 | 8 | -4.5376% | +2.9913% | -7.5289 |
+| 63 / all_features / security_transfer | 2024-03-28 | 8 | -7.3733% | +4.2283% | -11.6016 |
+| 63 / all_features / security_transfer | 2024-04-30 | 8 | -2.2398% | +10.2096% | -12.4495 |
+| 63 / technical_news / security_transfer | 2022-07-29 | 8 | -5.0343% | -6.7392% | +1.7049 |
+| 63 / technical_news / security_transfer | 2022-08-31 | 8 | +5.3635% | +4.1707% | +1.1927 |
+| 63 / technical_news / security_transfer | 2022-12-30 | 8 | +24.1859% | +7.3071% | +16.8788 |
+| 63 / technical_news / security_transfer | 2023-01-31 | 8 | -15.9554% | +1.7609% | -17.7163 |
+| 63 / technical_news / security_transfer | 2023-03-31 | 8 | +8.5453% | +8.9466% | -0.4014 |
+| 63 / technical_news / security_transfer | 2023-07-31 | 8 | -20.8302% | -9.6449% | -11.1853 |
+| 63 / technical_news / security_transfer | 2024-02-29 | 8 | -5.6706% | +2.9913% | -8.6619 |
+| 63 / technical_news / security_transfer | 2024-03-28 | 8 | -6.8591% | +4.2283% | -11.0874 |
+| 63 / technical_relationships / security_transfer | 2022-04-29 | 8 | +1.0720% | +0.0672% | +1.0048 |
+| 63 / technical_relationships / security_transfer | 2022-06-30 | 8 | +0.6533% | -3.2328% | +3.8861 |
+| 63 / technical_relationships / security_transfer | 2022-07-29 | 8 | -5.0343% | -6.7392% | +1.7049 |
+| 63 / technical_relationships / security_transfer | 2022-09-30 | 8 | +6.6339% | +6.4062% | +0.2278 |
+| 63 / technical_relationships / security_transfer | 2022-12-30 | 8 | +21.5559% | +7.3071% | +14.2488 |
+| 63 / technical_relationships / security_transfer | 2023-01-31 | 8 | -12.6254% | +1.7609% | -14.3863 |
+| 63 / technical_relationships / security_transfer | 2023-03-31 | 8 | +7.8821% | +8.9466% | -1.0645 |
+| 63 / technical_relationships / security_transfer | 2023-07-31 | 8 | -23.4896% | -9.6449% | -13.8446 |
+| 63 / technical_relationships / security_transfer | 2024-01-31 | 8 | -1.6486% | +3.5728% | -5.2214 |
+| 63 / technical_relationships / security_transfer | 2024-02-29 | 8 | -5.3713% | +2.9913% | -8.3626 |
+| 63 / technical_relationships / security_transfer | 2024-03-28 | 8 | -6.8591% | +4.2283% | -11.0874 |
+| 63 / technical_relationships / security_transfer | 2024-04-30 | 8 | -2.2398% | +10.2096% | -12.4495 |
+| 63 / within_date_return_rank / security_transfer | 2022-03-31 | 8 | -24.1287% | -15.5508% | -8.5779 |
+| 63 / within_date_return_rank / security_transfer | 2022-08-31 | 8 | +3.7171% | +4.1707% | -0.4536 |
+| 63 / within_date_return_rank / security_transfer | 2022-09-30 | 8 | +4.2994% | +6.4062% | -2.1068 |
+| 63 / within_date_return_rank / security_transfer | 2022-12-30 | 8 | +22.6082% | +7.3071% | +15.3011 |
+| 63 / within_date_return_rank / security_transfer | 2023-04-28 | 8 | +21.9878% | +10.5804% | +11.4074 |
+| 63 / within_date_return_rank / security_transfer | 2023-07-31 | 8 | -16.9963% | -9.6449% | -7.3514 |
+| 63 / within_date_return_rank / security_transfer | 2023-10-31 | 8 | +8.6016% | +17.1532% | -8.5516 |
+| 63 / within_date_return_rank / security_transfer | 2024-01-31 | 8 | +2.6687% | +3.5728% | -0.9041 |
+| 63 / within_date_return_rank / security_transfer | 2024-02-29 | 8 | -3.8587% | +2.9913% | -6.8500 |
+
+The new annual within-date ranking candidate has 3/29 complete held-out-stock dates:
+June 30, 2022: stock +21.8864%, SPY +19.5858%, difference +2.3006 percentage points;
+September 30, 2022: stock +11.3324%, SPY +18.5607%, difference -7.2283 points;
+May 28, 2024: stock +6.3784%, SPY +13.4827%, difference -7.1042 points.
+Its quarterly view has 9/29 complete held-out-stock dates. Neither horizon has a
+complete temporal date. These partial results do not establish a full-period SPY
+advantage. Repeated/overlapping holdings and the outcome-availability subset cannot
+be treated as independent performance observations or used to choose a winner.
+
+Remaining gaps below count each distinct decision/horizon key once per reason;
+categories overlap and must not be summed into an additional position count.
+
+| Missing fact | Distinct unresolved decision/horizon keys affected |
+| --- | ---: |
+| dividend_usd_currency_unproven | 378 |
+| missing_action_economic_date | 219 |
+| corporate_terms_require_replay | 198 |
+| ordinary_domestic_cash_entitlement_unproven | 198 |
+| unbounded_entitlement_or_due_bill_dates | 120 |
+| missing_or_cross_segment_raw_binding | 109 |
+| raw_security_symbol_or_role_differs | 11 |
+| TWTR completion 8-K Item 2.01; effective October 27, not provider October 28 | 8 |
+| discovery_warner_completion Item 2.01 and WBD listing transition | 6 |
+| Fortune Brands Items 1.01/2.01 completed distribution; 5.03 FBIN December 15 | 4 |
+| unsupported_action_participant_field | 1 |
+
+Concrete next source work: corroborate dividend currency (378 affected keys), prove
+missing corporate-action effective dates (219), model verified merger/transition
+terms (198), establish ordinary cash entitlement (198), establish due-bill windows
+(120), and resolve raw segment/identity bindings (109 plus 11 identity conflicts).
+The exact source requests must follow the existing immutable pair reason records.
+TWTR cash settlement, Discovery/WBD and Fortune Brands successor/distribution paths
+remain unproven where listed. Fresh evidence must prove exact class, date, cash and
+successor terms; provider ticker labels alone cannot settle them. This checkpoint
+did not authorize excluding these selected holdings or changing training features.
+
+Proposed next evidence priorities, based only on the number of fixed cohorts with
+one remaining unknown position (not forecast returns): 87 cohorts have exactly one
+gap. SLB (8), MDT (8), APA (7), EFX (7) and MAS (6) account for 36 of these. Counts
+are conditional opportunities, not newly recovered outcomes or a promise of success.
+The Sol engineer's bounded retained-source inspection found:
+
+- SLB: prove exact common-share gross USD distributions and foreign/withholding
+  entitlement on the affected dates. Retained provider records are marked foreign
+  for CUSIP 806857108, and the selected tax archives contain no SLB units. The
+  domestic-only adapter refusing these events is not a demonstrated parser defect.
+- MDT: establish the foreign class (CUSIP G5960L103) and independently declared gross
+  USD entitlement, especially June 28, 2024 and March 23, 2023. Do not treat provider
+  payment amounts as proven gross dividends. No selected MDT tax/identity unit exists.
+- APA/CPE: obtain official merger and continuing-share-class evidence for April 1,
+  2024. The retained provider page distinguishes CPE acquiree and APA acquirer with
+  ratio 1 to 1.0425; independent exact-class proof is still required before treating
+  the selected APA lot as unaffected. This is a role-binding hypothesis, not a waiver.
+- EFX: obtain exact 2022 gross-USD event proof for February 18, May 24, August 17,
+  September 2 and November 22. Verified tax coverage is 2023-2025 for ISIN
+  US2944291051; later-year facts cannot certify the missing 2022 distributions.
+- MAS: resolve the official class/identifier lookup for ISIN US5745991068 and dated
+  gross distributions, including November 9, 2022 and February 22, 2023. Retained
+  2020-2025 lookup results report unavailable data; no tax PAYMENT bytes exist to
+  reinterpret. Use a working official lookup or independent issuer evidence.
+
+SEE affects another eight single-gap cohorts but needs both raw ownership/segment
+proof and multiple currency events; it is a compound recovery rather than one fact.
+Any subsequent source/parser amendment requires a bounded frozen scope and evidence
+review. These proposals do not admit any new source or change a selected position.
+
+Remaining next work: resolve only the reported source/identity/action gaps with
+provable dated evidence, preserve these same ordered selections, and rerun a new
+immutable outcome overlay if new facts become available. Do not claim a full-period
+SPY edge from the available-date subset or use missing positions as exclusions.
+No additional model/API checkpoint is active. Exact pair gaps and every known
+cohort return are in the pinned outcomes.json and comparisons.json beside the report.
 
 ### Stock selection and held-out security ranking November 11
 
