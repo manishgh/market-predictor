@@ -69,7 +69,8 @@ All independent global, source, official and companion action gaps survive.
 Metadata opportunity counts are not recoveries: approximately 107 name-only/date
 sole blockers (including only 23 of 28 APTV holdings strictly before its official
 December 17, 2024 change), 13 reviewed-spin sole blockers (10 MMM, 3 DHR), and
-60 future-spin sole blockers (WDC20, BDX5, WAT12, LEN12, FTV7, DD4). Actual raw replay
+48 future-spin sole blockers (WDC20, BDX5, LEN12, FTV7, DD4). The 12 WAT
+keys are daughter-side and remain outside the approved parent-only rule. Actual raw replay
 and independent audit decide admissibility. Remaining split, successor, currency,
 class and raw segment problems are open; existing MOS/DVN issuer facts are discovery
 leads and do not authorize cash admission in this first step. No new downloads.

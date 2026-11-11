@@ -50,10 +50,23 @@ class VerifiedInvestmentRawExtension:
 
 
 def recheck_extension_sources(root: Path, files: Mapping[str, str]) -> None:
+    """Check every source under the memory guard; reclaim only at bounded chunks."""
+    files_in_chunk = bytes_in_chunk = 0
     for name, digest in files.items():
-        guard("investment extension source hash verification")
-        if file_sha256(inside(root, name)) != digest:
+        path = inside(root, name)
+        size = path.stat().st_size
+        reclaim = (files_in_chunk == 0 or files_in_chunk >= 32
+            or bytes_in_chunk + size > 8 * 1024**2 or size > 8 * 1024**2)
+        guard("investment extension source hash verification", reclaim_unused_memory=reclaim)
+        if file_sha256(path) != digest:
             raise DataReadinessError("investment extension source changed")
+        if size > 8 * 1024**2:
+            files_in_chunk = bytes_in_chunk = 0
+        else:
+            if reclaim:
+                files_in_chunk = bytes_in_chunk = 0
+            files_in_chunk += 1
+            bytes_in_chunk += size
 
 
 def verify_investment_raw_extension(root: Path, request: InvestmentRawSourceExtension) -> VerifiedInvestmentRawExtension:

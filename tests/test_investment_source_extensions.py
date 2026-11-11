@@ -21,7 +21,7 @@ from market_predictor.swing.contracts.holding_materialization import SourcePin
 
 @pytest.fixture
 def scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(extension, "guard", lambda *args: None)
+    monkeypatch.setattr(extension, "guard", lambda *args, **kwargs: None)
     parent = {"schema": "synthetic_original_selection", "audit_sha256": "unchanged", "segments": []}
     artifacts = []
     tax_rows = []
