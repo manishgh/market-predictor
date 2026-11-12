@@ -23,6 +23,18 @@ does not publish new outcomes or resume the RAM-limited replay.
 
 ### Retained dividend currency and held-stock actions — November 11
 
+Resumed November 12 at 09:42:41.715619 UTC under the user's renewed instruction.
+RAM measured 68.85% before launch; the same strictly-below-90% guard and shared
+heavy-job lease remain active. The resolver uses the unchanged 72eedcf producer,
+478-file export, frozen f70f request and absent dividend_resolution_72eedcf output.
+The fresh log is outputs/currency-action-dividend-resolution-20261112.log.
+This active rerun supersedes the environment-pending execution status below;
+the November 11 timeout remains retained historical evidence. No new dividend or
+holding outcome result has yet been published. The Sol senior Quant reviewer has
+reverified the immutable audit helper, runner, export and input hashes and is ready
+to audit the actual results after the dividend and holding replays finish.
+
+
 Implementation checkpoint: main 72eedcf4bde54a043ccb11d60a1de1070f58a79e is
 committed and pushed. Immutable export has 478 source files, manifest SHA256
 5484eb2d86a58798aae5457d2d3f301ec20063af8de098c0ad896fe31148190f.
