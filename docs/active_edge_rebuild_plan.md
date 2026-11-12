@@ -36,7 +36,16 @@ Currency assertions SHA256 72164e48dc18c71ef94cf3980a669fcf7e75948704882f3313ccc
 Completed log: outputs/currency-action-dividend-resolution-20261112.log,
 SHA256 baab4f52fe25fdb8d6e8fbb2fb9705b992e5007cbc910d9a6af806ae6d45bff8.
 
-Status: `paused_by_user` on November 12. The user explicitly requested stopping
+Current status: `paused_by_user`, pending available RAM. The user briefly resumed
+this replay on November 12, then explicitly chose "Leave it pending for now"
+after system RAM measured 94.4% with no project Python workers running. No new
+replay was launched and no result was changed. Main was clean at bc181e8.
+The senior Sol Quant reviewer rechecked the unchanged audit helper, runner,
+holding request, completed dividend manifest and producer export hashes; both
+script syntax checks passed. The audit is ready but has not run on holding results.
+Resume only on a new user instruction and below the unchanged 90% RAM ceiling.
+
+Historical user stop on November 12: the user explicitly requested stopping
 and saving all work to remote main. Do not restart jobs without a new instruction.
 The holding replay ran from 10:20:07.375446 to 10:40:30.324396 UTC and was
 terminated at the user's request. It had reached raw-share-plan preparation
