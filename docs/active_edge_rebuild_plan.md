@@ -36,18 +36,30 @@ Currency assertions SHA256 72164e48dc18c71ef94cf3980a669fcf7e75948704882f3313ccc
 Completed log: outputs/currency-action-dividend-resolution-20261112.log,
 SHA256 baab4f52fe25fdb8d6e8fbb2fb9705b992e5007cbc910d9a6af806ae6d45bff8.
 
-Full holding replay started November 12 at 10:20:07.375446 UTC and is in progress.
+Status: `paused_by_user` on November 12. The user explicitly requested stopping
+and saving all work to remote main. Do not restart jobs without a new instruction.
+The holding replay ran from 10:20:07.375446 to 10:40:30.324396 UTC and was
+terminated at the user's request. It had reached raw-share-plan preparation
+after repeated bounded memory pauses. This was a user stop, not a model failure.
 Request: data/research/investment_currency_action_outcomes_20261111/inputs/request.json,
 SHA256 b97cca7abf05b933f0f42ca87946a491c8834001c336c31a1505615296c1be77.
 Command: resolve-remaining-investment-outcomes through the retained
 outputs/run_committed_research.py, using the same immutable 72eedcf producer.
 Output: data/research/investment_currency_action_outcomes_20261111/outcomes_72eedcf.
 Log: outputs/currency-action-holding-replay-20261112.log.
-The normal shared lease and strictly-below-90% system RAM guard remain active.
-Do not launch another replay or heavy job while this process owns the lease.
-The 3,177 known / 715 unknown holding baseline has not yet been replaced by a
-published holding result. The independent senior Sol Quant audit follows publication;
-the audit helper and runner have been reverified and remain unchanged.
+Stopped log SHA256 bed77deff2ed41722917d9f2c1c1e8d7f62efc2b7edb686fe32e38e4b45c59ad.
+Both replay worker processes exited, no Python worker remains, and the shared
+lease was successfully acquired and released in a lightweight stop check.
+The outcomes_72eedcf directory is absent: no new holding result was published.
+Baseline remains 3,177 known / 715 unknown unique holdings out of 3,892,
+101/464 complete cohorts and no available full-period comparison in any of
+the 16 views. Five exclusions, selections and all previous results are unchanged.
+Stop receipt: outputs/currency-action-user-stop-20261112.json, SHA256 8b3a88c5dd7592e26c61d9e494ffb828e69320fe1f86169416884600ab294dac.
+The completed dividend result, holding request, held-action facts, parent result
+and producer export hashes were rechecked; all four dividend result files match.
+The full holding replay and independent Quant audit are still required.
+Training is not the only remaining task, and the current models have not
+established complete after-cost outperformance against SPY.
 
 Implementation checkpoint: main 72eedcf4bde54a043ccb11d60a1de1070f58a79e is
 committed and pushed. Immutable export has 478 source files, manifest SHA256
@@ -64,9 +76,14 @@ Historical November 11 attempt: the same resolver stopped at final source
 recheck after system RAM exceeded 90% for 120.1728 seconds (92.0421% at timeout).
 It published no output. Its failed log remains retained. Today's successful resolver
 supersedes that execution failure without changing source bytes or weakening guards.
-After the running holding replay completes, pin its result, run the frozen independent
-Quant audit, summarize remaining evidence gaps and measured SPY comparisons, and close
-this checkpoint. No holding-recovery or model-performance claim is made yet.
+On explicit resume, reuse the completed dividend result and existing b97cca7a
+holding request: do not rerun the dividend resolver or exclusive request builder.
+Run resolve-remaining-investment-outcomes from the same 72eedcf export to the
+still-absent outcomes_72eedcf directory, with a NEW exclusive log such as
+outputs/currency-action-holding-replay-20261112b.log and the unchanged 90% guard.
+Then pin the actual result, run the frozen independent Quant audit, summarize
+remaining evidence gaps and after-cost SPY comparisons, and close the checkpoint.
+V1/beta remains deferred. No new holding-recovery or performance claim is made.
 
 The canonical held-stock input is already staged and must be reused:
 data/research/investment_currency_action_outcomes_20261111/inputs/held-stock-actions.json
@@ -93,7 +110,7 @@ The senior Quant helper independently checked all 33 retained tax records and
 12 exact stock-class covers while preparing the audit. That bounded source check
 does not replace the still-unrun audit of produced holdings and SPY economics.
 
-Status: `in_progress`. Current user authorizes further remaining currency and
+Frozen scope below is paused by the current user instruction. It covers remaining currency and
 corporate-action recovery with retained data, Sol engineering and independent senior
 Quant/design/code review. Canonical main only; V1/beta deferred. The previous bounded
 distribution checkpoint is closed at main 5be656b2701ad003cd9cd23f09ae96b1cc72742e.
