@@ -1,5 +1,26 @@
 # Active Edge Rebuild Handoff
 
+### Disposable disk cleanup — November 12
+
+Completed the user's disk-only housekeeping request. Removed 128 verified generated
+cache/test directories (82,964 files; 1,599,703,221 logical bytes), plus 1,695
+dangling uv cache files (32.9 MiB) and 308 pip download-cache files (31.4 MB).
+The test directories contain synthetic fixtures, including shared publication-test
+fixtures explicitly created by the repository tests. No real training datasets,
+candles, news, features, financial inputs, models, research results, partial work,
+historical producer sources, installed environment or referenced logs were removed.
+Targets were checked for path containment, links, age, tracked files and source
+manifest references before native removal. Seventeen protected artifact hashes,
+including all eleven external historical producer source pins, passed afterward.
+No executable source changed; Git was clean and Python 3.14.5 still starts.
+The last measured C: free space was 21,293,142,016 bytes (21.3 GB).
+
+The detailed deletion receipts and verification are retained under the chat
+workspace outputs directory. Verification: disk-cleanup-verification-20261112.json,
+SHA256 4ce82b03391061680f9b657b7857f0cfa1937d21cf9ccfe80b194693a5d74676. Its receipt hashes bind every removed target.
+The existing dividend recovery remains environment_pending; this housekeeping
+does not publish new outcomes or resume the RAM-limited replay.
+
 ### Retained dividend currency and held-stock actions — November 11
 
 Implementation checkpoint: main 72eedcf4bde54a043ccb11d60a1de1070f58a79e is
