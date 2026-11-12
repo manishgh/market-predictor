@@ -18,22 +18,36 @@ The last measured C: free space was 21,293,142,016 bytes (21.3 GB).
 The detailed deletion receipts and verification are retained under the chat
 workspace outputs directory. Verification: disk-cleanup-verification-20261112.json,
 SHA256 4ce82b03391061680f9b657b7857f0cfa1937d21cf9ccfe80b194693a5d74676. Its receipt hashes bind every removed target.
-The existing dividend recovery remains environment_pending; this housekeeping
-does not publish new outcomes or resume the RAM-limited replay.
+This housekeeping did not itself publish outcomes or resume the replay.
+The subsequent authorized recovery status is recorded below.
 
 ### Retained dividend currency and held-stock actions — November 11
 
-Resumed November 12 at 09:42:41.715619 UTC under the user's renewed instruction.
-RAM measured 68.85% before launch; the same strictly-below-90% guard and shared
-heavy-job lease remain active. The resolver uses the unchanged 72eedcf producer,
-478-file export, frozen f70f request and absent dividend_resolution_72eedcf output.
-The fresh log is outputs/currency-action-dividend-resolution-20261112.log.
-This active rerun supersedes the environment-pending execution status below;
-the November 11 timeout remains retained historical evidence. No new dividend or
-holding outcome result has yet been published. The Sol senior Quant reviewer has
-reverified the immutable audit helper, runner, export and input hashes and is ready
-to audit the actual results after the dividend and holding replays finish.
+Dividend resolution completed November 12 at 10:19:16.793600 UTC after resuming
+at 09:42:41.715619 UTC. All 33 requested dividend records are supported, all
+4,647 accepted assertion objects are preserved as the identical ordered prefix,
+and the cumulative result contains 4,680 assertions. There are zero unresolved
+requested events or pending amount corrections; both existing amount corrections
+retain their exact bytes. The request builder verified these source bindings.
 
+Resolver: data/research/investment_currency_action_outcomes_20261111/dividend_resolution_72eedcf/_manifest.json
+SHA256 12bc2700aa41645fb89e5e14b607fde75b1cc46f11e6c0135ca698baf972a267.
+Currency assertions SHA256 72164e48dc18c71ef94cf3980a669fcf7e75948704882f3313ccca8e187b30ab.
+Completed log: outputs/currency-action-dividend-resolution-20261112.log,
+SHA256 baab4f52fe25fdb8d6e8fbb2fb9705b992e5007cbc910d9a6af806ae6d45bff8.
+
+Full holding replay started November 12 at 10:20:07.375446 UTC and is in progress.
+Request: data/research/investment_currency_action_outcomes_20261111/inputs/request.json,
+SHA256 b97cca7abf05b933f0f42ca87946a491c8834001c336c31a1505615296c1be77.
+Command: resolve-remaining-investment-outcomes through the retained
+outputs/run_committed_research.py, using the same immutable 72eedcf producer.
+Output: data/research/investment_currency_action_outcomes_20261111/outcomes_72eedcf.
+Log: outputs/currency-action-holding-replay-20261112.log.
+The normal shared lease and strictly-below-90% system RAM guard remain active.
+Do not launch another replay or heavy job while this process owns the lease.
+The 3,177 known / 715 unknown holding baseline has not yet been replaced by a
+published holding result. The independent senior Sol Quant audit follows publication;
+the audit helper and runner have been reverified and remain unchanged.
 
 Implementation checkpoint: main 72eedcf4bde54a043ccb11d60a1de1070f58a79e is
 committed and pushed. Immutable export has 478 source files, manifest SHA256
@@ -46,36 +60,13 @@ on the final code. Ruff passes across investment/research and the 12 affected te
 files; strict mypy passes all six changed source files. The broader 85-source mypy
 run reports one pre-existing unchanged swing_oof_policy_evaluation.py:507 import
 export error for MAXIMUM_SYSTEM_USED_PERCENT; that unrelated source is not changed.
-Execution is environment_pending because system RAM exceeded the agreed ceiling.
-The canonical resolver ran from 2026-11-11T17:11:49.711614Z to
-2026-11-11T17:59:44.434954Z. All eleven archive checks finished; the worker reached
-the final dividend publication source recheck. After repeated bounded pauses, it
-stopped with exit 2 when system memory remained above 90% for 120.1728 seconds
-(observed 92.0421% at timeout). No guard was bypassed. A later check without the
-worker still measured 94.06% system use, so an immediate retry is not justified.
-The resolver output directory does not exist; no partial assertions or outcome
-results were published. Both worker processes exited and the heavy-job lease was
-released. The baseline therefore remains 3,177 known and 715 unknown holdings,
-101/464 complete cohorts, and zero available full-period comparisons. The 83
-candidate attempts (54 whose recorded gaps are addressed, 29 with independent
-gaps) are source-scope arithmetic only, not successful recoveries.
-
-The full holding request, full replay and independent result audit are NOT yet run.
-The user has been asked to free RAM; continue the existing authorized task when
-RAM permits. Do not refit, rerank, change exclusions, backdate clocks or lower the
-90% guard. Keep the canonical producer export and existing input files unchanged.
-Retry the same resolve-investment-dividends request from producer
-72eedcf4bde54a043ccb11d60a1de1070f58a79e through outputs/run_committed_research.py.
-Request: data/research/investment_currency_action_outcomes_20261111/inputs/dividend-request.json,
-SHA256 f70f0811ed361eba7af9ff41c56426b04d3d801364c2ed0ffa0430376f913f10.
-Output: data/research/investment_currency_action_outcomes_20261111/dividend_resolution_72eedcf
-(still absent, so reusable). Use a NEW exclusive log, e.g.
-outputs/currency-action-dividend-resolution-20261111b.log. Preserve the failed log.
-After a successful 33-event resolver result, run the prepared request builder,
-then resolve-remaining-investment-outcomes to a new outcomes_72eedcf directory
-using the same immutable producer. Run the independent Quant audit only after
-publication, summarize remaining evidence gaps, and close this checkpoint with
-actual results. No recovery/performance or complete-checkpoint claim is made.
+Historical November 11 attempt: the same resolver stopped at final source
+recheck after system RAM exceeded 90% for 120.1728 seconds (92.0421% at timeout).
+It published no output. Its failed log remains retained. Today's successful resolver
+supersedes that execution failure without changing source bytes or weakening guards.
+After the running holding replay completes, pin its result, run the frozen independent
+Quant audit, summarize remaining evidence gaps and measured SPY comparisons, and close
+this checkpoint. No holding-recovery or model-performance claim is made yet.
 
 The canonical held-stock input is already staged and must be reused:
 data/research/investment_currency_action_outcomes_20261111/inputs/held-stock-actions.json
