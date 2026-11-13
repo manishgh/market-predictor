@@ -17,10 +17,12 @@ C-to-D junctions fail the frozen replay's resolved-path containment and exact
 C SourcePin/source-inventory comparisons; changing --root alone also fails.
 Two Sol reviews independently confirmed this against the real parent and code.
 The current 72eedcf export and all historical source/request/result bytes remain
-immutable. The guarded copy to D:/market-predictor/data stopped at 90.4% system
-RAM. A resume began at 66.0% at 16:31 UTC, but stopped during resume checks at
-91.35%; the final check at 16:33 UTC measured 96.2%. No project Python or
-Robocopy worker remains. All C: originals remain
+immutable. The guarded copy to D:/market-predictor/data remains incomplete. The
+latest sustained resume began below 80% RAM at 16:59 UTC, then stopped during
+partial-copy checks at 90.09%; a later attempt stopped at 90.29%. The check at
+17:12 UTC measured 92.4%, with no project Python or Robocopy worker running.
+The user has been asked to pause unused build tools; observed dotnet/compiler
+process working sets were about 5.5 GB in total. Do not stop unrelated workers. All C: originals remain
 present; the partial D: copy is retained for --resume. There is no completed copy
 receipt or staging receipt, and no C dataset originals have been retired. The
 existing collector task remains enabled with its original C: action. No holding
@@ -28,6 +30,16 @@ replay was resumed. Resume the copy only below the agreed 90% system RAM ceiling
 from the chat workspace, run C:/project/market-predictor/.venv/Scripts/python.exe
 -B outputs/run_market_dataset_copy.py --resume. Then complete the migration gates
 below before deleting verified C: copies or changing the collector action.
+
+Operational helper performance review: per-entry PowerShell provider lookups in
+the copy/resume and retirement checks were replaced with equivalent .NET path
+and metadata calls. Both Sol implementation and independent review passed tiny
+fixtures, including actual junctions and missing children below junctions; all
+ancestry, file type, size, hash, volume and deletion-authority checks remain.
+Copy helper SHA256: 35dc29654f45b30440830d94467ae68e6d18091bef8f978f63907ce81c1290b0.
+Retirement helper SHA256: eb391aa3c10f4170ac3f4aba999414dd8056da0c9ad1d20d235acd6ec545d91d.
+No live-data retirement was performed. The reduced check overhead has not yet
+been measured on a completed real-data resume; memory pressure still stopped it.
 
 Implementation d3211eef6fa9625610d6d2fb3e044de51083d71c is pushed to main.
 The immutable export contains 480 source files; _export.json SHA256 is
