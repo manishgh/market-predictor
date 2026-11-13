@@ -2,7 +2,20 @@
 
 ### Configurable data storage and retained scratch cleanup — November 13
 
-Status: `in_progress`. The user requests moving large datasets/archives to D:,
+Status: `implementation_complete; data_movement_deferred_by_user`.
+Latest user instruction: proceed with implementation and do data movement later.
+The configurable-storage code is implemented, tested, independently reviewed and
+pushed in d3211ee. Do not resume copying, staging, retirement, or collector cutover
+until the user asks to resume data movement. Keep the current C: data references,
+code, Python and enabled collection task unchanged. No migration worker is running;
+all seven C: data namespaces remain present, no staging receipt exists, and the
+partial D: copy is retained. Actual D: consumer checks and deletion of C: copies
+remain unperformed migration gates, not completed implementation evidence.
+The 715 unresolved holding outcomes remain pending; no replay or fitting is started
+by this storage-only implementation checkpoint. Existing component verification
+below remains applicable: this latest change is documentation-only.
+
+Original scope: the user requests moving large datasets/archives to D:,
 keeping active code and Python on C:, preserving existing data references and the
 pending holding replay, and making storage location an explicit parameter.
 The user also asks to remove unnecessary unverified archives. Verification status
@@ -26,7 +39,7 @@ process working sets were about 5.5 GB in total. Do not stop unrelated workers. 
 present; the partial D: copy is retained for --resume. There is no completed copy
 receipt or staging receipt, and no C dataset originals have been retired. The
 existing collector task remains enabled with its original C: action. No holding
-replay was resumed. Resume the copy only below the agreed 90% system RAM ceiling:
+replay was resumed. Only after the user reauthorizes data movement, and below the agreed 90% system RAM ceiling:
 from the chat workspace, run C:/project/market-predictor/.venv/Scripts/python.exe
 -B outputs/run_market_dataset_copy.py --resume. Then complete the migration gates
 below before deleting verified C: copies or changing the collector action.
