@@ -17,7 +17,65 @@ C-to-D junctions fail the frozen replay's resolved-path containment and exact
 C SourcePin/source-inventory comparisons; changing --root alone also fails.
 Two Sol reviews independently confirmed this against the real parent and code.
 The current 72eedcf export and all historical source/request/result bytes remain
-immutable. No live data has moved and no holding replay was resumed.
+immutable. A guarded copy to D:/market-predictor/data is now running; all C:
+originals remain present and no holding replay was resumed.
+
+Implementation d3211eef6fa9625610d6d2fb3e044de51083d71c is pushed to main.
+The immutable export contains 480 source files; _export.json SHA256 is
+fc72cdba5f53d9d0a9a4c9eafc754f679e219fa1b1e04b6612793b2932b90377.
+Explicit --data-root now covers the remaining holding replay, investment dataset
+builder, investment model trainer, ranking trainer, and incremental Alpaca/SEC
+collectors. The PowerShell collection wrapper/installer accept -DataRoot. Windows
+immutable publication uses same-directory no-replace rename, supported by exFAT.
+No model fitting, acquisition, or holding outcome compilation was run.
+
+Checks: the source-reader final targeted rerun passed 85 cases after fixes; all
+99 collector/wrapper cases passed across initial and targeted reruns; the final
+investment consumer/source-validation suite passed 92 cases. Core path tests had
+31 passes and one symlink-permission skip. Ruff and changed-source strict mypy
+passed (30 source modules, then 17 collector/consumer modules). These are synthetic
+component tests, not evidence of improved model performance. Senior Sol reviews
+covered path identity, contained child reads, shared leases, immutable publication,
+retention and the guarded migration procedure.
+
+The independent retained-C preflight passed: 21,930 inventory files, 22,412 distinct
+file hashes including exports/lineage, all 33 frozen currency additions, 3,177 known
+and 715 unresolved of 3,892 holdings, five exclusions, 10,469 ordered placements,
+464 cohorts, 16 views and 20 bp stock cost. Receipt:
+chat outputs/storage-source-preflight-c-20261113.json, SHA256
+cdac785950f6d4f238b92cd13711501ce640b428226fc482daa309a3a448e5f1.
+Independent helper SHA256:
+383bb0b6062e9752e9ccafcad110530edf61f0f8d16b2437e773599f06b0732d.
+C/D expected pin inventory SHA256:
+b724cce146d57d6db980e534e8fa9a5cbcde4e91021c2066f49bfa9215edb7a3.
+C/D expected cohort economics SHA256:
+567bab8b5d029e9499cf052f1503e8d21dbc8a41510b9ab1051d80fbc1d50987.
+
+Historical source plans additionally require the exact old producer bytes in
+ data/evidence/storage_source_implementation_20261113/_manifest.json, SHA256
+ d1415f8f38b5a4b892150a3cf749f0a642533ae6883f2208aa6a943f1c3eb409.
+The three original source blobs match both their retained plan hashes and commit
+8005744871745b2415ddd28e96990f0ae2c8ca80; old plans were not rewritten.
+
+Remaining migration gates: finish per-file copy verification; temporarily stage
+original C dataset paths inside data/.storage_migration_20261113 while retaining
+all bytes and C implementation_snapshots; validate D with original paths absent;
+run --validate-inputs-only through the new immutable producer and the independent
+D preflight; compare source and economic hashes; then retire only verified staged
+C files. This does not resume the paused holding replay. The existing midnight
+collector is still configured for C. Quiesce it during cutover after a pinned XML
+backup, then update only its action to include -DataRoot D:/market-predictor/data
+and restore its enabled state; preserve schedule/settings/principal. Roll back
+renames by the pinned move plan if any required storage check fails.
+
+Completed retention cleanup: removed only the completed population export's stale
+_checkpoint.json and .resume SQLite database, freeing 7,395,248,626 logical bytes.
+All 1,754 published files remain; published population.sqlite and _manifest.json
+were SHA256-verified before and after removal. Receipt: chat
+outputs/population-resume-cleanup-20261113.json, SHA256
+24585683d68e7588a69ae42d5f6f0e3d625e41f25afd6d85ccaf786a4843246b.
+C: free space after cleanup was 16,305,733,632 bytes. This is scratch cleanup only;
+no raw, news, financial, training, model or archived published evidence was removed.
 
 Freeze: add an explicit data-root parameter, keeping project/code/config root and
 Python on C. One shared EvidencePaths abstraction separates logical evidence
