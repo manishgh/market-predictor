@@ -1,5 +1,18 @@
 # Active Edge Rebuild Plan
 
+### Assistant scratch cleanup — November 13
+
+Completed the user's request to remove unnecessary assistant-generated files.
+Removed 2,037 files across 96 targets: 12,611,427 logical bytes of disposable
+Python/tool caches, synthetic pytest scratch and one downloaded installer wheel.
+No research manifest referenced these targets; paths, links, age and tracked files
+were checked before removal. All 16 protected historical-source/replay-input
+hashes matched afterward. No datasets, candles, news, models, research results,
+source evidence, active tools, chat history or replay helpers were removed.
+Receipt: chat outputs/assistant-scratch-cleanup-20261113.json, SHA256
+9c8ea46e9b37a9095f7790fc75560be8acadbc050e2157f1f7aefec2de426aa9.
+The holding replay remains paused by the user; no ML job was started.
+
 ### Disposable disk cleanup — November 12
 
 Completed the user's disk-only housekeeping request. Removed 128 verified generated
