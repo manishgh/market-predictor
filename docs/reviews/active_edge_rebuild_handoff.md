@@ -1,5 +1,51 @@
 # Active Edge Rebuild Handoff
 
+### Configurable data storage and retained scratch cleanup — November 13
+
+Status: `in_progress`. The user requests moving large datasets/archives to D:,
+keeping active code and Python on C:, preserving existing data references and the
+pending holding replay, and making storage location an explicit parameter.
+The user also asks to remove unnecessary unverified archives. Verification status
+alone is not a deletion criterion: preserve raw inputs, published artifacts,
+models and all referenced evidence; remove only proven superseded scratch.
+
+Read-only inventory found 107,964,413,214 readable data bytes: features about
+40.19 GB, research 45.23 GB, raw 18.78 GB. Four model directories deny listing;
+they are preserved and excluded from any automatic migration/deletion decision.
+D: is a healthy Samsung T7, exFAT, with approximately 1.95 TB free. Ordinary
+C-to-D junctions fail the frozen replay's resolved-path containment and exact
+C SourcePin/source-inventory comparisons; changing --root alone also fails.
+Two Sol reviews independently confirmed this against the real parent and code.
+The current 72eedcf export and all historical source/request/result bytes remain
+immutable. No live data has moved and no holding replay was resumed.
+
+Freeze: add an explicit data-root parameter, keeping project/code/config root and
+Python on C. One shared EvidencePaths abstraction separates logical evidence
+identities from physical file access. Preserve historical pin strings, hashes,
+known outcomes, selections, exclusions, costs, clocks and existing interpretation.
+Reject unsafe paths, unexpected links, alternate-root fallback and changed source
+bytes. Keep the shared heavy-job lease and immutable producer exports on C.
+Publication must stage and rename on the selected output volume. Do not monkeypatch
+Path/filesystem APIs or rewrite historical manifests to hide relocation.
+
+Order: (1) verify/remove only obsolete completed-export scratch; (2) implement
+and test the path abstraction; (3) integrate all readers/writers/hash checks on
+the full holding replay call graph; (4) create a new immutable producer and
+independent audit; (5) copy and verify retained data before cutover/removing C
+copies. Other consumers must pass their own storage checks before their datasets
+move. No partial helper implementation constitutes completed migration.
+
+Exit gates: default-path regression and alternate-root parity; stable logical
+source inventories/sidecars/proofs; missing/tampered/foreign/traversal/reparse and
+no-fallback tests; shared-lease contention; same-volume atomic publication; actual
+retained-data source/lineage verification and independent replay comparison; full
+per-file copy receipts and preserved C code/environment. Use component checks,
+Ruff and strict mypy for changed packages. The existing unrelated mypy diagnostic
+remains documented. Revert new code or retain original C files if any gate fails.
+The initial core implementation is owned by the Sol storage engineer; root owns
+integration/migration orchestration and docs; senior Sol Quant reviews the contract
+and produced evidence. V1/beta, refits and financial semantics remain out of scope.
+
 ### Assistant scratch cleanup — November 13
 
 Completed the user's request to remove unnecessary assistant-generated files.
