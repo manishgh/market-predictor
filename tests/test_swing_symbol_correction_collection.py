@@ -84,13 +84,14 @@ def test_correction_collects_and_replays_through_owner_with_raw_mapping(
     assert owner_validator.call_count == 2  # Online admission and publication replay.
     for call in owner_validator.call_args_list:
         assert call.args == ()
-        assert set(call.kwargs) == {"directory", "request", "manifest", "units", "parent_archive_loader"}
+        assert set(call.kwargs) == {"directory", "request", "manifest", "units", "parent_archive_loader", "paths"}
         assert call.kwargs["directory"] == plan
         assert call.kwargs["request"] == _json(plan / "_request.json")
         assert call.kwargs["manifest"] == _json(plan / "_manifest.json")
         assert call.kwargs["units"]["role"].eq("stock").all()
         assert set(call.kwargs["units"]["ticker"]) == {"ECHO", "FISV"}
-        assert call.kwargs["parent_archive_loader"] is collector.load_complete_swing_history_collection
+        assert call.kwargs["parent_archive_loader"].func is collector.load_complete_swing_history_collection
+        assert call.kwargs["parent_archive_loader"].keywords == {"paths": None, "source_implementation_snapshot": None}
     source.calls.clear()
     assert collector.load_complete_swing_history_collection(
         output, plan_directory=plan, expected_adjustment="raw", expected_plan_authority_sha256=pin,

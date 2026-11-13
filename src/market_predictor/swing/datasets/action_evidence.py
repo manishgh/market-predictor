@@ -12,7 +12,7 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.core.system_memory import assert_system_memory_available
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import inside, resolve_inside_authority
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.resources import assert_memory_budget
 from market_predictor.swing.datasets.corporate_action_collection import collect_holding_corporate_actions
@@ -29,38 +29,43 @@ class CorporateActionEvidence:
     replay_metadata: dict[str, Any]
     projection_sha256: str
 
-    def recheck(self, root: Path) -> None:
+    def recheck(self, root: Path, *, paths: EvidencePaths | None = None) -> None:
+        paths = paths or EvidencePaths(root)
         if json_sha256({"records": self.records_by_symbol, "unavailable": list(self.unavailable_symbols),
                 "source_files": self.source_files, "replay": self.replay_metadata}) != self.projection_sha256:
             raise DataReadinessError("corporate-action projection changed in memory after replay")
         for name, expected in self.source_files.items():
-            if file_sha256(resolve_inside_authority(root, name)) != expected:
+            if file_sha256(paths.read(name)) != expected:
                 raise DataReadinessError("corporate-action evidence changed after independent replay")
 
 
 def load_corporate_action_evidence(*, root: Path, config: Path, archive: Path,
-    expected_audit_sha256: str, memory_guard: Callable[[], None] | None = None) -> CorporateActionEvidence:
+    expected_audit_sha256: str, memory_guard: Callable[[], None] | None = None,
+    paths: EvidencePaths | None = None) -> CorporateActionEvidence:
     """Verify pagination/transport/source pins, then retain only bounded action records.
 
     Call before acquiring a downstream heavy-job lease: archive replay owns its own
     lease. Consumers must recheck returned file pins while publishing their authority.
     This projection does not certify ownership, economic interpretation or absence.
     """
-    root = root.resolve()
-    directory = inside(root, archive)
+    paths = paths or EvidencePaths(root)
+    root = paths.project_root
+    directory = paths.directory(archive)
     replay: dict[str, Any] = {}
     report = collect_holding_corporate_actions(root, config, archive,
-        expected_audit_sha256=expected_audit_sha256, replay_metadata=replay)
+        expected_audit_sha256=expected_audit_sha256, replay_metadata=replay, paths=paths)
     runtime = (root / heavy_job_runtime_dir()).resolve()
     if not runtime.is_relative_to(root):
         raise DataReadinessError("corporate-action projection runtime escapes workspace")
     with heavy_job_lease("project-swing-corporate-action-evidence", runtime_dir=runtime):
-        return _project(root, directory, report, replay, memory_guard=memory_guard)
+        return _project(root, directory, report, replay, memory_guard=memory_guard, paths=paths)
 
 
 def _project(root: Path, directory: Path, report: dict[str, Any], replay: dict[str, Any],
-    *, memory_guard: Callable[[], None] | None = None) -> CorporateActionEvidence:
-    request_path = directory / "_request.json"
+    *, memory_guard: Callable[[], None] | None = None,
+    paths: EvidencePaths | None = None) -> CorporateActionEvidence:
+    paths = paths or EvidencePaths(root)
+    request_path = paths.read_child(directory, "_request.json")
     if request_path.stat().st_size > 8 * 1024**2:
         raise DataReadinessError("corporate-action request exceeds metadata bound")
     request_bytes = request_path.read_bytes()
@@ -69,8 +74,8 @@ def _project(root: Path, directory: Path, report: dict[str, Any], replay: dict[s
             or request["request_sha256"] != json_sha256({k: v for k, v in request.items() if k != "request_sha256"})):
         raise DataReadinessError("corporate-action request changed during projection")
     bound = dict(request["bound_files"])
-    bound[request_path.relative_to(root).as_posix()] = hashlib.sha256(request_bytes).hexdigest()
-    reconstruction = load_reconstruction_proof(root, directory, request)
+    bound[paths.relative(request_path).as_posix()] = hashlib.sha256(request_bytes).hexdigest()
+    reconstruction = load_reconstruction_proof(root, directory, request, paths=paths)
     if reconstruction is not None:
         if (report.get("reconstruction_proof") != reconstruction.proof_pin
                 or report.get("reconstruction_source_files") != reconstruction.source_files):
@@ -80,7 +85,7 @@ def _project(root: Path, directory: Path, report: dict[str, Any], replay: dict[s
                 raise DataReadinessError("corporate-action reconstruction source pins conflict")
             bound[name] = digest
         proof_path = directory / reconstruction.proof_pin["path"]
-        bound[proof_path.relative_to(root).as_posix()] = reconstruction.proof_pin["sha256"]
+        bound[paths.relative(proof_path).as_posix()] = reconstruction.proof_pin["sha256"]
     elif "reconstruction_proof" in report or "reconstruction_source_files" in report:
         raise DataReadinessError("corporate-action report reconstruction proof is absent")
     records: dict[str, dict[str, list[dict[str, Any]]]] = {}
@@ -99,15 +104,15 @@ def _project(root: Path, directory: Path, report: dict[str, Any], replay: dict[s
         if len(successes) != 1:
             raise DataReadinessError("corporate-action projection has ambiguous successful attempts")
         summary = successes[0]
-        attempt = inside(directory, f"tickers/{symbol}/{summary['attempt']}")
-        receipt_path = attempt / "receipt.json"
+        attempt = paths.directory(directory / "tickers" / symbol / summary["attempt"])
+        receipt_path = paths.read_child(attempt, "receipt.json")
         if file_sha256(receipt_path) != summary["receipt_sha256"]:
             raise DataReadinessError("corporate-action receipt changed during projection")
         receipt: dict[str, Any] = parse_strict_json_object(receipt_path.read_bytes(), label="corporate-action receipt")
-        bound[receipt_path.relative_to(root).as_posix()] = summary["receipt_sha256"]
+        bound[paths.relative(receipt_path).as_posix()] = summary["receipt_sha256"]
         families: dict[str, list[dict[str, Any]]] = {}
         for page in receipt["pages"]:
-            body_path = resolve_inside_authority(attempt, page["body_path"])
+            body_path = paths.read_child(attempt, page["body_path"])
             if body_path.stat().st_size > request["policy"]["maximum_response_bytes"]:
                 raise DataReadinessError("corporate-action projected body exceeds its bound")
             body = body_path.read_bytes()
@@ -116,14 +121,14 @@ def _project(root: Path, directory: Path, report: dict[str, Any], replay: dict[s
             payload: dict[str, Any] = parse_strict_json_object(body, label="corporate-action body")
             for family, values in payload["corporate_actions"].items():
                 families.setdefault(family, []).extend(values)
-            bound[body_path.relative_to(root).as_posix()] = page["body_sha256"]
-            metadata_path = resolve_inside_authority(attempt, page["metadata_path"])
-            bound[metadata_path.relative_to(root).as_posix()] = page["metadata_sha256"]
+            bound[paths.relative(body_path).as_posix()] = page["body_sha256"]
+            metadata_path = paths.read_child(attempt, page["metadata_path"])
+            bound[paths.relative(metadata_path).as_posix()] = page["metadata_sha256"]
         if {name: len(values) for name, values in families.items()} != summary["counts"]:
             raise DataReadinessError("corporate-action projected inventory differs from replay")
         records[symbol] = families
     digest = json_sha256({"records": records, "unavailable": sorted(missing), "source_files": bound, "replay": replay})
     result = CorporateActionEvidence(report["audit_sha256"], request["request_sha256"], records,
         tuple(sorted(missing)), bound, replay, digest)
-    result.recheck(root)
+    result.recheck(root, paths=paths)
     return result

@@ -21,7 +21,9 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.core.runtime_memory import guard as runtime_memory_guard
 from market_predictor.evidence.hashing import json_sha256
+from market_predictor.evidence.implementation_snapshot import verify_replayed_implementation
 from market_predictor.evidence.io import resolve_inside_authority
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.resources import assert_memory_budget, assert_peak_memory_budget
 from market_predictor.swing.contracts.holding_materialization import SourcePin
@@ -71,9 +73,9 @@ def _inside(root: Path, path: Path) -> Path:
     return result
 
 
-def _recheck(root: Path, files: dict[str, str]) -> None:
+def _recheck(paths: EvidencePaths, files: dict[str, str]) -> None:
     for name, digest in files.items():
-        if file_sha256(resolve_inside_authority(root, name)) != digest:
+        if file_sha256(paths.read(name)) != digest:
             raise DataReadinessError(f"investment raw acquisition pinned source changed: {name}")
 
 
@@ -93,7 +95,7 @@ def _runs(days: set[date], calendar: tuple[date, ...]) -> list[tuple[date, date]
     return result
 
 
-def _selection_dates(selection: dict[str, Any], root: Path, bound: dict[str, str]
+def _selection_dates(selection: dict[str, Any], paths: EvidencePaths, bound: dict[str, str]
                      ) -> tuple[dict[str, set[date]], dict[str, dict[str, Any]]]:
     if (selection.get("schema") != "market_predictor.swing_symbol_corrected_sources"
             or selection.get("status") != "source_selection_verified" or selection.get("exclusions_added") != []
@@ -108,10 +110,9 @@ def _selection_dates(selection: dict[str, Any], root: Path, bound: dict[str, str
         if (not first <= last <= FROZEN_SWING_END or artifact["role"] not in {"stock", "benchmark"}
                 or artifact["status"] != "observed" or ticker != ticker.strip().upper()):
             raise DataReadinessError("investment acquisition parent segment identity or frozen boundary differs")
-        source = _inside(root, Path(segment["archive"]))
         for path_key, hash_key in (("bars_path", "bars_sha256"), ("unit_manifest_path", "unit_manifest_sha256")):
-            path = resolve_inside_authority(source, artifact[path_key])
-            relative, digest = path.relative_to(root).as_posix(), str(artifact[hash_key])
+            path = paths.read_child(segment["archive"], artifact[path_key])
+            relative, digest = paths.relative(path).as_posix(), str(artifact[hash_key])
             if relative in bound and bound[relative] != digest:
                 raise DataReadinessError("investment acquisition parent artifact has conflicting hashes")
             bound[relative] = digest
@@ -130,22 +131,23 @@ def _selection_dates(selection: dict[str, Any], root: Path, bound: dict[str, str
     return dates, latest
 
 
-def prepare_investment_raw_acquisition(root: Path, request_path: Path
+def prepare_investment_raw_acquisition(root: Path, request_path: Path, *, paths: EvidencePaths | None = None,
                                      ) -> tuple[dict[str, Any], dict[str, Any], pd.DataFrame]:
     """Reconstruct metadata-only requirements inside an already leased operation."""
-    root = root.resolve()
+    paths = paths or EvidencePaths(root)
+    root = paths.project_root
     _guard()
-    config = resolve_inside_authority(root, str(request_path))
+    config = paths.read(request_path)
     policy = InvestmentRawAcquisitionRequest.model_validate_json(json.dumps(_object(config)))
     if policy.outcome_end != OUTCOME_END:
         raise DataReadinessError("investment acquisition outcome end must remain May 30, 2025")
-    bound: dict[str, str] = {config.relative_to(root).as_posix(): file_sha256(config)}
+    bound: dict[str, str] = {paths.relative(config).as_posix(): file_sha256(config)}
 
     def pinned(pin: SourcePin) -> dict[str, Any]:
-        path = resolve_inside_authority(root, pin.path)
+        path = paths.read(pin.path)
         if file_sha256(path) != pin.sha256:
             raise DataReadinessError("investment acquisition independent source pin differs")
-        bound[path.relative_to(root).as_posix()] = pin.sha256
+        bound[paths.relative(path).as_posix()] = pin.sha256
         return _object(path)
 
     gap, selection, roster = pinned(policy.gap_inventory), pinned(policy.source_selection), pinned(policy.roster)
@@ -157,13 +159,13 @@ def prepare_investment_raw_acquisition(root: Path, request_path: Path
             or gap.get("no_prices_returns_or_financial_values_read") is not True):
         raise DataReadinessError("investment acquisition gap audit scope differs")
     for pin in (policy.source_selection, policy.roster, policy.action_query):
-        relative = resolve_inside_authority(root, pin.path).relative_to(root).as_posix()
+        relative = paths.relative(pin.path).as_posix()
         if gap["source_pins"].get(relative) != pin.sha256:
             raise DataReadinessError("investment acquisition audit and explicit source pins differ")
     bound.update({str(name): str(digest) for name, digest in gap["source_pins"].items()})
-    parent_directory = resolve_inside_authority(root, policy.parent_plan_authority.path).parent
-    parent_request_path = parent_directory / "_request.json"
-    parent_manifest_path = parent_directory / "_manifest.json"
+    parent_directory = paths.read(policy.parent_plan_authority.path).parent
+    parent_request_path = paths.read_child(parent_directory, "_request.json")
+    parent_manifest_path = paths.read_child(parent_directory, "_manifest.json")
     parent_request, parent_manifest = _object(parent_request_path), _object(parent_manifest_path)
     if (parent_authority.get("schema") != AUTHORITY_SCHEMA or parent_authority.get("state") != "complete"
             or parent_authority.get("artifact") != "_manifest.json"
@@ -175,13 +177,13 @@ def prepare_investment_raw_acquisition(root: Path, request_path: Path
             or selection.get("parent_plan_sha256") != policy.parent_plan_authority.sha256):
         raise DataReadinessError("investment acquisition parent raw authority or frozen end differs")
     for path in (parent_request_path, parent_manifest_path):
-        bound[path.relative_to(root).as_posix()] = file_sha256(path)
+        bound[paths.relative(path).as_posix()] = file_sha256(path)
     action_scope = action_query.get("policy", {})
     if (action_scope.get("process_start") != "2018-05-29" or action_scope.get("process_end") != "2026-09-11"
             or action_scope.get("numeric_end") != FROZEN_SWING_END.isoformat()
             or gap.get("missing_action_query_symbols") != []):
         raise DataReadinessError("investment acquisition retained action query coverage differs")
-    observed, latest = _selection_dates(selection, root, bound)
+    observed, latest = _selection_dates(selection, paths, bound)
     calendar = holding_calendar(date(2019, 7, 9), OUTCOME_END)
     ordinals = {day: index for index, day in enumerate(calendar)}
     required: dict[str, set[date]] = defaultdict(set)
@@ -260,7 +262,7 @@ def prepare_investment_raw_acquisition(root: Path, request_path: Path
     lineage = parent_request["membership_authority"]
     package = Path(__file__).resolve().parents[1]
     request = {"schema": PLAN_SCHEMA, "scope": SCOPE, "source_root": str(root),
-        "request_path": config.relative_to(root).as_posix(), "policy": policy.model_dump(mode="json", by_alias=True),
+        "request_path": paths.relative(config).as_posix(), "policy": policy.model_dump(mode="json", by_alias=True),
         "source_files": bound, "membership_authority": lineage, "provider_symbols": provider_symbols,
         "asof_policy": "inclusive_unit_end_date_entity_mapping_not_ownership", "decision_start": "2019-07-31",
         "decision_end": FROZEN_SWING_END.isoformat(), "outcome_end": OUTCOME_END.isoformat(), "horizons": [63, 252],
@@ -283,21 +285,31 @@ def prepare_investment_raw_acquisition(root: Path, request_path: Path
             "stock_sessions": stock_sessions, "benchmark_sessions": benchmark_sessions,
             "tail_identity_caution_ids": sorted(cautions), "historical_gap_security_ids": sorted(earlier)},
         "unit_requirements": details}
-    _recheck(root, bound)
+    _recheck(paths, bound)
     _guard()
     return request, manifest, units
 
 
 def validate_investment_raw_acquisition_plan(*, directory: Path, request: dict[str, Any],
-                                           manifest: dict[str, Any], units: pd.DataFrame) -> None:
+                                           manifest: dict[str, Any], units: pd.DataFrame,
+                                           paths: EvidencePaths | None = None,
+                                           source_implementation_snapshot: SourcePin | None = None) -> dict[str, str]:
     """Shared transport callback: independently replay exact owner requirements."""
     root = Path(request["source_root"])
-    expected_request, expected_manifest, expected_units = prepare_investment_raw_acquisition(root, Path(request["request_path"]))
+    paths = paths or EvidencePaths(root)
+    if root != paths.project_root:
+        raise DataReadinessError("investment raw acquisition request differs from project namespace")
+    expected_request, expected_manifest, expected_units = prepare_investment_raw_acquisition(
+        root, Path(request["request_path"]), paths=paths)
+    proof = verify_replayed_implementation(root, expected_request["implementation_files"],
+        request.get("implementation_files"), source_implementation_snapshot)
+    comparison = {**request, "implementation_files": expected_request["implementation_files"]}
     actual = {key: value for key, value in manifest.items() if key not in {"request_sha256", "resources"}}
     actual["daily_bars"] = {key: value for key, value in manifest["daily_bars"].items() if key != "units_artifact"}
-    if (request != expected_request or actual != expected_manifest
+    if (comparison != expected_request or actual != expected_manifest
             or units[list(UNIT_COLUMNS)].reset_index(drop=True).equals(expected_units) is False):
         raise DataReadinessError("investment raw acquisition plan differs from exact independent requirements")
+    return proof
 
 
 def _plan(root: Path, request_path: Path, output: Path, expected_pin: str | None) -> dict[str, Any]:
@@ -343,33 +355,42 @@ def collect_investment_raw_acquisition(root: Path, request_path: Path, plan_dire
                 provider_symbol_for=lambda ticker: str(request["provider_symbols"][ticker]),
                 expected_plan_authority_sha256=expected_plan_authority_sha256, maximum_units_this_run=maximum_units_this_run,
                 memory_guard=_guard)
-        return _verify(root, request_path, plan, output, expected_plan_authority_sha256)
+        return _verify(EvidencePaths(root), request_path, plan, output, expected_plan_authority_sha256, None)
 
 
-def _verify(root: Path, request_path: Path, plan: Path, output: Path, pin: str) -> dict[str, Any]:
-    _plan(root, request_path, plan, pin)
-    verified = archive._load_verified_plan(plan, expected_plan_authority_sha256=pin)
-    plan_request, plan_manifest = _object(plan / "_request.json"), _object(plan / "_manifest.json")
-    collection_request = _object(output / "_request.json")
+def _verify(paths: EvidencePaths, request_path: Path, plan: Path, output: Path, pin: str,
+    source_implementation_snapshot: SourcePin | None) -> dict[str, Any]:
+    verified = archive._load_verified_plan(plan, expected_plan_authority_sha256=pin,
+        paths=paths, source_implementation_snapshot=source_implementation_snapshot)
+    if verified.scope != SCOPE:
+        raise DataReadinessError("investment acquisition replay scope differs")
+    plan_request = _object(paths.read_child(plan, "_request.json"))
+    plan_manifest = _object(paths.read_child(plan, "_manifest.json"))
+    if paths.identity(plan_request["request_path"]) != paths.identity(request_path):
+        raise DataReadinessError("investment acquisition request path differs from the exact plan")
+    collection_request = _object(paths.read_child(output, "_request.json"))
     request_hash = collection_request.get("request_sha256")
     units = archive._bind_provider_symbols(verified.units, lambda ticker: str(plan_request["provider_symbols"][ticker]))
-    expected = {"schema": archive.COLLECTION_SCHEMA, "plan_directory": str(plan.resolve()), "plan_schema": PLAN_SCHEMA,
+    expected = {"schema": archive.COLLECTION_SCHEMA, "plan_directory": str(paths.identity(plan)), "plan_schema": PLAN_SCHEMA,
         "plan_hashes": verified.hashes, "universe_sha256": verified.universe_sha256,
         "provider_unit_set_sha256": archive._provider_unit_set_sha256(units), "provider_symbols": plan_request["provider_symbols"],
         "provider": "alpaca", "timeframe": "1Day", "price_feed": "sip", "adjustment": "raw", "transport_receipts_required": True,
         "workers": 1, "maximum_memory_gib": archive.MAXIMUM_MEMORY_GIB}
     if (collection_request != {**expected, "request_sha256": json_sha256(expected)} or request_hash != json_sha256(expected)):
         raise DataReadinessError("investment raw archive request differs from exact acquisition plan")
-    complete = (output / "_authority.json").exists()
+    authority_path = paths.write(output / "_authority.json")
+    manifest_path = paths.write(output / "_manifest.json")
+    status_path = paths.write(output / "_status.json")
+    complete = authority_path.exists()
     if complete:
         archive.load_complete_swing_history_collection(output, plan_directory=plan, expected_adjustment="raw",
-            expected_plan_authority_sha256=pin)
-    elif (output / "_manifest.json").exists():
+            expected_plan_authority_sha256=pin, paths=paths, source_implementation_snapshot=source_implementation_snapshot)
+    elif manifest_path.exists():
         raise DataReadinessError("investment raw archive has an orphan final manifest")
-    files = dict(plan_request["source_files"])
+    files = {**plan_request["source_files"], **verified.source_implementation_files}
     for path in (*plan.iterdir(), output / "_request.json", output / "_status.json", output / "_manifest.json", output / "_authority.json"):
         if path.is_file():
-            files[path.relative_to(root).as_posix()] = file_sha256(path)
+            files[paths.relative(path).as_posix()] = file_sha256(paths.read(path))
     completed: list[dict[str, Any]] = []
     gaps: list[dict[str, Any]] = []
     captured = requested = 0
@@ -381,7 +402,7 @@ def _verify(root: Path, request_path: Path, plan: Path, output: Path, pin: str) 
         record = archive._load_existing_unit(output, unit, request_sha256=str(request_hash), adjustment="raw", require_transport=True)
         observed: set[str] = set()
         if record is not None:
-            path = resolve_inside_authority(output, record["bars_path"])
+            path = paths.read_child(output, record["bars_path"])
             frame = pd.read_parquet(path, columns=["session_date"])
             if file_sha256(path) != record["bars_sha256"]:
                 raise DataReadinessError("investment raw observations changed during coverage read")
@@ -392,14 +413,14 @@ def _verify(root: Path, request_path: Path, plan: Path, output: Path, pin: str) 
             if observed:
                 actual_ends.append(max(observed))
             for key in ("bars_path", "unit_manifest_path"):
-                path = resolve_inside_authority(output, record[key])
-                files[path.relative_to(root).as_posix()] = file_sha256(path)
-            unit_manifest = _object(resolve_inside_authority(output, record["unit_manifest_path"]))
+                path = paths.read_child(output, record[key])
+                files[paths.relative(path).as_posix()] = file_sha256(path)
+            unit_manifest = _object(paths.read_child(output, record["unit_manifest_path"]))
             for page in unit_manifest["pages"]:
                 for name in (page["raw_path"], page["transport"]["body_path"]):
-                    path = resolve_inside_authority(output, name)
-                    files[path.relative_to(root).as_posix()] = file_sha256(path)
-            completed.append({**record, "archive": output.relative_to(root).as_posix(),
+                    path = paths.read_child(output, name)
+                    files[paths.relative(path).as_posix()] = file_sha256(path)
+            completed.append({**record, "archive": paths.relative(output).as_posix(),
                 "identity_admission": QUARANTINE if unit["role"] == "stock" else "captured_only",
                 "ownership_admitted": False, "actual_first_session": min(observed) if observed else None,
                 "actual_last_session": max(observed) if observed else None, "required_sessions": len(days),
@@ -408,17 +429,17 @@ def _verify(root: Path, request_path: Path, plan: Path, output: Path, pin: str) 
             gaps.append({"unit_id": unit["unit_id"], "security_id": unit["security_id"], "role": unit["role"],
                 "reason": "unit_not_completed" if record is None else "provider_observations_missing",
                 "missing_sessions": sorted(days - observed)})
-    _recheck(root, files)
-    collection_status = _object(output / "_status.json") if (output / "_status.json").is_file() else None
+    _recheck(paths, files)
+    collection_status = _object(status_path) if status_path.is_file() else None
     return {"schema": "market_predictor.investment_raw_acquisition_report", "scope": SCOPE,
-        "archive_status": _object(output / "_manifest.json")["status"] if complete else "incomplete",
+        "archive_status": _object(manifest_path)["status"] if complete else "incomplete",
         "archive_authority_present": complete, "collection_status": collection_status,
         "status_receipt_present": collection_status is not None,
-        "plan_authority_sha256": pin, "plan_directory": plan.relative_to(root).as_posix(),
-        "archive_directory": output.relative_to(root).as_posix(), "outcome_end": OUTCOME_END.isoformat(),
+        "plan_authority_sha256": pin, "plan_directory": paths.relative(plan).as_posix(),
+        "archive_directory": paths.relative(output).as_posix(), "outcome_end": OUTCOME_END.isoformat(),
         "plan_request_sha256": file_sha256(plan / "_request.json"), "plan_manifest_sha256": file_sha256(plan / "_manifest.json"),
         "archive_request_sha256": file_sha256(output / "_request.json"),
-        "archive_authority_sha256": file_sha256(output / "_authority.json") if complete else None,
+        "archive_authority_sha256": file_sha256(authority_path) if complete else None,
         "provider_symbols": plan_request["provider_symbols"],
         "planned_benchmark_symbols": sorted(set(units.loc[units.role.eq("benchmark"), "ticker"].astype(str))),
         "actual_source_end": max(actual_ends) if actual_ends else None, "requested_units": len(units),
@@ -430,8 +451,10 @@ def _verify(root: Path, request_path: Path, plan: Path, output: Path, pin: str) 
 
 
 def verify_investment_raw_acquisition(root: Path, request_path: Path, plan_directory: Path, output_directory: Path, *,
-                                    expected_plan_authority_sha256: str) -> dict[str, Any]:
-    root = root.resolve()
-    with heavy_job_lease("investment-raw-acquisition-verification", runtime_dir=_inside(root, heavy_job_runtime_dir())):
-        return _verify(root, request_path, _inside(root, plan_directory), _inside(root, output_directory),
-            expected_plan_authority_sha256)
+                                    expected_plan_authority_sha256: str, paths: EvidencePaths | None = None,
+                                    source_implementation_snapshot: SourcePin | None = None) -> dict[str, Any]:
+    paths = paths or EvidencePaths(root)
+    runtime = _inside(paths.project_root, heavy_job_runtime_dir())
+    with heavy_job_lease("investment-raw-acquisition-verification", runtime_dir=runtime):
+        return _verify(paths, request_path, paths.directory(plan_directory), paths.directory(output_directory),
+            expected_plan_authority_sha256, source_implementation_snapshot)

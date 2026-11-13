@@ -3,6 +3,7 @@ param(
     [string]$ProjectDir = (Split-Path -Parent $PSScriptRoot),
     [string]$Config = "configs/swing_incremental_collection.toml",
     [string]$SecConfig = "configs/swing_incremental_sec.toml",
+    [string]$DataRoot,
     [ValidateSet("all", "alpaca", "sec")][string]$Source = "all",
     [string]$Through,
     [ValidateRange(1, 1000000)][int]$MaxUnits,
@@ -41,6 +42,7 @@ try {
     $ErrorActionPreference = "Continue"
     foreach ($job in $jobs) {
         $arguments = @("-B", "-m", $job.Module, "--config", (Join-Path $root $job.Config))
+        if ($DataRoot) { $arguments += @("--data-root", $DataRoot) }
         if ($Through) { $arguments += @("--through", $Through) }
         if ($PSBoundParameters.ContainsKey("MaxUnits")) { $arguments += @($job.Limit, "$MaxUnits") }
         if ($Offline) { $arguments += "--offline" }

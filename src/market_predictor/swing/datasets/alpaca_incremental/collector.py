@@ -16,7 +16,9 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.config import Settings
 from market_predictor.core.errors import MemoryBudgetError
 from market_predictor.core.json_integrity import parse_strict_json_object
+from market_predictor.core.path_integrity import verify_no_reparse_ancestry
 from market_predictor.core.system_memory import assert_system_memory_available
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.resources import assert_memory_budget
 from market_predictor.sources.alpaca import AlpacaSource
@@ -47,7 +49,8 @@ def _replay(directory: Path, receipt: dict[str, Any], unit: Unit, config: Config
         if not isinstance(name, str) or Path(name).name != name or not name.startswith("archive-") or not name.endswith(".jsonl.gz"):
             raise IntegrityError("invalid archive reference")
         archive = directory / name
-        if archive.resolve().parent != directory.resolve() or file_sha256(archive) != receipt.get("archive_sha256"):
+        archive = verify_no_reparse_ancestry(archive, label="incremental response")
+        if archive.parent != directory or file_sha256(archive) != receipt.get("archive_sha256"):
             raise IntegrityError("successful archive SHA mismatch")
         counts = dict.fromkeys(unit.symbols, 0)
         pages = rows = 0
@@ -122,6 +125,7 @@ class _Run:
             raise RuntimeError("online acquisition requires a source")
         if self.source.settings.alpaca_stock_feed.lower().strip() != "sip":
             raise ValueError("incremental bars require SIP")
+        directory = verify_no_reparse_ancestry(directory, label="incremental acquisition unit")
         directory.mkdir(parents=True, exist_ok=True)
         archive = directory / f"archive-{uuid4().hex}.jsonl.gz"
         counts = dict.fromkeys(unit.symbols, 0)
@@ -229,9 +233,9 @@ class _Run:
 
 
 def _run(config_path: Path, through: date, cutoff: datetime, max_units: int | None, offline: bool,
-         source: AlpacaSource | None) -> dict[str, Any]:
+         source: AlpacaSource | None, *, paths: EvidencePaths | None = None) -> dict[str, Any]:
     guard_memory()
-    config, output, request = load_config(config_path)
+    config, output, request = load_config(config_path, paths=paths)
     return _run_loaded(config, output, request, through, cutoff, max_units, offline, source)
 
 
@@ -356,7 +360,8 @@ def _revision(run: _Run, symbols: tuple[str, ...], day: date, capture_date: date
 
 
 def collect(config_path: Path, *, through: date | None = None, max_units: int | None = None,
-            offline: bool = False, source: AlpacaSource | None = None, root: Path | None = None) -> dict[str, Any]:
+            offline: bool = False, source: AlpacaSource | None = None, root: Path | None = None,
+            data_root: Path | None = None) -> dict[str, Any]:
     """Own the heavy lease. Inject an AlpacaSource with a fixture client for tests.
 
     Through today produces a separate partial snapshot, never a completed daily unit.
@@ -370,7 +375,7 @@ def collect(config_path: Path, *, through: date | None = None, max_units: int | 
     if type(requested_through) is not date or requested_through > cutoff.date():
         raise ValueError("through must be a UTC calendar date no later than today")
     root = (root or Path.cwd()).resolve()
-    config_path = (root / config_path).resolve()
+    config_path = root / config_path
     runtime = heavy_job_runtime_dir()
     with heavy_job_lease("alpaca-incremental-source-only", runtime_dir=root / runtime, config_path=config_path):
         owned_source: AlpacaSource | None = None
@@ -379,7 +384,10 @@ def collect(config_path: Path, *, through: date | None = None, max_units: int | 
             if not offline and source is None:
                 owned_source = AlpacaSource(Settings())
                 source = owned_source
-            return _run(config_path.resolve(), requested_through, cutoff, max_units, offline, source)
+            paths = None if data_root is None else EvidencePaths(root, data_root)
+            if paths is None:
+                config_path = config_path.resolve()
+            return _run(config_path, requested_through, cutoff, max_units, offline, source, paths=paths)
         except MemoryBudgetError:
             return {"status": "paused_memory", "source_only": True, "training_ready": False,
                 "complete_through_utc_date": None, "today_complete": False}

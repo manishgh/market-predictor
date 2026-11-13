@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from market_predictor.core.immutable_publication import publish_new_file
+from market_predictor.core.path_integrity import verify_no_reparse_ancestry
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import write_json_object
 from market_predictor.swing.datasets.alpaca_incremental.config import read_object
@@ -16,6 +18,7 @@ class IntegrityError(ValueError):
 
 
 def publish(path: Path, payload: dict[str, Any], *, replace: bool = False) -> None:
+    path = verify_no_reparse_ancestry(path, label="incremental publication")
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     envelope = {"payload": payload, "sha256": json_sha256(payload)}
@@ -26,14 +29,14 @@ def publish(path: Path, payload: dict[str, Any], *, replace: bool = False) -> No
         if replace:
             os.replace(temporary, path)
         else:
-            os.link(temporary, path)
+            publish_new_file(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
 
 
 def verified(path: Path) -> dict[str, Any]:
     try:
-        envelope = read_object(path)
+        envelope = read_object(verify_no_reparse_ancestry(path, label="incremental receipt"))
         payload = envelope.get("payload")
         if not isinstance(payload, dict) or envelope.get("sha256") != json_sha256(payload):
             raise IntegrityError("incremental receipt hash mismatch")

@@ -6,6 +6,7 @@ import json
 from datetime import date
 from pathlib import Path
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.heavy_jobs import HeavyJobBusyError
 from market_predictor.swing.datasets.alpaca_incremental import collect
 from market_predictor.swing.datasets.alpaca_incremental.storage import IntegrityError
@@ -15,17 +16,19 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Bounded Alpaca source-only incremental archives")
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--root", type=Path, default=Path.cwd(), help="Workspace root for the shared lease; default CWD.")
+    parser.add_argument("--data-root", type=Path, help="Root holding the selected data namespaces.")
     parser.add_argument("--through", type=date.fromisoformat, help="UTC date; default yesterday. Today is partial only.")
     parser.add_argument("--max-units", type=int)
     parser.add_argument("--offline", action="store_true")
     args = parser.parse_args(argv)
     try:
-        result = collect(args.config, through=args.through, max_units=args.max_units, offline=args.offline, root=args.root)
+        result = collect(args.config, through=args.through, max_units=args.max_units, offline=args.offline,
+                         root=args.root, data_root=args.data_root)
     except HeavyJobBusyError:
         result = {"status": "busy", "source_only": True}
     except IntegrityError:
         result = {"status": "integrity_failed", "source_only": True}
-    except (ValueError, OSError):
+    except (DataReadinessError, ValueError, OSError):
         result = {"status": "invalid_config_or_io", "source_only": True}
     compact = {key: value for key, value in result.items() if key not in ("families", "revisions", "partial_today")}
     for scope in ("families", "revisions", "partial_today"):

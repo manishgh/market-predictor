@@ -20,9 +20,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.core.json_integrity import parse_strict_json_object
+from market_predictor.core.path_integrity import resolve_existing_file_inside
 from market_predictor.core.system_memory import assert_system_memory_available
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import resolve_inside_authority, write_json_object
+from market_predictor.evidence.io import write_json_object
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.locking import file_lock
 from market_predictor.resources import assert_memory_budget, assert_peak_memory_budget
@@ -58,21 +60,23 @@ def _object(path: Path) -> dict[str, Any]:
     return parse_strict_json_object(path.read_bytes(), label=str(path))
 
 
-def _verify_sources(root: Path, files: dict[str, str]) -> None:
+def _verify_sources(root: Path, files: dict[str, str], *, paths: EvidencePaths | None = None) -> None:
+    paths = paths or EvidencePaths(root)
     for name, digest in files.items():
-        if file_sha256(resolve_inside_authority(root, name)) != digest:
+        if file_sha256(paths.read(name)) != digest:
             raise DataReadinessError("corporate-action source binding differs")
 
 
-def _prepare(root: Path, config: Path) -> dict[str, Any]:
+def _prepare(root: Path, config: Path, *, paths: EvidencePaths | None = None) -> dict[str, Any]:
+    paths = paths or EvidencePaths(root)
     if config.stat().st_size > 1024**2:
         raise DataReadinessError("corporate-action configuration exceeds size limit")
     raw = tomllib.loads(config.read_text(encoding="utf-8"))
     if raw.get("schema_version") == "market_predictor.swing_corporate_action_scope":
-        request = {**prepare_corporate_action_scope(root, config, raw), "implementation_files": _implementation()}
+        request = {**prepare_corporate_action_scope(root, config, raw, paths=paths), "implementation_files": _implementation()}
         return {**request, "request_sha256": json_sha256(request)}
     policy = _Policy.model_validate_json(json.dumps(raw))
-    path = resolve_inside_authority(root, policy.observation_inventory)
+    path = paths.read(policy.observation_inventory)
     report = _object(path)
     if (report.get("audit_sha256") != policy.observation_audit_sha256
             or json_sha256({k: v for k, v in report.items() if k != "audit_sha256"}) != policy.observation_audit_sha256
@@ -82,12 +86,14 @@ def _prepare(root: Path, config: Path) -> dict[str, Any]:
             or not date(2019, 7, 9) <= policy.process_start <= policy.process_end):
         raise DataReadinessError("corporate-action collection requires the pinned initial-fit inventory")
     bound = dict(report["source_files"])
-    bound[path.relative_to(root).as_posix()] = file_sha256(path)
-    bound[config.relative_to(root).as_posix()] = file_sha256(config)
-    _verify_sources(root, bound)
-    _verify_sources(path.parent, report["outputs"])
+    bound[paths.relative(path).as_posix()] = file_sha256(path)
+    bound[paths.relative(config).as_posix()] = file_sha256(config)
+    _verify_sources(root, bound, paths=paths)
     for relative, digest in report["outputs"].items():
-        bound[(path.parent / relative).relative_to(root).as_posix()] = digest
+        child = paths.read_child(path.parent, relative)
+        if file_sha256(child) != digest:
+            raise DataReadinessError("corporate-action source binding differs")
+        bound[paths.relative(child).as_posix()] = digest
     cases = report["cases"]
     tickers = sorted({row["ticker"] for row in cases})
     if (not tickers or len(tickers) > 2000 or len({row["security_id"] for row in cases}) != policy.expected_securities
@@ -108,7 +114,7 @@ def _implementation() -> dict[str, str]:
 
 
 def _archived_request(output: Path, prepared: dict[str, Any]) -> dict[str, Any]:
-    archived = _object(resolve_inside_authority(output, "_request.json"))
+    archived = _object(resolve_existing_file_inside(output, "_request.json", label="corporate-action request"))
     unsigned = {key: value for key, value in archived.items() if key != "request_sha256"}
     identity = archived.get("implementation_files")
     if (archived.get("request_sha256") != json_sha256(unsigned) or not isinstance(identity, dict)
@@ -142,8 +148,10 @@ def _response(body: bytes, metadata: dict[str, Any]) -> HttpByteResponse:
 
 def _check_attempt(attempt: Path, request: dict[str, Any], ticker: str, *,
     reconstruction: ValidatedReconstruction | None = None, root: Path | None = None,
+    paths: EvidencePaths | None = None,
 ) -> dict[str, Any]:
-    receipt = _object(attempt / "receipt.json")
+    receipt_path = resolve_existing_file_inside(attempt, "receipt.json", label="corporate-action receipt")
+    receipt = _object(receipt_path)
     unsigned = {k: v for k, v in receipt.items() if k != "receipt_sha256"}
     if (receipt.get("receipt_sha256") != json_sha256(unsigned)
             or receipt.get("request_sha256") != request["request_sha256"] or receipt.get("ticker") != ticker
@@ -159,7 +167,7 @@ def _check_attempt(attempt: Path, request: dict[str, Any], ticker: str, *,
             or (attempt.parents[2] / "_reconstruction.json").exists()):
         if root is None:
             raise DataReadinessError("corporate-action reconstructed receipt requires its workspace root")
-        reconstruction = load_reconstruction_proof(root, attempt.parents[2], request)
+        reconstruction = load_reconstruction_proof(root, attempt.parents[2], request, paths=paths)
     validate_reconstructed_receipt(attempt, request, receipt, reconstruction)
     token = None
     seen_tokens: set[str] = set()
@@ -173,10 +181,10 @@ def _check_attempt(attempt: Path, request: dict[str, Any], ticker: str, *,
             raise DataReadinessError("corporate-action page chain differs")
         if token is not None:
             seen_tokens.add(token)
-        metadata_path = resolve_inside_authority(attempt, page["metadata_path"])
+        metadata_path = resolve_existing_file_inside(attempt, page["metadata_path"], label="corporate-action metadata")
         if file_sha256(metadata_path) != page["metadata_sha256"]:
             raise DataReadinessError("corporate-action metadata hash differs")
-        body_path = resolve_inside_authority(attempt, page["body_path"])
+        body_path = resolve_existing_file_inside(attempt, page["body_path"], label="corporate-action body")
         if body_path.stat().st_size > request["policy"]["maximum_response_bytes"]:
             raise DataReadinessError("corporate-action response exceeds limit")
         metadata = _object(metadata_path)
@@ -207,7 +215,7 @@ def _check_attempt(attempt: Path, request: dict[str, Any], ticker: str, *,
             raise DataReadinessError("corporate-action acquisition lacks valid terminal evidence")
     elif not isinstance(receipt.get("error_type"), str) or decode_error and decode_error != receipt["error_type"]:
         raise DataReadinessError("corporate-action failure receipt differs")
-    return {"attempt": attempt.name, "receipt_sha256": file_sha256(attempt / "receipt.json"),
+    return {"attempt": attempt.name, "receipt_sha256": file_sha256(receipt_path),
         "state": receipt["state"], "error_type": receipt["error_type"], "counts": dict(counts)}
 
 
@@ -277,18 +285,18 @@ def _collect(output: Path, request: dict[str, Any], ticker: str, fetch: ActionFe
     return pressure
 
 
-def _report(output: Path, request: dict[str, Any], *, root: Path | None = None) -> dict[str, Any]:
+def _report(output: Path, request: dict[str, Any], *, root: Path | None = None, paths: EvidencePaths | None = None) -> dict[str, Any]:
     results = []
     reconstruction = None
     if (output / "_reconstruction.json").exists():
         if root is None:
             raise DataReadinessError("corporate-action reconstruction report requires its workspace root")
-        reconstruction = load_reconstruction_proof(root, output, request)
+        reconstruction = load_reconstruction_proof(root, output, request, paths=paths)
     if (output / "tickers").exists() and any(path.name not in request["tickers"] for path in (output / "tickers").iterdir()):
         raise DataReadinessError("corporate-action collection contains an unknown ticker")
     for ticker in request["tickers"]:
         parent = output / "tickers" / ticker
-        attempts = [_check_attempt(path, request, ticker, reconstruction=reconstruction, root=root)
+        attempts = [_check_attempt(path, request, ticker, reconstruction=reconstruction, root=root, paths=paths)
             for path in sorted(parent.iterdir())] if parent.exists() else []
         successes = [row for row in attempts if row["state"] == "acquired"]
         if len(successes) > 1:
@@ -313,24 +321,28 @@ def collect_holding_corporate_actions(
     root: Path, config_path: Path, output_directory: Path, *, fetch: ActionFetcher | None = None,
     expected_audit_sha256: str | None = None,
     replay_metadata: dict[str, Any] | None = None,
+    paths: EvidencePaths | None = None,
 ) -> dict[str, Any]:
     """Replay original acquisition with an external audit pin.
 
     ``replay_metadata`` receives current validator identity separately; it is not
     inserted into the immutable acquisition report or its historical audit hash.
     """
-    root = root.resolve()
-    config = resolve_inside_authority(root, str(config_path))
-    output = (root / output_directory).resolve()
+    paths = paths or EvidencePaths(root)
+    root = paths.project_root
+    config = paths.read(config_path)
+    output = paths.write(output_directory)
     runtime = (root / heavy_job_runtime_dir()).resolve()
-    if not output.is_relative_to(root) or not runtime.is_relative_to(root):
+    if not runtime.is_relative_to(root):
         raise DataReadinessError("corporate-action paths must remain inside the workspace")
     with heavy_job_lease("collect-swing-holding-corporate-actions", runtime_dir=runtime):
-        with file_lock(output.parent / f".{output.name}.collection", timeout=0):
+        lock_target = output.parent / f".{output.name}.collection"
+        paths.write(lock_target.with_name(f"{lock_target.name}.lock"))
+        with file_lock(lock_target, timeout=0):
             assert_memory_budget(stage="corporate-action input loading", hard_budget_gib=5.0, headroom_gib=0.75)
             if fetch is not None:
                 assert_system_memory_available()
-            request = _prepare(root, config)
+            request = _prepare(root, config, paths=paths)
             replay_implementation = request["implementation_files"]
             if output.exists() and expected_audit_sha256 is None:
                 raise DataReadinessError("corporate-action resume requires an independent audit pin")
@@ -342,8 +354,8 @@ def collect_holding_corporate_actions(
                 write_json_object(staging / "_request.json", request)
                 os.rename(staging, output)
             request = _archived_request(output, request)
-            report = _report(output, request, root=root)
-            _verify_sources(root, request["bound_files"])
+            report = _report(output, request, root=root, paths=paths)
+            _verify_sources(root, request["bound_files"], paths=paths)
             _verify_sources(Path(__file__).resolve().parents[2], replay_implementation)
             if expected_audit_sha256 is not None and report["audit_sha256"] != expected_audit_sha256:
                 raise DataReadinessError("corporate-action independent audit pin differs")
@@ -359,9 +371,9 @@ def collect_holding_corporate_actions(
                     pressure = _collect(output, request, ticker, fetch)
                     if pressure is not None:
                         break
-            _verify_sources(root, request["bound_files"])
+            _verify_sources(root, request["bound_files"], paths=paths)
             _verify_sources(Path(__file__).resolve().parents[2], replay_implementation)
-            report = _report(output, request, root=root)
+            report = _report(output, request, root=root, paths=paths)
             assert_peak_memory_budget(stage="corporate-action report", hard_budget_gib=5.0, headroom_gib=0.75)
             reports = output / "reports"
             reports.mkdir(exist_ok=True)

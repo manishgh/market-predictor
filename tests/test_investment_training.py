@@ -162,11 +162,13 @@ def test_custom_shared_lease_refuses_before_training_inputs(tmp_path: Path, monk
     from market_predictor.research import investment_training as owner
 
     runtime = tmp_path / "shared-runtime"
+    alternate = tmp_path.with_name(tmp_path.name + "-datasets")
+    alternate.mkdir()
     monkeypatch.setenv("MARKET_PREDICTOR_RUNTIME_DIR", str(runtime))
     with heavy_job_lease("other-job", runtime_dir=runtime), pytest.raises(HeavyJobBusyError):
         owner.train_investment_models(root=tmp_path, request=tmp_path / "does-not-exist.json",
-            request_sha256="0" * 64, output=tmp_path / "output")
-    assert not (tmp_path / "output").exists()
+            request_sha256="0" * 64, output=tmp_path / "data/research/output", data_root=alternate)
+    assert not (alternate / "research/output").exists()
 
 
 def test_actual_fit_clock_cannot_precede_label_verification(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -11,8 +11,9 @@ import pandas as pd
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
+from market_predictor.core.path_integrity import verify_tree_containment
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import inside, resolve_inside_authority
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.sources.official_documents import load_official_document_inventory, verify_official_document_collection
 from market_predictor.swing.datasets.history_plan_publication import PLAN_SCHEMA, UNIT_COLUMNS, publish_daily_history_plan
 from market_predictor.swing.labels.holding_paths import holding_calendar
@@ -35,32 +36,34 @@ def pinned_object(path: Path, expected_sha256: str | None = None) -> dict[str, A
     return parse_strict_json_object(payload, label=str(path))
 
 
-def _parent(root: Path, policy: SymbolCorrectionPolicy, loader: ArchiveLoader) -> dict[str, Any]:
-    plan, archive = inside(root, policy.parent_plan), inside(root, policy.parent_archive)
-    plan_authority = pinned_object(plan / "_authority.json", policy.parent_plan_sha256)
-    archive_authority = pinned_object(archive / "_authority.json", policy.parent_archive_sha256)
-    request = pinned_object(plan / "_request.json", plan_authority["request_sha256"])
+def _parent(root: Path, policy: SymbolCorrectionPolicy, loader: ArchiveLoader, paths: EvidencePaths) -> dict[str, Any]:
+    plan, archive = paths.directory(policy.parent_plan), paths.directory(policy.parent_archive)
+    plan_authority = pinned_object(paths.read_child(plan, "_authority.json"), policy.parent_plan_sha256)
+    archive_authority = pinned_object(paths.read_child(archive, "_authority.json"), policy.parent_archive_sha256)
+    request = pinned_object(paths.read_child(plan, "_request.json"), plan_authority["request_sha256"])
     if request.get("scope") != "initial_fit_raw_share_acquisition":
         raise DataReadinessError("symbol correction parent must be the original initial-fit plan")
     result = loader(archive, plan_directory=plan, expected_adjustment="raw",
         expected_plan_authority_sha256=policy.parent_plan_sha256)
-    pinned_object(archive / "_authority.json", policy.parent_archive_sha256)
-    if result != pinned_object(archive / "_manifest.json", archive_authority["artifact_sha256"]):
+    pinned_object(paths.read_child(archive, "_authority.json"), policy.parent_archive_sha256)
+    if result != pinned_object(paths.read_child(archive, "_manifest.json"), archive_authority["artifact_sha256"]):
         raise DataReadinessError("symbol correction parent manifest changed after replay")
-    pinned_object(plan / "_request.json", plan_authority["request_sha256"])
+    pinned_object(paths.read_child(plan, "_request.json"), plan_authority["request_sha256"])
     return result
 
 
 def correction_requirements(root: Path, config: Path, policy_sha256: str, loader: ArchiveLoader,
-    ) -> tuple[dict[str, Any], dict[str, Any], pd.DataFrame]:
+    *, paths: EvidencePaths | None = None) -> tuple[dict[str, Any], dict[str, Any], pd.DataFrame]:
     """Reconstruct exact replacement units from reviewed facts and immutable parents."""
     root = root.resolve()
-    policy = load_symbol_correction_policy(root, config, policy_sha256)
-    parent = _parent(root, policy, loader)
-    plan_authority = pinned_object(inside(root, policy.parent_plan) / "_authority.json", policy.parent_plan_sha256)
-    original = pinned_object(inside(root, policy.parent_plan) / "_request.json", plan_authority["request_sha256"])
-    inventory = load_official_document_inventory(resolve_inside_authority(root, policy.document_inventory))
-    documents = verify_official_document_collection(inside(root, policy.document_archive), inventory)
+    paths = paths or EvidencePaths(root)
+    policy = load_symbol_correction_policy(root, config, policy_sha256, paths=paths)
+    parent = _parent(root, policy, loader, paths)
+    plan_authority = pinned_object(paths.read_child(paths.directory(policy.parent_plan), "_authority.json"), policy.parent_plan_sha256)
+    original = pinned_object(paths.read_child(paths.directory(policy.parent_plan), "_request.json"), plan_authority["request_sha256"])
+    inventory = load_official_document_inventory(paths.read(policy.document_inventory))
+    document_archive = verify_tree_containment(paths.directory(policy.document_archive), label="symbol correction document archive")
+    documents = verify_official_document_collection(document_archive, inventory)
     if documents["status"] != "collected_unreviewed" or json_sha256(documents) != policy.document_report_sha256:
         raise DataReadinessError("symbol correction reviewed document collection differs")
     available_documents = {item.document_id for item in inventory.documents}
@@ -99,7 +102,7 @@ def correction_requirements(root: Path, config: Path, policy_sha256: str, loader
             for c in policy.corrections
         ):
             raise DataReadinessError("inherited benchmark interval does not cover corrections")
-        frame = pd.read_parquet(resolve_inside_authority(inside(root, policy.parent_archive), benchmark["bars_path"]),
+        frame = pd.read_parquet(paths.read_child(paths.directory(policy.parent_archive), benchmark["bars_path"]),
             columns=["session_date"])
         dates = frame.session_date.astype(str).tolist()
         if dates != [day.isoformat() for day in holding_calendar(
@@ -107,11 +110,11 @@ def correction_requirements(root: Path, config: Path, policy_sha256: str, loader
             raise DataReadinessError("inherited benchmark exact session coverage differs")
     membership = original["membership_authority"]
     request = {"schema": PLAN_SCHEMA, "scope": CORRECTION_SCOPE, "source_root": str(root),
-        "policy_path": resolve_inside_authority(root, str(config)).relative_to(root).as_posix(),
+        "policy_path": paths.relative(config).as_posix(),
         "policy_sha256": policy_sha256, "policy": policy.model_dump(mode="json"),
         "membership_authority": membership, "provider_symbols": {c.ticker: c.provider_symbol for c in policy.corrections},
         "asof_policy": "inclusive_unit_end_date_entity_mapping_not_ownership",
-        "parent_archive_manifest_sha256": file_sha256(inside(root, policy.parent_archive) / "_manifest.json"),
+        "parent_archive_manifest_sha256": file_sha256(paths.read_child(paths.directory(policy.parent_archive), "_manifest.json")),
         "inherited_benchmarks": benchmarks, "replacements": replacements}
     manifest = {"schema": PLAN_SCHEMA, "scope": CORRECTION_SCOPE, "status": "ready_for_daily_history_collection",
         "outcomes_read": False, "accounting_eligible": False, "label_eligible": False, "promotion_eligible": False,
@@ -120,14 +123,15 @@ def correction_requirements(root: Path, config: Path, policy_sha256: str, loader
         "missing_session_ranges": [{"first_session": str(c.start_date), "last_session": str(c.end_date)} for c in policy.corrections],
         "daily_bars": {"status": "ready", "source": "alpaca", "timeframe": "1Day", "price_feed": "sip",
             "adjustment": "raw", "planned_units": 2, "stock_units": 2, "benchmark_units": 0}}
-    load_symbol_correction_policy(root, config, policy_sha256)
+    load_symbol_correction_policy(root, config, policy_sha256, paths=paths)
     return request, manifest, pd.DataFrame(rows, columns=list(UNIT_COLUMNS))
 
 
 def validate_symbol_correction_collection_plan(*, directory: Path, request: dict[str, Any],
-    manifest: dict[str, Any], units: pd.DataFrame, parent_archive_loader: ArchiveLoader) -> None:
+    manifest: dict[str, Any], units: pd.DataFrame, parent_archive_loader: ArchiveLoader,
+    paths: EvidencePaths | None = None) -> None:
     expected_request, expected_manifest, expected_units = correction_requirements(
-        Path(request["source_root"]), Path(request["policy_path"]), request["policy_sha256"], parent_archive_loader)
+        Path(request["source_root"]), Path(request["policy_path"]), request["policy_sha256"], parent_archive_loader, paths=paths)
     actual_manifest = {key: value for key, value in manifest.items() if key not in {"resources", "request_sha256"}}
     actual_manifest["daily_bars"] = {key: value for key, value in manifest["daily_bars"].items() if key != "units_artifact"}
     actual_units = units[list(UNIT_COLUMNS)].sort_values(list(UNIT_COLUMNS)).reset_index(drop=True)
@@ -137,12 +141,13 @@ def validate_symbol_correction_collection_plan(*, directory: Path, request: dict
 
 
 def publish_symbol_correction_plan(root: Path, config: Path, policy_sha256: str, output: Path,
-    loader: ArchiveLoader) -> dict[str, Any]:
-    request, manifest, units = correction_requirements(root, config, policy_sha256, loader)
-    destination = inside(root, output)
+    loader: ArchiveLoader, *, paths: EvidencePaths | None = None) -> dict[str, Any]:
+    paths = paths or EvidencePaths(root)
+    request, manifest, units = correction_requirements(root, config, policy_sha256, loader, paths=paths)
+    destination = paths.write(output)
     policy = SymbolCorrectionPolicy.model_validate(request["policy"])
     for raw in (policy.parent_plan, policy.parent_archive, policy.document_archive, str(config)):
-        source = inside(root, raw)
-        if source.is_relative_to(destination) or destination.is_relative_to(source):
+        source = paths.identity(raw)
+        if source.is_relative_to(paths.identity(destination)) or paths.identity(destination).is_relative_to(source):
             raise DataReadinessError("symbol correction output overlaps an immutable input")
     return publish_daily_history_plan(output=destination, request=request, manifest=manifest, units=units)

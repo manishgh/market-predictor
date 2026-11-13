@@ -12,6 +12,7 @@ import pytest
 from market_predictor.canonical.store import file_sha256, manifest_path_for
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.investment import dataset as data
 from market_predictor.investment.contracts import InvestmentTargetRequest, InvestmentTargetResult
 from market_predictor.investment.fundamentals import FEATURE_CONTRACT_SHA256, FEATURE_NAMES, FundamentalSnapshot
@@ -246,6 +247,33 @@ def test_complete_publication_admission_loader_and_unknown_forecast_population(t
     assert not (tmp_path / "producer-raw-provenance-not-reopened").exists()
     assert json.loads(Path(result["admission"]["path"]).read_text())["research_training_allowed"] is True
     assert str(tmp_path / "news/strategy_contract.toml") in dataset.source_files
+
+
+def test_dataset_rebuild_and_load_through_alternate_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = tmp_path / "project"
+    research = project / "data/research"
+    value = fixture(research, monkeypatch)
+    monkeypatch.setattr(publisher, "_implementation", lambda: {})
+    default = build(project, value)
+    manifest, admission = SourcePin(**default["dataset"]), SourcePin(**default["admission"])
+    expected = data.load_investment_dataset(root=project, manifest=manifest, admission=admission)
+    alternate = tmp_path / "alternate"
+    (project / "data").rename(alternate)
+    paths = EvidencePaths(project, alternate)
+    loaded = data.load_investment_dataset(root=project, manifest=manifest, admission=admission, paths=paths)
+    pd.testing.assert_frame_equal(loaded.features, expected.features)
+    pd.testing.assert_frame_equal(loaded.metadata, expected.metadata)
+    assert loaded.source_files == expected.source_files
+
+    logical_output = research / "rebuild"
+    result = publisher.build_investment_dataset(root=project, request=Path(value["request_pin"]["path"]),
+        request_sha256=value["request_pin"]["sha256"], output=logical_output, data_root=alternate)
+    assert Path(result["dataset"]["path"]).is_relative_to(logical_output)
+    assert not logical_output.exists()
+    rebuilt = data.load_investment_dataset(root=project, manifest=SourcePin(**result["dataset"]),
+        admission=SourcePin(**result["admission"]), paths=paths)
+    pd.testing.assert_frame_equal(rebuilt.features, expected.features)
+    pd.testing.assert_frame_equal(rebuilt.metadata, expected.metadata)
 
 
 @pytest.mark.parametrize("poison", ["source_bytes", "producer_bytes", "producer_mapping", "false_news_receipt", "past_evaluation",

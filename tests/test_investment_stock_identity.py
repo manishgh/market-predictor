@@ -63,7 +63,7 @@ def scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     facts = _extract(tmp_path, _document(_context("base"), _issuer("base"), _row("base", ticker="TEST")), ticker="TEST")
     calls: list[str] = []
 
-    def anchor(*args: Any):
+    def anchor(*args: Any, **kwargs: Any):
         calls.append("parse")
         source = tmp_path / "synthetic.zip"
         source.write_bytes(b"explicit synthetic class source")
@@ -94,7 +94,7 @@ def test_anchor_is_not_a_lifetime_start_and_clocks_remain_current(scope):
 def test_absent_index_membership_does_not_end_positive_relation(scope, monkeypatch):
     relations = scope["relations"]
     members = scope["members"].iloc[:0]
-    monkeypatch.setattr(identity, "_authority_frames", lambda *args: (relations, members))
+    monkeypatch.setattr(identity, "_authority_frames", lambda *args, **kwargs: (relations, members))
     assert replay(scope, "2024-05-31").missing_reasons == ()
 
 
@@ -105,14 +105,14 @@ def test_excluded_or_other_competing_owner_cannot_disappear(scope, monkeypatch, 
     other = target.iloc[0].to_dict()
     other["security_id"] = "excluded:other-class"
     target.loc[len(target)] = other
-    monkeypatch.setattr(identity, "_authority_frames", lambda *args: (relations, members))
+    monkeypatch.setattr(identity, "_authority_frames", lambda *args, **kwargs: (relations, members))
     assert not replay(scope, "2024-05-31").proven_sessions
 
 
 def test_partial_session_owner_is_not_a_full_session_owner(scope, monkeypatch):
     relations = scope["relations"].copy()
     relations.loc[0, "effective_to_utc"] = pd.Timestamp("2024-05-31T16:00:00Z")
-    monkeypatch.setattr(identity, "_authority_frames", lambda *args: (relations, scope["members"]))
+    monkeypatch.setattr(identity, "_authority_frames", lambda *args, **kwargs: (relations, scope["members"]))
     assert replay(scope, "2024-05-31").proven_sessions == ()
 
 
@@ -121,7 +121,7 @@ def test_cik_alone_cannot_resolve_another_share_class(scope, monkeypatch):
     other = relations.iloc[0].to_dict()
     other.update(ticker="TESTB", security_id="issuer:class-b")
     relations.loc[1] = other
-    monkeypatch.setattr(identity, "_authority_frames", lambda *args: (relations, scope["members"]))
+    monkeypatch.setattr(identity, "_authority_frames", lambda *args, **kwargs: (relations, scope["members"]))
     assert replay(scope, "2024-05-31").competing_class_tickers == ("TESTB",)
     scope["proof"] = scope["proof"].model_copy(update={"security_id": "issuer:class-b"})
     with pytest.raises(DataReadinessError, match="exact retained security/ticker"):

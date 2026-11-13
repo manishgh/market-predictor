@@ -19,6 +19,7 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.swing.contracts.backtest_corporate_actions import (
     BacktestCorporateActionContext,
     BacktestCorporateActionPolicy,
@@ -79,15 +80,16 @@ def _positive(value: Any) -> float:
 
 
 def _selected_pages(root: Path, evidence: CorporateActionEvidence,
-    memory_guard: Callable[[], None]) -> dict[str, tuple[str, str, str, str]]:
+    memory_guard: Callable[[], None], *, paths: EvidencePaths | None = None) -> dict[str, tuple[str, str, str, str]]:
     """Select only acquired receipts belonging to the independently replayed request."""
+    paths = paths or EvidencePaths(root)
     pages: dict[str, tuple[str, str, str, str]] = {}
     receipts: set[str] = set()
     for name, digest in evidence.source_files.items():
         if not name.endswith("/receipt.json") or "/tickers/" not in name:
             continue
         memory_guard()
-        path = inside(root, name)
+        path = paths.read(name)
         if path.stat().st_size > 256 * 1024:
             raise DataReadinessError("backtest action receipt exceeds its bound")
         raw = path.read_bytes()
@@ -101,8 +103,8 @@ def _selected_pages(root: Path, evidence: CorporateActionEvidence,
             raise DataReadinessError("backtest action successful receipt is ambiguous")
         receipts.add(symbol)
         for page in receipt["pages"]:
-            body = inside(path.parent, page["body_path"]).relative_to(root).as_posix()
-            metadata = inside(path.parent, page["metadata_path"]).relative_to(root).as_posix()
+            body = paths.relative(paths.read_child(path.parent, page["body_path"])).as_posix()
+            metadata = paths.relative(paths.read_child(path.parent, page["metadata_path"])).as_posix()
             if (evidence.source_files.get(body) != page["body_sha256"]
                     or evidence.source_files.get(metadata) != page["metadata_sha256"] or body in pages):
                 raise DataReadinessError("backtest action page differs from selected receipt")

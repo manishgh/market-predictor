@@ -15,6 +15,7 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.commands import investment_research
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.investment.diagnostics import PREDICTION
 from market_predictor.investment.ranking import within_date_rank_targets
 from market_predictor.investment.training import TARGET, investment_fold
@@ -24,12 +25,14 @@ from tests.test_investment_diagnostics_publication import write
 from tests.test_investment_feature_ablation_publication import prepare
 
 
+@pytest.mark.parametrize("relocated", [False, True])
 def test_frozen_rank_experiment_publishes_dimensionless_scores_and_preserves_references(
-    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch,
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch, relocated: bool,
 ) -> None:
     # The root keeps canonical nested fit paths short enough for Windows.
-    root = tmp_path_factory.getbasetemp()
-    fixture = root / "rank-fixture"
+    base = tmp_path_factory.getbasetemp()
+    root = base / ("a" if relocated else "b")
+    fixture = root / "data/research"
     value, _ = prepare(fixture, monkeypatch)
     dataset = value["dataset"]
     dataset.features.iloc[:, 0] = pd.factorize(dataset.metadata.security_id)[0].astype(float)
@@ -59,17 +62,22 @@ def test_frozen_rank_experiment_publishes_dimensionless_scores_and_preserves_ref
 
     monkeypatch.setattr(module, "_publish_fit", publish_fit)
     arguments = {"root": root, "request": Path(request["path"]), "request_sha256": request["sha256"]}
-    output = root / "ranking"
-    result = module.train_investment_ranking(**arguments, output=output)
-    report = json.loads((output / "_manifest.json").read_text())
+    output = root / "data/research/ranking"
+    alternate = base / "c" if relocated else None
+    if alternate is not None:
+        (root / "data").rename(alternate)
+    paths = EvidencePaths(root, alternate)
+    result = module.train_investment_ranking(**arguments, output=output, data_root=alternate)
+    report = json.loads(paths.read(output / "_manifest.json").read_text())
     assert result["fold_scope_fits"] == len(calls) == len(set(calls)) == 12
     assert result["final_models"] == 0 and result["reused_validation_fits"] == 36
     assert len(report["unit_diagnostics"]) == 48 and len(report["aggregate_diagnostics"]) == 16
-    assert all(file_sha256(path) == digest for path, digest in reference_files.items())
+    assert all(file_sha256(paths.read(path)) == digest for path, digest in reference_files.items())
     assert not any(".investment-" in path for path in report["source_files"])
     for key, pin in report["new_units"].items():
-        path = Path(pin["path"])
-        assert path == output / key / "_manifest.json" and file_sha256(path) == pin["sha256"]
+        assert Path(pin["path"]) == output / key / "_manifest.json"
+        path = paths.read(pin["path"])
+        assert file_sha256(path) == pin["sha256"]
         unit = json.loads(path.read_text())
         assert unit["schema"] == "market_predictor.investment_ranking_model"
         assert unit["score_units"] == "dimensionless" and unit["score_column"] == module.RANKING_SCORE
@@ -85,11 +93,11 @@ def test_frozen_rank_experiment_publishes_dimensionless_scores_and_preserves_ref
         assert unit["metrics"] == report["unit_diagnostics"][key]
     assert len(report["improvement_checks"]["years"]) == 12
     old_model = next(Path(pin["path"]).parent / "model.joblib" for pin in report["reused_units"].values())
-    old_model.write_bytes(b"tampered historical model")
-    refused = root / "refused"
+    paths.read(old_model).write_bytes(b"tampered historical model")
+    refused = root / "data/research/refused"
     with pytest.raises(DataReadinessError, match="source bytes changed"):
-        module.train_investment_ranking(**arguments, output=refused)
-    assert len(calls) == 12 and not refused.exists()
+        module.train_investment_ranking(**arguments, output=refused, data_root=alternate)
+    assert len(calls) == 12 and not paths.write(refused).exists()
 
 
 def test_rank_publisher_fits_only_purged_training_targets_despite_outside_poison(
@@ -158,7 +166,8 @@ def test_cli_forwards_exact_ranking_request(tmp_path: Path, monkeypatch: pytest.
     app = typer.Typer()
     investment_research.register_investment_research_commands(app)
     request, output = tmp_path / "request.json", tmp_path / "output"
+    storage = tmp_path.with_name("ranking-storage")
     result = CliRunner().invoke(app, ["train-investment-ranking", "--root", str(tmp_path),
-        "--request", str(request), "--request-sha256", "a" * 64, "--output", str(output)])
+        "--request", str(request), "--request-sha256", "a" * 64, "--output", str(output), "--data-root", str(storage)])
     assert result.exit_code == 0, result.output
-    assert calls == [{"root": tmp_path, "request": request, "request_sha256": "a" * 64, "output": output}]
+    assert calls == [{"root": tmp_path, "request": request, "request_sha256": "a" * 64, "output": output, "data_root": storage}]

@@ -14,6 +14,7 @@ from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.investment.dividend_currencies import _json
 from market_predictor.research.investment_features import FLAGS, ArtifactReference, _object, _publish, _read
@@ -266,20 +267,29 @@ def collect_investment_dividend_currencies(
 
 
 def load_investment_currency_evidence(
-    root: Path, manifest: Path, sha256: str, pins: dict[str, str], *, interpretation_policy_sha256: str
+    root: Path, manifest: Path, sha256: str, pins: dict[str, str], *, interpretation_policy_sha256: str,
+    paths: EvidencePaths | None = None,
 ) -> dict[str, tuple[dict[str, Any], EvidenceReference]]:
     """Independently replay raw responses and exact archived originals before admission."""
-    report = _object(root, ArtifactReference(path=str(manifest), sha256=sha256), pins)
+    report = _object(root, ArtifactReference(path=str(manifest), sha256=sha256), pins, paths=paths)
     if report.get("schema") != SCHEMA or report.get("status") not in {"currency_evidence_complete", "currency_evidence_complete_with_gaps"}:
         raise DataReadinessError("not a completed dividend currency artifact")
     for name, digest in report["source_files"].items():
-        path = Path(name) if Path(name).is_absolute() else inside(root, name)
+        path = paths.read(name) if paths is not None else (Path(name) if Path(name).is_absolute() else inside(root, name))
         if file_sha256(path) != digest:
             raise DataReadinessError("dividend currency source changed")
-        pins[str(path)] = digest
+        identity = str(path if paths is None else paths.identity(name))
+        if pins.get(identity, digest) != digest:
+            raise DataReadinessError("dividend currency source conflicts with an earlier pin")
+        pins[identity] = digest
     parent = Path(manifest).parent
+    if paths is not None:
+        parent = paths.identity(manifest).parent
     data = {
-        name: _object(root, ArtifactReference(path=str(parent / name), sha256=digest), pins) for name, digest in report["files"].items()
+        name: _object(root, ArtifactReference(
+            path=str(parent / name if paths is None else paths.child_identity(parent, name)), sha256=digest),
+            pins, paths=paths)
+        for name, digest in report["files"].items()
     }
     originals = data["originals.json"]["records"]
     if json_sha256(originals) != report["request"]["original_records_sha256"]:
@@ -309,7 +319,7 @@ def load_investment_currency_evidence(
             or report["source_files"].get(transport_ref.path) != transport_ref.sha256
         ):
             raise DataReadinessError("dividend currency response or transport is outside source inventory")
-        transport = _object(root, transport_ref, pins)
+        transport = _object(root, transport_ref, pins, paths=paths)
         if (
             transport.get("retrieved_at_utc") != row["retrieved_at_utc"]
             or transport.get("sha256") != reference.sha256
@@ -317,7 +327,7 @@ def load_investment_currency_evidence(
         ):
             raise DataReadinessError("dividend currency retrieval clock/transport binding differs")
         if reference.path not in cache:
-            payload = _object(root, reference, pins)
+            payload = _object(root, reference, pins, paths=paths)
             # The response may contain other requested IDs from the same batch.
             cache[reference.path] = _decode_response(payload, originals)[0]
         record, locator = cache[reference.path][action_id]
@@ -328,7 +338,8 @@ def load_investment_currency_evidence(
         result[action_id] = (
             derived,
             EvidenceReference(
-                reference=inside(root, reference.path).relative_to(root.resolve()).as_posix(),
+                reference=(inside(root, reference.path).relative_to(root.resolve())
+                    if paths is None else paths.relative(reference.path)).as_posix(),
                 artifact_sha256=reference.sha256,
                 record_locator=locator,
                 interpretation_policy_sha256=interpretation_policy_sha256,

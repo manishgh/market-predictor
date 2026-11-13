@@ -13,9 +13,10 @@ from pydantic import model_validator
 
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
+from market_predictor.core.path_integrity import verify_tree_containment
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import inside
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.investment.action_relevance import RECIPIENT_PRE_DISTRIBUTION_RELEVANCE, SUPPORTED_REASONS
 from market_predictor.investment.completed_cash_distributions import (
     COMPLETED_CASH_RELEVANCE,
@@ -118,12 +119,14 @@ class SurvivorOutcomes:
         return tuple(self.rows[key].get("pair_missing_reasons", ()))
 
 
-def read_exclusion_survivors(root: Path, pin: SourcePin, pins: dict[str, str]) -> SurvivorOutcomes:
-    return _read_exclusion_survivors(root, pin, pins, read_object(root, pin, pins))
+def read_exclusion_survivors(root: Path, pin: SourcePin, pins: dict[str, str], *, paths: EvidencePaths | None = None) -> SurvivorOutcomes:
+    paths = paths or EvidencePaths(root)
+    return _read_exclusion_survivors(root, pin, pins, read_object(root, pin, pins, paths=paths), paths=paths)
 
 
 def _read_exclusion_survivors(
     root: Path, pin: SourcePin, pins: dict[str, str], manifest: dict[str, Any],
+    *, paths: EvidencePaths,
 ) -> SurvivorOutcomes:
     require(manifest.get("schema") == EXCLUSION_SCHEMA and manifest.get("scope") == "post_observation_sensitivity"
         and manifest.get("status") in {"complete_with_explicit_gaps", "complete_research_only"}
@@ -133,18 +136,18 @@ def _read_exclusion_survivors(
             "models_refitted", "original_labels_changed", "training_ready")),
         "remaining outcomes require the closed pinned exclusion comparison")
     exclusion = InvestmentExclusionEvaluationRequest.model_validate_json(json.dumps(
-        read_object(root, SourcePin.model_validate(manifest["request"]), pins)))
+        read_object(root, SourcePin.model_validate(manifest["request"]), pins, paths=paths)))
     ancestor_pin = exclusion.parent_manifest
     require(ancestor_pin == SourcePin.model_validate(manifest["parent_manifest"]), "exclusion ancestor pin differs")
-    ancestor = read_fixed_selection_outcomes(root, ancestor_pin, pins)
+    ancestor = read_fixed_selection_outcomes(root, ancestor_pin, pins, paths=paths)
     require(ancestor.outcomes_pin == SourcePin.model_validate(manifest["parent_outcomes"])
         and ancestor.comparisons_pin == SourcePin.model_validate(manifest["parent_comparisons"])
         and manifest["parent_selection_sha256"] == ancestor.manifest["selection_sha256"],
         "exclusion ancestor outcomes, comparisons or ordered selections differ")
     retained, comparison, removed = _filter_cohorts(exclusion.exclusions, ancestor.cohorts, ancestor.outcomes, ancestor.comparisons)
-    outcomes_pin, comparisons_pin = comparison_sidecar_pins(root, pin, manifest)
-    actual_rows = read_object(root, outcomes_pin, pins)
-    actual_comparisons = read_object(root, comparisons_pin, pins)
+    outcomes_pin, comparisons_pin = comparison_sidecar_pins(root, pin, manifest, paths=paths)
+    actual_rows = read_object(root, outcomes_pin, pins, paths=paths)
+    actual_comparisons = read_object(root, comparisons_pin, pins, paths=paths)
     require(json_sha256(actual_rows) == json_sha256({"rows": list(retained.values())})
         and json_sha256(actual_comparisons) == json_sha256({"views": comparison})
         and manifest["exclusions"] == removed
@@ -187,7 +190,7 @@ def _clock(value: Any) -> datetime:
     return parsed
 
 
-def _read_ledger(root: Path, path: Path, manifest: dict[str, Any], pins: dict[str, str]) -> _Ledger:
+def _read_ledger(root: Path, path: Path, manifest: dict[str, Any], pins: dict[str, str], *, paths: EvidencePaths) -> _Ledger:
     require(manifest.get("schema") == SCHEMA and manifest.get("scope") == "post_observation_sensitivity"
         and manifest.get("round_trip_stock_cost_bps") == 20 and manifest.get("benchmark_basis") == "stock_net_minus_spy_gross"
         and all(manifest.get(flag) is False for flag in (*FLAGS, "selection_changed", "models_refitted",
@@ -195,10 +198,16 @@ def _read_ledger(root: Path, path: Path, manifest: dict[str, Any], pins: dict[st
         and all(manifest.get(flag, False) is False for flag in ("reranked", "replacements_added")),
         "remaining ledger schema, scope, stock/SPY cost or research-only flags differ")
     request_pin = SourcePin.model_validate(manifest.get("request"))
-    request = InvestmentRemainingOutcomeRequest.model_validate_json(json.dumps(read_object(root, request_pin, pins)))
+    request = InvestmentRemainingOutcomeRequest.model_validate_json(json.dumps(read_object(root, request_pin, pins, paths=paths)))
     require(all(manifest.get(name) == value
         for name, value in request.model_dump(mode="json", exclude={"schema_version", "scope"}).items()),
         "remaining ledger request bindings differ")
+    if "source_implementation_snapshot" in manifest:
+        snapshot = SourcePin.model_validate(manifest["source_implementation_snapshot"])
+        sources = manifest.get("source_files")
+        require(isinstance(sources, dict) and sources.get(str(paths.identity(snapshot.path))) == snapshot.sha256,
+            "remaining ledger source inventory lacks the exact implementation snapshot pin")
+        pin_source_file(root, snapshot, pins, paths=paths)
     verified_at = _clock(manifest.get("verified_at_utc"))
     completed_at = _clock(manifest.get("completed_at_utc"))
     require(verified_at <= completed_at <= datetime.now(UTC), "remaining ledger verification or completion clock differs")
@@ -207,25 +216,25 @@ def _read_ledger(root: Path, path: Path, manifest: dict[str, Any], pins: dict[st
 
 def _ledger_sidecars(
     root: Path, ledger: _Ledger, pins: dict[str, str],
+    *, paths: EvidencePaths,
 ) -> tuple[tuple[SourcePin, dict[str, Any]], tuple[SourcePin, dict[str, Any]], tuple[SourcePin, list[dict[str, Any]]]]:
     files = ledger.manifest.get("files")
     require(isinstance(files, dict) and set(files) == set(SIDECARS)
-        and {child.name for child in ledger.directory.iterdir() if child.is_file()} == {*SIDECARS, "_manifest.json"},
+        and {child.name for child in paths.directory(ledger.directory).iterdir() if child.is_file()} == {*SIDECARS, "_manifest.json"},
         "remaining ledger requires an exact named sidecar inventory")
     assert isinstance(files, dict)
     loaded = {}
     for name in SIDECARS:
         child = ledger.directory / name
-        require(inside(root, child) == child, "remaining ledger sidecar must be the named sibling file")
         pin = SourcePin(path=str(child), sha256=files[name])
-        loaded[name] = (pin, read_object(root, pin, pins))
+        loaded[name] = (pin, read_object(root, pin, pins, paths=paths))
     attempts_pin, attempts = loaded["attempts.json"]
     require(set(attempts) == {"rows"} and isinstance(attempts["rows"], list),
         "remaining ledger attempt sidecar requires ordered rows")
     return loaded["outcomes.json"], loaded["comparisons.json"], (attempts_pin, attempts["rows"])
 
 
-def _validate_link(root: Path, ledger: _Ledger, parent: SurvivorOutcomes) -> None:
+def _validate_link(ledger: _Ledger, parent: SurvivorOutcomes, *, paths: EvidencePaths) -> None:
     manifest, request = ledger.manifest, ledger.request
     parent_pins = {
         "parent_outcomes": parent.outcomes_pin,
@@ -237,7 +246,7 @@ def _validate_link(root: Path, ledger: _Ledger, parent: SurvivorOutcomes) -> Non
             "parent_selection_sha256", "exclusions", "comparison_views", "comparison_cohorts", "empty_cohorts",
         )), "remaining ledger parent or ancestor bindings, exclusions or ordered selections differ")
     sources = manifest.get("source_files")
-    require(isinstance(sources, dict) and all(sources.get(str(inside(root, pin.path))) == pin.sha256 for pin in (
+    require(isinstance(sources, dict) and all(sources.get(str(paths.identity(pin.path))) == pin.sha256 for pin in (
         ledger.request_pin, request.parent_manifest, *parent_pins.values(),
     )), "remaining ledger source inventory lacks an exact request, parent or ancestor pin")
     assert isinstance(sources, dict)
@@ -245,7 +254,7 @@ def _validate_link(root: Path, ledger: _Ledger, parent: SurvivorOutcomes) -> Non
                  "currency_corroborations", "reviewed_held_stock_actions"):
         pin = getattr(request, name)
         if pin is not None:
-            require(sources.get(str(inside(root, pin.path))) == pin.sha256,
+            require(sources.get(str(paths.identity(pin.path))) == pin.sha256,
                 f"remaining ledger source inventory lacks the exact {name} authority pin")
     if parent.request is not None:
         require(_clock(parent.manifest["completed_at_utc"]) <= ledger.verified_at,
@@ -331,11 +340,11 @@ class RemainingEvidence:
         return frozenset(candidates)
 
 
-def _read_currency_inventory(root: Path, pin: SourcePin, pins: dict[str, str]) -> list[dict[str, Any]]:
+def _read_currency_inventory(root: Path, pin: SourcePin, pins: dict[str, str], *, paths: EvidencePaths) -> list[dict[str, Any]]:
     guard("remaining ledger currency inventory", reclaim_unused_memory=False)
     value = parse_strict_json_object(read_currency_bytes(root, CurrencyArtifactPin(path=pin.path, sha256=pin.sha256),
-        MAX_CURRENCY_MANIFEST_BYTES), label="remaining ledger currency manifest")
-    add_pins(root, pins, {pin.path: pin.sha256})
+        MAX_CURRENCY_MANIFEST_BYTES, paths=paths), label="remaining ledger currency manifest")
+    add_pins(root, pins, {pin.path: pin.sha256}, paths=paths)
     records = value.get("corroborations")
     require(set(value) == {"schema", "corroborations"} and value["schema"] == CURRENCY_SCHEMA
         and isinstance(records, list) and 0 < len(records) <= 10_000
@@ -360,13 +369,14 @@ def _currency_source_pins(value: Any) -> Sequence[SourcePin]:
 
 def _new_currency_additions(
     root: Path, ancestor: dict[str, Any], before: SourcePin | None, supplied: SourcePin | None, pins: dict[str, str],
+    *, paths: EvidencePaths,
 ) -> dict[str, _CurrencyAddition]:
     require(before is None or supplied is not None, "remaining ledger removed carried currency corroborations")
     if supplied is None or supplied == before:
         return {}
     baseline = before or SourcePin.model_validate(ancestor.get("currency_corroborations"))
-    previous = _read_currency_inventory(root, baseline, pins)
-    current = _read_currency_inventory(root, supplied, pins)
+    previous = _read_currency_inventory(root, baseline, pins, paths=paths)
+    current = _read_currency_inventory(root, supplied, pins, paths=paths)
     require(len(current) > len(previous) and json_sha256(current[:len(previous)]) == json_sha256(previous),
         "remaining ledger currency additions must preserve every exact prior assertion as an ordered prefix")
     declared: dict[str, str] = {}
@@ -375,7 +385,7 @@ def _new_currency_additions(
         for source in _currency_source_pins(record):
             path = resolved.get(source.path)
             if path is None:
-                path = str(inside(root, source.path))
+                path = str(paths.identity(source.path))
                 resolved[source.path] = path
             require(declared.setdefault(path, source.sha256) == source.sha256
                 and pins.get(path, source.sha256) == source.sha256,
@@ -392,7 +402,7 @@ def _new_currency_additions(
         owner = owners.get(identity.proof)
         if owner is None:
             pin = SourcePin(path=identity.proof.path, sha256=identity.proof.sha256)
-            owner = StockIdentityProof.model_validate_json(json.dumps(read_object(root, pin, pins)))
+            owner = StockIdentityProof.model_validate_json(json.dumps(read_object(root, pin, pins, paths=paths)))
             owners[identity.proof] = owner
         require(owner.ticker == assertion.symbol, "remaining ledger currency assertion differs from its exact stock class")
         additions[assertion.action_id] = _CurrencyAddition(assertion, owner)
@@ -401,8 +411,10 @@ def _new_currency_additions(
 
 def prepare_remaining_evidence(
     root: Path, parent: SurvivorOutcomes, request: InvestmentRemainingOutcomeRequest, pins: dict[str, str],
+    *, paths: EvidencePaths | None = None,
 ) -> RemainingEvidence:
     """Bind additive sources and preserve every authority active in the parent."""
+    paths = paths or EvidencePaths(root)
     before = parent.request
     positive = request.currency_corroborations is not None or request.reviewed_held_stock_actions is not None
     if before is not None:
@@ -414,21 +426,21 @@ def prepare_remaining_evidence(
                 else before.completed_cash_distributions is None or request.completed_cash_distributions is not None),
             "remaining ledger replaced or removed a carried action authority")
     prior_cash_pin = None if before is None else before.completed_cash_distributions
-    prior_cash = read_completed_cash_facts(root, prior_cash_pin, pins)
+    prior_cash = read_completed_cash_facts(root, prior_cash_pin, pins, paths=paths)
     cash_pin = request.completed_cash_distributions
-    cash = prior_cash if cash_pin == prior_cash_pin else read_completed_cash_facts(root, cash_pin, pins)
+    cash = prior_cash if cash_pin == prior_cash_pin else read_completed_cash_facts(root, cash_pin, pins, paths=paths)
     cash_ids = new_completed_cash_ids(prior_cash, cash)
     recipient_pin = request.existing_recipient_stock_identity
     recipient_added = recipient_pin is not None and (before is None or before.existing_recipient_stock_identity is None)
     if recipient_pin is not None and recipient_added:
-        pin_source_file(root, recipient_pin, pins)
+        pin_source_file(root, recipient_pin, pins, paths=paths)
     currency_pin = request.currency_corroborations
     currency_additions = _new_currency_additions(root, parent.ancestor,
-        None if before is None else before.currency_corroborations, currency_pin, pins)
+        None if before is None else before.currency_corroborations, currency_pin, pins, paths=paths)
     prior_held_pin = None if before is None else before.reviewed_held_stock_actions
-    prior_held = read_reviewed_held_stock_actions(root, prior_held_pin, pins)
+    prior_held = read_reviewed_held_stock_actions(root, prior_held_pin, pins, paths=paths)
     held_pin = request.reviewed_held_stock_actions
-    held = prior_held if held_pin == prior_held_pin else read_reviewed_held_stock_actions(root, held_pin, pins)
+    held = prior_held if held_pin == prior_held_pin else read_reviewed_held_stock_actions(root, held_pin, pins, paths=paths)
     held_ids = frozenset(held.keys() - prior_held.keys())
     require(all(action_id in held and json_sha256(held[action_id].model_dump(mode="json")) == json_sha256(fact.model_dump(mode="json"))
         for action_id, fact in prior_held.items()) and (held_pin == prior_held_pin or bool(held_ids)),
@@ -470,16 +482,17 @@ def _validate_attempt(
 def _recovered_proof(
     root: Path, ledger: _Ledger, key: SelectedKey, row: dict[str, Any], previous: dict[str, Any],
     attempt: dict[str, Any], additions: RemainingEvidence, pins: dict[str, str],
+    *, paths: EvidencePaths,
 ) -> Path:
     decision, horizon = key
     require(Path(decision).name == decision and decision not in {"", ".", ".."},
         "remaining ledger decision ID escapes the pair directory")
     expected_path = ledger.directory / "pairs" / decision / f"{horizon}.json"
     pin = SourcePin.model_validate(row.get("pair_proof"))
-    require(inside(root, pin.path) == inside(root, expected_path) == expected_path and expected_path.is_file(),
+    require(paths.identity(pin.path) == expected_path,
         "remaining ledger recovery proof must be the named sibling pair file")
     guard("remaining ledger pair proof", reclaim_unused_memory=False)
-    proof = read_object(root, pin, pins)
+    proof = read_object(root, pin, pins, paths=paths)
     require(set(proof) == {"schema", "verified_at_utc", "request", "result", "specifications"}
         and proof.get("schema") == "market_predictor.investment_selected_spy_pair_evidence",
         "remaining ledger recovery proof schema differs")
@@ -506,13 +519,14 @@ def _recovered_proof(
         and ledger.verified_at <= available <= ledger.completed_at
         and all(value.label_available_at_utc is not None and ledger.verified_at <= value.label_available_at_utc <= available
             for value in result.holdings), "remaining ledger recovery proof verification or availability clock differs")
-    _validate_specifications(root, ledger, proof["specifications"], request, result, row, previous, attempt, additions)
+    _validate_specifications(root, ledger, proof["specifications"], request, result, row, previous, attempt, additions, paths=paths)
     return expected_path
 
 
 def _validate_specifications(
     root: Path, ledger: _Ledger, specifications: Any, request: InvestmentSpyPairRequest, result: InvestmentSpyPairResult,
     row: dict[str, Any], previous: dict[str, Any], attempt: dict[str, Any], additions: RemainingEvidence,
+    *, paths: EvidencePaths,
 ) -> None:
     components = row.get("pair_components")
     require(isinstance(specifications, dict) and set(specifications) == {"stock", "spy"}
@@ -550,7 +564,7 @@ def _validate_specifications(
         for source in request.holdings[0].sources}
     verify_remaining_trigger_evidence(root, ledger.request_pin, additions, stock,
         attempt["relevance_action_ids"], ledger.manifest["source_files"], stock_sources=stock_sources,
-        verified_at=ledger.verified_at, outcome_available_at=result.outcome_available_at_utc)
+        verified_at=ledger.verified_at, outcome_available_at=result.outcome_available_at_utc, paths=paths)
 
 
 @dataclass(frozen=True)
@@ -591,21 +605,24 @@ def verify_remaining_trigger_evidence(
     eligible_ids: Sequence[str] | frozenset[str], source_files: Mapping[str, str], *,
     stock_sources: Mapping[str, tuple[str, str]] | None = None,
     verified_at: datetime | None = None, outcome_available_at: datetime | None = None,
+    paths: EvidencePaths | None = None,
 ) -> None:
     """Require each triggering fact in the stock entry or its matching economic event."""
+    paths = paths or EvidencePaths(root)
+
     def bound(ref: Any, supplying_pin: SourcePin | None = None) -> bool:
         if not isinstance(ref, dict) or ref.get("interpretation_policy_sha256") != request_pin.sha256:
             return False
         reference, digest = ref.get("reference"), ref.get("artifact_sha256")
         if not isinstance(reference, str) or not isinstance(digest, str):
             return False
-        path = inside(root, reference)
+        path = paths.identity(reference)
         if source_files.get(str(path)) != digest or (
                 stock_sources is not None and stock_sources.get(reference) != (digest, request_pin.sha256)):
             return False
         if supplying_pin is None:
             return True
-        if path != inside(root, supplying_pin.path) or digest != supplying_pin.sha256:
+        if path != paths.identity(supplying_pin.path) or digest != supplying_pin.sha256:
             return False
         available = _clock(ref.get("available_at"))
         retrieved = _clock(ref.get("retrieved_at"))
@@ -675,9 +692,10 @@ def verify_remaining_trigger_evidence(
 
 def _apply_ledger(
     root: Path, ledger: _Ledger, parent: SurvivorOutcomes, additions: RemainingEvidence, pins: dict[str, str],
+    *, paths: EvidencePaths,
 ) -> SurvivorOutcomes:
     guard("remaining ledger sidecars", reclaim_unused_memory=False)
-    (outcomes_pin, outcomes), (comparisons_pin, comparisons), (attempts_pin, attempts) = _ledger_sidecars(root, ledger, pins)
+    (outcomes_pin, outcomes), (comparisons_pin, comparisons), (attempts_pin, attempts) = _ledger_sidecars(root, ledger, pins, paths=paths)
     rows = outcomes.get("rows")
     require(set(outcomes) == {"rows"} and isinstance(rows, list) and len(rows) == len(parent.rows),
         "remaining ledger survivor row inventory differs")
@@ -703,13 +721,14 @@ def _apply_ledger(
                     and json_sha256({name: value for name, value in row.items() if name not in RECOVERY_FIELDS})
                     == json_sha256({name: value for name, value in previous.items() if name not in RECOVERY_FIELDS}),
                     "remaining ledger changed a recovered survivor's frozen key, order or original metadata")
-                new_proofs.add(_recovered_proof(root, ledger, key, row, previous, attempt, additions, pins))
+                new_proofs.add(_recovered_proof(root, ledger, key, row, previous, attempt, additions, pins, paths=paths))
                 continue
         require(json_sha256([row]) == json_sha256([previous]),
             "remaining ledger changed an existing survivor key, order, outcome, proof or clock")
-    proof_dir = ledger.directory / "pairs"
-    require((not proof_dir.exists() or proof_dir.is_dir() and inside(root, proof_dir) == proof_dir)
-        and {path for path in proof_dir.rglob("*") if path.is_file()} == new_proofs,
+    proof_dir = paths.write(ledger.directory / "pairs")
+    if proof_dir.exists():
+        verify_tree_containment(proof_dir, label="remaining ledger pair proof directory")
+    require({paths.identity(path) for path in proof_dir.rglob("*") if path.is_file()} == new_proofs,
         "remaining ledger pair proof inventory differs from its recovered rows")
 
     expected = compare_survivor_cohorts(parent, current)
@@ -729,25 +748,28 @@ def _apply_ledger(
         parent.original_unknowns, current, comparisons["views"], parent.cohorts, ledger.request, latest_failed)
 
 
-def read_remaining_outcome_parent(root: Path, pin: SourcePin, pins: dict[str, str]) -> SurvivorOutcomes:
+def read_remaining_outcome_parent(
+    root: Path, pin: SourcePin, pins: dict[str, str], *, paths: EvidencePaths | None = None,
+) -> SurvivorOutcomes:
     """Validate a finite pinned lineage from the original exclusion to the direct parent."""
+    paths = paths or EvidencePaths(root)
     visited: set[Path] = set()
     chain: list[_Ledger] = []
     while True:
-        path = inside(root, pin.path)
+        path = paths.identity(pin.path)
         require(path.name == "_manifest.json", "remaining ledger parent must name its manifest")
         require(path not in visited, "remaining ledger parent chain contains a cycle")
         visited.add(path)
-        manifest = read_object(root, pin, pins)
+        manifest = read_object(root, pin, pins, paths=paths)
         if manifest.get("schema") == EXCLUSION_SCHEMA:
-            parent = _read_exclusion_survivors(root, pin, pins, manifest)
+            parent = _read_exclusion_survivors(root, pin, pins, manifest, paths=paths)
             break
-        ledger = _read_ledger(root, path, manifest, pins)
+        ledger = _read_ledger(root, path, manifest, pins, paths=paths)
         chain.append(ledger)
         pin = ledger.request.parent_manifest
     for ledger in reversed(chain):
-        _validate_link(root, ledger, parent)
-        additions = prepare_remaining_evidence(root, parent, ledger.request, pins)
-        parent = _apply_ledger(root, ledger, parent, additions, pins)
+        _validate_link(ledger, parent, paths=paths)
+        additions = prepare_remaining_evidence(root, parent, ledger.request, pins, paths=paths)
+        parent = _apply_ledger(root, ledger, parent, additions, pins, paths=paths)
     return parent
 

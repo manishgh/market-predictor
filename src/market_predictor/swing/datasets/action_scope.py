@@ -8,9 +8,10 @@ from typing import Any
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.path_integrity import verify_tree_containment
 from market_predictor.core.system_memory import assert_system_memory_available
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import inside
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.sources.official_documents import load_official_document_inventory, verify_official_document_collection
 from market_predictor.swing.contracts.corrected_outcomes import ReviewedCashDistributionScope
 from market_predictor.swing.datasets.action_windows import ActionWindow
@@ -18,8 +19,9 @@ from market_predictor.swing.datasets.symbol_corrections import pinned_object
 
 
 def verify_action_scope_documents(root: Path, scopes: tuple[ReviewedCashDistributionScope, ...],
-    *, memory_guard: Callable[[], None] | None = None) -> dict[str, str]:
+    *, memory_guard: Callable[[], None] | None = None, paths: EvidencePaths | None = None) -> dict[str, str]:
     """Return immutable source pins; the caller's publication lease must be held."""
+    paths = paths or EvidencePaths(root)
     pins: dict[str, str] = {}
     reports: dict[tuple[str, str, str], dict[str, Any]] = {}
     for scope in scopes:
@@ -27,37 +29,37 @@ def verify_action_scope_documents(root: Path, scopes: tuple[ReviewedCashDistribu
             assert_system_memory_available()
         else:
             memory_guard()
-        inventory_path = inside(root, scope.inventory.path)
-        archive = inside(root, scope.archive)
+        inventory_path = paths.read(scope.inventory.path)
+        archive = verify_tree_containment(paths.directory(scope.archive), label="reviewed action scope archive")
         key = (scope.archive, scope.inventory.sha256, scope.report_sha256)
         if key not in reports:
             if file_sha256(inventory_path) != scope.inventory.sha256:
                 raise DataReadinessError("reviewed action scope inventory changed")
-            pins[inventory_path.relative_to(root).as_posix()] = scope.inventory.sha256
-            request = archive / "_request.json"
-            pins[request.relative_to(root).as_posix()] = file_sha256(request)
+            pins[paths.relative(inventory_path).as_posix()] = scope.inventory.sha256
+            request = paths.read_child(archive, "_request.json")
+            pins[paths.relative(request).as_posix()] = file_sha256(request)
             report = verify_official_document_collection(archive, load_official_document_inventory(inventory_path))
             if report["status"] != "collected_unreviewed" or json_sha256(report) != scope.report_sha256:
                 raise DataReadinessError("reviewed action scope document replay differs from external pin")
             reports[key] = report
-        document_path = inside(root, scope.document.path)
+        document_path = paths.read(scope.document.path)
         found = False
         for document in reports[key]["documents"]:
             for attempt in document["attempts"]:
-                receipt_path = inside(archive, attempt["receipt_path"])
+                receipt_path = paths.read_child(archive, attempt["receipt_path"])
                 receipt = pinned_object(receipt_path, attempt["receipt_sha256"])
-                pins[receipt_path.relative_to(root).as_posix()] = attempt["receipt_sha256"]
+                pins[paths.relative(receipt_path).as_posix()] = attempt["receipt_sha256"]
                 if receipt["body_path"] is None:
                     continue
-                body = inside(archive, receipt_path.parent / receipt["body_path"])
+                body = paths.read_child(receipt_path.parent, receipt["body_path"])
                 digest = receipt["response"]["sha256"]
-                pins[body.relative_to(root).as_posix()] = digest
+                pins[paths.relative(body).as_posix()] = digest
                 found |= (document["document_id"] == scope.document_id and body == document_path
                     and digest == scope.document.sha256 and receipt["state"] == "archived_unreviewed")
         if not found:
             raise DataReadinessError("reviewed action scope body lacks independently replayed receipt")
     for name, digest in pins.items():
-        if file_sha256(inside(root, name)) != digest:
+        if file_sha256(paths.read(name)) != digest:
             raise DataReadinessError("reviewed action scope source changed during replay")
     return pins
 

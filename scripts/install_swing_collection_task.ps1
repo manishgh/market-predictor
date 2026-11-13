@@ -1,6 +1,7 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [string]$ProjectDir = (Split-Path -Parent $PSScriptRoot),
+    [string]$DataRoot,
     [ValidatePattern('^([01][0-9]|2[0-3]):[0-5][0-9]$')][string]$At = "00:00"
 )
 
@@ -55,9 +56,16 @@ if ($PSCmdlet.ShouldProcess($root, "Install source-only collection and retire th
         Export-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath |
             Out-File -LiteralPath (Join-Path $backup ($task.TaskName + ".xml")) -Encoding utf8
     }
+    $arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$runner`" -ProjectDir `"$root`""
+    if ($DataRoot) {
+        $storage = (Resolve-Path -LiteralPath $DataRoot).Path
+        if (-not (Test-Path -LiteralPath $storage -PathType Container)) {
+            throw "Collection data root is not a directory: $storage"
+        }
+        $arguments += " -DataRoot `"$storage`""
+    }
     $action = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
-        -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$runner`" -ProjectDir `"$root`"" `
-        -WorkingDirectory $root
+        -Argument $arguments -WorkingDirectory $root
     $trigger = New-ScheduledTaskTrigger -Daily -At $At
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew `
         -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 30) -ExecutionTimeLimit (New-TimeSpan -Hours 4)

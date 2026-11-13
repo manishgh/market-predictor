@@ -11,6 +11,7 @@ import pytest
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.research import investment_labels as module
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference
 
@@ -19,6 +20,21 @@ def write(path: Path, value: Any) -> dict[str, str]:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value), encoding="utf-8")
     return {"path": str(path), "sha256": file_sha256(path)}
+
+
+def test_relocated_roster_rejects_foreign_source_lookalike(tmp_path: Path) -> None:
+    alternate = tmp_path.with_name(tmp_path.name + "-datasets")
+    alternate.mkdir()
+    foreign = write(tmp_path.with_name(tmp_path.name + "-foreign") / "src/market_predictor/evidence.py", {})
+    roster = write(tmp_path / "roster/_manifest.json", {
+        "schema": "market_predictor.investment_coverage_roster", "status": "roster_complete",
+        "source_files": {foreign["path"]: foreign["sha256"]},
+    })
+    request = write(tmp_path / "request.json", {"roster_manifest": roster, "target_config": roster,
+        "nominal_unpaid_claim_valuation": True, "evaluation_as_of_utc": "2026-01-01T00:00:00Z"})
+    with pytest.raises(DataReadinessError, match="outside the project namespace"):
+        module.read_investment_label_inputs(tmp_path, module.ArtifactReference.model_validate(request), {},
+            paths=EvidencePaths(tmp_path, alternate))
 
 
 def setup_job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, str, Path]:
@@ -39,7 +55,7 @@ def setup_job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, st
     monkeypatch.setattr(module, "guard", lambda *_, **__: None)
     monkeypatch.setattr(module, "_implementation", lambda: {})
     monkeypatch.setattr("market_predictor.research.investment_features.guard", lambda *_: None)
-    monkeypatch.setattr(module, "load_corrected_outcome_policy", lambda *_: SimpleNamespace(
+    monkeypatch.setattr(module, "load_corrected_outcome_policy", lambda *_, **__: SimpleNamespace(
         action_config=SimpleNamespace(path="actions"), action_archive="archive", action_audit_sha256="a" * 64,
         official_windows=(), decision_corrections=(), numerical_end=datetime(2024, 5, 28, tzinfo=UTC).date()))
     monkeypatch.setattr(module, "load_corporate_action_evidence", lambda **_: object())

@@ -5,6 +5,7 @@ import json
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from shutil import copytree
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
@@ -14,6 +15,7 @@ import pytest
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.evidence.hashing import json_sha256
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import HeavyJobBusyError, heavy_job_lease
 from market_predictor.investment import raw_acquisition as raw
 from market_predictor.swing.datasets import history_archive as archive
@@ -349,3 +351,25 @@ def test_investment_transport_cannot_omit_system_memory_guard(acquisition: dict[
         archive.collect_swing_history_plan(plan_directory=acquisition["plan"], output_directory=acquisition["archive"],
             source_factory=lambda: source, provider_symbol_for=lambda symbol: symbol, expected_plan_authority_sha256=pin)
     assert source.calls == [] and not acquisition["archive"].exists()
+
+
+def test_relocated_acquisition_replays_frozen_plan_and_archive_paths(acquisition: dict[str, Any]) -> None:
+    project: Path = acquisition["root"]
+    plan = project / "data/research/plan"
+    archive_path = project / "data/raw/archive"
+    acquisition.update(plan=plan, archive=archive_path)
+    pin = _publish(acquisition)
+    expected = _collect(acquisition, _Source(fail="AAA"), pin)
+
+    storage = project.parent / (project.name + "-storage")
+    copytree(project / "data/research", storage / "research")
+    copytree(project / "data/raw", storage / "raw")
+    paths = EvidencePaths(project, storage)
+    actual = raw.verify_investment_raw_acquisition(project, acquisition["request"], plan, archive_path,
+        expected_plan_authority_sha256=pin, paths=paths)
+    assert actual == expected
+
+    (storage / "raw/archive/_request.json").unlink()
+    with pytest.raises(DataReadinessError, match="missing"):
+        raw.verify_investment_raw_acquisition(project, acquisition["request"], plan, archive_path,
+            expected_plan_authority_sha256=pin, paths=paths)

@@ -11,7 +11,8 @@ import pandas as pd
 from market_predictor.canonical.store import file_sha256, load_canonical_artifact, manifest_path_for
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import inside, write_json_object
+from market_predictor.evidence.io import write_json_object
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.investment.contracts import InvestmentTargetRequest, InvestmentTargetResult
 from market_predictor.investment.dataset import (
@@ -46,22 +47,23 @@ def _implementation() -> dict[str, str]:
     return {str((package / name).resolve()): file_sha256(package / name) for name in (
         "investment/dataset.py", "research/investment_dataset.py", "investment/contracts.py", "investment/fundamentals.py",
         "research/investment_features.py", "research/investment_label_reuse.py", "canonical/store.py", "canonical/cutoffs.py",
-        "evidence/hashing.py", "evidence/io.py", "core/runtime_memory.py", "resources.py")}
+        "evidence/hashing.py", "evidence/io.py", "evidence/paths.py", "core/runtime_memory.py", "resources.py")}
 
 
-def _child(root: Path, parent: SourcePin, name: str, digest: str) -> SourcePin:
-    return SourcePin(path=str(inside(root, parent.path).parent / name), sha256=digest)
+def _child(paths: EvidencePaths, parent: SourcePin, name: str, digest: str) -> SourcePin:
+    return SourcePin(path=str(paths.child_identity(paths.identity(parent.path).parent, name)), sha256=digest)
 
 
 def _closed(value: dict[str, Any]) -> bool:
     return all(value.get(key) is False for key in FLAGS)
 
 
-def _roster(root: Path, request: InvestmentDatasetRequest, pins: dict[str, str]) -> list[dict[str, Any]]:
-    report = read_object(root, request.roster_manifest, pins)
+def _roster(root: Path, request: InvestmentDatasetRequest, pins: dict[str, str], *, paths: EvidencePaths) -> list[dict[str, Any]]:
+    report = read_object(root, request.roster_manifest, pins, paths=paths)
     require(report.get("schema") == "market_predictor.investment_coverage_roster"
         and report.get("status") == "roster_complete" and _closed(report), "investment dataset requires closed complete roster")
-    rows = read_object(root, _child(root, request.roster_manifest, "roster.json", report["files"]["roster.json"]), pins)["rows"]
+    roster_pin = _child(paths, request.roster_manifest, "roster.json", report["files"]["roster.json"])
+    rows = read_object(root, roster_pin, pins, paths=paths)["rows"]
     require(len(rows) * 2 == EXPECTED_ROWS and report["declared_rows"] == len(rows)
         and len({row["decision_id"] for row in rows}) == len(rows), "investment roster population differs")
     for row in rows:
@@ -71,8 +73,8 @@ def _roster(root: Path, request: InvestmentDatasetRequest, pins: dict[str, str])
 
 
 def _targets(root: Path, request: InvestmentDatasetRequest, roster: list[dict[str, Any]],
-    pins: dict[str, str]) -> tuple[pd.DataFrame, dict[str, Any]]:
-    report = read_object(root, request.targets_manifest, pins)
+    pins: dict[str, str], *, paths: EvidencePaths) -> tuple[pd.DataFrame, dict[str, Any]]:
+    report = read_object(root, request.targets_manifest, pins, paths=paths)
     require(report.get("schema") == "market_predictor.investment_label_corpus"
         and report.get("status") == "labels_complete_with_explicit_gaps" and report.get("scope") == "full_roster"
         and report.get("label_rows") == EXPECTED_ROWS and _closed(report), "investment dataset target corpus is incomplete")
@@ -88,47 +90,49 @@ def _targets(root: Path, request: InvestmentDatasetRequest, roster: list[dict[st
     export_values: dict[str, dict[str, Any]] = {}
     for origin in origins:
         guard("investment dataset target checkpoint")
-        checkpoint = read_object(root, origin.checkpoint, pins)
-        job_path = str(inside(root, origin.job.path))
+        checkpoint = read_object(root, origin.checkpoint, pins, paths=paths)
+        job_path = str(paths.identity(origin.job.path))
         if job_path not in job_values:
-            job_values[job_path] = read_object(root, origin.job, pins)
+            job_values[job_path] = read_object(root, origin.job, pins, paths=paths)
         require(pins[job_path] == origin.job.sha256, "investment target original job has conflicting pins")
         job = job_values[job_path]
         require(job["job_identity"] == origin.job_identity
             and pd.Timestamp(job["verified_at_utc"]) == origin.verified_at_utc,
             "investment target original job or clock differs")
         if origin.common_sources.path not in common_values:
-            read_object(root, origin.common_sources, pins)
+            read_object(root, origin.common_sources, pins, paths=paths)
             common_values.add(origin.common_sources.path)
-        require(pins[str(inside(root, origin.common_sources.path))] == origin.common_sources.sha256,
+        require(pins[str(paths.identity(origin.common_sources.path))] == origin.common_sources.sha256,
             "investment target original common inventory has conflicting pins")
-        original_request = read_object(root, origin.request, pins)
+        original_request = read_object(root, origin.request, pins, paths=paths)
         require(original_request["roster_manifest"] == request.roster_manifest.model_dump(mode="json")
             and origin.request.sha256 == report["request_sha256"], "investment targets bind another frozen roster/request")
         require(origin.producer_export is not None and origin.producer_commit is not None,
             "investment target origin omits immutable producer")
         assert origin.producer_export is not None
         if origin.producer_export.path not in export_values:
-            export_values[origin.producer_export.path] = read_object(root, origin.producer_export, pins)
+            export_values[origin.producer_export.path] = read_object(root, origin.producer_export, pins, paths=paths)
         export = export_values[origin.producer_export.path]
-        require(pins[str(inside(root, origin.producer_export.path))] == origin.producer_export.sha256
+        require(pins[str(paths.identity(origin.producer_export.path))] == origin.producer_export.sha256
             and export["commit"] == origin.producer_commit, "investment target producer commit or export pin differs")
         for name, digest in origin.implementation.items():
-            path = inside(root, name)
-            relative = path.relative_to(inside(root, origin.producer_export.path).parent).as_posix()
+            path = paths.identity(name)
+            relative = path.relative_to(paths.identity(origin.producer_export.path).parent).as_posix()
             require(export["files"].get(relative) == digest, "investment target producer export binding differs")
-            add_pins(root, pins, {str(path): digest})
+            add_pins(root, pins, {str(path): digest}, paths=paths)
         require(checkpoint.get("schema") == "market_predictor.investment_security_labels"
             and checkpoint.get("status") == "security_complete" and _closed(checkpoint)
             and checkpoint.get("security_id") == origin.security_id and checkpoint.get("job_identity") == origin.job_identity
             and checkpoint.get("files") == {"labels.json": origin.labels.sha256}, "investment target checkpoint differs")
         local_pins: dict[str, str] = {}
+        # Historical checkpoints can also declare external producer files.
+        # Only the three named checkpoint bindings below are consumed here.
         add_pins(root, local_pins, checkpoint["source_files"])
-        require(inside(root, origin.labels.path) == inside(root, origin.checkpoint.path).parent / "labels.json"
-            and all(local_pins.get(str(inside(root, pin.path))) == pin.sha256
+        require(paths.identity(origin.labels.path) == paths.identity(origin.checkpoint.path).parent / "labels.json"
+            and all(local_pins.get(str(paths.identity(pin.path))) == pin.sha256
                 for pin in (origin.job, origin.common_sources, origin.request)),
             "investment target checkpoint original source bindings differ")
-        rows = read_object(root, origin.labels, pins)["rows"]
+        rows = read_object(root, origin.labels, pins, paths=paths)["rows"]
         require(checkpoint["declared_rows"] == len(rows), "investment target checkpoint row count differs")
         for row in rows:
             key = (row["decision_id"], row["horizon_sessions"])
@@ -180,9 +184,9 @@ def _targets(root: Path, request: InvestmentDatasetRequest, roster: list[dict[st
 
 
 def _financial(root: Path, request: InvestmentDatasetRequest, roster: list[dict[str, Any]],
-    pins: dict[str, str]) -> dict[str, dict[str, Any]]:
-    report = read_object(root, request.financial_manifest, pins)
-    roster_report = read_object(root, request.roster_manifest, pins)
+    pins: dict[str, str], *, paths: EvidencePaths) -> dict[str, dict[str, Any]]:
+    report = read_object(root, request.financial_manifest, pins, paths=paths)
+    roster_report = read_object(root, request.roster_manifest, pins, paths=paths)
     require(report.get("schema") == "market_predictor.investment_coverage"
         and report.get("status") == "coverage_complete" and _closed(report)
         and report.get("availability_basis") == "reconstructed_research"
@@ -190,7 +194,8 @@ def _financial(root: Path, request: InvestmentDatasetRequest, roster: list[dict[
         and report["roster_sha256"] == roster_report["files"]["roster.json"]
         and report["feature_contract_sha256"] == FEATURE_CONTRACT_SHA256 and report["feature_names"] == list(FEATURE_NAMES)
         and report["failed_issuers"] == 0, "investment financial coverage source or feature contract differs")
-    coverage = read_object(root, _child(root, request.financial_manifest, "coverage.json", report["files"]["coverage.json"]), pins)
+    coverage_pin = _child(paths, request.financial_manifest, "coverage.json", report["files"]["coverage.json"])
+    coverage = read_object(root, coverage_pin, pins, paths=paths)
     expected = {row["decision_id"]: row for row in roster if row["status"] == "eligible"}
     result: dict[str, dict[str, Any]] = {}
     issuers = coverage["issuer_artifacts"]
@@ -200,12 +205,12 @@ def _financial(root: Path, request: InvestmentDatasetRequest, roster: list[dict[
     for item in issuers:
         guard("investment dataset financial checkpoint")
         pin = SourcePin(path=item["path"], sha256=item["sha256"])
-        checkpoint = read_object(root, pin, pins)
+        checkpoint = read_object(root, pin, pins, paths=paths)
         require(checkpoint.get("schema") == "market_predictor.investment_issuer_coverage"
             and checkpoint.get("status") == "issuer_complete" and checkpoint["cik"] == item["cik"]
             and checkpoint["job_identity"] == report["job_identity"] and _closed(checkpoint),
             "investment financial issuer checkpoint differs")
-        rows = read_object(root, _child(root, pin, "features.json", checkpoint["files"]["features.json"]), pins)["rows"]
+        rows = read_object(root, _child(paths, pin, "features.json", checkpoint["files"]["features.json"]), pins, paths=paths)["rows"]
         require(len(rows) == checkpoint["decision_count"], "investment financial row count differs")
         for row in rows:
             identity = row["decision_id"]
@@ -222,12 +227,16 @@ def _financial(root: Path, request: InvestmentDatasetRequest, roster: list[dict[
     return result
 
 
-def _news(root: Path, request: InvestmentDatasetRequest, pins: dict[str, str]) -> tuple[dict[str, Any], dict[str, str]]:
+def _news(
+    root: Path, request: InvestmentDatasetRequest, pins: dict[str, str], *, paths: EvidencePaths,
+) -> tuple[dict[str, Any], dict[str, str]]:
     """Replay the retained saved-row proof, preserving original producer provenance."""
-    report = read_object(root, request.news_verification, pins)
-    manifest = read_object(root, request.news_manifest, pins)
-    producer_request = read_object(root, _child(root, request.news_manifest, "_request.json", manifest["request_sha256"]), pins)
-    checkpoint = read_object(root, _child(root, request.news_manifest, "_checkpoint.json", manifest["checkpoint_sha256"]), pins)
+    report = read_object(root, request.news_verification, pins, paths=paths)
+    manifest = read_object(root, request.news_manifest, pins, paths=paths)
+    producer_pin = _child(paths, request.news_manifest, "_request.json", manifest["request_sha256"])
+    producer_request = read_object(root, producer_pin, pins, paths=paths)
+    checkpoint_pin = _child(paths, request.news_manifest, "_checkpoint.json", manifest["checkpoint_sha256"])
+    checkpoint = read_object(root, checkpoint_pin, pins, paths=paths)
     closed = ("training_eligible", "promotion_eligible", "serving_eligible", "source_coverage_admitted", "world_actor_verified")
     require(manifest.get("schema") == "market_predictor.news_decision_publication"
         and manifest.get("status") == "complete_research_only"
@@ -267,9 +276,7 @@ def _news(root: Path, request: InvestmentDatasetRequest, pins: dict[str, str]) -
     for logical, pin in request.news_producer_sources.items():
         require(pin.sha256 == original_code[logical] and logical.startswith("src/market_predictor/"),
             "investment news original producer source mapping differs")
-        path = inside(root, pin.path)
-        require(file_sha256(path) == pin.sha256, "investment news original producer bytes changed")
-        add_pins(root, pins, {str(path): pin.sha256})
+        pin_source_file(root, pin, pins, paths=paths)
     require(all(original_code.get(name) == digest for name, digest in producer_request["implementation_files"].items()),
         "investment news original publication implementation is not bound by saved proof")
     parent = None
@@ -277,10 +284,10 @@ def _news(root: Path, request: InvestmentDatasetRequest, pins: dict[str, str]) -
     for name in ("parent_publication", "parent_saved_row_verification", "original_snapshot_replay"):
         require(report[name] == producer_request[name], "investment news retained parent proof differs")
         parent_pin = SourcePin.model_validate_json(json.dumps(report[name]))
-        value = read_object(root, parent_pin, pins)
+        value = read_object(root, parent_pin, pins, paths=paths)
         if name == "parent_publication":
             parent = value
-            parent_request = read_object(root, _child(root, parent_pin, "_request.json", parent["request_sha256"]), pins)
+            parent_request = read_object(root, _child(paths, parent_pin, "_request.json", parent["request_sha256"]), pins, paths=paths)
     require(parent is not None and parent_request is not None
         and parent_request.get("profile") == "technical_relationships"
         and parent_request.get("model_columns") == manifest["model_columns"][:124]
@@ -288,13 +295,13 @@ def _news(root: Path, request: InvestmentDatasetRequest, pins: dict[str, str]) -
         and parent_request.get("rows") == parent["rows"] == manifest["rows"],
         "investment news inherited 586-peer feature context differs")
     config_pin = SourcePin.model_validate_json(json.dumps(producer_request["config"]))
-    policy = read_object(root, config_pin, pins)
+    policy = read_object(root, config_pin, pins, paths=paths)
     require(policy == producer_request["policy"], "investment news original configuration differs")
-    read_object(root, SourcePin.model_validate_json(json.dumps(report["configuration_evidence"])), pins)
+    read_object(root, SourcePin.model_validate_json(json.dumps(report["configuration_evidence"])), pins, paths=paths)
     proof_sources = {}
     for key in ("source_link_index", "sentiment_copy_evidence"):
         require(policy[key] == report[key], "investment news original source-evidence identity differs")
-        proof_sources[key] = read_object(root, SourcePin.model_validate_json(json.dumps(policy[key])), pins)
+        proof_sources[key] = read_object(root, SourcePin.model_validate_json(json.dumps(policy[key])), pins, paths=paths)
     linked, copied = proof_sources["source_link_index"], proof_sources["sentiment_copy_evidence"]
     require(linked.get("schema") == "market_predictor.news_source_links"
         and linked.get("status") == "complete_source_links_only" and linked.get("coverage") == "unknown"
@@ -314,7 +321,7 @@ def _news(root: Path, request: InvestmentDatasetRequest, pins: dict[str, str]) -
         "uncertainty_policy": producer_request["uncertainty_policy"]}), "investment news original profile digest differs")
     for key, pin in report["contract_pins"].items():
         require(key in {"strategy_contract", "research_contract", "temporal_contract"}, "investment news unknown contract pin")
-        pin_source_file(root, SourcePin.model_validate_json(json.dumps(pin)), pins)
+        pin_source_file(root, SourcePin.model_validate_json(json.dumps(pin)), pins, paths=paths)
     months = manifest["months"]
     require(set(report["monthly"]) == set(months) and sum(child["rows"] for child in months.values()) == manifest["rows"],
         "investment news proof monthly inventory differs")
@@ -323,37 +330,41 @@ def _news(root: Path, request: InvestmentDatasetRequest, pins: dict[str, str]) -
             and child["model_columns"] == manifest["model_columns"] and child["availability_columns"] == manifest["availability_columns"]
             and child["path"] == f"{month}/technical_relationships_news.parquet", "investment news saved month proof differs")
     original_sources: dict[str, str] = {}
-    add_pins(root, original_sources, report["source_files"])
-    required_sources = {str(inside(root, pin.path)): pin.sha256 for pin in (request.news_manifest, config_pin)}
+    add_pins(root, original_sources, report["source_files"], paths=paths)
+    required_sources = {str(paths.identity(pin.path)): pin.sha256 for pin in (request.news_manifest, config_pin)}
     required_sources.update({str(source_parent): digest for source_parent, digest in (
-        (inside(root, request.news_manifest.path).parent / "_request.json", manifest["request_sha256"]),
-        (inside(root, request.news_manifest.path).parent / "_checkpoint.json", manifest["checkpoint_sha256"]))})
+        (paths.identity(request.news_manifest.path).parent / "_request.json", manifest["request_sha256"]),
+        (paths.identity(request.news_manifest.path).parent / "_checkpoint.json", manifest["checkpoint_sha256"]))})
     for child in months.values():
         for name, digest in ((child["path"], child["sha256"]), (child["path"] + ".manifest.json", child["manifest_sha256"])):
-            required_sources[str(inside(root, request.news_manifest.path).parent / name)] = digest
+            required_sources[str(paths.identity(request.news_manifest.path).parent / name)] = digest
     require(all(original_sources.get(name) == digest for name, digest in required_sources.items()),
         "investment news saved proof omits publication or source-byte pins")
     return manifest, manifest["availability_columns"]
 
 
-def build_investment_dataset(*, root: Path, request: Path, request_sha256: str, output: Path) -> dict[str, Any]:
-    root, output = root.resolve(), output.resolve()
-    require(not output.exists(), "immutable investment dataset output already exists")
+def build_investment_dataset(
+    *, root: Path, request: Path, request_sha256: str, output: Path, data_root: Path | None = None,
+) -> dict[str, Any]:
+    paths = EvidencePaths(root, data_root)
+    root, output = paths.project_root, paths.identity(output)
+    require(not paths.write(output).exists(), "immutable investment dataset output already exists")
     with heavy_job_lease("build-investment-dataset", runtime_dir=root / heavy_job_runtime_dir()):
         guard("investment dataset preparation")
         pins = _implementation()
-        request_pin = SourcePin(path=str(inside(root, request)), sha256=request_sha256)
-        parsed = InvestmentDatasetRequest.model_validate_json(json.dumps(read_object(root, request_pin, pins)))
-        news, availability = _news(root, parsed, pins)
-        roster = _roster(root, parsed, pins)
-        targets, target_report = _targets(root, parsed, roster, pins)
-        financial = _financial(root, parsed, roster, pins)
+        retained_implementation = frozenset(name for name in pins if not Path(name).is_relative_to(root))
+        request_pin = SourcePin(path=str(paths.identity(request)), sha256=request_sha256)
+        parsed = InvestmentDatasetRequest.model_validate_json(json.dumps(read_object(root, request_pin, pins, paths=paths)))
+        news, availability = _news(root, parsed, pins, paths=paths)
+        roster = _roster(root, parsed, pins, paths=paths)
+        targets, target_report = _targets(root, parsed, roster, pins, paths=paths)
+        financial = _financial(root, parsed, roster, pins, paths=paths)
         profiles = model_profiles(tuple(news["model_columns"]))
         availability = {name: availability[name] for name in news["model_columns"]}
         availability.update(dict.fromkeys(FEATURE_NAMES, "financial_available_at_utc"))
         contract = feature_contract(profiles, availability)
         pieces = []
-        source_parent = inside(root, parsed.news_manifest.path).parent
+        source_parent = paths.identity(parsed.news_manifest.path).parent
         columns = list(dict.fromkeys(("decision_id", "security_id", "ticker", "session_date_et", "decision_time_utc",
             "feature_eligible", "technical_missing_reasons", *news["model_columns"],
             *(availability[name] for name in news["model_columns"]), *(f"missing_reason_{name}" for name in NEWS_COLUMNS))))
@@ -366,10 +377,14 @@ def build_investment_dataset(*, root: Path, request: Path, request_sha256: str, 
                 if source_month not in news["months"]:
                     continue
                 child = news["months"][source_month]
-                path = inside(source_parent, child["path"])
-                require(file_sha256(path) == child["sha256"] and file_sha256(manifest_path_for(path)) == child["manifest_sha256"],
+                identity = paths.child_identity(source_parent, child["path"])
+                path = paths.read(identity)
+                sidecar_path = paths.read(manifest_path_for(identity))
+                require(file_sha256(path) == child["sha256"] and file_sha256(sidecar_path) == child["manifest_sha256"],
                     "investment news saved source partition changed")
-                add_pins(root, pins, {str(path): child["sha256"], str(manifest_path_for(path)): child["manifest_sha256"]})
+                add_pins(root, pins, {
+                    str(identity): child["sha256"], str(manifest_path_for(identity)): child["manifest_sha256"],
+                }, paths=paths)
                 source, sidecar = load_canonical_artifact(path, expected_type="swing_news_decision_features",
                     allow_research=True, columns=columns)
                 require(sidecar["production_ready"] is False and sidecar["inputs"] == {"request_sha256": news["request_sha256"]}
@@ -411,10 +426,11 @@ def build_investment_dataset(*, root: Path, request: Path, request_sha256: str, 
                 partition.to_parquet(path, index=False)
                 report["months"][month] = {"path": f"months/{month}.parquet", "sha256": file_sha256(path), "rows": len(partition),
                     "row_keys_sha256": json_sha256(sorted(zip(partition.decision_id, partition.horizon_sessions, strict=True)))}
-            recheck_sources(root, pins)
+            recheck_sources(root, pins, paths=paths, retained_external=retained_implementation)
 
-        _publish(output / "dataset", report, pins, save)
-        dataset_pin = SourcePin(path=str(output / "dataset/_manifest.json"), sha256=file_sha256(output / "dataset/_manifest.json"))
+        _publish(output / "dataset", report, pins, save, paths=paths, retained_external=retained_implementation)
+        dataset_manifest = output / "dataset/_manifest.json"
+        dataset_pin = SourcePin(path=str(dataset_manifest), sha256=file_sha256(paths.read(dataset_manifest)))
         admission = InvestmentDatasetAdmission(schema=ADMISSION_SCHEMA, status="admitted_for_retrospective_research",
             scope="retrospective_research", dataset=dataset_pin,
             request=request_pin, feature_contract_sha256=contract, model_columns=profiles, admitted_at_utc=admitted_at,
@@ -422,7 +438,9 @@ def build_investment_dataset(*, root: Path, request: Path, request_sha256: str, 
             raw_sources_rechecked=False, source_admission_changed=False, historical_first_seen_proven=False, promotion_eligible=False,
             production_eligible=False, counts_by_horizon=counts, source_files=pins)
         admission_path = output / "admission"
-        _publish(admission_path, admission.model_dump(mode="json", by_alias=True), {**pins, dataset_pin.path: dataset_pin.sha256})
+        _publish(admission_path, admission.model_dump(mode="json", by_alias=True),
+            {**pins, dataset_pin.path: dataset_pin.sha256}, paths=paths, retained_external=retained_implementation)
+        admission_manifest = admission_path / "_manifest.json"
         return {"status": "investment_research_dataset_admitted", "dataset": dataset_pin.model_dump(mode="json"),
-            "admission": {"path": str(admission_path / "_manifest.json"), "sha256": file_sha256(admission_path / "_manifest.json")},
+            "admission": {"path": str(admission_manifest), "sha256": file_sha256(paths.read(admission_manifest))},
             "counts_by_horizon": counts, **FLAGS}

@@ -7,6 +7,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
+from shutil import copytree
 from typing import Any
 from urllib.parse import urlencode
 
@@ -17,9 +18,11 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core import errors
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import HeavyJobBusyError, heavy_job_lease
 from market_predictor.sources.http import HttpByteResponse
 from market_predictor.swing.datasets import corporate_action_collection as collector
+from market_predictor.swing.datasets.action_evidence import load_corporate_action_evidence
 
 Fetcher = Callable[[dict[str, Any], int], HttpByteResponse]
 
@@ -583,3 +586,24 @@ def test_system_pressure_stops_scheduling_and_publishes_resumable_partial_audit(
     monkeypatch.setattr(collector, "assert_system_memory_available", lambda: None)
     assert _run(inventory, expected=report["audit_sha256"]) == report
     assert _run(inventory, _empty, report["audit_sha256"])["acquired_tickers"] == 2
+
+
+def test_relocated_action_archive_preserves_report_projection_and_source_keys(inventory: dict[str, Any]) -> None:
+    project: Path = inventory["root"]
+    archive = project / "data/raw/collection"
+    inventory["output"] = archive
+    report = _run(inventory, _empty)
+    baseline = load_corporate_action_evidence(root=project, config=inventory["config"], archive=archive,
+        expected_audit_sha256=report["audit_sha256"], memory_guard=lambda: None)
+
+    storage = project.parent / (project.name + "-storage")
+    copytree(project / "data/raw", storage / "raw")
+    paths = EvidencePaths(project, storage)
+    relocated = load_corporate_action_evidence(root=project, config=inventory["config"], archive=archive,
+        expected_audit_sha256=report["audit_sha256"], memory_guard=lambda: None, paths=paths)
+    assert relocated == baseline
+
+    (storage / "raw/collection/_request.json").unlink()
+    with pytest.raises(DataReadinessError, match="missing"):
+        load_corporate_action_evidence(root=project, config=inventory["config"], archive=archive,
+            expected_audit_sha256=report["audit_sha256"], memory_guard=lambda: None, paths=paths)

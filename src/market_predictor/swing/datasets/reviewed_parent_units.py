@@ -12,7 +12,7 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import inside
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.swing.contracts.holding_accounting import HoldingContract, Sha256
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.reviewed_action_dates import ReviewedActionDate
@@ -39,18 +39,19 @@ class ReviewedParentSpinUnitsArtifact(HoldingContract):
 
 def load_reviewed_parent_spin_units(root: Path, pin: SourcePin | None,
     records: dict[str, tuple[str, dict[str, Any]]], dates: dict[str, ReviewedActionDate],
-    *, memory_guard: Callable[[], None],
+    *, memory_guard: Callable[[], None], paths: EvidencePaths | None = None,
 ) -> tuple[dict[str, ReviewedParentSpinUnits], dict[str, str]]:
     if pin is None:
         return {}, {}
-    path = inside(root, pin.path)
+    paths = paths or EvidencePaths(root)
+    path = paths.read(pin.path)
     if path.stat().st_size > 1024**2 or file_sha256(path) != pin.sha256:
         raise DataReadinessError("reviewed parent-unit facts size or hash differs")
     raw = path.read_bytes()
     parse_strict_json_object(raw, label="reviewed parent-unit facts")
     artifact = ReviewedParentSpinUnitsArtifact.model_validate_json(raw)
     pins = verify_reviewed_action_sources(root, pin, artifact.source_files,
-        (receipt for fact in artifact.records for receipt in fact.official_receipts), memory_guard=memory_guard)
+        (receipt for fact in artifact.records for receipt in fact.official_receipts), memory_guard=memory_guard, paths=paths)
     result: dict[str, ReviewedParentSpinUnits] = {}
     for fact in artifact.records:
         matched, reviewed_date = records.get(fact.action_id), dates.get(fact.action_id)

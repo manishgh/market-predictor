@@ -12,7 +12,8 @@ import pandas as pd
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import inside, resolve_inside_authority, write_json_object
+from market_predictor.evidence.io import resolve_inside_authority, write_json_object
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.locking import file_lock
 from market_predictor.resources import assert_memory_budget
 from market_predictor.swing.datasets.symbol_corrections import ArchiveLoader, pinned_object
@@ -20,8 +21,10 @@ from market_predictor.swing.labels.holding_paths import holding_calendar, valida
 from market_predictor.universe.symbol_correction_policy import SymbolCorrectionPolicy
 
 
-def _segment(archive: Path, artifact: dict[str, Any], start: date, end: date, *, replacement: bool) -> dict[str, Any]:
-    path = resolve_inside_authority(archive, artifact["bars_path"])
+def _segment(archive: Path, artifact: dict[str, Any], start: date, end: date, *,
+    replacement: bool, paths: EvidencePaths | None = None) -> dict[str, Any]:
+    path = (paths.read_child(archive, artifact["bars_path"]) if paths is not None
+        else resolve_inside_authority(archive, artifact["bars_path"]))
     if file_sha256(path) != artifact["bars_sha256"]:
         raise DataReadinessError("selected source bar file differs from replayed artifact")
     frame = pd.read_parquet(path)
@@ -49,24 +52,27 @@ def _segment(archive: Path, artifact: dict[str, Any], start: date, end: date, *,
         raise DataReadinessError("corrected source contains unusable OHLCV observations")
     if file_sha256(path) != artifact["bars_sha256"]:
         raise DataReadinessError("selected source changed during observation validation")
-    return {"archive": str(archive), "artifact": artifact, "first_session": str(start), "last_session": str(end),
+    return {"archive": str(paths.identity(archive) if paths is not None else archive),
+        "artifact": artifact, "first_session": str(start), "last_session": str(end),
         "selection": "corrected" if replacement else "parent", "rows": len(dates),
         "sessions_sha256": json_sha256(dates), "required_sessions": len(expected), "missing_sessions": missing,
         "invalid_observations": invalid}
 
 
 def reconstruct_symbol_corrected_sources(*, root: Path, correction_plan: Path, correction_plan_sha256: str,
-    correction_archive: Path, correction_archive_sha256: str, loader: ArchiveLoader) -> dict[str, Any]:
-    plan, archive = inside(root, correction_plan), inside(root, correction_archive)
-    plan_authority = pinned_object(plan / "_authority.json", correction_plan_sha256)
-    pinned_object(archive / "_authority.json", correction_archive_sha256)
+    correction_archive: Path, correction_archive_sha256: str, loader: ArchiveLoader,
+    paths: EvidencePaths | None = None) -> dict[str, Any]:
+    paths = paths or EvidencePaths(root)
+    plan, archive = paths.directory(correction_plan), paths.directory(correction_archive)
+    plan_authority = pinned_object(paths.read_child(plan, "_authority.json"), correction_plan_sha256)
+    pinned_object(paths.read_child(archive, "_authority.json"), correction_archive_sha256)
     corrected = loader(archive, plan_directory=plan, expected_adjustment="raw",
         expected_plan_authority_sha256=correction_plan_sha256)
-    request = pinned_object(plan / "_request.json", plan_authority["request_sha256"])
+    request = pinned_object(paths.read_child(plan, "_request.json"), plan_authority["request_sha256"])
     policy = SymbolCorrectionPolicy.model_validate(request["policy"])
-    parent_root = inside(root, policy.parent_archive)
-    pinned_object(parent_root / "_authority.json", policy.parent_archive_sha256)
-    parent = pinned_object(parent_root / "_manifest.json", request["parent_archive_manifest_sha256"])
+    parent_root = paths.directory(policy.parent_archive)
+    pinned_object(paths.read_child(parent_root, "_authority.json"), policy.parent_archive_sha256)
+    parent = pinned_object(paths.read_child(parent_root, "_manifest.json"), request["parent_archive_manifest_sha256"])
     corrections = {c.parent_unit_id: c for c in policy.corrections}
     replacements = {item["unit_id"]: item for item in corrected["unit_artifacts"]}
     corrected_ids = {item["parent_unit_id"]: item["unit_id"] for item in request["replacements"]}
@@ -77,24 +83,24 @@ def reconstruct_symbol_corrected_sources(*, root: Path, correction_plan: Path, c
         start, end = date.fromisoformat(item["start_date"]), date.fromisoformat(item["end_date"])
         correction = corrections.get(item["unit_id"])
         if correction is None:
-            segments.append(_segment(parent_root, item, start, end, replacement=False))
+            segments.append(_segment(parent_root, item, start, end, replacement=False, paths=paths))
             continue
         kept = 0
         for lower, upper in ((start, correction.start_date - timedelta(days=1)),
             (correction.end_date + timedelta(days=1), end)):
             if lower <= upper:
-                segment = _segment(parent_root, item, lower, upper, replacement=False)
+                segment = _segment(parent_root, item, lower, upper, replacement=False, paths=paths)
                 kept += segment["rows"]
                 segments.append(segment)
         discarded_rows += int(item["rows"]) - kept
         replacement = replacements[corrected_ids[item["unit_id"]]]
-        segments.append(_segment(archive, replacement, correction.start_date, correction.end_date, replacement=True))
-    pinned_object(plan / "_authority.json", correction_plan_sha256)
-    pinned_object(plan / "_request.json", plan_authority["request_sha256"])
-    pinned_object(archive / "_authority.json", correction_archive_sha256)
+        segments.append(_segment(archive, replacement, correction.start_date, correction.end_date, replacement=True, paths=paths))
+    pinned_object(paths.read_child(plan, "_authority.json"), correction_plan_sha256)
+    pinned_object(paths.read_child(plan, "_request.json"), plan_authority["request_sha256"])
+    pinned_object(paths.read_child(archive, "_authority.json"), correction_archive_sha256)
     result = {"schema": "market_predictor.swing_symbol_corrected_sources", "status": "source_selection_verified",
-        "correction_plan": str(plan), "correction_plan_sha256": correction_plan_sha256,
-        "correction_archive": str(archive), "correction_archive_sha256": correction_archive_sha256,
+        "correction_plan": str(paths.identity(plan)), "correction_plan_sha256": correction_plan_sha256,
+        "correction_archive": str(paths.identity(archive)), "correction_archive_sha256": correction_archive_sha256,
         "parent_plan_sha256": policy.parent_plan_sha256, "parent_archive_sha256": policy.parent_archive_sha256,
         "policy_sha256": request["policy_sha256"], "segments": segments, "discarded_parent_rows": discarded_rows,
         "selected_rows": sum(s["rows"] for s in segments),

@@ -23,7 +23,7 @@ from market_predictor.catalysts.sec_filings.document_collection import (
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import inside
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.swing.contracts.holding_accounting import HoldingContract, Identifier, Sha256
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 
@@ -51,9 +51,11 @@ class RetainedSecDocument:
     index_captured_at: pd.Timestamp
 
 
-def pin_retained_source(root: Path, pin: SourcePin, files: MutableMapping[str, str]) -> Path:
-    path = inside(root, pin.path)
-    key = str(path)
+def pin_retained_source(root: Path, pin: SourcePin, files: MutableMapping[str, str], *,
+    paths: EvidencePaths | None = None) -> Path:
+    paths = paths or EvidencePaths(root)
+    path = paths.read(pin.path)
+    key = str(paths.identity(path))
     if key in files and files[key] != pin.sha256:
         raise DataReadinessError("retained SEC or identity source pins conflict")
     if key not in files and file_sha256(path) != pin.sha256:
@@ -68,8 +70,11 @@ def retained_source_object(path: Path) -> dict[str, Any]:
     return parse_strict_json_object(path.read_bytes(), label="retained SEC or identity metadata")
 
 
-def pin_retained_child(root: Path, parent: Path, name: str, digest: str, files: MutableMapping[str, str]) -> Path:
-    return pin_retained_source(root, SourcePin(path=str(inside(parent, name)), sha256=digest), files)
+def pin_retained_child(root: Path, parent: Path, name: str, digest: str, files: MutableMapping[str, str], *,
+    paths: EvidencePaths | None = None) -> Path:
+    paths = paths or EvidencePaths(root)
+    path = paths.read_child(parent, name)
+    return pin_retained_source(root, SourcePin(path=str(paths.identity(path)), sha256=digest), files, paths=paths)
 
 
 def _verify_receipt(row: dict[str, Any]) -> None:
@@ -102,9 +107,11 @@ def _capture(row: dict[str, Any], accepted: pd.Timestamp) -> pd.Timestamp:
 def read_retained_sec_document(
     root: Path, anchor: SecArchivedDocument, sec_cik: str, files: MutableMapping[str, str], cache: dict[str, Any],
     *, primary_only: bool, memory_guard: Callable[[], None],
+    paths: EvidencePaths | None = None,
 ) -> RetainedSecDocument:
     """Replay source bytes and the selected EDGAR index row without opening a mutable collection."""
-    manifest_path = pin_retained_source(root, anchor.collection_manifest, files)
+    paths = paths or EvidencePaths(root)
+    manifest_path = pin_retained_source(root, anchor.collection_manifest, files, paths=paths)
     manifest = retained_source_object(manifest_path)
     if (manifest.get("schema") != "market_predictor.sec_filing_document_collection"
             or manifest.get("inventory_mode") != "initial_fit" or manifest.get("status") != "complete"
@@ -114,7 +121,7 @@ def read_retained_sec_document(
     receipt_cache = cache.setdefault("receipt_frames", {})
 
     def shard_rows(pin: SourcePin) -> tuple[str, pd.DataFrame]:
-        path = pin_retained_source(root, pin, files)
+        path = pin_retained_source(root, pin, files, paths=paths)
         shard = path.stem
         if (path.parent != folder or path.suffix != ".parquet" or shard not in manifest["shards"]
                 or pin.sha256 != manifest["shards"][shard]["parquet_sha256"]):
@@ -140,9 +147,9 @@ def read_retained_sec_document(
     if (parsed_url.scheme != "https" or parsed_url.netloc != "www.sec.gov"
             or parsed_url.query or parsed_url.fragment):
         raise DataReadinessError("retained document is outside the official SEC URL")
-    body_path = pin_retained_child(root, folder, shard + ".zip", manifest["shards"][shard]["zip_sha256"], files)
+    body_path = pin_retained_child(root, folder, shard + ".zip", manifest["shards"][shard]["zip_sha256"], files, paths=paths)
     body = _zip_body(body_path, row)
-    filing_path = pin_retained_source(root, anchor.filing_metadata, files)
+    filing_path = pin_retained_source(root, anchor.filing_metadata, files, paths=paths)
     filing_cache = cache.setdefault("filing_frames", {})
     if str(filing_path) not in filing_cache:
         filing_cache[str(filing_path)] = pd.read_parquet(filing_path, columns=["sec_cik", "accession_number", "sec_form",
@@ -185,7 +192,7 @@ def read_retained_sec_document(
     index_captured = _capture(index_row, accepted)
     if index_captured > captured:
         raise DataReadinessError("retained SEC document was captured before its detail page")
-    index_path = pin_retained_child(root, folder, index_shard + ".zip", manifest["shards"][index_shard]["zip_sha256"], files)
+    index_path = pin_retained_child(root, folder, index_shard + ".zip", manifest["shards"][index_shard]["zip_sha256"], files, paths=paths)
     index = parse_filing_index(_zip_body(index_path, index_row), accession=str(accession))
     comparable = {key: str(value) for key, value in item.items()}
     comparable["accepted_at_utc"] = accepted.isoformat()
@@ -197,5 +204,5 @@ def read_retained_sec_document(
              and (not primary_only or doc.filename == item["primary_document"])]
     if len(exact) != 1 or row["url"] != "https://www.sec.gov" + exact[0].path:
         raise DataReadinessError("retained SEC document differs from its exact listed URL or index row")
-    return RetainedSecDocument(body, body_path, str(row["member"]), index_path, str(index_row["member"]),
+    return RetainedSecDocument(body, paths.identity(body_path), str(row["member"]), paths.identity(index_path), str(index_row["member"]),
         str(index_hash), str(row["document_type"]), accepted, captured, index_captured)

@@ -9,9 +9,11 @@ from typing import Any
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.runtime_memory import guard
-from market_predictor.evidence.io import inside, write_json_object
+from market_predictor.evidence.hashing import json_sha256
+from market_predictor.evidence.io import write_json_object
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
-from market_predictor.investment.dataset import add_pins, read_object, recheck_sources, require
+from market_predictor.investment.dataset import add_pins, pin_source_file, read_object, recheck_sources, require
 from market_predictor.investment.label_sources import InvestmentSourceReader
 from market_predictor.research.investment_exclusion_evaluation import _coverage
 from market_predictor.research.investment_features import _publish
@@ -45,10 +47,12 @@ from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.corrected_outcome_admission import corrected_ticker
 
 
-def _reviewed_action_ids(root: Path, request: InvestmentRemainingOutcomeRequest, pins: dict[str, str]) -> frozenset[str]:
+def _reviewed_action_ids(
+    root: Path, request: InvestmentRemainingOutcomeRequest, pins: dict[str, str], *, paths: EvidencePaths,
+) -> frozenset[str]:
     return frozenset(record["action_id"]
         for pin in (request.reviewed_action_dates, request.reviewed_parent_units) if pin is not None
-        for record in read_object(root, pin, pins)["records"])
+        for record in read_object(root, pin, pins, paths=paths)["records"])
 
 
 def _implementation() -> dict[str, str]:
@@ -60,33 +64,40 @@ def _implementation() -> dict[str, str]:
         "investment/sec_document_evidence.py", "investment/reviewed_held_stock_actions.py",
         "swing/datasets/reviewed_action_dates.py", "swing/datasets/reviewed_parent_units.py",
         "swing/datasets/reviewed_action_sources.py", "swing/datasets/action_windows.py",
+        "evidence/paths.py",
     )}}
 
 
-def resolve_remaining_investment_outcomes(*, root: Path, request: Path, request_sha256: str, output: Path) -> dict[str, Any]:
+def resolve_remaining_investment_outcomes(
+    *, root: Path, request: Path, request_sha256: str, output: Path, data_root: Path | None = None,
+    source_implementation_snapshot: SourcePin | None = None, validate_inputs_only: bool = False,
+) -> dict[str, Any]:
     """Compile only supported unknown survivors and keep all fixed cohort placements."""
-    root = root.resolve()
-    output = inside(root, output)
-    if output.exists():
+    paths = EvidencePaths(root, data_root)
+    root = paths.project_root
+    output = paths.identity(output)
+    if paths.write(output).exists():
         raise FileExistsError(output)
     runtime = heavy_job_runtime_dir()
-    request_pin = SourcePin(path=str(inside(root, request)), sha256=request_sha256)
+    request_pin = SourcePin(path=str(paths.identity(request)), sha256=request_sha256)
     with heavy_job_lease("prepare-remaining-investment-outcomes", runtime_dir=runtime if runtime.is_absolute() else root / runtime):
         guard("remaining investment outcome preparation")
         implementation = _implementation()
         pins = dict(implementation)
-        parsed = InvestmentRemainingOutcomeRequest.model_validate_json(json.dumps(read_object(root, request_pin, pins)))
-        parent = read_remaining_outcome_parent(root, parsed.parent_manifest, pins)
-        recovery_evidence = prepare_remaining_evidence(root, parent, parsed, pins)
+        if source_implementation_snapshot is not None:
+            pin_source_file(root, source_implementation_snapshot, pins, paths=paths)
+        parsed = InvestmentRemainingOutcomeRequest.model_validate_json(json.dumps(read_object(root, request_pin, pins, paths=paths)))
+        parent = read_remaining_outcome_parent(root, parsed.parent_manifest, pins, paths=paths)
+        recovery_evidence = prepare_remaining_evidence(root, parent, parsed, pins, paths=paths)
         ancestor_request_pin = SourcePin.model_validate(parent.ancestor["request"])
         ancestor_request = InvestmentSelectionOutcomeRequest.model_validate_json(json.dumps(
-            read_object(root, ancestor_request_pin, pins)))
+            read_object(root, ancestor_request_pin, pins, paths=paths)))
         require(parent.ancestor["request_sha256"] == ancestor_request_pin.sha256
             and all(parent.ancestor[name] == value
                 for name, value in ancestor_request.model_dump(mode="json", exclude={"schema_version", "scope"}).items()),
             "ancestor selected outcome request does not bind its source amendments")
-        inputs = read_investment_label_inputs(root, _reference(ancestor_request.label_request), pins)
-        amended = _amended_label_request(root, ancestor_request, inputs.request, parent.original_unknowns, pins)
+        inputs = read_investment_label_inputs(root, _reference(ancestor_request.label_request), pins, paths=paths)
+        amended = _amended_label_request(root, ancestor_request, inputs.request, parent.original_unknowns, pins, paths=paths)
         if recovery_evidence.currency_pin is not None:
             amended = amended.model_copy(update={
                 "currency_corroboration_manifest": _reference(recovery_evidence.currency_pin),
@@ -94,14 +105,17 @@ def resolve_remaining_investment_outcomes(*, root: Path, request: Path, request_
         roster = {row["decision_id"]: row for row in inputs.rows}
         unknown = {key: row for key, row in parent.rows.items() if row["status"] == "unresolved"}
         candidate_ids = {key: recovery_evidence.candidate_ids(parent, key) for key in unknown}
-        action_ids = _reviewed_action_ids(root, parsed, pins).union(
+        action_ids = _reviewed_action_ids(root, parsed, pins, paths=paths).union(
             recovery_evidence.cash, recovery_evidence.held_actions, *candidate_ids.values(),
             *(potential_action_ids(unknown[key]) for key, ids in candidate_ids.items() if ids))
         require(inputs.request.decision_ids is None and all(key[0] in roster for key in unknown),
             "remaining outcomes require the original full fixed decision roster")
 
-    with verified_investment_label_sources(root, amended, inputs.policy) as (extension, evidence, sources):
-        add_pins(root, pins, sources["source_files"])
+    # Raw and action archive preparation acquire this same non-reentrant lease.
+    # The verified source context then holds it for holding replay and publication.
+    with verified_investment_label_sources(root, amended, inputs.policy, paths=paths,
+            source_implementation_snapshot=source_implementation_snapshot) as (extension, evidence, sources):
+        add_pins(root, pins, sources["source_files"], paths=paths)
         verified_at = datetime.now(UTC)
         policy_ref = EvidenceReference(reference=ancestor_request.label_request.path,
             artifact_sha256=ancestor_request.label_request.sha256,
@@ -116,9 +130,31 @@ def resolve_remaining_investment_outcomes(*, root: Path, request: Path, request_
             completed_cash_manifest=parsed.completed_cash_distributions, completed_cash_facts=recovery_evidence.cash,
             existing_recipient_stock_identity=parsed.existing_recipient_stock_identity,
             reviewed_held_stock_actions_manifest=parsed.reviewed_held_stock_actions,
-            reviewed_held_stock_actions=recovery_evidence.held_actions)
-        reader = InvestmentSourceReader(root, raw_selection, request_sha256)
+            reviewed_held_stock_actions=recovery_evidence.held_actions, paths=paths)
+        reader = InvestmentSourceReader(root, raw_selection, request_sha256, paths=paths)
+        prior_producer_sources = set(pins)
         producer_export, producer_commit = producer_origin(implementation, pins)
+        producer_sources = implementation.keys() | (pins.keys() - prior_producer_sources)
+        retained_external = inputs.retained_external | frozenset(
+            name for name in producer_sources if not Path(name).is_relative_to(root))
+
+        def recheck_inputs() -> None:
+            reader.recheck()
+            actions.recheck()
+            add_pins(root, pins, actions.source_files, paths=paths)
+            add_pins(root, pins, reader.source_files, paths=paths)
+            recheck_sources(root, pins, paths=paths, retained_external=retained_external)
+
+        if validate_inputs_only:
+            recheck_inputs()
+            return {
+                "status": "inputs_verified", "data_root": str(paths.data_root),
+                "fixed_holdings": len(parent.rows), "unknown_holdings": len(unknown),
+                "source_pin_count": len(pins), "source_inventory_sha256": json_sha256(pins),
+                "source_implementation_snapshot": (
+                    None if source_implementation_snapshot is None else source_implementation_snapshot.model_dump(mode="json")),
+                "holding_replay_started": False,
+            }
         report: dict[str, Any] = {
             "schema": "market_predictor.investment_remaining_outcomes", "scope": parsed.scope,
             "status": "complete_with_explicit_gaps", "request": request_pin.model_dump(mode="json"),
@@ -135,6 +171,8 @@ def resolve_remaining_investment_outcomes(*, root: Path, request: Path, request_
             "producer_commit": producer_commit, "selection_changed": False, "models_refitted": False,
             "original_labels_changed": False, "training_ready": False, **FLAGS,
         }
+        if source_implementation_snapshot is not None:
+            report["source_implementation_snapshot"] = source_implementation_snapshot.model_dump(mode="json")
         rows = dict(parent.rows)
         attempts = {key: {name: row[name] for name in ("decision_id", "horizon_sessions", "security_id", "decision_session")}
             for key, row in unknown.items()}
@@ -178,9 +216,9 @@ def resolve_remaining_investment_outcomes(*, root: Path, request: Path, request_
                 if pair["status"] != "source_validated":
                     continue
                 verify_remaining_trigger_evidence(root, request_pin, recovery_evidence,
-                    pair["specifications"]["stock"], eligible_ids, pins)
+                    pair["specifications"]["stock"], eligible_ids, pins, paths=paths)
                 recovered = dict(row)
-                publish_selected_pair(staged, output, key, recovered, pair, verified_at, proof_pins)
+                publish_selected_pair(staged, output, key, recovered, pair, verified_at, proof_pins, paths=paths)
                 rows[key] = recovered
                 attempt["status"] = "recovered"
 
@@ -193,19 +231,15 @@ def resolve_remaining_investment_outcomes(*, root: Path, request: Path, request_
                     "after": _coverage(rows.values(), comparisons)})
             if all(view["date_count"] and view["complete_dates"] == view["date_count"] for view in comparisons.values()):
                 report["status"] = "complete_research_only"
-            reader.recheck()
-            actions.recheck()
-            add_pins(root, pins, actions.source_files)
-            add_pins(root, pins, reader.source_files)
             guard("remaining investment outcome publication")
             write_json_object(staged / "outcomes.json", {"rows": list(rows.values())})
             write_json_object(staged / "comparisons.json", {"views": comparisons})
             write_json_object(staged / "attempts.json", {"rows": list(attempts.values())})
-            recheck_sources(root, pins)
+            recheck_inputs()
             recheck_sources(staged, proof_pins)
             report["completed_at_utc"] = datetime.now(UTC).isoformat()
 
-        result = _publish(output, report, pins, save)
+        result = _publish(output, report, pins, save, paths=paths, retained_external=retained_external)
         return {**result, **{name: report[name] for name in (
             "attempted_keys", "unattempted_keys", "newly_recovered_keys", "still_unresolved_keys", "coverage",
         )}}

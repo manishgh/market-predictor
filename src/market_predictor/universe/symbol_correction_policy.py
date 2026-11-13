@@ -10,7 +10,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.evidence.io import resolve_inside_authority
+from market_predictor.evidence.paths import EvidencePaths
 
 
 class _Strict(BaseModel):
@@ -41,8 +41,9 @@ class SymbolCorrectionPolicy(_Strict):
     corrections: list[SymbolCorrection] = Field(min_length=2, max_length=2)
 
 
-def load_symbol_correction_policy(root: Path, config: Path, expected_sha256: str) -> SymbolCorrectionPolicy:
-    path = resolve_inside_authority(root, str(config))
+def load_symbol_correction_policy(root: Path, config: Path, expected_sha256: str, *,
+    paths: EvidencePaths | None = None) -> SymbolCorrectionPolicy:
+    path = (paths or EvidencePaths(root)).read(config)
     if path.stat().st_size > 1024**2:
         raise DataReadinessError("symbol correction policy exceeds bound")
     payload = path.read_bytes()

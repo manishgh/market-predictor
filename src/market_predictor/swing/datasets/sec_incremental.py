@@ -42,7 +42,10 @@ from market_predictor.catalysts.sec_filings.collection import (
 )
 from market_predictor.config import Settings
 from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
+from market_predictor.core.immutable_publication import publish_new_file
+from market_predictor.core.path_integrity import verify_no_reparse_ancestry, verify_tree_containment
 from market_predictor.core.system_memory import assert_system_memory_available
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError, heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.resources import assert_memory_budget
 from market_predictor.sources.http import HttpClient
@@ -76,7 +79,7 @@ def _object(value: object) -> dict[str, Any]:
 
 def _read(path: Path) -> dict[str, Any]:
     try:
-        return _object(json.loads(path.read_text(encoding="utf-8")))
+        return _object(json.loads(verify_no_reparse_ancestry(path, label="SEC metadata").read_text(encoding="utf-8")))
     except (OSError, ValueError) as exc:
         raise DataReadinessError(f"SEC metadata unreadable: {path}") from exc
 
@@ -84,6 +87,7 @@ def _read(path: Path) -> dict[str, Any]:
 def _pin(path: Path, expected: object) -> None:
     if not isinstance(expected, str) or re.fullmatch(r"[0-9a-f]{64}", expected) is None:
         raise DataReadinessError(f"SEC pin invalid: {path}")
+    path = verify_no_reparse_ancestry(path, label="SEC source")
     if not path.is_file() or file_sha256(path) != expected:
         raise DataReadinessError(f"SEC pin mismatch: {path}")
 
@@ -93,6 +97,7 @@ def _write(path: Path, payload: Mapping[str, object]) -> None:
 
 
 def _publish_bytes(path: Path, encoded: bytes, *, replace: bool = False) -> None:
+    path = verify_no_reparse_ancestry(path, label="SEC publication")
     temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     try:
         with temporary.open("xb") as handle:
@@ -102,7 +107,7 @@ def _publish_bytes(path: Path, encoded: bytes, *, replace: bool = False) -> None
         if replace:
             os.replace(temporary, path)
         else:
-            os.link(temporary, path)
+            publish_new_file(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -117,8 +122,10 @@ def _read_pinned(path: Path) -> dict[str, Any]:
     return _read(path)
 
 
-def load_config(path: Path, *, root: Path | None = None) -> SecIncrementalConfig:
+def load_config(path: Path, *, root: Path | None = None, paths: EvidencePaths | None = None) -> SecIncrementalConfig:
     root = (root or Path.cwd()).resolve()
+    if paths is not None:
+        path = paths.read(path)
     try:
         section = _object(tomllib.loads(path.read_text(encoding="utf-8"))["sec_incremental"])
         expected = {
@@ -130,17 +137,20 @@ def load_config(path: Path, *, root: Path | None = None) -> SecIncrementalConfig
         for key in ("archive_manifest_sha256", "identity_relations_sha256"):
             if re.fullmatch(r"[0-9a-f]{64}", str(section[key])) is None:
                 raise DataReadinessError(f"SEC config invalid {key}")
-        paths = {}
+        locations: dict[str, Path] = {}
         for key in ("archive_directory", "identity_relations", "output_root"):
             if not isinstance(section[key], str) or not section[key].strip():
                 raise DataReadinessError(f"SEC config invalid {key}")
-            paths[key] = (root / section[key]).resolve()
-        output = paths["output_root"]
-        archive = paths["archive_directory"]
+            if paths is None:
+                locations[key] = (root / section[key]).resolve()
+            else:
+                locations[key] = paths.write(section[key])
+        output = locations["output_root"]
+        archive = locations["archive_directory"]
         if output == archive or output.is_relative_to(archive) or archive.is_relative_to(output):
             raise DataReadinessError("SEC extension output must be separate from immutable archive")
         return SecIncrementalConfig(
-            archive, section["archive_manifest_sha256"], paths["identity_relations"],
+            archive, section["archive_manifest_sha256"], locations["identity_relations"],
             section["identity_relations_sha256"], output,
             date.fromisoformat(str(section["extension_start"])),
         )
@@ -279,7 +289,8 @@ def _replay(
         _pin(attempt / "collection" / "_manifest.json", manifest_pin)
     elif not (attempt / "collection").exists():
         return False
-    collection = load_sec_filing_collection(attempt / "collection")
+    collection_path = verify_tree_containment(attempt / "collection", label="SEC attempt collection")
+    collection = load_sec_filing_collection(collection_path)
     if collection.manifest.get("request") != expected:
         raise DataReadinessError("SEC replay collection request mismatch")
     success = (
@@ -306,11 +317,12 @@ def _checkpoint(
     cik = str(relations.iloc[0]["sec_cik"])
     completed = config.extension_start - _DAY
     intervals: list[tuple[date, date, Path, dict[str, Any]]] = []
-    issuer_root = config.output_root / cik
+    issuer_root = verify_no_reparse_ancestry(config.output_root / cik, label="SEC issuer archive")
     if not issuer_root.exists():
         return completed
     for attempt in issuer_root.iterdir():
-        if not attempt.is_dir() or attempt.is_symlink():
+        attempt = verify_no_reparse_ancestry(attempt, label="SEC attempt")
+        if not attempt.is_dir():
             raise DataReadinessError("SEC attempt directory inventory invalid")
         if not (attempt / "request.json").exists():
             if any(not (child.name.startswith(".") and child.name.endswith(".tmp")) for child in attempt.iterdir()):
@@ -342,6 +354,7 @@ def _attempt(
 ) -> bool:
     cik = str(relations.iloc[0]["sec_cik"])
     attempt = config.output_root / cik / uuid4().hex
+    attempt = verify_no_reparse_ancestry(attempt, label="SEC publication attempt")
     attempt.mkdir(parents=True, exist_ok=False)
     expected = _expected_request(relations, collection_config)
     request: dict[str, object] = {
@@ -379,6 +392,7 @@ def _attempt(
 def _snapshot_request(config: SecIncrementalConfig, now: datetime, *, offline: bool) -> dict[str, Any] | None:
     # One immutable observation cutoff per UTC day, shared across bounded resumptions.
     directory = config.output_root / "snapshots" / now.date().isoformat()
+    directory = verify_no_reparse_ancestry(directory, label="SEC snapshot request")
     requests = list(directory.glob("request.*.json"))
     if len(requests) > 1:
         raise DataReadinessError("SEC current-day snapshot has conflicting cutoffs")
@@ -407,8 +421,10 @@ def _snapshot_request(config: SecIncrementalConfig, now: datetime, *, offline: b
 
 def _snapshot_replay(directory: Path, expected: Mapping[str, object]) -> bool:
     observed = False
+    directory = verify_no_reparse_ancestry(directory, label="SEC snapshot directory")
     for attempt in directory.iterdir() if directory.exists() else ():
-        if not attempt.is_dir() or attempt.is_symlink():
+        attempt = verify_no_reparse_ancestry(attempt, label="SEC snapshot attempt")
+        if not attempt.is_dir():
             raise DataReadinessError("SEC snapshot attempt inventory invalid")
         manifests = list(attempt.glob("manifest.*.json"))
         if not manifests:
@@ -449,6 +465,7 @@ def _snapshot(
     directory: Path, request: Mapping[str, Any], source: SecSource, gate: _RequestGate,
 ) -> bool:
     attempt = directory / uuid4().hex
+    attempt = verify_no_reparse_ancestry(attempt, label="SEC publication attempt")
     attempt.mkdir(parents=True, exist_ok=False)
     raw_responses: tuple[SecRawResponse, ...] = ()
     filings: list[dict[str, Any]] = []
@@ -498,7 +515,7 @@ def _snapshot(
 
 def run(
     config_path: Path, *, through: date | None = None, max_issuers: int | None = None, offline: bool = False,
-    root: Path | None = None,
+    root: Path | None = None, data_root: Path | None = None,
 ) -> dict[str, object]:
     """Hold the workspace lease before config, relation or archive input loading."""
     root = (root or Path.cwd()).resolve()
@@ -511,7 +528,8 @@ def run(
     runtime = heavy_job_runtime_dir() if os.environ.get("MARKET_PREDICTOR_RUNTIME_DIR", "").strip() else root / "data/runtime"
     with heavy_job_lease("sec-incremental", runtime_dir=runtime):
         guard_memory()
-        config = load_config(config_path, root=root)
+        paths = None if data_root is None else EvidencePaths(root, data_root)
+        config = load_config(config_path, root=root, paths=paths)
         archive = verify_archive(config, guard=guard_memory)
         _pin(config.identity_relations, config.identity_relations_sha256)
         relations = load_sec_identity_relations(config.identity_relations)
@@ -613,12 +631,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--root", type=Path, default=None, help="Repository root; defaults to the current working directory")
+    parser.add_argument("--data-root", type=Path, help="Root holding the selected data namespaces.")
     parser.add_argument("--through", type=date.fromisoformat, help="Inclusive UTC date; default yesterday UTC")
     parser.add_argument("--max-issuers", type=int, help="Maximum new issuer attempts, excluding verified skips")
     parser.add_argument("--offline", action="store_true", help="Verify archive pins and replay attempts without HTTP")
     args = parser.parse_args(argv)
     try:
-        result = run(args.config, root=args.root, through=args.through, max_issuers=args.max_issuers, offline=args.offline)
+        result = run(args.config, root=args.root, through=args.through, max_issuers=args.max_issuers,
+            offline=args.offline, data_root=args.data_root)
         print(json.dumps({key: value for key, value in result.items() if key != "issuers"}, sort_keys=True, indent=2))
         return 0 if result["status"] in {"complete", "snapshot_collected"} else 75 if result["status"] == "paused_memory_pressure" else 2
     except HeavyJobBusyError as exc:

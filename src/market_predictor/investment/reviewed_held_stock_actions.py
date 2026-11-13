@@ -16,7 +16,7 @@ from pydantic import Field, model_validator
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import inside
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.investment.completed_cash_distributions import _date_pattern, _issuer_name_key, _official_blocks
 from market_predictor.investment.dividend_currencies import (
     TaxCurrencyEvent,
@@ -133,16 +133,18 @@ def held_stock_action_covers(
 
 def read_reviewed_held_stock_actions(
     root: Path, pin: SourcePin | None, files: MutableMapping[str, str],
+    *, paths: EvidencePaths | None = None,
 ) -> dict[str, ReviewedHeldStockAction]:
     if pin is None:
         return {}
-    path = pin_retained_source(root, pin, files)
+    paths = paths or EvidencePaths(root)
+    path = pin_retained_source(root, pin, files, paths=paths)
     if path.stat().st_size > 1024**2:
         raise DataReadinessError("reviewed held-stock facts exceed bounded size")
     raw = path.read_bytes()
     parse_strict_json_object(raw, label="reviewed held-stock action facts")
     manifest = ReviewedHeldStockActions.model_validate_json(raw)
-    declared = {os.path.normcase(str(inside(root, name))): digest for name, digest in files.items()}
+    declared = {os.path.normcase(str(paths.identity(name))): digest for name, digest in files.items()}
     for fact in manifest.facts:
         sources = [fact.stock_class_proof]
         if isinstance(fact, ReviewedHoldingSplit):
@@ -158,7 +160,7 @@ def read_reviewed_held_stock_actions(
                     sources.extend(SourcePin(path=source.path, sha256=source.sha256)
                                    for source in (captured.body, captured.receipt))
         for source in sources:
-            name = os.path.normcase(str(inside(root, source.path)))
+            name = os.path.normcase(str(paths.identity(source.path)))
             if declared.setdefault(name, source.sha256) != source.sha256:
                 raise DataReadinessError("reviewed held-stock facts declare conflicting exact source pins")
     return {item.action_id: item for item in manifest.facts}
@@ -198,10 +200,11 @@ def _reference(pin: SourcePin, policy: str, locator: str, captured: datetime) ->
 def _split_issuer(
     root: Path, fact: ReviewedHoldingSplit, policy: str, files: MutableMapping[str, str], cache: dict[str, Any],
     *, memory_guard: Callable[[], None],
+    paths: EvidencePaths | None = None,
 ) -> tuple[EvidenceReference, ...]:
     source = fact.issuer_declaration
     document = read_retained_sec_document(root, source, fact.security_id.removeprefix("cik:"), files, cache,
-                                         primary_only=False, memory_guard=memory_guard)
+                                         primary_only=False, memory_guard=memory_guard, paths=paths)
     _, blocks = _official_blocks(document)
     quote = fact.declaration_quote
     record = _date_pattern(fact.record_date, year_required=True)
@@ -228,22 +231,24 @@ def _split_issuer(
 def _regular_cash_issuer(
     root: Path, fact: ReviewedRegularCash, manifest: SourcePin, policy: str, files: MutableMapping[str, str],
     *, memory_guard: Callable[[], None],
+    paths: EvidencePaths | None = None,
 ) -> tuple[EvidenceReference, ...]:
     history = fact.issuer_history
     sources = (history.receipt, history.request, history.transport, history.body)
     if fact.security_id != "cik:0000078003" or len({item.path for item in sources}) != 4:
         raise DataReadinessError("reviewed regular cash history lacks supported exact issuer binding")
     pins = verify_reviewed_action_sources(root, manifest, {item.path: item.sha256 for item in sources},
-                                         (history.receipt,), memory_guard=memory_guard)
-    receipt_path = inside(root, history.receipt.path)
+                                         (history.receipt,), memory_guard=memory_guard, paths=paths)
+    paths = paths or EvidencePaths(root)
+    receipt_path = paths.read(history.receipt.path)
     receipt = parse_strict_json_object(receipt_path.read_bytes(), label="reviewed cash issuer receipt")
-    body_path = inside(root, history.body.path)
+    body_path = paths.read(history.body.path)
     if (receipt.get("url") != _PFIZER_HISTORY
-            or inside(receipt_path.parent, str(receipt.get("body_path"))) != body_path
-            or receipt_path.parent / "_request.json" != inside(root, history.request.path)
-            or receipt_path.parent / "transport.json" != inside(root, history.transport.path)):
+            or paths.read_child(receipt_path.parent, str(receipt.get("body_path"))) != body_path
+            or receipt_path.parent / "_request.json" != paths.read(history.request.path)
+            or receipt_path.parent / "transport.json" != paths.read(history.transport.path)):
         raise DataReadinessError("reviewed cash issuer history receipt does not bind its exact sources")
-    transport = parse_strict_json_object(inside(root, history.transport.path).read_bytes(), label="reviewed cash transport")
+    transport = parse_strict_json_object(paths.read(history.transport.path).read_bytes(), label="reviewed cash transport")
     raw_clocks = receipt.get("started_at_utc"), transport.get("retrieved_at_utc"), receipt.get("completed_at_utc")
     if any(not isinstance(clock, str) for clock in raw_clocks):
         raise DataReadinessError("reviewed cash issuer source is missing a capture clock")
@@ -262,7 +267,7 @@ def _regular_cash_issuer(
             or [cell.get_text(strip=True) for cell in matching[0]] != expected):
         raise DataReadinessError("reviewed cash issuer history lacks one exact regular cash schedule")
     for path, digest in pins.items():
-        pin_retained_source(root, SourcePin(path=path, sha256=digest), files)
+        pin_retained_source(root, SourcePin(path=path, sha256=digest), files, paths=paths)
     locator = f"issuer regular cash schedule;action_id={fact.action_id};ex_date={fact.ex_date};gross_amount={fact.gross_amount}"
     return tuple(_reference(item, policy, locator, captured) for item in sources)
 
@@ -270,9 +275,10 @@ def _regular_cash_issuer(
 def verify_held_stock_action(
     root: Path, fact: ReviewedHeldStockAction, original: dict[str, Any], manifest: SourcePin, policy: str,
     files: MutableMapping[str, str], cache: dict[str, Any], *, memory_guard: Callable[[], None],
+    paths: EvidencePaths | None = None,
 ) -> VerifiedHeldStockAction:
     value = _checked_provider_record(fact, original)
-    proof_path = pin_retained_source(root, fact.stock_class_proof, files)
+    proof_path = pin_retained_source(root, fact.stock_class_proof, files, paths=paths)
     if proof_path.stat().st_size > 1024**2:
         raise DataReadinessError("reviewed held-stock class proof exceeds size bound")
     raw = proof_path.read_bytes()
@@ -286,25 +292,25 @@ def verify_held_stock_action(
     if isinstance(fact, ReviewedHoldingSplit):
         sessions = (fact.record_date, fact.payable_date, fact.ex_date, fact.due_bill_redemption_date)
     identity = replay_stock_identity(root, proof, sessions=sessions, source_files=files,
-                                     interpretation_sha256=policy, cache=cache)
+                                     interpretation_sha256=policy, cache=cache, paths=paths)
     if (identity.proven_sessions != sessions or identity.missing_reasons or identity.competing_class_tickers
             or not identity.evidence or identity.anchor_accepted_at_utc.date() >= sessions[0]):
         raise DataReadinessError("reviewed held-stock action lacks unique dated common share ownership")
     if isinstance(fact, ReviewedHoldingSplit):
-        source_refs = _split_issuer(root, fact, policy, files, cache, memory_guard=memory_guard)
+        source_refs = _split_issuer(root, fact, policy, files, cache, memory_guard=memory_guard, paths=paths)
     else:
-        issuer_refs = _regular_cash_issuer(root, fact, manifest, policy, files, memory_guard=memory_guard)
+        issuer_refs = _regular_cash_issuer(root, fact, manifest, policy, files, memory_guard=memory_guard, paths=paths)
 
         def tax_class(calculation: Mapping[str, Any]) -> tuple[EvidenceReference, ...]:
             refs, observed = replay_stock_tax_class(calculation, fact.tax.lookup, root, policy,
-                                                    issuer_name=identity.issuer_name, security_title=identity.security_title)
+                                                    issuer_name=identity.issuer_name, security_title=identity.security_title, paths=paths)
             issuer = _issuer_name_key(identity.issuer_name)
             if not issuer or _issuer_name_key(observed["tax_institution"]) != issuer:
                 raise DataReadinessError("reviewed regular cash tax issuer differs from dated share class")
             return refs
 
         _, tax_refs = replay_tax_currency_event(root, fact.tax, fact.ex_date, _decimal(fact.gross_amount), Decimal(0), policy,
-            stock_tax_validation=tax_class, payable_date=fact.payable_date, record_date=fact.record_date)
+            stock_tax_validation=tax_class, payable_date=fact.payable_date, record_date=fact.record_date, paths=paths)
         source_refs = (*issuer_refs, *tax_refs)
     locator = (f"{HELD_STOCK_ACTION_LOCATOR};kind={fact.kind};action_id={fact.action_id};security_id={fact.security_id};"
                f"ticker={fact.ticker};retained_record_sha256={fact.retained_record_sha256}")
@@ -313,5 +319,5 @@ def verify_held_stock_action(
                            identity.verified_at_utc)
     evidence = (binding, proof_ref, *identity.evidence, *source_refs)
     for ref in evidence:
-        pin_retained_source(root, SourcePin(path=ref.reference, sha256=ref.artifact_sha256), files)
+        pin_retained_source(root, SourcePin(path=ref.reference, sha256=ref.artifact_sha256), files, paths=paths)
     return VerifiedHeldStockAction(fact, value, binding, evidence)

@@ -33,6 +33,7 @@ def test_collection_adapter_preserves_child_exit_and_separates_training() -> Non
     assert 'if ($childExitCode -ne 0) { $exitCode = $childExitCode }' in source
     assert "exit $exitCode" in source
     assert '"market_predictor.swing.datasets.alpaca_incremental"' in source
+    assert '$arguments += @("--data-root", $DataRoot)' in source
     assert "Activate.ps1" not in source
     assert "train-" not in source
     assert "score-" not in source
@@ -44,6 +45,7 @@ def test_scheduler_has_rollback_and_nonoverlap() -> None:
     assert "-MultipleInstances IgnoreNew" in source
     assert "-WorkingDirectory $root" in source
     assert "Export-ScheduledTask" in source
+    assert ' -DataRoot `"$storage`"' in source
     assert source.index("Register-ScheduledTask -TaskName") < source.index("Unregister-ScheduledTask -TaskName")
     assert "-LogonType Interactive -RunLevel Limited" in source
 

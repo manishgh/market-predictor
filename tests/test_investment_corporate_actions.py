@@ -281,7 +281,7 @@ def _reviewed_split_record() -> tuple[dict[str, Any], ReviewedHoldingSplit]:
 
 def _fixture_held_verifier(
     root: Path, fact: ReviewedHeldStockAction, original: dict[str, Any], manifest: SourcePin,
-    policy: str, files: dict[str, str], cache: dict[str, Any], *, memory_guard: Any,
+    policy: str, files: dict[str, str], cache: dict[str, Any], *, memory_guard: Any, paths: Any = None,
 ) -> VerifiedHeldStockAction:
     value = _checked_provider_record(fact, original)
     captured = datetime(2026, 11, 7, tzinfo=UTC)

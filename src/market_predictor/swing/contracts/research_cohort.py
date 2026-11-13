@@ -13,7 +13,7 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import resolve_inside_authority
+from market_predictor.evidence.paths import EvidencePaths
 
 Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 SecurityId = Annotated[str, Field(min_length=1, pattern=r"^\S+$")]
@@ -128,8 +128,13 @@ class SwingResearchCohort(BaseModel):
         return memberships.loc[memberships["security_id"].isin(self.retained_security_ids)].copy()
 
 
-def load_swing_research_cohort(path: Path, *, source_root: Path | None = None) -> SwingResearchCohort:
+def load_swing_research_cohort(path: Path, *, source_root: Path | None = None,
+    paths: EvidencePaths | None = None) -> SwingResearchCohort:
     """Read a hash-bound audit and optionally verify its immutable source files."""
+    if paths is not None:
+        if source_root is not None and paths.project_root != source_root.resolve():
+            raise DataReadinessError("research cohort storage/project roots differ")
+        path = paths.read(path)
     try:
         if path.stat().st_size > 8 * 1024 * 1024:
             raise DataReadinessError("research cohort metadata exceeds bounded size")
@@ -142,8 +147,9 @@ def load_swing_research_cohort(path: Path, *, source_root: Path | None = None) -
         if payload["cohort_sha256"] != cohort.sha256() or payload["summary"] != cohort.summary():
             raise DataReadinessError("research cohort identity or summary differs")
         if source_root is not None:
+            storage = paths or EvidencePaths(source_root)
             for relative, expected in cohort.source_files.items():
-                if file_sha256(resolve_inside_authority(source_root, relative)) != expected:
+                if file_sha256(storage.read(relative)) != expected:
                     raise DataReadinessError(f"research cohort source hash differs: {relative}")
         return cohort
     except (OSError, ValueError, TypeError) as exc:

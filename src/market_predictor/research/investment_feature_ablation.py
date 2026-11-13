@@ -12,6 +12,7 @@ import pandas as pd
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.io import inside, write_json_object
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.investment.dataset import add_pins, load_investment_dataset, pin_source_file, read_object, require
 from market_predictor.investment.diagnostics import feature_coverage, prediction_diagnostics
@@ -50,12 +51,15 @@ class InvestmentFeatureAblationRequest(HoldingContract):
     training_request: SourcePin
 
 
-def read_ablation_reference(root: Path, request: InvestmentComparisonSources, training: InvestmentReferenceRun,
-                   columns: dict[str, tuple[str, ...]], pins: dict[str, str]) -> InvestmentReferenceRun:
-    original = InvestmentFeatureAblationRequest.model_validate_json(json.dumps(read_object(root, request.ablation_request, pins)))
+def read_ablation_reference(
+    root: Path, request: InvestmentComparisonSources, training: InvestmentReferenceRun,
+    columns: dict[str, tuple[str, ...]], pins: dict[str, str], *, paths: EvidencePaths | None = None,
+) -> InvestmentReferenceRun:
+    original = InvestmentFeatureAblationRequest.model_validate_json(
+        json.dumps(read_object(root, request.ablation_request, pins, paths=paths)))
     require(original.training_manifest == request.training_manifest and original.training_request == request.training_request,
         "investment comparison ablation binds a different training run")
-    report = read_object(root, request.ablation_manifest, pins)
+    report = read_object(root, request.ablation_manifest, pins, paths=paths)
     require(report.get("schema") == "market_predictor.investment_feature_ablation"
         and report.get("status") == "complete_research_only" and report.get("scope") == "retrospective_research"
         and report["request_sha256"] == request.ablation_request.sha256 and report["fold_scope_fits"] == 48
@@ -71,9 +75,10 @@ def read_ablation_reference(root: Path, request: InvestmentComparisonSources, tr
     require(not pd.isna(completed_at) and completed_at.tzinfo is not None
         and training.completed_at < completed_at <= pd.Timestamp(datetime.now(UTC)),
         "investment comparison ablation completion clock differs")
-    experiment_path = inside(root, request.ablation_manifest.path).parent / "experiment.json"
+    manifest_path = inside(root, request.ablation_manifest.path) if paths is None else paths.identity(request.ablation_manifest.path)
+    experiment_path = manifest_path.parent / "experiment.json"
     require(report["files"] == {"experiment.json": report["experiment_sha256"]}, "investment comparison ablation experiment pin differs")
-    experiment = read_object(root, SourcePin(path=str(experiment_path), sha256=report["experiment_sha256"]), pins)
+    experiment = read_object(root, SourcePin(path=str(experiment_path), sha256=report["experiment_sha256"]), pins, paths=paths)
     require(experiment.get("schema") == "market_predictor.investment_feature_ablation_experiment"
         and experiment["scope"] == "retrospective_research" and all(experiment.get(flag) is False for flag in FLAGS)
         and experiment["request_sha256"] == request.ablation_request.sha256

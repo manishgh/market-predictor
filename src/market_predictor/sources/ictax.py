@@ -20,6 +20,7 @@ from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, read_json_object, write_json_object
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.research.investment_features import FLAGS, _publish
 from market_predictor.sources.http import HttpClient
@@ -89,14 +90,16 @@ def _detail_request(fund: TaxFund, year: int, valor: int) -> dict[str, Any]:
             "language": "en", "isCantonBL": False}
 
 
-def _read_pin(root: Path, pin: SourcePin, pins: dict[str, str], maximum: int = MAXIMUM_RESPONSE_BYTES) -> bytes:
-    path = inside(root, pin.path)
+def _read_pin(root: Path, pin: SourcePin, pins: dict[str, str], maximum: int = MAXIMUM_RESPONSE_BYTES, *,
+              paths: EvidencePaths | None = None) -> bytes:
+    paths = paths or EvidencePaths(root)
+    path = paths.read(pin.path)
     if path.stat().st_size > maximum:
         raise DataReadinessError("ICTax pinned source hash or byte bound differs")
     raw = path.read_bytes()
     if len(raw) > maximum or sha256(raw).hexdigest() != pin.sha256:
         raise DataReadinessError("ICTax pinned source hash or byte bound differs")
-    pins[str(path)] = pin.sha256
+    pins[str(paths.identity(path))] = pin.sha256
     return raw
 
 
@@ -151,26 +154,30 @@ def _clock(value: object) -> None:
         raise DataReadinessError("ICTax capture clock must be aware and not in the future")
 
 
-def _pin(root: Path, path: Path) -> dict[str, str]:
-    return {"path": path.relative_to(root).as_posix(), "sha256": file_sha256(path)}
+def _pin(root: Path, path: Path, *, paths: EvidencePaths | None = None) -> dict[str, str]:
+    paths = paths or EvidencePaths(root)
+    return {"path": paths.relative(path).as_posix(), "sha256": file_sha256(paths.read(path))}
 
 
-def _load_directory(root: Path, directory: Path, pins: dict[str, str]) -> dict[str, Any]:
-    manifest = directory / "_manifest.json"
-    payload = _json(_read_pin(root, SourcePin(**_pin(root, manifest)), pins))
+def _load_directory(root: Path, directory: Path, pins: dict[str, str], *, paths: EvidencePaths | None = None) -> dict[str, Any]:
+    paths = paths or EvidencePaths(root)
+    manifest = paths.read_child(directory, "_manifest.json")
+    payload = _json(_read_pin(root, SourcePin(**_pin(root, manifest, paths=paths)), pins, paths=paths))
     files = payload.get("files")
     if not isinstance(files, dict):
         raise DataReadinessError("ICTax archive file inventory missing")
     for name, digest in files.items():
         if Path(name).name != name:
             raise DataReadinessError("ICTax checkpoint file path differs")
-        _read_pin(root, SourcePin(path=(directory / name).relative_to(root).as_posix(), sha256=digest), pins)
+        _read_pin(root, SourcePin(path=paths.relative(directory / name).as_posix(), sha256=digest), pins, paths=paths)
     return payload
 
 
 def _read_capture(root: Path, directory: Path, url: str, request: dict[str, Any],
-                  job_sha256: str, pins: dict[str, str]) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    unit = _load_directory(root, directory, pins)
+                  job_sha256: str, pins: dict[str, str], *, paths: EvidencePaths | None = None,
+                  ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    paths = paths or EvidencePaths(root)
+    unit = _load_directory(root, directory, pins, paths=paths)
     if (unit.get("schema") != SCHEMA + ".capture" or unit.get("job_sha256") != job_sha256
         or unit.get("url") != url or unit.get("request") != request):
         raise DataReadinessError("ICTax capture request identity differs")
@@ -180,8 +187,8 @@ def _read_capture(root: Path, directory: Path, url: str, request: dict[str, Any]
         return unit, None
     if unit.get("status") != "response_archived" or set(unit["files"]) != {"response.bin", "receipt.json"}:
         raise DataReadinessError("ICTax response checkpoint differs")
-    body = (directory / "response.bin").read_bytes()
-    receipt = read_json_object(directory / "receipt.json")
+    body = paths.read_child(directory, "response.bin").read_bytes()
+    receipt = read_json_object(paths.read_child(directory, "receipt.json"))
     response = http_response_from_record(receipt, body)
     if (receipt.get("url") != url or receipt.get("method") != "POST" or receipt.get("request") != request
         or receipt.get("sha256") != response.sha256 or receipt.get("bytes") != len(body)
@@ -191,7 +198,8 @@ def _read_capture(root: Path, directory: Path, url: str, request: dict[str, Any]
     _clock(receipt.get("retrieved_at"))
     if receipt.get("retrieved_at") != receipt.get("retrieved_at_utc"):
         raise DataReadinessError("ICTax response capture clocks differ")
-    unit["source"] = {"body": _pin(root, directory / "response.bin"), "receipt": _pin(root, directory / "receipt.json")}
+    unit["source"] = {"body": _pin(root, directory / "response.bin", paths=paths),
+                      "receipt": _pin(root, directory / "receipt.json", paths=paths)}
     if response.status_code != 200:
         unit["gap_reason"] = f"http_status_{response.status_code}"
         return unit, None
@@ -299,13 +307,14 @@ def _detail_status(payload: dict[str, Any] | None, request: dict[str, Any], *, h
     return None
 
 
-def _retained(root: Path, pair: RetainedTaxPair, fund: TaxFund, pins: dict[str, str]) -> dict[str, Any]:
+def _retained(root: Path, pair: RetainedTaxPair, fund: TaxFund, pins: dict[str, str], *,
+              paths: EvidencePaths | None = None) -> dict[str, Any]:
     captured: dict[str, dict[str, Any]] = {}
     requests: list[dict[str, Any]] = []
     has_http_status: list[bool] = []
     for name, source, url in (("structured", pair.structured, STRUCTURED_URL), ("gross_context", pair.gross_context, HTML_URL)):
-        raw = _read_pin(root, source.body, pins)
-        receipt = _json(_read_pin(root, source.receipt, pins))
+        raw = _read_pin(root, source.body, pins, paths=paths)
+        receipt = _json(_read_pin(root, source.receipt, pins, paths=paths))
         if (receipt.get("url") != url or receipt.get("method") != "POST" or receipt.get("sha256") != source.body.sha256
             or receipt.get("bytes") != len(raw) or receipt.get("status_code", 200) != 200):
             raise DataReadinessError("retained ICTax receipt binding differs")
@@ -328,16 +337,18 @@ def _retained(root: Path, pair: RetainedTaxPair, fund: TaxFund, pins: dict[str, 
                                        else "original_legacy_receipts_no_http_status")}
 
 
-def _request(root: Path, path: Path, digest: str, pins: dict[str, str]) -> ICTaxArchiveRequest:
-    raw = _read_pin(root, SourcePin(path=path.relative_to(root).as_posix(), sha256=digest), pins, MAXIMUM_REQUEST_BYTES)
+def _request(root: Path, path: Path, digest: str, pins: dict[str, str], *, paths: EvidencePaths | None = None) -> ICTaxArchiveRequest:
+    paths = paths or EvidencePaths(root)
+    pin = SourcePin(path=paths.relative(path).as_posix(), sha256=digest)
+    raw = _read_pin(root, pin, pins, MAXIMUM_REQUEST_BYTES, paths=paths)
     return ICTaxArchiveRequest.model_validate_json(raw)
 
 
 def _records(root: Path, output: Path, policy: ICTaxArchiveRequest, job_sha256: str,
-             pins: dict[str, str], session: _Session | None = None) -> list[dict[str, Any]]:
+             pins: dict[str, str], session: _Session | None = None, *, paths: EvidencePaths | None = None) -> list[dict[str, Any]]:
     def capture(directory: Path, url: str, request: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any] | None]:
         if session is None:
-            return _read_capture(root, directory, url, request, job_sha256, pins)
+            return _read_capture(root, directory, url, request, job_sha256, pins, paths=paths)
         return _capture(root, directory, url, request, job_sha256, session, pins)
 
     retained = {(p.symbol, p.year): p for p in policy.retained}
@@ -347,7 +358,7 @@ def _records(root: Path, output: Path, policy: ICTaxArchiveRequest, job_sha256: 
         for year in fund.years:
             guard("ICTax fund-year checkpoint")
             if (fund.symbol, year) in retained:
-                rows.append(_retained(root, retained[fund.symbol, year], fund, pins))
+                rows.append(_retained(root, retained[fund.symbol, year], fund, pins, paths=paths))
                 continue
             if lookup is None or lookup[1] is None:
                 search = {"max": 100, "fetch": 10, "offset": 0, "isin": fund.isin, "year": year, "lang": "en"}
@@ -356,7 +367,7 @@ def _records(root: Path, output: Path, policy: ICTaxArchiveRequest, job_sha256: 
                 lookup = lookup_directory, _valor(payload, fund.isin)
             lookup_directory, valor = lookup
             row: dict[str, Any] = {"symbol": fund.symbol, "isin": fund.isin, "year": year,
-                                   "lookup": _pin(root, lookup_directory / "_manifest.json")}
+                                   "lookup": _pin(root, lookup_directory / "_manifest.json", paths=paths)}
             if valor is None:
                 rows.append({**row, "status": "source_gap", "reasons": ["lookup_unavailable"]})
                 continue
@@ -415,14 +426,15 @@ def collect_ictax_archive(*, root: Path, request: Path, request_sha256: str, out
         return _publish(output / "final", report, pins, lambda path: write_json_object(path / "records.json", {"records": rows}))
 
 
-def verify_ictax_archive(*, root: Path, manifest: Path, manifest_sha256: str) -> dict[str, Any]:
+def verify_ictax_archive(*, root: Path, manifest: Path, manifest_sha256: str, paths: EvidencePaths | None = None) -> dict[str, Any]:
     """Verify immutable request, response bytes and receipts without admitting events."""
     root = root.resolve()
-    manifest = inside(root, manifest)
-    with heavy_job_lease("verify-ictax-distribution-sources", runtime_dir=root / heavy_job_runtime_dir()):
+    paths = paths or EvidencePaths(root)
+    with heavy_job_lease("verify-ictax-distribution-sources", runtime_dir=paths.project_root / heavy_job_runtime_dir()):
         guard("ICTax archive verification")
+        manifest = paths.read(manifest)
         pins: dict[str, str] = {}
-        report = _json(_read_pin(root, SourcePin(path=manifest.relative_to(root).as_posix(), sha256=manifest_sha256), pins))
+        report = _json(_read_pin(root, SourcePin(path=paths.relative(manifest).as_posix(), sha256=manifest_sha256), pins, paths=paths))
         if report.get("schema") != SCHEMA or report.get("status") not in {"archive_complete", "archive_complete_with_gaps"}:
             raise DataReadinessError("not a completed ICTax archive")
         source_files = report.get("source_files")
@@ -430,21 +442,21 @@ def verify_ictax_archive(*, root: Path, manifest: Path, manifest_sha256: str) ->
             raise DataReadinessError("ICTax source inventory missing")
         for name, digest in source_files.items():
             guard("ICTax source verification")
-            _read_pin(root, SourcePin(path=name, sha256=digest), pins, MAXIMUM_REQUEST_BYTES)
-        _load_directory(root, manifest.parent, pins)
-        records = read_json_object(manifest.parent / "records.json").get("records")
+            _read_pin(root, SourcePin(path=name, sha256=digest), pins, MAXIMUM_REQUEST_BYTES, paths=paths)
+        _load_directory(root, manifest.parent, pins, paths=paths)
+        records = read_json_object(paths.read_child(manifest.parent, "records.json")).get("records")
         if not isinstance(records, list) or len(records) != report.get("requested_fund_years"):
             raise DataReadinessError("ICTax fund-year accounting differs")
         output = manifest.parent.parent
-        job = read_json_object(output / "_job.json")
+        job = read_json_object(paths.read_child(output, "_job.json"))
         if (json_sha256(job) != report.get("job_sha256") or job.get("schema") != SCHEMA + ".job"
-            or report.get("job") != _pin(root, output / "_job.json")):
+            or report.get("job") != _pin(root, output / "_job.json", paths=paths)):
             raise DataReadinessError("ICTax archive job hash differs")
         request_pin = SourcePin.model_validate(job["request"])
-        policy = _request(root, inside(root, request_pin.path), request_pin.sha256, pins)
+        policy = _request(root, paths.read(request_pin.path), request_pin.sha256, pins, paths=paths)
         if policy.model_dump(mode="json", by_alias=True) != job.get("policy"):
             raise DataReadinessError("ICTax archive policy differs from pinned request")
-        expected = _records(root, output, policy, report["job_sha256"], pins)
+        expected = _records(root, output, policy, report["job_sha256"], pins, paths=paths)
         if (records != expected or report.get("retained_fund_years") != len(policy.retained)
             or report.get("source_gap_fund_years") != sum(r["status"] == "source_gap" for r in expected)
             or any(report.get(key) is not False for key in FLAGS)

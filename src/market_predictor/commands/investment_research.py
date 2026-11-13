@@ -160,15 +160,19 @@ def register_investment_research_commands(app: typer.Typer) -> None:
 
     @app.command("build-investment-dataset")
     def build_dataset(root: Path = typer.Option(...), request: Path = typer.Option(...),
-                      request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
+                      request_sha256: str = typer.Option(...), output: Path = typer.Option(...),
+                      data_root: Path | None = typer.Option(None)) -> None:
         """Join verified targets to prior-session features and exact-close financial snapshots."""
-        _run(lambda: build_investment_dataset(root=root, request=request, request_sha256=request_sha256, output=output))
+        _run(lambda: build_investment_dataset(root=root, request=request, request_sha256=request_sha256,
+            output=output, data_root=data_root))
 
     @app.command("train-investment-models")
     def train_models(root: Path = typer.Option(...), request: Path = typer.Option(...),
-                     request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
+                     request_sha256: str = typer.Option(...), output: Path = typer.Option(...),
+                     data_root: Path | None = typer.Option(None)) -> None:
         """Fit fixed retrospective research models and evaluate matched SPY-relative outcomes."""
-        _run(lambda: train_investment_models(root=root, request=request, request_sha256=request_sha256, output=output))
+        _run(lambda: train_investment_models(root=root, request=request, request_sha256=request_sha256,
+            output=output, data_root=data_root))
 
     @app.command("diagnose-investment-predictions")
     def diagnose_predictions(root: Path = typer.Option(...), request: Path = typer.Option(...),
@@ -193,9 +197,11 @@ def register_investment_research_commands(app: typer.Typer) -> None:
 
     @app.command("train-investment-ranking")
     def train_ranking(root: Path = typer.Option(...), request: Path = typer.Option(...),
-                      request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
+                      request_sha256: str = typer.Option(...), output: Path = typer.Option(...),
+                      data_root: Path | None = typer.Option(None)) -> None:
         """Fit the fixed within-date ranking target and compare saved return-model controls."""
-        _run(lambda: train_investment_ranking(root=root, request=request, request_sha256=request_sha256, output=output))
+        _run(lambda: train_investment_ranking(root=root, request=request, request_sha256=request_sha256,
+            output=output, data_root=data_root))
 
     @app.command("resolve-investment-selection-outcomes")
     def resolve_selection_outcomes(root: Path = typer.Option(...), request: Path = typer.Option(...),
@@ -212,8 +218,19 @@ def register_investment_research_commands(app: typer.Typer) -> None:
 
     @app.command("resolve-remaining-investment-outcomes")
     def resolve_remaining_outcomes(root: Path = typer.Option(...), request: Path = typer.Option(...),
-                                   request_sha256: str = typer.Option(...), output: Path = typer.Option(...)) -> None:
+                                   request_sha256: str = typer.Option(...), output: Path = typer.Option(...),
+                                   data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
+                                   source_implementation_snapshot: Path | None = typer.Option(None),
+                                   source_implementation_snapshot_sha256: str | None = typer.Option(None),
+                                   validate_inputs_only: bool = typer.Option(False, help="Verify inputs without compiling holdings.")
+                                   ) -> None:
         """Recover additional fixed survivor outcomes from retained action evidence."""
+        if (source_implementation_snapshot is None) != (source_implementation_snapshot_sha256 is None):
+            raise typer.BadParameter("source-implementation-snapshot and its SHA-256 must be supplied together")
+        snapshot = None
+        if source_implementation_snapshot is not None and source_implementation_snapshot_sha256 is not None:
+            snapshot = SourcePin(path=source_implementation_snapshot.as_posix(), sha256=source_implementation_snapshot_sha256)
         _run(lambda: resolve_remaining_investment_outcomes(
-            root=root, request=request, request_sha256=request_sha256, output=output,
+            root=root, request=request, request_sha256=request_sha256, output=output, data_root=data_root,
+            source_implementation_snapshot=snapshot, validate_inputs_only=validate_inputs_only,
         ))

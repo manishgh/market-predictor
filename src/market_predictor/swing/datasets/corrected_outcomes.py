@@ -14,6 +14,7 @@ from collections import Counter
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import date
+from functools import partial
 from pathlib import Path
 from typing import Any, Protocol
 from uuid import uuid4
@@ -25,14 +26,16 @@ import pyarrow.parquet as pq
 from market_predictor.canonical.reconciliation import stamp_canonical_decision_ids
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.path_integrity import verify_tree_containment
 from market_predictor.core.system_memory import assert_system_memory_available
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.resources import assert_memory_budget, memory_audit
 from market_predictor.sources.official_documents import load_official_document_inventory, verify_official_document_collection
 from market_predictor.swing.contracts.corrected_outcomes import CorrectedOutcomePolicy
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference
-from market_predictor.swing.contracts.holding_materialization import PositionSourceBinding
+from market_predictor.swing.contracts.holding_materialization import PositionSourceBinding, SourcePin
 from market_predictor.swing.contracts.research import load_swing_research_contract
 from market_predictor.swing.contracts.trade_simulation import TradeSimulationContext
 from market_predictor.swing.datasets.action_evidence import CorporateActionEvidence, load_corporate_action_evidence
@@ -87,9 +90,10 @@ def _write(path: Path, value: Any) -> None:
     temporary.replace(path)
 
 
-def _check(root: Path, files: dict[str, str]) -> None:
+def _check(root: Path, files: dict[str, str], *, paths: EvidencePaths | None = None) -> None:
+    paths = paths or EvidencePaths(root)
     for name, digest in files.items():
-        if file_sha256(inside(root, name)) != digest:
+        if file_sha256(paths.read(name)) != digest:
             raise DataReadinessError(f"corrected outcome source changed: {name}")
 
 
@@ -100,8 +104,9 @@ def _check_published(output: Path, request_pin: str, months: dict[str, Any]) -> 
     _check(output, files)
 
 
-def load_corrected_outcome_policy(root: Path, config: Path, expected_sha256: str) -> CorrectedOutcomePolicy:
-    path = inside(root, config)
+def load_corrected_outcome_policy(root: Path, config: Path, expected_sha256: str, *,
+    paths: EvidencePaths | None = None) -> CorrectedOutcomePolicy:
+    path = (paths or EvidencePaths(root)).read(config)
     if path.stat().st_size > 1024**2:
         raise DataReadinessError("corrected outcome configuration exceeds bound")
     data = path.read_bytes()
@@ -119,73 +124,77 @@ def _projection(path: Path, columns: tuple[str, ...]) -> pd.DataFrame:
 
 @contextmanager
 def verified_corrected_price_sources(root: Path, config: Path, config_sha256: str,
-    policy: CorrectedOutcomePolicy, *, memory_guard: Callable[[], None] | None = None) -> Iterator[dict[str, Any]]:
+    policy: CorrectedOutcomePolicy, *, memory_guard: Callable[[], None] | None = None, paths: EvidencePaths | None = None,
+    source_implementation_snapshot: SourcePin | None = None) -> Iterator[dict[str, Any]]:
     """Verify corrected raw prices and identities under the shared publication lease.
 
     No action archive, holding specification or target is opened. The outcome
     wrapper separately admits the economic evidence required for target creation.
     """
-    root = root.resolve()
-    if load_corrected_outcome_policy(root, config, config_sha256) != policy:
+    paths = paths or EvidencePaths(root)
+    root = paths.project_root
+    if load_corrected_outcome_policy(root, config, config_sha256, paths=paths) != policy:
         raise DataReadinessError("corrected price policy differs from its pinned configuration")
-    selected = pinned_object(inside(root, policy.source_selection.path), policy.source_selection.sha256)
-    correction_plan = inside(root, selected["correction_plan"])
-    authority = pinned_object(correction_plan / "_authority.json", selected["correction_plan_sha256"])
-    correction = pinned_object(correction_plan / "_request.json", authority["request_sha256"])
-    parent = inside(root, correction["policy"]["parent_plan"])
+    selected = pinned_object(paths.read(policy.source_selection.path), policy.source_selection.sha256)
+    correction_plan = paths.directory(selected["correction_plan"])
+    authority = pinned_object(paths.read_child(correction_plan, "_authority.json"), selected["correction_plan_sha256"])
+    correction = pinned_object(paths.read_child(correction_plan, "_request.json"), authority["request_sha256"])
+    parent = paths.directory(correction["policy"]["parent_plan"])
     parent_pin = correction["policy"]["parent_plan_sha256"]
-    with verified_initial_fit_raw_share_plan(root, inside(root, policy.parent_config.path), parent,
-        expected_plan_sha256=parent_pin) as plan:
+    with verified_initial_fit_raw_share_plan(root, paths.read(policy.parent_config.path), parent,
+        expected_plan_sha256=parent_pin, paths=paths, source_implementation_snapshot=source_implementation_snapshot) as plan:
         (memory_guard or _guard)()
-        pins = {inside(root, config).relative_to(root).as_posix(): config_sha256}
+        pins = {paths.relative(config).as_posix(): config_sha256, **plan.get("source_implementation_files", {})}
         for pin in (policy.source_selection, policy.parent_config, policy.symbol_corrections):
-            pins[inside(root, pin.path).relative_to(root).as_posix()] = pin.sha256
-        _check(root, pins)
+            pins[paths.relative(pin.path).as_posix()] = pin.sha256
+        _check(root, pins, paths=paths)
         if selected["policy_sha256"] != policy.symbol_corrections.sha256:
             raise DataReadinessError("decision corrections must share the reconstructed price correction authority")
         # Freeze metadata bytes before independent reconstruction validates them.
         # Collection request hashes are semantic, unlike plan request file hashes.
         authorities = ((correction_plan, selected["correction_plan_sha256"]), (parent, parent_pin),
-            (inside(root, selected["correction_archive"]), selected["correction_archive_sha256"]),
-            (inside(root, correction["policy"]["parent_archive"]), correction["policy"]["parent_archive_sha256"]))
+            (paths.directory(selected["correction_archive"]), selected["correction_archive_sha256"]),
+            (paths.directory(correction["policy"]["parent_archive"]), correction["policy"]["parent_archive_sha256"]))
         for directory, digest in authorities:
-            archive_authority = pinned_object(directory / "_authority.json", digest)
-            pins[(directory / "_authority.json").relative_to(root).as_posix()] = digest
-            pins[(directory / "_manifest.json").relative_to(root).as_posix()] = archive_authority["artifact_sha256"]
-            pins[(directory / "_request.json").relative_to(root).as_posix()] = file_sha256(directory / "_request.json")
-            units = directory / "daily_bar_units.csv"
+            archive_authority = pinned_object(paths.read_child(directory, "_authority.json"), digest)
+            pins[paths.relative(directory / "_authority.json").as_posix()] = digest
+            pins[paths.relative(directory / "_manifest.json").as_posix()] = archive_authority["artifact_sha256"]
+            pins[paths.relative(directory / "_request.json").as_posix()] = file_sha256(paths.read_child(directory, "_request.json"))
+            units = paths.write(directory / "daily_bar_units.csv")
             if units.exists():
-                pins[units.relative_to(root).as_posix()] = file_sha256(units)
+                pins[paths.relative(units).as_posix()] = file_sha256(units)
         rebuilt = reconstruct_symbol_corrected_sources(root=root, correction_plan=correction_plan,
             correction_plan_sha256=selected["correction_plan_sha256"],
-            correction_archive=inside(root, selected["correction_archive"]),
-            correction_archive_sha256=selected["correction_archive_sha256"], loader=load_complete_swing_history_collection)
+            correction_archive=paths.directory(selected["correction_archive"]),
+            correction_archive_sha256=selected["correction_archive_sha256"],
+            loader=partial(load_complete_swing_history_collection, paths=paths,
+                source_implementation_snapshot=source_implementation_snapshot), paths=paths)
         if rebuilt != selected:
             raise DataReadinessError("corrected source selection differs from independent reconstruction")
         # Retain every raw unit and page validated by the canonical archive replay,
         # including original units replaced by the reviewed symbol correction.
-        for directory in (inside(root, selected["correction_archive"]),
-                inside(root, correction["policy"]["parent_archive"])):
-            archive_manifest = pinned_object(directory / "_manifest.json",
-                pins[(directory / "_manifest.json").relative_to(root).as_posix()])
+        for directory in (paths.directory(selected["correction_archive"]),
+                paths.directory(correction["policy"]["parent_archive"])):
+            archive_manifest = pinned_object(paths.read_child(directory, "_manifest.json"),
+                pins[paths.relative(directory / "_manifest.json").as_posix()])
             for record in archive_manifest["unit_artifacts"]:
                 for path_key, hash_key in (("bars_path", "bars_sha256"), ("unit_manifest_path", "unit_manifest_sha256")):
-                    path = inside(directory, record[path_key])
-                    pins[path.relative_to(root).as_posix()] = record[hash_key]
-                unit = pinned_object(inside(directory, record["unit_manifest_path"]), record["unit_manifest_sha256"])
+                    path = paths.read_child(directory, record[path_key])
+                    pins[paths.relative(path).as_posix()] = record[hash_key]
+                unit = pinned_object(paths.read_child(directory, record["unit_manifest_path"]), record["unit_manifest_sha256"])
                 for page in unit["pages"]:
-                    pins[inside(directory, page["raw_path"]).relative_to(root).as_posix()] = page["raw_sha256"]
+                    pins[paths.relative(paths.read_child(directory, page["raw_path"])).as_posix()] = page["raw_sha256"]
                     transport = page["transport"]
-                    pins[inside(directory, transport["body_path"]).relative_to(root).as_posix()] = transport["metadata"]["sha256"]
-        mapping = load_symbol_correction_policy(root, Path(policy.symbol_corrections.path), policy.symbol_corrections.sha256)
-        inventory_path = inside(root, mapping.document_inventory)
-        document_archive = inside(root, mapping.document_archive)
-        pins[inventory_path.relative_to(root).as_posix()] = file_sha256(inventory_path)
+                    pins[paths.relative(paths.read_child(directory, transport["body_path"])).as_posix()] = transport["metadata"]["sha256"]
+        mapping = load_symbol_correction_policy(root, Path(policy.symbol_corrections.path), policy.symbol_corrections.sha256, paths=paths)
+        inventory_path = paths.read(mapping.document_inventory)
+        document_archive = verify_tree_containment(paths.directory(mapping.document_archive), label="corrected price document archive")
+        pins[paths.relative(inventory_path).as_posix()] = file_sha256(inventory_path)
         document_files = [path for path in document_archive.rglob("*") if path.is_file()]
         if not document_files or len(document_files) > 1000:
             raise DataReadinessError("corrected price document inventory exceeds bound")
         for path in document_files:
-            pins[inside(root, path).relative_to(root).as_posix()] = file_sha256(path)
+            pins[paths.relative(path).as_posix()] = file_sha256(paths.read(path))
         inventory = load_official_document_inventory(inventory_path)
         documents = verify_official_document_collection(document_archive, inventory)
         if documents["status"] != "collected_unreviewed" or json_sha256(documents) != mapping.document_report_sha256:
@@ -193,67 +202,71 @@ def verified_corrected_price_sources(root: Path, config: Path, config_sha256: st
         reviewed_ids = {doc for rule in mapping.corrections for doc in rule.document_ids}
         if any(not set(rule.document_ids).issubset(reviewed_ids) for rule in policy.decision_corrections):
             raise DataReadinessError("decision correction references an unreviewed source document")
-        _check(root, pins)
-        parent_authority = pinned_object(parent / "_authority.json", parent_pin)
-        request = pinned_object(parent / "_request.json", parent_authority["request_sha256"])
+        _check(root, pins, paths=paths)
+        parent_authority = pinned_object(paths.read_child(parent, "_authority.json"), parent_pin)
+        request = pinned_object(paths.read_child(parent, "_request.json"), parent_authority["request_sha256"])
         pins.update(request["source_files"])
-        pins[(parent / "_authority.json").relative_to(root).as_posix()] = parent_pin
-        pins[(parent / "_request.json").relative_to(root).as_posix()] = parent_authority["request_sha256"]
+        pins[paths.relative(parent / "_authority.json").as_posix()] = parent_pin
+        pins[paths.relative(parent / "_request.json").as_posix()] = parent_authority["request_sha256"]
         if (len(request["retained_security_ids"]) != 586 or len(request["excluded_security_ids"]) != 45
                 or request["decision_start"] != str(policy.decision_start)
                 or request["initial_fit_end"] != str(policy.numerical_end)):
             raise DataReadinessError("corrected outcomes differ from the frozen 586-security initial-fit population")
-        parent_policy = tomllib.loads(inside(root, policy.parent_config.path).read_text(encoding="utf-8"))
-        preflight_path = inside(root, parent_policy["preflight_path"])
-        preflight = pinned_object(preflight_path, pins[preflight_path.relative_to(root).as_posix()])
+        parent_policy = tomllib.loads(paths.read(policy.parent_config.path).read_text(encoding="utf-8"))
+        preflight_path = paths.read(parent_policy["preflight_path"])
+        preflight = pinned_object(preflight_path, pins[paths.relative(preflight_path).as_posix()])
         base = preflight["request"]
-        membership_path = inside(root, base["membership_path"])
-        manifest_path = inside(root, base["parent_manifest_path"])
-        manifest = pinned_object(manifest_path, pins[manifest_path.relative_to(root).as_posix()])
+        membership_path = paths.read(base["membership_path"])
+        manifest_path = paths.read(base["parent_manifest_path"])
+        manifest = pinned_object(manifest_path, pins[paths.relative(manifest_path).as_posix()])
         memberships = _projection(membership_path, MEMBERSHIP_COLUMNS)
         memberships = corrected_memberships(memberships, policy.decision_corrections)
         for segment in selected["segments"]:
             artifact = segment["artifact"]
-            path = inside(inside(root, segment["archive"]), artifact["bars_path"])
-            pins[path.relative_to(root).as_posix()] = artifact["bars_sha256"]
-        _check(root, pins)
+            path = paths.read_child(segment["archive"], artifact["bars_path"])
+            pins[paths.relative(path).as_posix()] = artifact["bars_sha256"]
+        _check(root, pins, paths=paths)
         yield {"selection": selected, "plan": plan, "request": request, "memberships": memberships,
             "manifest": manifest, "manifest_path": manifest_path, "source_files": dict(pins),
             "membership_path": membership_path}
-        _check(root, pins)
+        _check(root, pins, paths=paths)
 
 
 @contextmanager
 def verified_corrected_research_sources(root: Path, config: Path, config_sha256: str, policy: CorrectedOutcomePolicy,
-    evidence: CorporateActionEvidence, *, memory_guard: Callable[[], None] | None = None) -> Iterator[dict[str, Any]]:
+    evidence: CorporateActionEvidence, *, memory_guard: Callable[[], None] | None = None, paths: EvidencePaths | None = None,
+    source_implementation_snapshot: SourcePin | None = None) -> Iterator[dict[str, Any]]:
     """Add every target-admission authority while retaining the price-source lease."""
-    root = root.resolve()
-    with verified_corrected_price_sources(root, config, config_sha256, policy, memory_guard=memory_guard) as sources:
+    paths = paths or EvidencePaths(root)
+    root = paths.project_root
+    with verified_corrected_price_sources(root, config, config_sha256, policy, memory_guard=memory_guard, paths=paths,
+        source_implementation_snapshot=source_implementation_snapshot) as sources:
         pins = dict(sources["source_files"])
         for pin in (policy.action_config, policy.research_contract, policy.simulation_policy,
                 *(w.document for w in policy.official_windows)):
-            pins[inside(root, pin.path).relative_to(root).as_posix()] = pin.sha256
-        _check(root, pins)
-        scope = prepare_corporate_action_scope(root, inside(root, policy.action_config.path),
-            tomllib.loads(inside(root, policy.action_config.path).read_text(encoding="utf-8")))
+            pins[paths.relative(pin.path).as_posix()] = pin.sha256
+        _check(root, pins, paths=paths)
+        action_config = paths.read(policy.action_config.path)
+        scope = prepare_corporate_action_scope(root, action_config,
+            tomllib.loads(action_config.read_text(encoding="utf-8")), paths=paths)
         if scope["policy"].get("source_selection") != policy.source_selection.model_dump(mode="json"):
             raise DataReadinessError("action evidence scope does not bind the corrected source selection")
         expected = {s["artifact"]["provider_symbol"] for s in sources["selection"]["segments"]} | SUCCESSORS
         if len(expected) != 570 or set(scope["tickers"]) != expected:
             raise DataReadinessError("corrected outcomes need all 570 full-cohort action queries")
-        action_request_path = inside(root, policy.action_archive) / "_request.json"
+        action_request_path = paths.read_child(policy.action_archive, "_request.json")
         action_request = pinned_object(action_request_path,
-            evidence.source_files[action_request_path.relative_to(root).as_posix()])
+            evidence.source_files[paths.relative(action_request_path).as_posix()])
         if (action_request["request_sha256"] != evidence.request_sha256
                 or action_request["policy"] != scope["policy"] or set(action_request["tickers"]) != expected):
             raise DataReadinessError("action evidence request does not bind the corrected full selection")
-        evidence.recheck(root)
+        evidence.recheck(root, paths=paths)
         pins.update(evidence.source_files)
-        pins.update(verify_action_scope_documents(root, policy.reviewed_cash_distribution_scopes, memory_guard=memory_guard))
+        pins.update(verify_action_scope_documents(root, policy.reviewed_cash_distribution_scopes, memory_guard=memory_guard, paths=paths))
         yield {**sources, "source_files": dict(pins),
             "action_index": reconcile_actions(evidence, expected, policy.reviewed_cash_distribution_scopes)}
-        _check(root, pins)
-        evidence.recheck(root)
+        _check(root, pins, paths=paths)
+        evidence.recheck(root, paths=paths)
 
 
 class MonthEngine:
@@ -395,10 +408,11 @@ class MonthEngine:
 
 
 def load_corrected_decision_partition(root: Path, source: dict[str, Any], record: dict[str, Any],
-    policy: CorrectedOutcomePolicy) -> pd.DataFrame:
+    policy: CorrectedOutcomePolicy, *, paths: EvidencePaths | None = None) -> pd.DataFrame:
     """Project frozen initial-fit identity/context columns and retain parent IDs."""
-    path = inside(root, source["manifest_path"].parent / record["path"])
-    if source["source_files"].get(path.relative_to(root).as_posix()) != record["sha256"]:
+    paths = paths or EvidencePaths(root)
+    path = paths.read_child(source["manifest_path"].parent, record["path"])
+    if source["source_files"].get(paths.relative(path).as_posix()) != record["sha256"]:
         raise DataReadinessError("decision partition lacks frozen raw-plan source authority")
     frame = _projection(path, DECISION_COLUMNS)
     if len(frame) != record["rows"]:

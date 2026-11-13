@@ -564,7 +564,7 @@ def test_missing_transport_evidence_fails_resume(tmp_path: Path, adjustment: str
         (output / manifest["pages"][0]["transport"]["body_path"]).unlink()
     _write_json(path, manifest)
     source = _FakeSource()
-    with pytest.raises(DataReadinessError, match="original transport receipt|transport body missing"):
+    with pytest.raises(DataReadinessError, match="original transport receipt|transport body (is )?missing"):
         collect_swing_history_plan(
             plan_directory=plan, output_directory=output,
             source_factory=lambda: source, provider_symbol_for=lambda ticker: ticker,

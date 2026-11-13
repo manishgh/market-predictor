@@ -1,5 +1,6 @@
 """Exact action relevance and fixed survivor recovery regressions."""
-from contextlib import nullcontext
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -13,6 +14,7 @@ from typer.testing import CliRunner
 from market_predictor.canonical.store import file_sha256
 from market_predictor.commands import investment_research
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.heavy_jobs import HeavyJobBusyError, heavy_job_lease
 from market_predictor.investment.action_relevance import action_relevance_reason
 from market_predictor.investment.label_materialization import InvestmentSourceValidation, compile_investment_spy_pair
 from market_predictor.research import investment_labels
@@ -135,8 +137,9 @@ def test_reviewed_callback_requires_exact_stock_raw_and_membership(gap: str) -> 
 
 
 @pytest.mark.parametrize("status", ["recovered", "unresolved", "unattempted", "unbound_evidence"])
+@pytest.mark.parametrize("relocated", [False, True])
 def test_incremental_publication_keeps_fixed_survivors_and_original_clocks(
-    tmp_path: Path, parent: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, status: str,
+    tmp_path: Path, parent: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, status: str, relocated: bool,
 ) -> None:
     request, ancestor_manifest = parent
     fixture_pin = _write(tmp_path / "source.json", {"nominal_unpaid_claim_valuation": True})
@@ -163,7 +166,9 @@ def test_incremental_publication_keeps_fixed_survivors_and_original_clocks(
     parent_rows = _read(exclusion_manifest.parent / "outcomes.json")["rows"]
     parent_views = _read(exclusion_manifest.parent / "comparisons.json")["views"]
     parent_hash = file_sha256(exclusion_manifest)
-    new_request = _write(tmp_path / "remaining-request.json", {
+    logical_directory = tmp_path / "data" / "research"
+    logical_directory.mkdir(parents=True)
+    new_request = _write(logical_directory / "remaining-request.json", {
         "schema_version": "market_predictor.investment_remaining_outcome_request",
         "scope": "post_observation_sensitivity", "parent_manifest": {"path": str(exclusion_manifest), "sha256": parent_hash},
     })
@@ -172,16 +177,31 @@ def test_incremental_publication_keeps_fixed_survivors_and_original_clocks(
         "decision_session": row["decision_session"], "decision_time_utc": row["decision_session"] + "T20:05:00Z", "status": "eligible"}
         for row in parent_rows]
     inputs = SimpleNamespace(request=SimpleNamespace(decision_ids=None), policy=SimpleNamespace(decision_corrections=()),
-        roster_rows=SourcePin.model_validate(fixture_pin), membership=SourcePin.model_validate(fixture_pin), rows=roster)
-    monkeypatch.setattr(module, "heavy_job_lease", lambda *_, **__: nullcontext())
+        roster_rows=SourcePin.model_validate(fixture_pin), membership=SourcePin.model_validate(fixture_pin), rows=roster,
+        retained_external=frozenset())
+    monkeypatch.setenv("MARKET_PREDICTOR_RUNTIME_DIR", "data/runtime")
     monkeypatch.setattr(module, "guard", lambda *_, **__: None)
-    monkeypatch.setattr(module, "read_investment_label_inputs", lambda *_: inputs)
-    monkeypatch.setattr(module, "InvestmentSourceReader", lambda *_: Reader())
-    monkeypatch.setattr(module, "verified_investment_label_sources", lambda *_: nullcontext((None, None, {"source_files": {}})))
+    monkeypatch.setattr(module, "read_investment_label_inputs", lambda *_, **__: inputs)
+    monkeypatch.setattr(module, "InvestmentSourceReader", lambda *_, **__: Reader())
+    @contextmanager
+    def verified_sources(*_: Any, **__: Any) -> Iterator[tuple[None, None, dict[str, Any]]]:
+        with heavy_job_lease("verify-initial-fit-raw-share-plan", runtime_dir=tmp_path / "data/runtime"):
+            yield None, None, {"source_files": {}}
+
+    publish = module._publish
+
+    def guarded_publish(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        with pytest.raises(HeavyJobBusyError, match="verify-initial-fit-raw-share-plan"):
+            with heavy_job_lease("competing-default-root-writer", runtime_dir=tmp_path / "data/runtime"):
+                pytest.fail("the source verification lease was released before publication")
+        return publish(*args, **kwargs)
+
+    monkeypatch.setattr(module, "verified_investment_label_sources", verified_sources)
+    monkeypatch.setattr(module, "_publish", guarded_publish)
     monkeypatch.setattr("market_predictor.research.investment_selection_outcomes._validate_membership_sources",
         lambda **kwargs: InvestmentSourceValidation((kwargs["evidence"],)))
 
-    def amendment(*args: Any) -> Any:
+    def amendment(*args: Any, **_: Any) -> Any:
         assert set(args[-2]) == {("jan-c", 63), ("feb-a", 63), ("apr-c", 63)}
         assert all(row["status"] == "unresolved" for row in args[-2].values())
         return inputs.request
@@ -206,16 +226,52 @@ def test_incremental_publication_keeps_fixed_survivors_and_original_clocks(
             source_files={}, recheck=lambda: None), {}
 
     monkeypatch.setattr(module, "prepare_investment_label_components", components)
-    output = tmp_path / "remaining"
+    data_root = tmp_path.with_name(tmp_path.name + "-relocated") if relocated else None
+    logical_output = logical_directory / "remaining"
+    output = logical_output
+    if data_root is not None:
+        physical_directory = data_root / "research"
+        physical_directory.mkdir(parents=True)
+        Path(new_request["path"]).rename(physical_directory / "remaining-request.json")
+        output = physical_directory / "remaining"
+    snapshot = SourcePin.model_validate(_write(tmp_path / "implementation.json", {})) if relocated else None
+    if relocated and status == "recovered":
+        with monkeypatch.context() as smoke:
+            smoke.setattr(module, "compile_selected_pair", lambda *_, **__: pytest.fail("smoke compiled a holding"))
+            smoke.setattr(module, "_publish", lambda *_, **__: pytest.fail("smoke published an output"))
+            recheck = module.recheck_sources
+
+            def leased_recheck(*args: Any, **kwargs: Any) -> None:
+                with pytest.raises(HeavyJobBusyError, match="verify-initial-fit-raw-share-plan"):
+                    with heavy_job_lease("competing-writer", runtime_dir=tmp_path / "data/runtime"):
+                        pytest.fail("source recheck ran outside its lease")
+                recheck(*args, **kwargs)
+
+            smoke.setattr(module, "recheck_sources", leased_recheck)
+            summary = module.resolve_remaining_investment_outcomes(root=tmp_path, request=Path(new_request["path"]),
+                request_sha256=new_request["sha256"], output=logical_output, data_root=data_root,
+                source_implementation_snapshot=snapshot, validate_inputs_only=True)
+        assert summary["status"] == "inputs_verified" and summary["holding_replay_started"] is False
+        assert summary["fixed_holdings"] == len(parent_rows) and summary["unknown_holdings"] == 1
+        assert summary["source_pin_count"] > 0 and len(summary["source_inventory_sha256"]) == 64
+        assert summary["data_root"] == str(data_root)
+        assert not output.exists()
     if status == "unbound_evidence":
         with pytest.raises(DataReadinessError, match="triggering action relevance proof"):
             module.resolve_remaining_investment_outcomes(root=tmp_path, request=Path(new_request["path"]),
-                request_sha256=new_request["sha256"], output=output)
+                request_sha256=new_request["sha256"], output=logical_output, data_root=data_root, source_implementation_snapshot=snapshot)
         assert not output.exists()
         assert file_sha256(exclusion_manifest) == parent_hash
         return
     result = module.resolve_remaining_investment_outcomes(root=tmp_path, request=Path(new_request["path"]),
-        request_sha256=new_request["sha256"], output=output)
+        request_sha256=new_request["sha256"], output=logical_output, data_root=data_root, source_implementation_snapshot=snapshot)
+    assert result["output_directory"] == str(logical_output)
+    assert not relocated or not logical_output.exists()
+    published = _read(output / "_manifest.json")
+    assert published["source_files"][new_request["path"]] == new_request["sha256"]
+    if snapshot is not None:
+        assert published["source_implementation_snapshot"] == snapshot.model_dump(mode="json")
+        assert published["source_files"][snapshot.path] == snapshot.sha256
     child_rows = _read(output / "outcomes.json")["rows"]
     attempts = _read(output / "attempts.json")["rows"]
     assert [row["decision_id"] for row in child_rows] == [row["decision_id"] for row in parent_rows]
@@ -230,8 +286,8 @@ def test_incremental_publication_keeps_fixed_survivors_and_original_clocks(
     assert view["dates"][2] == parent_views[VIEW]["dates"][2]
     if status == "recovered":
         proof = Path(changed["pair_proof"]["path"])
-        assert proof == output / "pairs" / "apr-c" / "63.json"
-        assert changed["pair_proof"]["sha256"] == file_sha256(proof)
+        assert proof == logical_output / "pairs" / "apr-c" / "63.json"
+        assert changed["pair_proof"]["sha256"] == file_sha256(output / proof.relative_to(logical_output))
         assert changed["net_excess_vs_spy"] == pytest.approx(-.002)
         assert datetime.fromisoformat(changed["verified_at_utc"]) >= datetime.fromisoformat(target["verified_at_utc"])
         assert view["dates"][3]["complete"]
@@ -241,7 +297,7 @@ def test_incremental_publication_keeps_fixed_survivors_and_original_clocks(
     assert file_sha256(exclusion_manifest) == parent_hash
     with pytest.raises(FileExistsError):
         module.resolve_remaining_investment_outcomes(root=tmp_path, request=Path(new_request["path"]),
-            request_sha256=new_request["sha256"], output=output)
+            request_sha256=new_request["sha256"], output=logical_output, data_root=data_root)
 
 
 def test_repacked_survivor_clock_is_refused(tmp_path: Path, parent: tuple[Path, Path]) -> None:
@@ -275,14 +331,35 @@ def test_action_source_merge_cannot_repin_a_previously_consumed_file(
     assert pins == {pin.path: pin.sha256}
 
 
-def test_cli_forwards_remaining_outcome_request(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_relocated_replay_uses_project_heavy_job_lease(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    alternate = tmp_path.with_name(tmp_path.name + "-datasets")
+    alternate.mkdir()
+    monkeypatch.setenv("MARKET_PREDICTOR_RUNTIME_DIR", "data/runtime")
+    with heavy_job_lease("default-root-writer", runtime_dir=tmp_path / "data/runtime"):
+        with pytest.raises(HeavyJobBusyError, match="default-root-writer"):
+            module.resolve_remaining_investment_outcomes(root=tmp_path, data_root=alternate,
+                request=Path("data/research/missing.json"), request_sha256="a" * 64,
+                output=Path("data/research/remaining"))
+    assert not (alternate / "runtime").exists()
+
+
+@pytest.mark.parametrize("relocated", [False, True])
+def test_cli_forwards_remaining_outcome_request(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, relocated: bool) -> None:
     calls = []
     monkeypatch.setattr(investment_research, "resolve_remaining_investment_outcomes",
         lambda **kwargs: calls.append(kwargs) or {"status": "fixture"})
     app = typer.Typer()
     investment_research.register_investment_research_commands(app)
-    result = CliRunner().invoke(app, ["resolve-remaining-investment-outcomes", "--root", str(tmp_path),
-        "--request", "request.json", "--request-sha256", "a" * 64, "--output", "remaining"])
+    arguments = ["resolve-remaining-investment-outcomes", "--root", str(tmp_path),
+        "--request", "request.json", "--request-sha256", "a" * 64, "--output", "remaining"]
+    data_root = tmp_path.parent / "datasets" if relocated else None
+    if data_root is not None:
+        arguments.extend(["--data-root", str(data_root), "--source-implementation-snapshot", "source/_export.json",
+            "--source-implementation-snapshot-sha256", "b" * 64, "--validate-inputs-only"])
+    result = CliRunner().invoke(app, arguments)
     assert result.exit_code == 0, result.output
-    assert calls == [{"root": tmp_path, "request": Path("request.json"), "request_sha256": "a" * 64, "output": Path("remaining")}]
+    snapshot = SourcePin(path="source/_export.json", sha256="b" * 64) if relocated else None
+    assert calls == [{"root": tmp_path, "request": Path("request.json"), "request_sha256": "a" * 64,
+        "output": Path("remaining"), "data_root": data_root, "source_implementation_snapshot": snapshot,
+        "validate_inputs_only": relocated}]
 

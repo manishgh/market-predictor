@@ -4,6 +4,7 @@ import json
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from hashlib import sha256
+from shutil import copytree
 from types import SimpleNamespace
 
 import pandas as pd
@@ -346,7 +347,7 @@ def test_pinned_json_roundtrip_uses_exact_bytes_on_host_platform(tmp_path):
 
 @pytest.mark.parametrize("stage", ["request", "result"])
 def test_atomic_publish_crash_leaves_no_truncated_final_and_resume_recovers(fixture, monkeypatch, stage):
-    original = inc.os.link
+    original = inc.publish_new_file
     crashed = False
 
     def crash_once(source, target, *args, **kwargs):
@@ -356,7 +357,7 @@ def test_atomic_publish_crash_leaves_no_truncated_final_and_resume_recovers(fixt
             raise OSError("fixture interrupted publish")
         return original(source, target, *args, **kwargs)
 
-    monkeypatch.setattr(inc.os, "link", crash_once)
+    monkeypatch.setattr(inc, "publish_new_file", crash_once)
     with pytest.raises(OSError, match="interrupted publish"):
         _run(fixture, through=date(2026, 7, 10), max_issuers=1)
     assert not list(fixture.config.output_root.glob(f"*/*/{stage}*.json"))
@@ -395,3 +396,31 @@ def test_config_cli_validation_and_portable_root(fixture, monkeypatch):
     fixture.path.write_text(text)
     with pytest.raises(DataReadinessError, match="separate"):
         inc.load_config(fixture.path, root=fixture.root)
+
+
+def test_offline_replays_relocated_archive_relations_and_extension(fixture):
+    root = fixture.root
+    config = fixture.config
+    logical = root / "data"
+    (logical / "external").mkdir(parents=True)
+    (logical / "canonical").mkdir()
+    fixture.archive.rename(logical / "external/archive")
+    config.identity_relations.rename(logical / "canonical/relations.parquet")
+    raw_config = fixture.path.read_text(encoding="utf-8")
+    fixture.path.write_text(
+        raw_config.replace('archive_directory = "archive"', 'archive_directory = "data/external/archive"')
+        .replace('identity_relations = "relations.parquet"', 'identity_relations = "data/canonical/relations.parquet"')
+        .replace('output_root = "extension"', 'output_root = "data/raw/extension"'), encoding="utf-8",
+    )
+    _run(fixture, through=date(2026, 7, 10))
+    storage = root.parent / (root.name + "-storage")
+    copytree(logical, storage)
+    fixture.source.calls.clear()
+    replay = _run(fixture, through=date(2026, 7, 10), offline=True, data_root=storage)
+    assert replay["status"] == "complete"
+    assert replay["attempted_issuers"] == 0
+    assert not fixture.source.calls
+
+    (storage / "canonical/relations.parquet").unlink()
+    with pytest.raises(DataReadinessError, match="pin mismatch"):
+        _run(fixture, through=date(2026, 7, 10), offline=True, data_root=storage)

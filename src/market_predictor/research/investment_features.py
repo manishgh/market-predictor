@@ -19,8 +19,10 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.catalysts.sec_filings.acceptance_clock import CONVENTIONS, corrected_acceptance
 from market_predictor.config import Settings
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.path_integrity import verify_no_reparse_ancestry
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.io import inside, write_json_object
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease
 from market_predictor.investment.contracts import InvestmentTargetRequest, InvestmentTargetResult
 from market_predictor.investment.evaluation import InvestmentPredictionRow, evaluate_paired_investment_predictions
@@ -68,19 +70,24 @@ class InvestmentEvaluationRequest(HoldingContract):
     evaluation_as_of_utc: Timestamp
 
 
-def _read(root: Path, reference: ArtifactReference, pins: dict[str, str]) -> bytes:
-    path = inside(root, reference.path)
+def _read(root: Path, reference: ArtifactReference, pins: dict[str, str], *, paths: EvidencePaths | None = None) -> bytes:
+    path = inside(root, reference.path) if paths is None else paths.read(reference.path)
+    identity = str(path if paths is None else paths.identity(reference.path))
     if path.stat().st_size > MAX_BYTES:
         raise DataReadinessError("investment input exceeds bounded byte budget")
     data = path.read_bytes()
     if len(data) > MAX_BYTES or hashlib.sha256(data).hexdigest() != reference.sha256:
         raise DataReadinessError(f"investment input hash differs: {reference.path}")
-    pins[str(path)] = reference.sha256
+    if pins.get(identity, reference.sha256) != reference.sha256:
+        raise DataReadinessError(f"investment input conflicts with an earlier pin: {reference.path}")
+    pins[identity] = reference.sha256
     return data
 
 
-def _object(root: Path, reference: ArtifactReference, pins: dict[str, str]) -> dict[str, Any]:
-    result = json.loads(_read(root, reference, pins))
+def _object(
+    root: Path, reference: ArtifactReference, pins: dict[str, str], *, paths: EvidencePaths | None = None,
+) -> dict[str, Any]:
+    result = json.loads(_read(root, reference, pins, paths=paths))
     if not isinstance(result, dict):
         raise DataReadinessError("investment input must be a JSON object")
     return result
@@ -95,12 +102,17 @@ def _implementation() -> dict[str, str]:
 
 
 def _publish(output: Path, report: dict[str, Any], pins: dict[str, str],
-             additional: Callable[[Path], None] | None = None) -> dict[str, Any]:
+             additional: Callable[[Path], None] | None = None, *, paths: EvidencePaths | None = None,
+             retained_external: frozenset[str] = frozenset()) -> dict[str, Any]:
     guard("investment artifact publication")
     for name, digest in pins.items():
-        if file_sha256(Path(name)) != digest:
+        source = Path(name) if paths is None or name in retained_external else paths.read(name)
+        if name in retained_external:
+            source = verify_no_reparse_ancestry(source, label="retained investment source")
+        if file_sha256(source) != digest:
             raise DataReadinessError(f"investment source changed before publication: {name}")
-    output = output.resolve()
+    identity = output.resolve() if paths is None else paths.identity(output)
+    output = identity if paths is None else paths.write(identity)
     if output.exists():
         raise FileExistsError(f"immutable investment artifact already exists: {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -112,9 +124,11 @@ def _publish(output: Path, report: dict[str, Any], pins: dict[str, str],
         report["files"] = {p.name: file_sha256(p) for p in staged.iterdir() if p.is_file()}
         write_json_object(staged / "_manifest.json", report)
         # Renaming a new directory publishes the complete artifact in one operation.
+        if paths is not None and paths.write(identity) != output:
+            raise DataReadinessError("investment publication destination changed")
         os.rename(staged, output)
     return {"status": report["status"], "manifest_sha256": file_sha256(output / "_manifest.json"),
-            "output_directory": str(output), **FLAGS}
+            "output_directory": str(identity), **FLAGS}
 
 
 def collect_investment_company_facts(*, root: Path, cik: str, security_id: str,

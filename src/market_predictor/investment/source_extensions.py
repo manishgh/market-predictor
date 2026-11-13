@@ -12,7 +12,7 @@ from typing import Any
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.runtime_memory import guard
-from market_predictor.evidence.io import inside
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.investment.dividend_currencies import CurrencyCorroboration
 from market_predictor.investment.raw_acquisition import QUARANTINE, verify_investment_raw_acquisition
@@ -49,11 +49,12 @@ class VerifiedInvestmentRawExtension:
         return date.fromisoformat(self.acquisition["outcome_end"])
 
 
-def recheck_extension_sources(root: Path, files: Mapping[str, str]) -> None:
+def recheck_extension_sources(root: Path, files: Mapping[str, str], *, paths: EvidencePaths | None = None) -> None:
     """Check every source under the memory guard; reclaim only at bounded chunks."""
+    paths = paths or EvidencePaths(root)
     files_in_chunk = bytes_in_chunk = 0
     for name, digest in files.items():
-        path = inside(root, name)
+        path = paths.read(name)
         size = path.stat().st_size
         reclaim = (files_in_chunk == 0 or files_in_chunk >= 32
             or bytes_in_chunk + size > 8 * 1024**2 or size > 8 * 1024**2)
@@ -69,43 +70,47 @@ def recheck_extension_sources(root: Path, files: Mapping[str, str]) -> None:
             bytes_in_chunk += size
 
 
-def verify_investment_raw_extension(root: Path, request: InvestmentRawSourceExtension) -> VerifiedInvestmentRawExtension:
+def verify_investment_raw_extension(root: Path, request: InvestmentRawSourceExtension, *, paths: EvidencePaths | None = None,
+    source_implementation_snapshot: SourcePin | None = None) -> VerifiedInvestmentRawExtension:
     """Replay owner plan/transport and official tax identity before holding the parent lease."""
-    root = root.resolve()
+    paths = paths or EvidencePaths(root)
+    root = paths.project_root
     with heavy_job_lease("prepare-investment-raw-extension", runtime_dir=root / heavy_job_runtime_dir()):
         guard("investment raw extension request")
-        if file_sha256(inside(root, request.acquisition_request.path)) != request.acquisition_request.sha256:
+        if file_sha256(paths.read(request.acquisition_request.path)) != request.acquisition_request.sha256:
             raise DataReadinessError("investment extension acquisition request hash differs")
     raw = verify_investment_raw_acquisition(root, Path(request.acquisition_request.path), Path(request.plan_directory),
-        Path(request.archive_directory), expected_plan_authority_sha256=request.plan_authority_sha256)
+        Path(request.archive_directory), expected_plan_authority_sha256=request.plan_authority_sha256, paths=paths,
+        source_implementation_snapshot=source_implementation_snapshot)
     tax = verify_ictax_archive(root=root, manifest=Path(request.benchmark_tax_archive.path),
-        manifest_sha256=request.benchmark_tax_archive.sha256)
+        manifest_sha256=request.benchmark_tax_archive.sha256, paths=paths)
     files: dict[str, str] = {}
     for inventory in (raw["source_files"], tax["source_files"],
             {request.acquisition_request.path: request.acquisition_request.sha256,
              request.benchmark_tax_archive.path: request.benchmark_tax_archive.sha256}):
         for name, digest in inventory.items():
-            normalized = str(inside(root, name))
+            normalized = str(paths.identity(name))
             if normalized in files and files[normalized] != digest:
                 raise DataReadinessError("investment extension has conflicting source pins")
             files[normalized] = digest
     proofs: tuple[StockIdentityProof, ...] = ()
     with heavy_job_lease("bind-investment-raw-extension", runtime_dir=root / heavy_job_runtime_dir()):
         if request.stock_identity is not None:
-            path = inside(root, request.stock_identity.path)
+            path = paths.read(request.stock_identity.path)
             if file_sha256(path) != request.stock_identity.sha256 or path.stat().st_size > 16 * 1024**2:
                 raise DataReadinessError("investment stock identity proof manifest differs")
             proofs = StockIdentityManifest.model_validate_json(path.read_bytes()).proofs
             if len(proofs) > 631 or len({(item.security_id, item.ticker) for item in proofs}) != len(proofs):
                 raise DataReadinessError("investment stock identity proof population is ambiguous")
-            files[str(path)] = request.stock_identity.sha256
-        recheck_extension_sources(root, files)
+            files[str(paths.identity(path))] = request.stock_identity.sha256
+        recheck_extension_sources(root, files, paths=paths)
     return VerifiedInvestmentRawExtension(request, raw, tax, files, proofs)
 
 
 def compose_investment_raw_extension(*, root: Path, extension: VerifiedInvestmentRawExtension,
     parent_selection: dict[str, Any], parent_selection_pin: SourcePin, roster_rows_pin: SourcePin,
-    action_query_pin: SourcePin, corroborations: Mapping[str, CurrencyCorroboration]
+    action_query_pin: SourcePin, corroborations: Mapping[str, CurrencyCorroboration],
+    paths: EvidencePaths | None = None,
 ) -> dict[str, Any]:
     """Bind benchmarks and only positively proven stock observation intervals.
 
@@ -113,13 +118,14 @@ def compose_investment_raw_extension(*, root: Path, extension: VerifiedInvestmen
     InvestmentCorporateActions has replayed all supplied corroborations. This does
     not waive any later corporate-action, currency or holding-accounting check.
     """
-    root = root.resolve()
-    recheck_extension_sources(root, extension.source_files)
+    paths = paths or EvidencePaths(root)
+    root = paths.project_root
+    recheck_extension_sources(root, extension.source_files, paths=paths)
     raw, tax = extension.acquisition, extension.tax_archive
     for key, expected in (("source_selection", parent_selection_pin), ("roster", roster_rows_pin),
                           ("action_query", action_query_pin)):
         actual = SourcePin.model_validate(raw["parent_pins"][key])
-        if (inside(root, actual.path) != inside(root, expected.path) or actual.sha256 != expected.sha256):
+        if (paths.identity(actual.path) != paths.identity(expected.path) or actual.sha256 != expected.sha256):
             raise DataReadinessError("investment extension differs from verified parent " + key)
     if raw["identity_admission"] != {"stock": QUARANTINE, "benchmark": "captured_only"}:
         raise DataReadinessError("investment extension cannot assert stock identity admission")
@@ -148,8 +154,8 @@ def compose_investment_raw_extension(*, root: Path, extension: VerifiedInvestmen
         if row["isin"] != isin:
             raise DataReadinessError("investment benchmark terminal-year ISIN differs from official identity")
         source = row["sources"]["structured"]["body"]
-        path = inside(root, source["path"])
-        if extension.source_files.get(str(path)) != source["sha256"] or file_sha256(path) != source["sha256"]:
+        path = paths.read(source["path"])
+        if extension.source_files.get(str(paths.identity(path))) != source["sha256"] or file_sha256(path) != source["sha256"]:
             raise DataReadinessError("investment benchmark tax identity body is not verified")
         calculation = json.loads(path.read_bytes())["data"]["calculation"]
         if calculation["isin"] != isin or calculation["referenceDate"] != row["request"]["referenceDate"]:
@@ -196,7 +202,7 @@ def compose_investment_raw_extension(*, root: Path, extension: VerifiedInvestmen
                 assert extension.request.stock_identity is not None
                 replayed = replay_stock_identity(root, proof, sessions=sessions, source_files=extension.source_files,
                     interpretation_sha256=extension.request.stock_identity.sha256,
-                    cache=stock_cache)
+                    cache=stock_cache, paths=paths)
             except StockIdentityUnavailable as exc:
                 stock_audit.append({"unit_id": artifact["unit_id"], "admitted_sessions": 0,
                     "missing_reasons": ["stock_identity_unavailable:" + str(exc)]})

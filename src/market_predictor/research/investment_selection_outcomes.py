@@ -14,6 +14,7 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.investment.contracts import InvestmentSpyPairResult, InvestmentTargetRequest, InvestmentTargetResult
 from market_predictor.investment.dataset import (
@@ -297,15 +298,15 @@ def _compare_cohorts(cohorts: dict[str, list[dict[str, Any]]], outcomes: dict[Se
 
 def _amended_label_request(root: Path, request: InvestmentSelectionOutcomeRequest,
                            original: InvestmentLabelMaterializationRequest, outcomes: dict[SelectedKey, dict[str, Any]],
-                           pins: dict[str, str]) -> InvestmentLabelMaterializationRequest:
+                           pins: dict[str, str], *, paths: EvidencePaths | None = None) -> InvestmentLabelMaterializationRequest:
     data = original.model_dump(mode="json")
     eligible_securities = {row["security_id"] for row in outcomes.values() if row["status"] == "unresolved"}
     if request.stock_identity is not None:
         require(original.raw_source_extension is not None and original.raw_source_extension.stock_identity is not None,
             "selected outcome stock identity amendment requires the original extension authority")
         assert original.raw_source_extension is not None and original.raw_source_extension.stock_identity is not None
-        before = read_object(root, original.raw_source_extension.stock_identity, pins)["proofs"]
-        after = read_object(root, request.stock_identity, pins)["proofs"]
+        before = read_object(root, original.raw_source_extension.stock_identity, pins, paths=paths)["proofs"]
+        after = read_object(root, request.stock_identity, pins, paths=paths)["proofs"]
         old_proofs = {(row["security_id"], row["ticker"]): row for row in before}
         new_proofs = {(row["security_id"], row["ticker"]): row for row in after}
         require(len(old_proofs) == len(before) and len(new_proofs) == len(after)
@@ -318,8 +319,8 @@ def _amended_label_request(root: Path, request: InvestmentSelectionOutcomeReques
             "selected outcome currency amendment requires the original corroborations")
         assert original.currency_corroboration_manifest is not None
         original_pin = SourcePin(path=original.currency_corroboration_manifest.path, sha256=original.currency_corroboration_manifest.sha256)
-        before = read_object(root, original_pin, pins)["corroborations"]
-        after = read_object(root, request.currency_corroborations, pins)["corroborations"]
+        before = read_object(root, original_pin, pins, paths=paths)["corroborations"]
+        after = read_object(root, request.currency_corroborations, pins, paths=paths)["corroborations"]
         allowed = {parts[3] for row in outcomes.values() if row["status"] == "unresolved"
             for reason in row["original_missing_reasons"] if (parts := reason.split(":", 4))[:3] == ["stock", "action", "cash_dividends"]
             and len(parts) == 5}
@@ -353,7 +354,7 @@ def compile_selected_pair(
 
 def publish_selected_pair(
     staged: Path, output: Path, key: SelectedKey, row: dict[str, Any], pair: dict[str, Any],
-    verified_at: datetime, proof_pins: dict[str, str],
+    verified_at: datetime, proof_pins: dict[str, str], *, paths: EvidencePaths | None = None,
 ) -> None:
     result = InvestmentSpyPairResult.model_validate_json(json.dumps(pair["pair"]))
     require(result.status == "available" and result.decision_id == key[0] and result.horizon_sessions == key[1]
@@ -363,6 +364,7 @@ def publish_selected_pair(
         "recovered pair availability, identity or actual verification differs")
     require(Path(key[0]).name == key[0] and key[0] not in {"", ".", ".."}, "selected decision ID escapes the pair directory")
     relative = Path("pairs") / key[0] / f"{key[1]}.json"
+    proof_identity = output / relative if paths is None else paths.child_identity(output, relative)
     path = staged / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     write_json_object(path, {"schema": "market_predictor.investment_selected_spy_pair_evidence",
@@ -374,7 +376,7 @@ def publish_selected_pair(
         spy_gross_return=result.holdings[1].gross_return, net_excess_vs_spy=result.net_excess_vs_spy,
         verified_at_utc=verified_at.isoformat(), pair_missing_reasons=pair["missing_reasons"], pair_components=pair["components"],
         outcome_available_at_utc=pair["outcome_available_at_utc"],
-        pair_proof=SourcePin(path=str(output / relative), sha256=digest).model_dump(mode="json"))
+        pair_proof=SourcePin(path=str(proof_identity), sha256=digest).model_dump(mode="json"))
 
 
 def resolve_investment_selection_outcomes(*, root: Path, request: Path, request_sha256: str, output: Path) -> dict[str, Any]:

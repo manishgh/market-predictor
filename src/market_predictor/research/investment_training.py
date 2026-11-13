@@ -16,11 +16,13 @@ import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.path_integrity import verify_no_reparse_ancestry
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import inside, read_json_object, write_json_object
+from market_predictor.evidence.io import read_json_object, write_json_object
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
-from market_predictor.investment.dataset import load_investment_dataset
+from market_predictor.investment.dataset import add_pins, load_investment_dataset
 from market_predictor.investment.ranking import RANKING_SCORE, ranking_diagnostics, within_date_rank_targets
 from market_predictor.investment.training import (
     FAMILIES,
@@ -54,11 +56,11 @@ class InvestmentTrainingRequest(HoldingContract):
     estimator_settings: SourcePin
 
 
-def _read(root: Path, pin: SourcePin, sources: dict[str, str]) -> dict[str, Any]:
-    path = inside(root, pin.path)
+def _read(root: Path, pin: SourcePin, sources: dict[str, str], *, paths: EvidencePaths) -> dict[str, Any]:
+    path = paths.read(pin.path)
     if path.stat().st_size > 32 * 1024**2 or file_sha256(path) != pin.sha256:
         raise DataReadinessError("investment training input hash or bounded size differs")
-    sources[str(path)] = pin.sha256
+    add_pins(root, sources, {pin.path: pin.sha256}, paths=paths)
     return read_json_object(path)
 
 
@@ -67,15 +69,18 @@ def _implementation() -> dict[str, str]:
     names = ("research/investment_training.py", "investment/training.py", "investment/dataset.py",
         "research/investment_dataset.py", "swing/training/return_estimators.py", "swing/training/return_validation.py",
         "swing/contracts/return_training.py", "core/runtime_memory.py", "core/system_memory.py", "resources.py",
-        "heavy_jobs.py")
+        "heavy_jobs.py", "evidence/paths.py")
     return {str(package / name): file_sha256(package / name) for name in names}
 
 
-def _recheck(sources: dict[str, str]) -> None:
+def _recheck(sources: dict[str, str], *, paths: EvidencePaths | None = None, implementation: frozenset[str] = frozenset()) -> None:
     for index, (name, digest) in enumerate(sources.items()):
         if index % 32 == 0:
             guard("investment training source recheck")
-        if file_sha256(Path(name)) != digest:
+        source = paths.read(name) if paths is not None and name not in implementation else Path(name)
+        if name in implementation:
+            source = verify_no_reparse_ancestry(source, label="investment implementation")
+        if file_sha256(source) != digest:
             raise DataReadinessError(f"investment training source changed: {name}")
 
 
@@ -169,23 +174,28 @@ def _publish_fit(output: Path, key: str, *, features: pd.DataFrame, metadata: pd
     return {"path": str(target), "sha256": file_sha256(target / "_manifest.json"), **record}, predictions
 
 
-def train_investment_models(*, root: Path, request: Path, request_sha256: str, output: Path) -> dict[str, Any]:
+def train_investment_models(
+    *, root: Path, request: Path, request_sha256: str, output: Path, data_root: Path | None = None,
+) -> dict[str, Any]:
     """Run only the frozen two-profile/two-learner experiment after dataset admission."""
-    root = root.resolve()
-    output = inside(root, output)
+    paths = EvidencePaths(root, data_root)
+    root = paths.project_root
+    logical_output = paths.identity(output)
+    output = paths.write(logical_output)
     runtime = heavy_job_runtime_dir()
     with heavy_job_lease("train-investment-models", runtime_dir=runtime if runtime.is_absolute() else root / runtime):
         guard("investment research training preparation")
         sources = _implementation()
+        implementation = frozenset(name for name in sources if not Path(name).is_relative_to(root))
         parsed = InvestmentTrainingRequest.model_validate_json(json.dumps(_read(root,
-            SourcePin(path=str(request), sha256=request_sha256), sources)))
-        settings = _read(root, parsed.estimator_settings, sources)
+            SourcePin(path=str(request), sha256=request_sha256), sources, paths=paths)))
+        settings = _read(root, parsed.estimator_settings, sources, paths=paths)
         parameters = {
             FAMILIES[0]: LinearReturnSettings.model_validate_json(json.dumps(settings["linear"])).model_dump(),
             FAMILIES[1]: BoostedReturnSettings.model_validate_json(json.dumps(settings["boosted"])).model_dump(),
         }
-        dataset = load_investment_dataset(root=root, manifest=parsed.dataset_manifest, admission=parsed.dataset_admission)
-        sources.update({str((root / name).resolve()): digest for name, digest in dataset.source_files.items()})
+        dataset = load_investment_dataset(root=root, manifest=parsed.dataset_manifest, admission=parsed.dataset_admission, paths=paths)
+        add_pins(root, sources, dataset.source_files, paths=paths)
         metadata = dataset.metadata.reset_index(drop=True)
         features = dataset.features.reset_index(drop=True)
         if (len(metadata) != len(features) or metadata.duplicated(["decision_id", "horizon_sessions"]).any()
@@ -237,7 +247,7 @@ def train_investment_models(*, root: Path, request: Path, request_sha256: str, o
                                 columns=columns, family=family, parameters=parameters[family], train_indices=fold.train_indices,
                                 score_indices=fold.score_indices, prediction_indices=fold.prediction_indices,
                                 identity=identity, request_sha256=request_sha256, admitted_at=dataset.admitted_at_utc)
-                            units[key] = {"path": str(output / key / "_manifest.json"), "sha256": record["sha256"]}
+                            units[key] = {"path": str(logical_output / key / "_manifest.json"), "sha256": record["sha256"]}
                             if prediction is not None:
                                 collected.append(prediction)
                         if collected:
@@ -254,8 +264,8 @@ def train_investment_models(*, root: Path, request: Path, request_sha256: str, o
                         identity={"horizon_sessions": horizon, "profile": profile, "scope": "final_refit",
                             "experiment_sha256": experiment_sha},
                         request_sha256=request_sha256, admitted_at=dataset.admitted_at_utc)
-                    units[key] = {"path": str(output / key / "_manifest.json"), "sha256": record["sha256"]}
-        _recheck(sources)
+                    units[key] = {"path": str(logical_output / key / "_manifest.json"), "sha256": record["sha256"]}
+        _recheck(sources, paths=paths, implementation=implementation)
         report = {"schema": "market_predictor.investment_training", "scope": "retrospective_research",
             "status": "complete_research_only" if all(horizon_allowed.values()) else "insufficient_temporal_coverage",
             "request_sha256": request_sha256, "experiment_sha256": experiment_sha, "units": units,
@@ -268,6 +278,6 @@ def train_investment_models(*, root: Path, request: Path, request_sha256: str, o
             "evidence_notice": "Reconstructed historical development; actual models fitted now. Overlapping outcomes are not independent.",
             **FLAGS}
         write_json_object(output / "_manifest.json", report)
-        return {"status": report["status"], "output": str(output),
+        return {"status": report["status"], "output": str(logical_output),
             "manifest_sha256": file_sha256(output / "_manifest.json"),
             "final_models": report["final_models"], "fold_scope_fits": report["fold_scope_fits"], **FLAGS}

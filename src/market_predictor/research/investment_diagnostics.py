@@ -10,8 +10,10 @@ from typing import Any, Literal, cast
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.path_integrity import verify_no_reparse_ancestry
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.io import inside
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.investment.dataset import (
     InvestmentDataset,
@@ -53,20 +55,25 @@ def _implementation() -> dict[str, str]:
         "commands/investment_research.py", "canonical/store.py", "core/runtime_memory.py", "resources.py", "heavy_jobs.py")}
 
 
-def _recheck(pins: dict[str, str]) -> None:
+def _recheck(pins: dict[str, str], *, paths: EvidencePaths | None = None, implementation: frozenset[str] = frozenset()) -> None:
     for index, (name, digest) in enumerate(pins.items()):
         if index % 32 == 0:
             guard("investment diagnostic source recheck")
-        require(file_sha256(Path(name)) == digest, f"investment diagnostic source changed: {name}")
+        source = paths.read(name) if paths is not None and name not in implementation else Path(name)
+        if name in implementation:
+            source = verify_no_reparse_ancestry(source, label="investment implementation")
+        require(file_sha256(source) == digest, f"investment diagnostic source changed: {name}")
 
 
 def read_fit_predictions(root: Path, pin: SourcePin, record: dict[str, Any], expected: pd.DataFrame,
-    coverage: pd.DataFrame, pins: dict[str, str], completed_at: pd.Timestamp, *, score_column: str = PREDICTION) -> pd.DataFrame:
-    path = inside(root, pin.path).parent / "predictions.parquet"
+    coverage: pd.DataFrame, pins: dict[str, str], completed_at: pd.Timestamp, *, score_column: str = PREDICTION,
+    paths: EvidencePaths | None = None) -> pd.DataFrame:
+    identity = (inside(root, pin.path) if paths is None else paths.identity(pin.path)).parent / "predictions.parquet"
+    path = identity if paths is None else paths.read(identity)
     digest = record["files"]["predictions.parquet"]
     require(path.stat().st_size <= 64 * 1024**2 and file_sha256(path) == digest,
         "investment saved predictions exceed size bound or changed")
-    add_pins(root, pins, {str(path): digest})
+    add_pins(root, pins, {str(identity): digest}, paths=paths)
     frame = pd.read_parquet(path, columns=[score_column if name == PREDICTION else name for name in PREDICTION_COLUMNS])
     require(len(frame) == len(expected) and not frame.decision_id.duplicated().any(),
         "investment saved prediction population differs from its frozen fold")
@@ -106,9 +113,9 @@ class InvestmentReferenceRun:
 
 
 def read_reference_run(root: Path, manifest: SourcePin, request: SourcePin,
-                       pins: dict[str, str]) -> InvestmentReferenceRun:
-    run = read_object(root, manifest, pins)
-    train_request = InvestmentTrainingRequest.model_validate_json(json.dumps(read_object(root, request, pins)))
+                       pins: dict[str, str], *, paths: EvidencePaths | None = None) -> InvestmentReferenceRun:
+    run = read_object(root, manifest, pins, paths=paths)
+    train_request = InvestmentTrainingRequest.model_validate_json(json.dumps(read_object(root, request, pins, paths=paths)))
     require(run.get("schema") == "market_predictor.investment_training" and run.get("status") == "complete_research_only"
         and run.get("scope") == "retrospective_research" and all(run.get(flag) is False for flag in FLAGS)
         and run["request_sha256"] == request.sha256 and run["fold_scope_fits"] == 48 and run["final_models"] == 8,
@@ -116,8 +123,9 @@ def read_reference_run(root: Path, manifest: SourcePin, request: SourcePin,
     completed_at = pd.Timestamp(run.get("completed_at_utc"))
     require(not pd.isna(completed_at) and completed_at.tzinfo is not None
         and completed_at <= pd.Timestamp(datetime.now(UTC)), "investment closed run completion clock is absent or in the future")
-    run_path = inside(root, manifest.path)
-    experiment = read_object(root, SourcePin(path=str(run_path.parent / "experiment.json"), sha256=run["experiment_sha256"]), pins)
+    run_path = inside(root, manifest.path) if paths is None else paths.identity(manifest.path)
+    experiment_pin = SourcePin(path=str(run_path.parent / "experiment.json"), sha256=run["experiment_sha256"])
+    experiment = read_object(root, experiment_pin, pins, paths=paths)
     require(experiment["request_sha256"] == request.sha256 and all(experiment.get(flag) is False for flag in FLAGS),
         "investment diagnostic experiment identity or scope differs")
     return InvestmentReferenceRun(run, experiment, train_request, request.sha256, completed_at)
@@ -157,10 +165,10 @@ def read_reference_predictions(root: Path, reference: InvestmentReferenceRun, ke
 def read_validation_predictions(root: Path, reference: InvestmentReferenceRun, pin: SourcePin, key: str,
                                 fold: InvestmentFold, dataset: InvestmentDataset, metadata: pd.DataFrame,
                                 coverage: pd.DataFrame, pins: dict[str, str],
-                                columns: tuple[str, ...]) -> tuple[dict[str, Any], pd.DataFrame]:
+                                columns: tuple[str, ...], *, paths: EvidencePaths | None = None) -> tuple[dict[str, Any], pd.DataFrame]:
     run, experiment = reference.manifest, reference.experiment
     _, profile, family, _, _ = key.split("/")
-    record = read_object(root, pin, pins)
+    record = read_object(root, pin, pins, paths=paths)
     identity = {**_fold_record(fold, metadata), "profile": profile, "experiment_sha256": run["experiment_sha256"]}
     require(record.get("schema") == "market_predictor.investment_research_model"
         and record.get("scope") == "retrospective_research" and record["unit"] == identity
@@ -178,7 +186,7 @@ def read_validation_predictions(root: Path, reference: InvestmentReferenceRun, p
             train.label_available_at_utc, utc=True).max()
         and pd.Timestamp(record["latest_training_economic_maturity_at_utc"]) == pd.to_datetime(
             train.economic_maturity_at_utc, utc=True).max(), "investment saved training lineage differs")
-    frame = read_fit_predictions(root, pin, record, metadata.iloc[fold.score_indices], coverage, pins, reference.completed_at)
+    frame = read_fit_predictions(root, pin, record, metadata.iloc[fold.score_indices], coverage, pins, reference.completed_at, paths=paths)
     return record, frame
 
 

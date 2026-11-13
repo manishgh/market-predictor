@@ -16,7 +16,7 @@ from pydantic import Field, model_validator
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import inside
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.investment.dividend_currencies import (
     CurrencyArtifactPin,
     TaxCurrencyEvent,
@@ -147,19 +147,21 @@ def _declared_pins(fact: ReviewedCompletedCashDistribution) -> list[SourcePin | 
 
 def read_completed_cash_facts(
     root: Path, pin: SourcePin | None, files: MutableMapping[str, str],
+    *, paths: EvidencePaths | None = None,
 ) -> dict[str, ReviewedCompletedCashDistribution]:
     if pin is None:
         return {}
-    path = pin_retained_source(root, pin, files)
+    paths = paths or EvidencePaths(root)
+    path = pin_retained_source(root, pin, files, paths=paths)
     if path.stat().st_size > 2 * 1024**2:
         raise DataReadinessError("completed cash facts exceed bounded size")
     raw = path.read_bytes()
     parse_strict_json_object(raw, label="reviewed completed cash facts")
     manifest = ReviewedCompletedCashDistributions.model_validate_json(raw)
-    declared = {str(path): pin.sha256}
+    declared = {str(paths.identity(path)): pin.sha256}
     for fact in manifest.facts:
         for source in _declared_pins(fact):
-            name = str(inside(root, source.path))
+            name = str(paths.identity(source.path))
             if (name in declared and declared[name] != source.sha256) or (name in files and files[name] != source.sha256):
                 raise DataReadinessError("completed cash facts declare conflicting exact source pins")
             declared[name] = source.sha256
@@ -226,10 +228,11 @@ def _issuer_name_key(value: object, incorporation_code: str | None = None) -> st
 def _verified_issuer_cash(
     root: Path, fact: ReviewedCompletedCashDistribution, policy: str, files: MutableMapping[str, str],
     sec_cache: dict[str, Any], memory_guard: Callable[[], None],
+    *, paths: EvidencePaths | None = None,
 ) -> tuple[EvidenceReference, ...]:
     def source(statement: SecCashStatement, role: str) -> tuple[RetainedSecDocument, set[str], tuple[EvidenceReference, ...]]:
         document = read_retained_sec_document(root, statement.document, fact.sec_cik, files, sec_cache,
-            primary_only=False, memory_guard=memory_guard)
+            primary_only=False, memory_guard=memory_guard, paths=paths)
         text, blocks = _official_blocks(document)
         if text.count(statement.quote) != 1 or statement.quote not in blocks:
             raise DataReadinessError("issuer cash source lacks one exact complete contextual statement")
@@ -303,6 +306,7 @@ def verify_completed_cash_fact(
     root: Path, fact: ReviewedCompletedCashDistribution, original: dict[str, Any], manifest: SourcePin,
     policy: str, files: MutableMapping[str, str], stock_cache: dict[str, Any], sec_cache: dict[str, Any],
     *, memory_guard: Callable[[], None],
+    paths: EvidencePaths | None = None,
 ) -> VerifiedCompletedCashDistribution:
     process = original.get("process_date")
     if (not _CASH_FIELDS.issubset(original) or set(original) - (_CASH_FIELDS | {"currency"})
@@ -316,7 +320,7 @@ def verify_completed_cash_fact(
             or not isinstance(process, str) or date.fromisoformat(process).isoformat() != process):
         raise DataReadinessError("completed cash proof differs from the exact original special provider action")
 
-    proof_path = pin_retained_source(root, fact.stock_class_proof, files)
+    proof_path = pin_retained_source(root, fact.stock_class_proof, files, paths=paths)
     if proof_path.stat().st_size > 1024**2:
         raise DataReadinessError("completed cash stock proof exceeds bound")
     raw = proof_path.read_bytes()
@@ -325,22 +329,23 @@ def verify_completed_cash_fact(
     if (proof.security_id, proof.ticker, proof.sec_cik) != (fact.security_id, fact.ticker, fact.sec_cik):
         raise DataReadinessError("completed cash proof names a different stable security, ticker or issuer")
     sessions = tuple(sorted({fact.ex_date, fact.record_date}))
-    identity = replay_stock_identity(root, proof, sessions=sessions, source_files=files, interpretation_sha256=policy, cache=stock_cache)
+    identity = replay_stock_identity(root, proof, sessions=sessions, source_files=files, interpretation_sha256=policy,
+        cache=stock_cache, paths=paths)
     if (identity.proven_sessions != sessions or identity.missing_reasons or identity.competing_class_tickers
             or not identity.evidence):
         raise DataReadinessError("completed cash proof lacks the unique dated stock class")
 
     def tax_class(calculation: Mapping[str, Any]) -> tuple[EvidenceReference, ...]:
         refs, observation = replay_stock_tax_class(calculation, fact.tax.lookup, root, policy,
-            issuer_name=identity.issuer_name, security_title=identity.security_title)
+            issuer_name=identity.issuer_name, security_title=identity.security_title, paths=paths)
         expected = _issuer_name_key(identity.issuer_name, identity.issuer_incorporation_code)
         if not expected or _issuer_name_key(observation["tax_institution"]) != expected:
             raise DataReadinessError("completed tax distribution issuer does not match the dated stock class")
         return refs
 
     _, tax_refs = replay_tax_currency_event(root, fact.tax, fact.ex_date, _decimal(fact.gross_amount), Decimal(0), policy,
-        stock_tax_validation=tax_class, payable_date=fact.payable_date, record_date=fact.record_date)
-    official_refs = _verified_issuer_cash(root, fact, policy, files, sec_cache, memory_guard)
+        stock_tax_validation=tax_class, payable_date=fact.payable_date, record_date=fact.record_date, paths=paths)
+    official_refs = _verified_issuer_cash(root, fact, policy, files, sec_cache, memory_guard, paths=paths)
     checked = datetime.now(UTC)
     fact_ref = EvidenceReference(reference=manifest.path, artifact_sha256=manifest.sha256,
         interpretation_policy_sha256=policy,
@@ -353,5 +358,5 @@ def verify_completed_cash_fact(
         retrieved_at=identity.verified_at_utc, available_at=identity.verified_at_utc)
     evidence = (*identity.evidence, proof_ref, *tax_refs, *official_refs, fact_ref)
     for reference in evidence:
-        pin_retained_source(root, SourcePin(path=reference.reference, sha256=reference.artifact_sha256), files)
+        pin_retained_source(root, SourcePin(path=reference.reference, sha256=reference.artifact_sha256), files, paths=paths)
     return VerifiedCompletedCashDistribution(fact, evidence)

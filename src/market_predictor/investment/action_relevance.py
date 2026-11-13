@@ -12,7 +12,7 @@ from typing import Any
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import inside
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.investment.completed_cash_distributions import (
     COMPLETED_CASH_RELEVANCE,
     VerifiedCompletedCashDistribution,
@@ -137,7 +137,8 @@ class InvestmentActionRelevance:
         recipients: ExistingRecipientStockAuthority | None = None,
         stock_cache: dict[str, Any] | None = None,
         recipient_source_files: MutableMapping[str, str] | None = None,
-    ) -> None:
+     paths: EvidencePaths | None = None) -> None:
+        self.paths = paths or EvidencePaths(root)
         self.records = records
         self.root, self.policy = root, policy
         self.completed_cash = {} if completed_cash is None else completed_cash
@@ -145,9 +146,9 @@ class InvestmentActionRelevance:
         self.stock_cache = {} if stock_cache is None else stock_cache
         self.recipient_source_files = {} if recipient_source_files is None else recipient_source_files
         by_action = {key[1]: (item.family, item.record) for key, item in records.items()}
-        self.dates, date_pins = load_reviewed_action_dates(root, dates_pin, by_action, memory_guard=memory_guard)
+        self.dates, date_pins = load_reviewed_action_dates(root, dates_pin, by_action, memory_guard=memory_guard, paths=paths)
         self.parent_units, unit_pins = load_reviewed_parent_spin_units(
-            root, parent_pin, by_action, self.dates, memory_guard=memory_guard,
+            root, parent_pin, by_action, self.dates, memory_guard=memory_guard, paths=paths,
         )
         if any(name in date_pins and date_pins[name] != digest for name, digest in unit_pins.items()):
             raise DataReadinessError("investment action relevance source pins conflict")
@@ -162,8 +163,8 @@ class InvestmentActionRelevance:
                     interpretation_policy_sha256=policy.interpretation_policy_sha256, record_locator=locator,
                     retrieved_at=policy.retrieved_at, available_at=policy.available_at)]
                 for receipt_pin in fact.official_receipts:
-                    receipt_path = inside(root, receipt_pin.path)
-                    transport = receipt_path.parent / "transport.json"
+                    receipt_path = self.paths.read(receipt_pin.path)
+                    transport = self.paths.read(receipt_path.parent / "transport.json")
                     value = parse_strict_json_object(transport.read_bytes(), label="reviewed official action transport")
                     raw_clock = value.get("retrieved_at_utc")
                     if not isinstance(raw_clock, str):
@@ -221,7 +222,7 @@ class InvestmentActionRelevance:
         if candidate is None or self.recipients is None:
             return ()
         try:
-            identity = replay_stock_identity(self.root, candidate.proof, sessions=sessions, cache=self.stock_cache,
+            identity = replay_stock_identity(self.root, candidate.proof, sessions=sessions, cache=self.stock_cache, paths=self.paths,
                 source_files=self.recipient_source_files, interpretation_sha256=self.policy.interpretation_policy_sha256)
         except StockIdentityUnavailable:
             return ()

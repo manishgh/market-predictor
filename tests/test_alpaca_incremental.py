@@ -8,6 +8,7 @@ from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
+from shutil import copytree
 from typing import Any, cast
 from unittest.mock import Mock
 from urllib.parse import urlencode
@@ -16,7 +17,8 @@ import pytest
 import requests
 
 from market_predictor.config import Settings
-from market_predictor.core.errors import MemoryBudgetError
+from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease
 from market_predictor.sources.alpaca import AlpacaSource
 from market_predictor.sources.http import HttpByteResponse
@@ -657,3 +659,39 @@ def test_guard_thresholds_fail_closed(tmp_path: Path, monkeypatch: pytest.Monkey
     system.side_effect = MemoryBudgetError("unknown system measurement")
     with pytest.raises(MemoryBudgetError):
         MEMORY_GUARD()
+
+
+def test_offline_replays_relocated_archive_with_logical_provenance(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    configs = project / "configs"
+    configs.mkdir(parents=True)
+    path = config_file(configs, output="../data/raw/archive")
+    logical_manifest = project / "data/raw/manifest.json"
+    logical_manifest.parent.mkdir(parents=True)
+    (configs / "manifest.json").rename(logical_manifest)
+    path.write_text(path.read_text(encoding="utf-8").replace('"manifest.json"', '"../data/raw/manifest.json"'), encoding="utf-8")
+    collect(path, through=DAY, source=source_with(Transport()), root=project)
+    archive = logical_manifest.parent / "archive"
+    baseline = verified(archive / "request.json")
+
+    storage = tmp_path / "storage"
+    copytree(project / "data/raw", storage / "raw")
+    paths = EvidencePaths(project, storage)
+    _, output, request = load_config(path, paths=paths)
+    assert output == storage / "raw/archive"
+    assert request == baseline
+    assert collect(path, root=project, data_root=storage, through=DAY, offline=True)["status"] == "verified"
+
+    (storage / "raw/manifest.json").unlink()
+    with pytest.raises(DataReadinessError, match="missing"):
+        collect(path, root=project, data_root=storage, through=DAY, offline=True)
+
+
+def test_immutable_publication_refuses_existing_destination(tmp_path: Path) -> None:
+    path = tmp_path / "receipt.json"
+    publish(path, {"first": True})
+    before = path.read_bytes()
+    with pytest.raises(FileExistsError):
+        publish(path, {"second": True})
+    assert path.read_bytes() == before
+    assert list(tmp_path.iterdir()) == [path]

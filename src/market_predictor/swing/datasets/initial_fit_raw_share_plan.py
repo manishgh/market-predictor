@@ -21,10 +21,12 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import resolve_inside_authority
+from market_predictor.evidence.implementation_snapshot import verify_replayed_implementation
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.resources import assert_memory_budget, assert_peak_memory_budget, release_process_memory
 from market_predictor.sources.provider_symbols import PROVIDER_ALPACA, provider_symbol
+from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.research_cohort import Sha256, load_swing_research_cohort
 from market_predictor.swing.datasets.history_plan_publication import (
     AUTHORITY_SCHEMA,
@@ -83,9 +85,9 @@ def _projection(path: Path, columns: tuple[str, ...]) -> pd.DataFrame:
         return frame
 
 
-def _recheck(root: Path, bound: dict[str, str]) -> None:
+def _recheck(root: Path, bound: dict[str, str], paths: EvidencePaths) -> None:
     for relative, digest in bound.items():
-        if file_sha256(resolve_inside_authority(root, relative)) != digest:
+        if file_sha256(paths.read(relative)) != digest:
             raise DataReadinessError(f"initial-fit plan source hash differs: {relative}")
 
 
@@ -103,9 +105,10 @@ def _runs(requirements: dict[tuple[str, str], set[int]], sessions: tuple[date, .
     return pd.DataFrame(records, columns=list(UNIT_COLUMNS))
 
 
-def _reconstruct(root: Path, config: Path) -> tuple[dict[str, Any], dict[str, Any], pd.DataFrame]:
+def _reconstruct(root: Path, config: Path, *, paths: EvidencePaths | None = None) -> tuple[dict[str, Any], dict[str, Any], pd.DataFrame]:
+    paths = paths or EvidencePaths(root)
     policy = _Request.model_validate_json(json.dumps(tomllib.loads(config.read_text(encoding="utf-8"))))
-    preflight_path = resolve_inside_authority(root, policy.preflight_path)
+    preflight_path = paths.read(policy.preflight_path)
     preflight = _object(preflight_path)
     if (preflight.get("audit_sha256") != policy.preflight_sha256
             or json_sha256({k: v for k, v in preflight.items() if k != "audit_sha256"}) != policy.preflight_sha256
@@ -113,8 +116,8 @@ def _reconstruct(root: Path, config: Path) -> tuple[dict[str, Any], dict[str, An
             or preflight.get("outcome_columns_read") is not False):
         raise DataReadinessError("initial-fit plan preflight pin or scope differs")
     base = preflight["request"]
-    cohort_path = resolve_inside_authority(root, base["cohort_path"])
-    cohort = load_swing_research_cohort(cohort_path, source_root=root)
+    cohort_path = paths.read(base["cohort_path"])
+    cohort = load_swing_research_cohort(cohort_path, source_root=root, paths=paths)
     if (cohort.sha256() != base["cohort_sha256"] or cohort.sha256() != preflight["cohort_sha256"]
             or not cohort.within_cap or cohort.maximum_exclusion_bps > 1000 or base["horizon_sessions"] != 10):
         raise DataReadinessError("initial-fit plan requires pinned accepted cohort and ten-session horizon")
@@ -128,13 +131,13 @@ def _reconstruct(root: Path, config: Path) -> tuple[dict[str, Any], dict[str, An
     for name, digest in cohort.source_files.items():
         if bound.get(name) != digest:
             raise DataReadinessError("initial-fit plan cohort/preflight source binding differs")
-    bound[preflight_path.relative_to(root).as_posix()] = file_sha256(preflight_path)
-    bound[config.relative_to(root).as_posix()] = file_sha256(config)
-    _recheck(root, bound)
+    bound[paths.relative(preflight_path).as_posix()] = file_sha256(preflight_path)
+    bound[paths.relative(config).as_posix()] = file_sha256(config)
+    _recheck(root, bound, paths)
 
     def source(relative: str) -> Path:
-        path = resolve_inside_authority(root, relative)
-        key = path.relative_to(root).as_posix()
+        path = paths.read(relative)
+        key = paths.relative(path).as_posix()
         if key not in cohort.source_files or bound.get(key) != file_sha256(path):
             raise DataReadinessError(f"initial-fit plan source is not cohort-bound: {relative}")
         return path
@@ -171,7 +174,7 @@ def _reconstruct(root: Path, config: Path) -> tuple[dict[str, Any], dict[str, An
         seen_months.add(month)
         if record["first_session"] > end.isoformat() or record["last_session"] < start.isoformat():
             continue
-        path = source((manifest_path.parent / record["path"]).relative_to(root).as_posix())
+        path = source(paths.relative(manifest_path.parent / record["path"]).as_posix())
         if file_sha256(path) != record["sha256"]:
             raise DataReadinessError("initial-fit plan partition hash differs")
         _guard()
@@ -284,68 +287,81 @@ def _reconstruct(root: Path, config: Path) -> tuple[dict[str, Any], dict[str, An
             "decision_and_holding_sessions": required_count, "benchmarks": benchmarks, "partitions": inspected},
         "unit_requirements": unit_audit,
         "ownership_admitted": False, "bar_coverage_verified": False, "accounting_eligible": False, "promotion_eligible": False}
-    _recheck(root, bound)
+    _recheck(root, bound, paths)
     _guard()
     return request, result, units
 
 
 def _verify_existing(output: Path, request: dict[str, Any], manifest: dict[str, Any], units: pd.DataFrame,
-    *, expected_sha256: str) -> dict[str, Any]:
-    stored = _object(output / "_manifest.json")
-    authority = _object(output / "_authority.json", expected_sha256=expected_sha256)
-    units_path = output / DAILY_BAR_UNITS_FILE
-    if (_object(output / "_request.json") != request or authority != {
+    *, expected_sha256: str, paths: EvidencePaths,
+    source_implementation_snapshot: SourcePin | None = None) -> tuple[dict[str, Any], dict[str, str]]:
+    stored = _object(paths.read_child(output, "_manifest.json"))
+    authority = _object(paths.read_child(output, "_authority.json"), expected_sha256=expected_sha256)
+    units_path = paths.read_child(output, DAILY_BAR_UNITS_FILE)
+    retained_request = _object(paths.read_child(output, "_request.json"))
+    proof = verify_replayed_implementation(paths.project_root, request["implementation_files"],
+        retained_request.get("implementation_files"), source_implementation_snapshot)
+    comparison = {**retained_request, "implementation_files": request["implementation_files"]}
+    if (comparison != request or authority != {
         "schema": AUTHORITY_SCHEMA, "state": "complete", "artifact": "_manifest.json",
-        "artifact_sha256": file_sha256(output / "_manifest.json"), "request_sha256": file_sha256(output / "_request.json"),
+        "artifact_sha256": file_sha256(paths.read_child(output, "_manifest.json")),
+        "request_sha256": file_sha256(paths.read_child(output, "_request.json")),
         "units_sha256": file_sha256(units_path), "universe_sha256": request["membership_authority"]["universe_sha256"]}):
         raise DataReadinessError("initial-fit plan replay request or authority differs")
-    expected = {**manifest, "request_sha256": file_sha256(output / "_request.json"), "resources": stored.get("resources")}
+    expected = {**manifest, "request_sha256": file_sha256(paths.read_child(output, "_request.json")), "resources": stored.get("resources")}
     expected["daily_bars"] = {**manifest["daily_bars"], "units_artifact": {
         "path": DAILY_BAR_UNITS_FILE, "bytes": units_path.stat().st_size, "sha256": file_sha256(units_path)}}
     if stored != expected or units_path.read_bytes() != units.to_csv(index=False, lineterminator="\n").encode("utf-8"):
         raise DataReadinessError("initial-fit plan replay requirements differ")
-    return stored
+    return stored, proof
 
 
 @contextmanager
 def verified_initial_fit_raw_share_plan(root: Path, config_path: Path, output_directory: Path, *,
-    expected_plan_sha256: str | None = None) -> Iterator[dict[str, Any]]:
+    expected_plan_sha256: str | None = None, paths: EvidencePaths | None = None,
+    source_implementation_snapshot: SourcePin | None = None) -> Iterator[dict[str, Any]]:
     """Hold the workspace lease across reconstruction and optional downstream collection."""
     root = root.resolve()
+    paths = paths or EvidencePaths(root)
     with heavy_job_lease("initial-fit-raw-share-plan", runtime_dir=_inside(root, heavy_job_runtime_dir())):
         try:
             _guard()
-            config = resolve_inside_authority(root, str(config_path))
+            config = paths.read(config_path)
             if config.stat().st_size > 1024**2:
                 raise DataReadinessError("initial-fit plan configuration exceeds bound")
-            output = _inside(root, output_directory)
+            output = paths.write(output_directory)
             if output.exists():
-                if expected_plan_sha256 is None or file_sha256(output / "_authority.json") != expected_plan_sha256:
+                if expected_plan_sha256 is None or file_sha256(paths.read_child(output, "_authority.json")) != expected_plan_sha256:
                     raise DataReadinessError("initial-fit plan requires its independent authority pin for replay")
             elif expected_plan_sha256 is not None:
                 raise DataReadinessError("initial-fit plan expected pin cannot create a replacement")
-            request, manifest, units = _reconstruct(root, config)
+            request, manifest, units = _reconstruct(root, config, paths=paths)
             if output.exists():
                 pin = expected_plan_sha256 or ""
-                manifest = _verify_existing(output, request, manifest, units, expected_sha256=pin)
+                manifest, proof = _verify_existing(output, request, manifest, units, expected_sha256=pin,
+                    paths=paths, source_implementation_snapshot=source_implementation_snapshot)
             else:
-                if any(resolve_inside_authority(root, path).is_relative_to(output) for path in request["source_files"]):
+                if any(paths.read(path).is_relative_to(output) for path in request["source_files"]):
                     raise DataReadinessError("initial-fit plan output contains a source")
                 manifest = publish_daily_history_plan(output=output, request=request, manifest=manifest, units=units)
-                pin = file_sha256(output / "_authority.json")
+                pin = file_sha256(paths.read_child(output, "_authority.json"))
                 _verify_existing(output, request, {k: v for k, v in manifest.items() if k not in {"request_sha256", "resources"}},
-                    units, expected_sha256=pin)
-            if file_sha256(output / "_authority.json") != pin:
+                    units, expected_sha256=pin, paths=paths)
+                proof = {}
+            if file_sha256(paths.read_child(output, "_authority.json")) != pin:
                 raise DataReadinessError("initial-fit plan authority changed before use")
-            yield {**manifest, "plan_sha256": pin, "provider_symbols": request["provider_symbols"]}
-            if file_sha256(output / "_authority.json") != pin:
+            yield {**manifest, "plan_sha256": pin, "provider_symbols": request["provider_symbols"],
+                **({"source_implementation_files": proof} if proof else {})}
+            if file_sha256(paths.read_child(output, "_authority.json")) != pin:
                 raise DataReadinessError("initial-fit plan authority changed during use")
-            _recheck(root, request["source_files"])
+            _recheck(root, request["source_files"], paths)
         except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
             raise DataReadinessError(f"invalid initial-fit raw-share plan: {exc}") from exc
 
 
 def run_initial_fit_raw_share_plan(root: Path, config_path: Path, output_directory: Path, *,
-    expected_plan_sha256: str | None = None) -> dict[str, Any]:
-    with verified_initial_fit_raw_share_plan(root, config_path, output_directory, expected_plan_sha256=expected_plan_sha256) as plan:
+    expected_plan_sha256: str | None = None, paths: EvidencePaths | None = None,
+    source_implementation_snapshot: SourcePin | None = None) -> dict[str, Any]:
+    with verified_initial_fit_raw_share_plan(root, config_path, output_directory, expected_plan_sha256=expected_plan_sha256,
+        paths=paths, source_implementation_snapshot=source_implementation_snapshot) as plan:
         return plan

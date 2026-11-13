@@ -9,6 +9,7 @@ import pytest
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.investment.action_relevance import RECIPIENT_PRE_DISTRIBUTION_RELEVANCE
 from market_predictor.investment.label_materialization import InvestmentSourceValidation, compile_investment_spy_pair
 from market_predictor.research import investment_remaining_parent as ledger
@@ -136,9 +137,35 @@ def chain(tmp_path: Path, parent: tuple[Path, Path], monkeypatch: pytest.MonkeyP
     original = _pin(tmp_path / "sensitivity" / "_manifest.json")
     dates = SourcePin.model_validate(_write(tmp_path / "dates.json", {"records": []}))
     recipient = SourcePin.model_validate(_write(tmp_path / "stock-identity.json", {"proofs": []}))
-    first = _write_ledger(tmp_path, original, tmp_path / "first", "feb-a", verified, dates)
-    second = _write_ledger(tmp_path, _pin(first), tmp_path / "second", "apr-c", verified + timedelta(seconds=10), dates, recipient)
+    research = tmp_path / "data" / "research"
+    research.mkdir(parents=True)
+    first = _write_ledger(tmp_path, original, research / "first", "feb-a", verified, dates)
+    second = _write_ledger(tmp_path, _pin(first), research / "second", "apr-c", verified + timedelta(seconds=10), dates, recipient)
     return first, second
+
+
+def test_relocated_parent_preserves_pins_and_requires_selected_volume(tmp_path: Path, chain: tuple[Path, Path]) -> None:
+    first, second = chain
+    pin = _pin(second)
+    default_pins: dict[str, str] = {}
+    expected = ledger.read_remaining_outcome_parent(tmp_path, pin, default_pins)
+    alternate = tmp_path.with_name(tmp_path.name + "-datasets")
+    (tmp_path / "data").rename(alternate)
+    paths = EvidencePaths(tmp_path, alternate)
+    relocated_pins: dict[str, str] = {}
+    assert ledger.read_remaining_outcome_parent(tmp_path, pin, relocated_pins, paths=paths) == expected
+    assert relocated_pins == default_pins
+    assert expected.rows["feb-a", 63]["pair_proof"]["path"] == str(first.parent / "pairs" / "feb-a" / "63.json")
+
+    physical_manifest = alternate / "research" / "second" / "_manifest.json"
+    second.parent.mkdir(parents=True)
+    second.write_bytes(physical_manifest.read_bytes())
+    physical_manifest.write_bytes(b"{}")
+    with pytest.raises(DataReadinessError, match="hash differs"):
+        ledger.read_remaining_outcome_parent(tmp_path, pin, {}, paths=paths)
+    physical_manifest.unlink()
+    with pytest.raises(DataReadinessError, match="missing"):
+        ledger.read_remaining_outcome_parent(tmp_path, pin, {}, paths=paths)
 
 
 def test_additive_children_preserve_prior_proof_clocks_and_ancestor_mask(
@@ -270,7 +297,7 @@ def test_repacked_remaining_ledger_is_refused(
 
 @pytest.mark.parametrize(("poison", "message"), [
     ("cycle", "cycle"),
-    ("outside", "escapes repository"),
+    ("outside", "unsafe evidence path"),
     ("carried_dates", "carried action authority"),
     ("no_new_role", "added no completed cash"),
 ])

@@ -14,7 +14,7 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import resolve_inside_authority
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.swing.contracts.research_cohort import Sha256, SwingResearchCohort
 
 BENCHMARKS = frozenset("SPY QQQ XLB XLC XLE XLF XLI XLK XLP XLRE XLU XLV XLY".split())
@@ -50,14 +50,14 @@ class CorporateActionScope(BaseModel):
     maximum_response_bytes: int = Field(ge=1024, le=4 * 1024**2)
 
 
-def _pinned_bytes(root: Path, pin: ScopePin, bound: dict[str, str]) -> bytes:
-    path = resolve_inside_authority(root, pin.path)
+def _pinned_bytes(paths: EvidencePaths, pin: ScopePin, bound: dict[str, str]) -> bytes:
+    path = paths.read(pin.path)
     if path.stat().st_size > 8 * 1024**2 or file_sha256(path) != pin.sha256:
         raise DataReadinessError("corporate-action scope source pin differs")
     data = path.read_bytes()
     if file_sha256(path) != pin.sha256:
         raise DataReadinessError("corporate-action scope source changed during read")
-    bound[path.relative_to(root).as_posix()] = pin.sha256
+    bound[paths.relative(path).as_posix()] = pin.sha256
     return data
 
 
@@ -68,17 +68,18 @@ def _signed(data: bytes) -> dict[str, Any]:
     return value
 
 
-def prepare_corporate_action_scope(root: Path, config: Path, raw: dict[str, Any]) -> dict[str, Any]:
+def prepare_corporate_action_scope(root: Path, config: Path, raw: dict[str, Any], *, paths: EvidencePaths | None = None) -> dict[str, Any]:
     """Reconstruct query symbols from pinned metadata without opening price files."""
+    paths = paths or EvidencePaths(root)
     policy = CorporateActionScope.model_validate_json(json.dumps(raw))
     if (policy.process_start != date(2018, 5, 29) or policy.process_end != date(2026, 9, 11)
             or policy.numeric_end != date(2024, 5, 28)):
         raise DataReadinessError("corporate-action scope differs from frozen query/numeric boundaries")
     if {item.symbol for item in policy.successors} != SUCCESSORS:
         raise DataReadinessError("corporate-action scope requires the five reviewed source-only successors")
-    bound = {config.relative_to(root).as_posix(): file_sha256(config)}
-    selection = _signed(_pinned_bytes(root, policy.source_selection, bound))
-    report = _signed(_pinned_bytes(root, policy.cohort, bound))
+    bound = {paths.relative(config).as_posix(): file_sha256(paths.read(config))}
+    selection = _signed(_pinned_bytes(paths, policy.source_selection, bound))
+    report = _signed(_pinned_bytes(paths, policy.cohort, bound))
     cohort = SwingResearchCohort.model_validate_json(json.dumps(report["cohort"]))
     if (report.get("cohort_sha256") != cohort.sha256() or not cohort.within_cap
             or len(cohort.original_security_ids) != 631 or len(cohort.excluded_security_ids) != 45
@@ -96,9 +97,7 @@ def prepare_corporate_action_scope(root: Path, config: Path, raw: dict[str, Any]
         if (not re.fullmatch(r"[A-Z0-9][A-Z0-9.-]{0,14}", symbol) or unit in units
                 or not date(2019, 7, 9) <= first <= last <= policy.numeric_end):
             raise DataReadinessError("corporate-action selected symbol/interval differs")
-        archive = (root / segment["archive"]).resolve()
-        if not archive.is_relative_to(root) or not (archive / artifact["bars_path"]).resolve().is_relative_to(archive):
-            raise DataReadinessError("corporate-action selected source escapes root")
+        paths.child_identity(segment["archive"], artifact["bars_path"])
         units.add(unit)
         symbols.add(symbol)
         if artifact["role"] == "stock":
@@ -110,12 +109,12 @@ def prepare_corporate_action_scope(root: Path, config: Path, raw: dict[str, Any]
     if len(stocks) != 545 or not stocks.issubset(cohort.retained_security_ids) or benchmarks != BENCHMARKS:
         raise DataReadinessError("corporate-action scope requires 545 retained stocks and all 13 ETFs")
     for successor in policy.successors:
-        inventory = tomllib.loads(_pinned_bytes(root, successor.inventory, bound).decode("utf-8"))
+        inventory = tomllib.loads(_pinned_bytes(paths, successor.inventory, bound).decode("utf-8"))
         documents = [item for item in inventory.get("documents", []) if item.get("document_id") == successor.document_id]
         if inventory.get("schema_version") != "market_predictor.official_document_inventory" or len(documents) != 1:
             raise DataReadinessError("corporate-action successor requires one pinned completion inventory reference")
         if successor.retained_document is not None:
-            _pinned_bytes(root, successor.retained_document, bound)
+            _pinned_bytes(paths, successor.retained_document, bound)
         symbols.add(successor.symbol)
     return {"policy": policy.model_dump(mode="json"), "tickers": sorted(symbols), "bound_files": bound,
         "scope": "corrected_cohort_provider_process_date_evidence_only"}

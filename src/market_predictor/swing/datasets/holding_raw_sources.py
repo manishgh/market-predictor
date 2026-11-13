@@ -10,7 +10,7 @@ import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.evidence.io import inside, resolve_inside_authority
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference
 from market_predictor.swing.contracts.holding_materialization import PositionSourceBinding
 from market_predictor.swing.labels.holding_paths import validate_outcome_observations
@@ -20,7 +20,8 @@ RAW_COLUMNS = ["security_id", "ticker", "session_date", "bar_start_utc", "open",
 
 
 def read_bound_observations(root: Path, selection: dict[str, Any], binding: PositionSourceBinding,
-    *, first: date, last: date, interpretation_sha256: str) -> tuple[pd.DataFrame, dict[date, EvidenceReference]]:
+    *, first: date, last: date, interpretation_sha256: str,
+    paths: EvidencePaths | None = None) -> tuple[pd.DataFrame, dict[date, EvidenceReference]]:
     """Hashes cover full files; Parquet numeric decoding is restricted to requested dates."""
     matches = [segment for segment in selection["segments"]
         if segment["artifact"]["unit_id"] == binding.unit_id
@@ -37,8 +38,8 @@ def read_bound_observations(root: Path, selection: dict[str, Any], binding: Posi
     lower, upper = max(first, binding.first_session), min(last, binding.last_session)
     if lower > upper or lower < date(2019, 7, 9) or upper > date(2024, 5, 28):
         raise DataReadinessError("raw holding read is outside the initial-fit binding window")
-    archive = inside(root, Path(segment["archive"]))
-    path = resolve_inside_authority(archive, artifact["bars_path"])
+    paths = paths or EvidencePaths(root)
+    path = paths.read_child(segment["archive"], artifact["bars_path"])
     if file_sha256(path) != binding.bars_sha256:
         raise DataReadinessError("raw holding artifact hash differs")
     frame = pd.read_parquet(path, columns=RAW_COLUMNS,
@@ -67,7 +68,7 @@ def read_bound_observations(root: Path, selection: dict[str, Any], binding: Posi
     observed["bar_start_utc"], observed["bar_end_utc"] = schedule.open.array, schedule.close.array
     observed["available_at_utc"] = frame.ingested_at_utc
     observed = validate_outcome_observations(observed).set_index("session_date_et")
-    evidence = {day: EvidenceReference(reference=path.relative_to(root).as_posix(),
+    evidence = {day: EvidenceReference(reference=paths.relative(path).as_posix(),
         artifact_sha256=binding.bars_sha256, record_locator=f"security_id={binding.security_id};session_date={day}",
         interpretation_policy_sha256=interpretation_sha256,
         retrieved_at=pd.Timestamp(observed.loc[day, "ingested_at_utc"]).to_pydatetime(), available_at=None)

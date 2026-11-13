@@ -89,5 +89,5 @@ def test_policy_reader_rejects_paths_outside_authority(tmp_path: Path) -> None:
     config.write_bytes(_CONFIG.read_bytes())
     root = tmp_path / "authority"
     root.mkdir()
-    with pytest.raises(DataReadinessError, match="escapes authority root"):
+    with pytest.raises(DataReadinessError, match="outside the project namespace"):
         load_symbol_correction_policy(root, config, file_sha256(config))

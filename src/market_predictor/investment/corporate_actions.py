@@ -15,7 +15,7 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import resolve_inside_authority
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.investment.action_relevance import (
     SUPPORTED_REASONS,
     ExistingRecipientStockAuthority,
@@ -82,8 +82,9 @@ class InvestmentCorporateActions:
         completed_cash_facts: Mapping[str, ReviewedCompletedCashDistribution] | None = None,
         recipient_stock_authority: ExistingRecipientStockAuthority | None = None,
         reviewed_held_stock_actions_manifest: SourcePin | None = None,
-        reviewed_held_stock_actions: Mapping[str, ReviewedHeldStockAction] | None = None) -> None:
-        self.root, self.evidence = root.resolve(), evidence
+        reviewed_held_stock_actions: Mapping[str, ReviewedHeldStockAction] | None = None, paths: EvidencePaths | None = None) -> None:
+        paths = self.paths = paths or EvidencePaths(root)
+        self.root, self.evidence = paths.project_root, evidence
         self.actions, self.global_gaps = action_index
         self.official = official_windows
         self.policy_reference, self.numeric_end = policy_reference, numeric_end
@@ -97,7 +98,7 @@ class InvestmentCorporateActions:
         self.process_first: date | None = None
         self.process_last: date | None = None
         self.recheck()
-        policy_path = resolve_inside_authority(self.root, policy_reference.reference)
+        policy_path = self.paths.read(policy_reference.reference)
         policy = parse_strict_json_object(policy_path.read_bytes(), label="investment nominal claim policy")
         if policy.get("nominal_unpaid_claim_valuation") is not True:
             raise DataReadinessError("investment policy must explicitly approve nominal unpaid claim valuation")
@@ -111,7 +112,7 @@ class InvestmentCorporateActions:
             if not name.endswith("/_request.json"):
                 continue
             request: dict[str, Any] = parse_strict_json_object(
-                resolve_inside_authority(self.root, name).read_bytes(), label="action request")
+                self.paths.read(name).read_bytes(), label="action request")
             if request.get("request_sha256") != evidence.request_sha256:
                 continue
             scope = request["policy"]
@@ -127,9 +128,9 @@ class InvestmentCorporateActions:
         relevance_action_ids = relevance_action_ids.union(held_facts)
         self.held_stock_actions: dict[tuple[str, str], tuple[VerifiedHeldStockAction, _Term]] = {}
         calendar = xcals.get_calendar("XNYS")
-        for name, (query, metadata_name, _, _) in _selected_pages(self.root, evidence, lambda: None).items():
-            body_path = resolve_inside_authority(self.root, name)
-            metadata_path = resolve_inside_authority(self.root, metadata_name)
+        for name, (query, metadata_name, _, _) in _selected_pages(self.root, evidence, lambda: None, paths=paths).items():
+            body_path = self.paths.read(name)
+            metadata_path = self.paths.read(metadata_name)
             if body_path.stat().st_size > 8 * 1024**2 or metadata_path.stat().st_size > 256 * 1024:
                 raise DataReadinessError("investment action page exceeds bounded metadata/body size")
             raw = body_path.read_bytes()
@@ -193,7 +194,7 @@ class InvestmentCorporateActions:
                             if amount_correction is not None:
                                 observed_corrections.add(action_id)
                                 resolved = amount_correction.resolve_against(
-                                    record, self.root, policy_reference.interpretation_policy_sha256)
+                                    record, self.root, policy_reference.interpretation_policy_sha256, paths=paths)
                                 dividend_amount = _positive(float(resolved.gross_amount))
                                 amount_refs = resolved.evidence
                             currency = record.get("currency")
@@ -203,7 +204,7 @@ class InvestmentCorporateActions:
                                     raise DataReadinessError("independent USD evidence contradicts provider currency")
                                 corroboration_refs = corroboration.validates_against(
                                     record, self.root, policy_reference.interpretation_policy_sha256,
-                                    amount_correction=amount_correction, stock_identity_cache=stock_identity_cache)
+                                    amount_correction=amount_correction, stock_identity_cache=stock_identity_cache, paths=paths)
                                 if special_assertion:
                                     self.special_cash_entitlements.add(identity)
                             for source_ref in (*amount_refs, *corroboration_refs):
@@ -231,7 +232,7 @@ class InvestmentCorporateActions:
                                     self.invalid.add(identity)
                                     self.unresolved_terms[identity] = "currency_refresh_capture_unproven"
                                     continue
-                                refreshed_path = resolve_inside_authority(self.root, currency_ref.reference)
+                                refreshed_path = self.paths.read(currency_ref.reference)
                                 if file_sha256(refreshed_path) != currency_ref.artifact_sha256:
                                     raise DataReadinessError("refreshed currency evidence hash differs")
                                 if refreshed_path.stat().st_size > 8 * 1024**2:
@@ -283,7 +284,7 @@ class InvestmentCorporateActions:
                 verified = verify_held_stock_action(
                     self.root, held, retained.record, reviewed_held_stock_actions_manifest,
                     policy_reference.interpretation_policy_sha256, self.source_files, stock_identity_cache,
-                    memory_guard=lambda: guard("reviewed held-stock action source"),
+                    memory_guard=lambda: guard("reviewed held-stock action source"), paths=paths,
                 )
                 held_key = held.ticker, action_id
                 if held_key in self.terms:
@@ -302,12 +303,13 @@ class InvestmentCorporateActions:
                 completed[action_id] = verify_completed_cash_fact(
                     self.root, fact, retained.record, completed_cash_manifest, policy_reference.interpretation_policy_sha256,
                     self.source_files, stock_identity_cache, stock_identity_cache,
-                    memory_guard=lambda: guard("completed cash SEC source"),
+                    memory_guard=lambda: guard("completed cash SEC source"), paths=paths,
                 )
             self.relevance = InvestmentActionRelevance(
                 self.root, exact, reviewed_action_dates, reviewed_parent_units, policy_reference,
                 memory_guard=lambda: guard("investment reviewed action relevance"), completed_cash=completed,
                 recipients=recipient_stock_authority, stock_cache=stock_identity_cache, recipient_source_files=self.source_files,
+                paths=paths,
             )
             for name, digest in self.relevance.source_files.items():
                 if name in self.source_files and self.source_files[name] != digest:
@@ -316,9 +318,9 @@ class InvestmentCorporateActions:
         self.recheck()
 
     def recheck(self) -> None:
-        self.evidence.recheck(self.root)
+        self.evidence.recheck(self.root, paths=self.paths)
         for name, digest in self.source_files.items():
-            if file_sha256(resolve_inside_authority(self.root, name)) != digest:
+            if file_sha256(self.paths.read(name)) != digest:
                 raise DataReadinessError("investment corporate-action source changed")
 
     def _relevance_window(self, symbol: str, window: ActionWindow, first: date, last: date) -> bool:

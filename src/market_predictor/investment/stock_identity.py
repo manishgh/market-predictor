@@ -20,7 +20,7 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import inside
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.investment.sec_document_evidence import (
     SecArchivedDocument,
     pin_retained_child,
@@ -82,17 +82,19 @@ class ReplayedStockIdentity:
 
 
 def _authority_frames(root: Path, proof: StockIdentityProof, files: MutableMapping[str, str]
-                      ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    authority_path = pin_retained_source(root, proof.identity_authority, files)
+                      , *, paths: EvidencePaths | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    paths = paths or EvidencePaths(root)
+    authority_path = pin_retained_source(root, proof.identity_authority, files, paths=paths)
     authority = retained_source_object(authority_path)
     if (authority.get("schema") != "edge_rebuild.sec_identity_authority.v2"
             or authority.get("state") != "identity_complete" or authority.get("artifact") != "_manifest.json"):
         raise DataReadinessError("stock identity requires the exact retained accepted SEC authority")
     directory = authority_path.parent
-    manifest = retained_source_object(pin_retained_child(root, directory, "_manifest.json", authority["artifact_sha256"], files))
-    request_path = directory / "_request.json"
+    manifest = retained_source_object(
+        pin_retained_child(root, directory, "_manifest.json", authority["artifact_sha256"], files, paths=paths))
+    request_path = paths.read(directory / "_request.json")
     request = retained_source_object(request_path)
-    files[str(request_path)] = file_sha256(request_path)
+    files[str(paths.identity(request_path))] = file_sha256(request_path)
     if (manifest.get("schema") != "edge_rebuild.sec_identity_manifest.v2" or manifest.get("status") != "complete"
             or request.get("schema") != "edge_rebuild.sec_identity_request.v2"
             or json_sha256({k: v for k, v in request.items() if k != "request_sha256"}) != authority["request_sha256"]
@@ -102,17 +104,17 @@ def _authority_frames(root: Path, proof: StockIdentityProof, files: MutableMappi
             or request["parent_lineage"]["membership_authority"]["authority_sha256"] != proof.membership_authority.sha256):
         raise DataReadinessError("stock SEC relation parent/request binding differs")
     relation = manifest["relation_artifact"]
-    relations = pd.read_parquet(pin_retained_child(root, directory, relation["path"], relation["sha256"], files))
-    membership_path = pin_retained_source(root, proof.membership_authority, files)
+    relations = pd.read_parquet(pin_retained_child(root, directory, relation["path"], relation["sha256"], files, paths=paths))
+    membership_path = pin_retained_source(root, proof.membership_authority, files, paths=paths)
     membership_authority = retained_source_object(membership_path)
     if (membership_authority.get("state") != "membership_complete"
             or membership_authority.get("artifact") != "_manifest.json"):
         raise DataReadinessError("stock membership authority is incomplete")
     member_manifest = retained_source_object(pin_retained_child(root, membership_path.parent, "_manifest.json",
-                                    membership_authority["artifact_sha256"], files))
+                                    membership_authority["artifact_sha256"], files, paths=paths))
     member_artifact = member_manifest["membership_artifact"]
     members = pd.read_parquet(pin_retained_child(root, membership_path.parent, member_artifact["path"],
-                                    member_artifact["sha256"], files))
+                                    member_artifact["sha256"], files, paths=paths))
     required = {"security_id", "ticker", "effective_from_utc", "effective_to_utc"}
     for frame in (relations, members):
         if not required.issubset(frame.columns) or not frame.columns.is_unique:
@@ -132,10 +134,10 @@ def _proof_cache_key(root: Path, proof: StockIdentityProof) -> str:
 
 
 def _class_anchor(root: Path, proof: StockIdentityProof, files: MutableMapping[str, str], cache: dict[str, Any]
-                  ) -> tuple[SecurityClassEvidence, pd.Timestamp, pd.Timestamp, str]:
+                  , *, paths: EvidencePaths | None = None) -> tuple[SecurityClassEvidence, pd.Timestamp, pd.Timestamp, str]:
     anchor = proof.anchor
     document = read_retained_sec_document(root, SecArchivedDocument.model_validate(anchor.model_dump()), proof.sec_cik,
-        files, cache, primary_only=True, memory_guard=lambda: guard("stock class index receipt"))
+        files, cache, primary_only=True, memory_guard=lambda: guard("stock class index receipt"), paths=paths)
     if document.accepted_at >= pd.Timestamp("2024-05-29T00:00:00Z"):
         raise DataReadinessError("stock class anchor escapes the frozen pre-boundary scope")
     with tempfile.TemporaryDirectory() as directory:
@@ -155,20 +157,22 @@ def _class_anchor(root: Path, proof: StockIdentityProof, files: MutableMapping[s
 
 def replay_stock_identity(root: Path, proof: StockIdentityProof, *, sessions: tuple[date, ...],
     source_files: MutableMapping[str, str], interpretation_sha256: str,
-    cache: dict[str, Any] | None = None) -> ReplayedStockIdentity:
+    cache: dict[str, Any] | None = None, paths: EvidencePaths | None = None) -> ReplayedStockIdentity:
     """Replay exact source facts and unique open-to-close ownership, without inference.
 
     Caller owns the shared lease and rechecks ``source_files`` at publication.
     A caller-owned cache is bounded by the finite declared proof population.
     """
-    root = root.resolve()
+    paths = paths or EvidencePaths(root)
+    root = paths.project_root
+    source_root = (root, paths.data_root)
     key = _proof_cache_key(root, proof)
-    exact_cache_hit = cache is not None and cache.get("source_root") == str(root) and cache.get(key) is not None
+    exact_cache_hit = cache is not None and cache.get("source_root") == source_root and cache.get(key) is not None
     guard("stock identity replay", reclaim_unused_memory=not exact_cache_hit)
     if not sessions or tuple(sorted(set(sessions))) != sessions:
         raise DataReadinessError("stock identity requires exact ordered nonempty sessions")
     cache = {} if cache is None else cache
-    if cache.setdefault("source_root", str(root)) != str(root):
+    if cache.setdefault("source_root", source_root) != source_root:
         raise DataReadinessError("stock identity cache cannot cross source roots")
     cached = cache.get(key)
     if cached is None:
@@ -176,9 +180,9 @@ def replay_stock_identity(root: Path, proof: StockIdentityProof, *, sessions: tu
         frame_key = "frames:" + json_sha256([proof.identity_authority.model_dump(mode="json"),
                                             proof.membership_authority.model_dump(mode="json")])
         if frame_key not in cache:
-            cache[frame_key] = _authority_frames(root, proof, files)
+            cache[frame_key] = _authority_frames(root, proof, files, paths=paths)
         relations, members = cache[frame_key]
-        facts, accepted, captured, body_reference = _class_anchor(root, proof, files, cache)
+        facts, accepted, captured, body_reference = _class_anchor(root, proof, files, cache, paths=paths)
         cached = relations, members, facts, accepted, captured, files, body_reference
         cache[key] = cached
     relations, members, facts, accepted, captured, files, body_reference = cached
@@ -212,7 +216,7 @@ def replay_stock_identity(root: Path, proof: StockIdentityProof, *, sessions: tu
         if owned:
             proven.append(day)
     competing = tuple(sorted(set(relations.loc[relations.sec_cik.eq(proof.sec_cik), "ticker"]) - {proof.ticker}))
-    evidence_names = {str(inside(root, pin.path)) for pin in (proof.identity_authority, proof.membership_authority,
+    evidence_names = {str(paths.identity(pin.path)) for pin in (proof.identity_authority, proof.membership_authority,
                       proof.anchor.collection_manifest, proof.anchor.receipt_artifact, proof.anchor.filing_metadata)}
     verified_at = datetime.now(UTC)
     references = tuple(EvidenceReference(reference=name, artifact_sha256=digest,

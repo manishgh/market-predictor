@@ -16,6 +16,7 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.investment.dataset import read_object, recheck_sources, require
 from market_predictor.investment.training import HORIZONS
@@ -224,8 +225,10 @@ def _coverage(rows: Iterable[dict[str, Any]], comparisons: dict[str, Any]) -> di
         "position_status_counts": positions, "complete_cohorts": sum(view["complete_dates"] for view in comparisons.values())}
 
 
-def comparison_sidecar_pins(root: Path, manifest: SourcePin, value: dict[str, Any]) -> tuple[SourcePin, SourcePin]:
-    parent_path = inside(root, manifest.path)
+def comparison_sidecar_pins(
+    root: Path, manifest: SourcePin, value: dict[str, Any], *, paths: EvidencePaths | None = None,
+) -> tuple[SourcePin, SourcePin]:
+    parent_path = inside(root, manifest.path) if paths is None else paths.identity(manifest.path)
     files = value.get("files")
     require(parent_path.name == "_manifest.json" and isinstance(files, dict)
         and set(files) == {"outcomes.json", "comparisons.json"},
@@ -234,7 +237,8 @@ def comparison_sidecar_pins(root: Path, manifest: SourcePin, value: dict[str, An
     sidecars = []
     for name in ("outcomes.json", "comparisons.json"):
         child = parent_path.parent / name
-        require(inside(root, child) == child, "parent selection sidecar must be the named sibling file")
+        if paths is None:
+            require(inside(root, child) == child, "parent selection sidecar must be the named sibling file")
         sidecars.append(SourcePin(path=str(child), sha256=files[name]))
     return sidecars[0], sidecars[1]
 
@@ -249,16 +253,18 @@ class FixedSelectionOutcomes:
     cohorts: dict[str, list[dict[str, Any]]]
 
 
-def read_fixed_selection_outcomes(root: Path, pin: SourcePin, pins: dict[str, str]) -> FixedSelectionOutcomes:
-    parent = read_object(root, pin, pins)
+def read_fixed_selection_outcomes(
+    root: Path, pin: SourcePin, pins: dict[str, str], *, paths: EvidencePaths | None = None,
+) -> FixedSelectionOutcomes:
+    parent = read_object(root, pin, pins, paths=paths)
     require(parent.get("schema") == "market_predictor.investment_selection_outcomes"
         and parent.get("scope") == "retrospective_research"
         and parent.get("round_trip_stock_cost_bps") == 20 and parent.get("benchmark_basis") == "stock_net_minus_spy_gross"
         and all(parent.get(flag) is False for flag in (*FLAGS, "selection_changed", "models_refitted", "original_labels_changed")),
         "exclusions require a closed fixed-selection parent with the original stock/SPY cost policy")
-    outcomes_pin, comparisons_pin = comparison_sidecar_pins(root, pin, parent)
-    outcomes = _parent_rows(read_object(root, outcomes_pin, pins))
-    original = read_object(root, comparisons_pin, pins)
+    outcomes_pin, comparisons_pin = comparison_sidecar_pins(root, pin, parent, paths=paths)
+    outcomes = _parent_rows(read_object(root, outcomes_pin, pins, paths=paths))
+    original = read_object(root, comparisons_pin, pins, paths=paths)
     cohorts = _parent_cohorts(original, outcomes)
     _validate_parent_report(parent, outcomes, original["views"], cohorts)
     return FixedSelectionOutcomes(parent, outcomes_pin, comparisons_pin, outcomes, original["views"], cohorts)

@@ -10,8 +10,9 @@ import threading
 import uuid
 from collections.abc import Callable, Mapping
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
+from functools import partial
 from pathlib import Path
 from typing import Any, Final, Protocol, cast
 from zoneinfo import ZoneInfo
@@ -21,6 +22,8 @@ import pandas as pd
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.core.json_integrity import parse_strict_json_object
+from market_predictor.core.path_integrity import resolve_existing_file_inside, resolve_write_path_inside
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
@@ -137,6 +140,7 @@ class _VerifiedPlan:
     adjustment: str
     provider_symbols: dict[str, str] | None
     scope: str | None
+    source_implementation_files: dict[str, str] = field(default_factory=dict)
 
 
 def collect_swing_history_plan(
@@ -345,16 +349,20 @@ def load_complete_swing_history_collection(
     expected_adjustment: str,
     expected_plan_authority_sha256: str | None = None,
     feature_plan_snapshot: SourcePin | None = None,
+    source_implementation_snapshot: SourcePin | None = None,
+    paths: EvidencePaths | None = None,
 ) -> dict[str, Any]:
     """Verify final authority, current plan identity, and every unit artifact."""
 
+    if paths is not None:
+        directory = paths.directory(directory)
     plan = _load_verified_plan(plan_directory, expected_plan_authority_sha256=expected_plan_authority_sha256,
-        feature_plan_snapshot=feature_plan_snapshot)
+        feature_plan_snapshot=feature_plan_snapshot, paths=paths, source_implementation_snapshot=source_implementation_snapshot)
     if expected_adjustment not in SUPPORTED_ADJUSTMENTS or plan.adjustment != expected_adjustment:
         raise DataReadinessError("swing history consumer adjustment differs from plan")
-    request = _load_json(directory / "_request.json")
-    manifest = _load_json(directory / "_manifest.json")
-    authority = _load_json(directory / "_authority.json")
+    request = _load_json(_resolve_inside(directory, "_request.json"))
+    manifest = _load_json(_resolve_inside(directory, "_manifest.json"))
+    authority = _load_json(_resolve_inside(directory, "_authority.json"))
     request_sha256 = str(request.get("request_sha256", ""))
     request_payload = {key: value for key, value in request.items() if key != "request_sha256"}
     if plan.provider_symbols is not None and request.get("provider_symbols") != plan.provider_symbols:
@@ -384,7 +392,7 @@ def load_complete_swing_history_collection(
         or authority.get("schema") != COLLECTION_AUTHORITY_SCHEMA
         or authority.get("state") != "complete"
         or authority.get("artifact") != "_manifest.json"
-        or authority.get("artifact_sha256") != file_sha256(directory / "_manifest.json")
+        or authority.get("artifact_sha256") != file_sha256(_resolve_inside(directory, "_manifest.json"))
         or authority.get("request_sha256") != request_sha256
         or authority.get("plan_authority_sha256") != plan.hashes["authority_sha256"]
         or authority.get("plan_units_sha256") != plan.hashes["units_sha256"]
@@ -446,10 +454,14 @@ def load_complete_swing_history_collection(
 
 def _load_verified_plan(directory: Path, *, expected_plan_authority_sha256: str | None = None,
     feature_plan_snapshot: SourcePin | None = None,
+    source_implementation_snapshot: SourcePin | None = None,
+    paths: EvidencePaths | None = None,
 ) -> _VerifiedPlan:
-    request_path = directory / "_request.json"
-    manifest_path = directory / "_manifest.json"
-    authority_path = directory / "_authority.json"
+    if paths is not None:
+        directory = paths.directory(directory)
+    request_path = _resolve_inside(directory, "_request.json")
+    manifest_path = _resolve_inside(directory, "_manifest.json")
+    authority_path = _resolve_inside(directory, "_authority.json")
     for path in (request_path, manifest_path, authority_path):
         if not path.is_file():
             raise DataReadinessError(f"swing history plan file is missing: {path}")
@@ -529,7 +541,8 @@ def _load_verified_plan(directory: Path, *, expected_plan_authority_sha256: str 
 
         validate_symbol_correction_collection_plan(
             directory=directory, request=request, manifest=manifest, units=units,
-            parent_archive_loader=load_complete_swing_history_collection,
+            parent_archive_loader=partial(load_complete_swing_history_collection, paths=paths,
+                source_implementation_snapshot=source_implementation_snapshot), paths=paths,
         )
     if scope == "corrected_adjusted_feature_history":
         from market_predictor.swing.datasets.feature_history_plan import validate_feature_history_collection_plan
@@ -537,10 +550,13 @@ def _load_verified_plan(directory: Path, *, expected_plan_authority_sha256: str 
         validate_feature_history_collection_plan(directory=directory, request=request, manifest=manifest, units=units,
             implementation_snapshot=feature_plan_snapshot)
         provider_symbols = dict(cast(dict[str, str], request["provider_symbols"]))
+    source_implementation_files: dict[str, str] = {}
     if scope == INVESTMENT_RAW_SCOPE:
         from market_predictor.investment.raw_acquisition import validate_investment_raw_acquisition_plan
 
-        validate_investment_raw_acquisition_plan(directory=directory, request=request, manifest=manifest, units=units)
+        source_implementation_files = validate_investment_raw_acquisition_plan(
+            directory=directory, request=request, manifest=manifest, units=units, paths=paths,
+            source_implementation_snapshot=source_implementation_snapshot)
     if scope == "initial_fit_adjusted_history":
         from market_predictor.swing.datasets.initial_fit_adjusted_history import (
             validate_initial_fit_adjusted_history_collection_plan,
@@ -561,6 +577,7 @@ def _load_verified_plan(directory: Path, *, expected_plan_authority_sha256: str 
         adjustment=str(units_record["adjustment"]),
         provider_symbols=provider_symbols,
         scope=scope,
+        source_implementation_files=source_implementation_files,
     )
 
 
@@ -978,8 +995,8 @@ def _load_existing_unit(
 ) -> dict[str, Any] | None:
     unit_id = str(unit["unit_id"])
     unit_directory = root / "units" / unit_id
-    manifest_path = unit_directory / "_manifest.json"
-    bars_path = unit_directory / "bars.parquet"
+    manifest_path = resolve_write_path_inside(root, unit_directory.relative_to(root) / "_manifest.json", label="history unit manifest")
+    bars_path = resolve_write_path_inside(root, unit_directory.relative_to(root) / "bars.parquet", label="history unit bars")
     if not manifest_path.exists() and not bars_path.exists():
         return None
     if not manifest_path.is_file() or not bars_path.is_file():
@@ -1094,7 +1111,7 @@ def _replay_transport(root: Path, page: Mapping[str, Any], *, unit: Mapping[str,
     if not isinstance(receipt, Mapping) or not isinstance(receipt.get("metadata"), Mapping):
         raise DataReadinessError("swing history lacks original transport receipt")
     metadata = dict(receipt["metadata"])
-    body_path = _resolve_inside(root, str(receipt.get("body_path", "")))
+    body_path = _resolve_inside(root, str(receipt.get("body_path", "")), label="swing history transport body")
     if not body_path.is_file() or body_path.stat().st_size > 32 * 1024**2:
         raise DataReadinessError("swing history transport body missing or oversized")
     with body_path.open("rb") as stream:
@@ -1288,12 +1305,8 @@ def _session_midnight_utc(session: date) -> datetime:
     return datetime.combine(session, time.min, tzinfo=EASTERN).astimezone(UTC)
 
 
-def _resolve_inside(root: Path, relative: str) -> Path:
-    resolved_root = root.resolve()
-    candidate = (resolved_root / relative).resolve()
-    if candidate != resolved_root and resolved_root not in candidate.parents:
-        raise DataReadinessError(f"swing history artifact escapes authority root: {relative}")
-    return candidate
+def _resolve_inside(root: Path, relative: str, *, label: str = "swing history artifact") -> Path:
+    return resolve_existing_file_inside(root, relative, label=label)
 
 
 def _write_or_validate_json(path: Path, payload: Mapping[str, Any]) -> None:

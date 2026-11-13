@@ -12,7 +12,7 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import inside
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.swing.contracts.holding_accounting import HoldingContract, Sha256
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.reviewed_action_sources import verify_reviewed_action_sources
@@ -45,11 +45,12 @@ class ReviewedActionDateArtifact(HoldingContract):
 
 
 def load_reviewed_action_dates(root: Path, pin: SourcePin | None,
-    records: dict[str, tuple[str, dict[str, Any]]], *, memory_guard: Callable[[], None],
+    records: dict[str, tuple[str, dict[str, Any]]], *, memory_guard: Callable[[], None], paths: EvidencePaths | None = None,
 ) -> tuple[dict[str, ReviewedActionDate], dict[str, str]]:
     if pin is None:
         return {}, {}
-    path = inside(root, pin.path)
+    paths = paths or EvidencePaths(root)
+    path = paths.read(pin.path)
     if path.stat().st_size > 1024**2 or file_sha256(path) != pin.sha256:
         raise DataReadinessError("reviewed action dates size or hash differs")
     raw = path.read_bytes()
@@ -58,7 +59,7 @@ def load_reviewed_action_dates(root: Path, pin: SourcePin | None,
     if not artifact.records or len(artifact.records) > 256:
         raise DataReadinessError("reviewed action dates exceed their exact-action bound")
     pins = verify_reviewed_action_sources(root, pin, artifact.source_files,
-        (receipt for fact in artifact.records for receipt in fact.official_receipts), memory_guard=memory_guard)
+        (receipt for fact in artifact.records for receipt in fact.official_receipts), memory_guard=memory_guard, paths=paths)
     result: dict[str, ReviewedActionDate] = {}
     for fact in artifact.records:
         matched = records.get(fact.action_id)

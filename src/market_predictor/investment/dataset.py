@@ -17,9 +17,11 @@ from pydantic import Field
 from market_predictor.canonical.cutoffs import swing_prediction_cutoffs
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.path_integrity import verify_no_reparse_ancestry
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.investment.fundamentals import FEATURE_NAMES
 from market_predictor.swing.contracts.holding_accounting import HoldingContract, Sha256, Timestamp
 from market_predictor.swing.contracts.holding_materialization import SourcePin
@@ -86,30 +88,36 @@ def require(condition: bool, message: str) -> None:
         raise DataReadinessError(message)
 
 
-def add_pins(root: Path, destination: dict[str, str], sources: dict[str, str]) -> None:
+def add_pins(root: Path, destination: dict[str, str], sources: dict[str, str], *, paths: EvidencePaths | None = None) -> None:
     for name, digest in sources.items():
-        path = str((root / name).resolve())
+        path = str((root / name).resolve() if paths is None else paths.identity(name))
         require(path not in destination or destination[path] == digest, "investment dataset source pins conflict")
         destination[path] = digest
 
 
-def read_object(root: Path, pin: SourcePin, pins: dict[str, str]) -> dict[str, Any]:
+def read_object(root: Path, pin: SourcePin, pins: dict[str, str], *, paths: EvidencePaths | None = None) -> dict[str, Any]:
     from market_predictor.research.investment_features import ArtifactReference, _object
 
-    path = str(inside(root, pin.path))
+    path = str(inside(root, pin.path) if paths is None else paths.identity(pin.path))
     require(path not in pins or pins[path] == pin.sha256, "investment dataset source pin conflicts with an earlier read")
-    return _object(root, ArtifactReference(path=pin.path, sha256=pin.sha256), pins)
+    return _object(root, ArtifactReference(path=pin.path, sha256=pin.sha256), pins, paths=paths)
 
 
-def pin_source_file(root: Path, pin: SourcePin, pins: dict[str, str]) -> None:
-    path = inside(root, pin.path)
+def pin_source_file(root: Path, pin: SourcePin, pins: dict[str, str], *, paths: EvidencePaths | None = None) -> None:
+    path = inside(root, pin.path) if paths is None else paths.read(pin.path)
     require(file_sha256(path) == pin.sha256, f"investment source bytes changed: {pin.path}")
-    add_pins(root, pins, {str(path): pin.sha256})
+    add_pins(root, pins, {pin.path: pin.sha256}, paths=paths)
 
 
-def recheck_sources(root: Path, pins: dict[str, str]) -> None:
+def recheck_sources(
+    root: Path, pins: dict[str, str], *, paths: EvidencePaths | None = None,
+    retained_external: frozenset[str] = frozenset(),
+) -> None:
     for name, digest in pins.items():
-        require(file_sha256(root / name) == digest, f"investment dataset source changed: {name}")
+        path = root / name if paths is None or name in retained_external else paths.read(name)
+        if name in retained_external:
+            path = verify_no_reparse_ancestry(path, label="retained investment source")
+        require(file_sha256(path) == digest, f"investment dataset source changed: {name}")
 
 
 def model_profiles(columns: tuple[str, ...]) -> dict[str, tuple[str, ...]]:
@@ -277,21 +285,25 @@ def validate_dataset_rows(frame: pd.DataFrame, profiles: dict[str, tuple[str, ..
         "investment dataset target does not reconcile stock net against SPY gross")
 
 
-def load_investment_dataset(*, root: Path, manifest: SourcePin, admission: SourcePin) -> InvestmentDataset:
+def load_investment_dataset(
+    *, root: Path, manifest: SourcePin, admission: SourcePin, paths: EvidencePaths | None = None,
+) -> InvestmentDataset:
     """Load all rows once under the caller's lease; never import historical model code."""
     guard("investment dataset admission")
     pins: dict[str, str] = {}
-    receipt = InvestmentDatasetAdmission.model_validate_json(json.dumps(read_object(root, admission, pins)))
+    receipt = InvestmentDatasetAdmission.model_validate_json(json.dumps(read_object(root, admission, pins, paths=paths)))
     require(receipt.files == {}, "investment admission contains unexpected files")
     require(receipt.dataset == manifest and receipt.scope == "retrospective_research", "investment admission refers to another dataset")
-    report = read_object(root, manifest, pins)
+    report = read_object(root, manifest, pins, paths=paths)
     require(report.get("schema") == DATASET_SCHEMA and report.get("status") == "complete_research_dataset"
         and report.get("request") == receipt.request.model_dump(mode="json"), "investment dataset manifest or request differs")
-    parsed_request = InvestmentDatasetRequest.model_validate_json(json.dumps(read_object(root, receipt.request, pins)))
+    parsed_request = InvestmentDatasetRequest.model_validate_json(json.dumps(read_object(root, receipt.request, pins, paths=paths)))
     require(set(report["files"]) == {"request.json"}, "investment dataset file inventory differs")
-    published_request = SourcePin(path=str(inside(root, manifest.path).parent / "request.json"),
+    directory = (inside(root, manifest.path) if paths is None else paths.identity(manifest.path)).parent
+    published_request = SourcePin(path=str(directory / "request.json"),
         sha256=report["files"]["request.json"])
-    require(InvestmentDatasetRequest.model_validate_json(json.dumps(read_object(root, published_request, pins))) == parsed_request,
+    require(InvestmentDatasetRequest.model_validate_json(
+        json.dumps(read_object(root, published_request, pins, paths=paths))) == parsed_request,
         "investment published request differs from the frozen input")
     require(report["feature_lag"] == parsed_request.feature_lag and report.get("rows") == EXPECTED_ROWS,
         "investment dataset request lag or population differs")
@@ -303,14 +315,14 @@ def load_investment_dataset(*, root: Path, manifest: SourcePin, admission: Sourc
     require(report.get("source_consumption_scope") == receipt.source_consumption_scope
         and report.get("raw_sources_rechecked") is False and report.get("source_admission_changed") is False,
         "investment dataset source consumption scope differs")
-    add_pins(root, pins, report["source_files"])
+    add_pins(root, pins, report["source_files"], paths=paths)
     pieces = []
     for month, child in sorted(report["months"].items()):
         guard("investment dataset partition input")
-        path = inside(Path(manifest.path).parent if Path(manifest.path).is_absolute() else root / Path(manifest.path).parent, child["path"])
-        require(child["path"] == f"months/{month}.parquet" and file_sha256(path) == child["sha256"],
-            "investment dataset partition changed")
-        pins[str(path)] = child["sha256"]
+        require(child["path"] == f"months/{month}.parquet", "investment dataset partition path differs")
+        path = inside(directory, child["path"]) if paths is None else paths.read_child(directory, child["path"])
+        require(file_sha256(path) == child["sha256"], "investment dataset partition changed")
+        add_pins(root, pins, {str(directory / child["path"]): child["sha256"]}, paths=paths)
         frame = pd.read_parquet(path)
         require(len(frame) == child["rows"] and frame.decision_session.map(str).str[:7].eq(month).all()
             and json_sha256(sorted(zip(frame.decision_id, frame.horizon_sessions, strict=True))) == child["row_keys_sha256"],
@@ -323,7 +335,7 @@ def load_investment_dataset(*, root: Path, manifest: SourcePin, admission: Sourc
         "investment supervised labels were unavailable at requested evaluation cutoff")
     require(counts_by_horizon(frame) == report["counts_by_horizon"] == receipt.counts_by_horizon,
         "investment dataset admission eligibility counts differ")
-    recheck_sources(root, pins)
+    recheck_sources(root, pins, paths=paths)
     names = profiles["all_features"]
     return InvestmentDataset(frame.loc[:, list(names)], frame.drop(columns=list(names)), profiles, pins,
         receipt.admitted_at_utc, receipt.feature_contract_sha256)

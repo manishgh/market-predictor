@@ -20,7 +20,7 @@ from pydantic import Field, PrivateAttr, model_validator
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import resolve_inside_authority
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.sources.official_documents import _Receipt
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference, HoldingContract, Identifier, Sha256
 
@@ -105,13 +105,13 @@ class StockCompositeIdentity(HoldingContract):
         return refs
 
     def validates_against(self, original: Mapping[str, Any], root: Path, policy_sha256: str,
-                          cache: dict[str, Any] | None = None) -> tuple[EvidenceReference, ...]:
+                          cache: dict[str, Any] | None = None, *, paths: EvidencePaths | None = None) -> tuple[EvidenceReference, ...]:
         from market_predictor.investment.stock_identity import StockIdentityProof, StockIdentityUnavailable, replay_stock_identity
 
         if (original.get("cusip") != self.cusip or original.get("foreign") is not False
             or original.get("special") is not False):
             raise DataReadinessError("stock composite original domestic class/CUSIP terms differ")
-        raw = _read(root, self.proof, MAX_MANIFEST_BYTES)
+        raw = _read(root, self.proof, MAX_MANIFEST_BYTES, paths=paths)
         _json(raw)
         proof = StockIdentityProof.model_validate_json(raw)
         if proof.ticker != original.get("symbol"):
@@ -119,7 +119,7 @@ class StockCompositeIdentity(HoldingContract):
         pins = {self.proof.path: self.proof.sha256}
         try:
             replayed = replay_stock_identity(root, proof, sessions=(date.fromisoformat(original["ex_date"]),),
-                source_files=pins, interpretation_sha256=policy_sha256, cache=cache)
+                source_files=pins, interpretation_sha256=policy_sha256, cache=cache, paths=paths)
         except StockIdentityUnavailable as exc:
             raise DividendEvidenceUnavailable(str(exc)) from exc
         if replayed.missing_reasons or replayed.proven_sessions != (date.fromisoformat(original["ex_date"]),):
@@ -171,7 +171,7 @@ class OccSpecialCashDistribution(HoldingContract):
 
     def validates_against(self, original: Mapping[str, Any], root: Path, policy_sha256: str, *,
                           action_id: str, digest: str, symbol: str, ex_date: date,
-                          cusip: str) -> tuple[EvidenceReference, ...]:
+                          cusip: str, paths: EvidencePaths | None = None) -> tuple[EvidenceReference, ...]:
         if (json_sha256(original) != digest or original.get("id") != action_id
             or original.get("symbol") != symbol or original.get("ex_date") != ex_date.isoformat()
             or original.get("special") is not True or original.get("foreign") is not False
@@ -184,8 +184,8 @@ class OccSpecialCashDistribution(HoldingContract):
             or not ex_date <= self.record_date <= min(self.announced_payable_date, self.provider_payable_date)
             or self.payable_date_conflict != (self.announced_payable_date != self.provider_payable_date)):
             raise DataReadinessError("special cash distribution original terms or payable conflict differ")
-        raw = _read(root, self.source.body)
-        payload = _json(_read(root, self.source.receipt, MAX_MANIFEST_BYTES))
+        raw = _read(root, self.source.body, paths=paths)
+        payload = _json(_read(root, self.source.receipt, MAX_MANIFEST_BYTES, paths=paths))
         if payload.pop("receipt_sha256", None) != json_sha256(payload):
             raise DataReadinessError("special cash distribution official receipt hash differs")
         try:
@@ -358,8 +358,8 @@ def _json(raw: bytes) -> dict[str, Any]:
     return value
 
 
-def _read(root: Path, pin: CurrencyArtifactPin, maximum: int = MAX_SOURCE_BYTES) -> bytes:
-    path = resolve_inside_authority(root, pin.path)
+def _read(root: Path, pin: CurrencyArtifactPin, maximum: int = MAX_SOURCE_BYTES, *, paths: EvidencePaths | None = None) -> bytes:
+    path = (paths or EvidencePaths(root)).read(pin.path)
     if path.stat().st_size > maximum:
         raise DataReadinessError("independent currency artifact exceeds byte bound")
     raw = path.read_bytes()
@@ -381,9 +381,9 @@ def _decimal(value: object) -> Decimal:
 
 
 def _captured(root: Path, source: CapturedCurrencySource, policy_sha256: str,
-              hosts: set[str]) -> tuple[bytes, dict[str, Any], tuple[EvidenceReference, ...]]:
-    raw = _read(root, source.body)
-    receipt = _json(_read(root, source.receipt, MAX_MANIFEST_BYTES))
+              hosts: set[str], *, paths: EvidencePaths | None = None) -> tuple[bytes, dict[str, Any], tuple[EvidenceReference, ...]]:
+    raw = _read(root, source.body, paths=paths)
+    receipt = _json(_read(root, source.receipt, MAX_MANIFEST_BYTES, paths=paths))
     url = receipt.get("url", receipt.get("source_url"))
     if not isinstance(url, str) or urlparse(url).scheme != "https" or urlparse(url).hostname not in hosts:
         raise DataReadinessError("independent currency source authority differs")
@@ -478,8 +478,9 @@ def _workbook_rows(raw: bytes) -> dict[int, dict[str, str]]:
 
 
 def _issuer_row(root: Path, source: CapturedCurrencySource, row_number: int, symbol: str, cusip: str,
-                ex_date: date, policy_sha256: str) -> tuple[dict[str, str], tuple[EvidenceReference, ...]]:
-    raw, _, refs = _captured(root, source, policy_sha256, {"www.ssga.com", "ssga.com"})
+                ex_date: date, policy_sha256: str, *, paths: EvidencePaths | None = None,
+                ) -> tuple[dict[str, str], tuple[EvidenceReference, ...]]:
+    raw, _, refs = _captured(root, source, policy_sha256, {"www.ssga.com", "ssga.com"}, paths=paths)
     rows = _workbook_rows(raw)
     matches = []
     for number, row in rows.items():
@@ -601,8 +602,9 @@ def _tax_payment_matches(entries: list[Any], table: _GrossRows | None, ex_date: 
 
 
 def _tax_gross_table(root: Path, source: CapturedCurrencySource, policy_sha256: str,
-                     structured_receipt: dict[str, Any]) -> tuple[_GrossRows, tuple[EvidenceReference, ...]]:
-    raw, receipt, refs = _captured(root, source, policy_sha256, {"www.ictax.admin.ch", "ictax.admin.ch"})
+                     structured_receipt: dict[str, Any], *, paths: EvidencePaths | None = None,
+                     ) -> tuple[_GrossRows, tuple[EvidenceReference, ...]]:
+    raw, receipt, refs = _captured(root, source, policy_sha256, {"www.ictax.admin.ch", "ictax.admin.ch"}, paths=paths)
     payload = _json(raw)
     html = payload.get("data", {}).get("html")
     if receipt.get("request") != structured_receipt.get("request"):
@@ -626,8 +628,8 @@ def _original_action(original: Mapping[str, Any], action_id: str, digest: str, s
 
 
 def _issuer_gross_amount(root: Path, issuer: IssuerDistributionRate, symbol: str, cusip: str, ex_date: date,
-                         policy_sha256: str) -> tuple[Decimal, tuple[EvidenceReference, ...]]:
-    row, refs = _issuer_row(root, issuer.source, issuer.row, symbol, cusip, ex_date, policy_sha256)
+                         policy_sha256: str, *, paths: EvidencePaths | None = None) -> tuple[Decimal, tuple[EvidenceReference, ...]]:
+    row, refs = _issuer_row(root, issuer.source, issuer.row, symbol, cusip, ex_date, policy_sha256, paths=paths)
     amount = _decimal(row.get("G"))
     if amount <= 0 or any(row.get(col, "") and _decimal(row[col]) != 0 for col in ("H", "I")):
         raise DataReadinessError("issuer gross distribution amount is nonpositive or contains capital gains")
@@ -665,7 +667,8 @@ class IssuerDividendAmountCorrection(HoldingContract):
             raise ValueError("issuer correction requires distinct positive original and corrected amounts")
         return self
 
-    def resolve_against(self, original: Mapping[str, Any], root: Path, policy_sha256: str) -> ResolvedDividendAmount:
+    def resolve_against(self, original: Mapping[str, Any], root: Path, policy_sha256: str, *,
+                        paths: EvidencePaths | None = None) -> ResolvedDividendAmount:
         _original_action(original, self.action_id, self.original_record_sha256, self.symbol, self.ex_date)
         original_amount, corrected = _decimal(self.original_rate), _decimal(self.corrected_gross_amount)
         if original_amount != _decimal(original.get("rate")):
@@ -673,7 +676,7 @@ class IssuerDividendAmountCorrection(HoldingContract):
         if _isin(self.cusip) != self.isin or original.get("cusip") not in (None, "", self.cusip):
             raise DataReadinessError("issuer correction CUSIP/ISIN identity differs")
         issuer_amount, refs = _issuer_gross_amount(root, self.issuer_rate, self.symbol, self.cusip,
-            self.ex_date, policy_sha256)
+            self.ex_date, policy_sha256, paths=paths)
         if issuer_amount != corrected:
             raise DataReadinessError("issuer correction amount differs from exact issuer gross distribution")
         return ResolvedDividendAmount(action_id=self.action_id, original_record_sha256=self.original_record_sha256,
@@ -685,13 +688,14 @@ def replay_stock_tax_class(
     root: Path, policy_sha256: str, *, issuer_name: str, security_title: str,
     observe: Callable[[dict[str, Any]], None] | None = None,
     explicit_class: str | None = None,
+    paths: EvidencePaths | None = None,
 ) -> tuple[tuple[EvidenceReference, ...], dict[str, Any]]:
     if (calculation.get("instrumentGroup") != "SHARE" or not isinstance(calculation.get("name"), str)
         or not calculation["name"].strip()):
         raise DividendEvidenceUnavailable("stock tax instrument group/name missing or unsupported")
     if lookup is None:
         raise DividendEvidenceUnavailable("stock tax classification source missing")
-    raw, receipt, refs = _captured(root, lookup, policy_sha256, {"www.ictax.admin.ch", "ictax.admin.ch"})
+    raw, receipt, refs = _captured(root, lookup, policy_sha256, {"www.ictax.admin.ch", "ictax.admin.ch"}, paths=paths)
     payload = _json(raw)
     records = payload.get("security")
     if (payload.get("total") != 1 or payload.get("count") != 1 or not isinstance(records, list) or len(records) != 1
@@ -757,10 +761,11 @@ def replay_tax_currency_event(
     resolved_comparison: tuple[Decimal, Decimal] | None = None,
     original_cash_action: Mapping[str, Any] | None = None,
     explicit_stock_class: bool = False,
+    paths: EvidencePaths | None = None,
 ) -> tuple[Decimal, tuple[EvidenceReference, ...]]:
     """Replay structured and Brutto evidence, with an exact payment match when requested."""
     refs: list[EvidenceReference] = []
-    raw, receipt, found = _captured(root, tax.source, policy_sha256, {"www.ictax.admin.ch", "ictax.admin.ch"})
+    raw, receipt, found = _captured(root, tax.source, policy_sha256, {"www.ictax.admin.ch", "ictax.admin.ch"}, paths=paths)
     tax_locator = (f"/data/calculation/isin={tax.isin};"
         f"/data/calculationDetails/entries/{tax.entry_index}/currency/shortName=USD;"
         f"/data/calculationDetails/entries/{tax.entry_index}/value={tax.gross_amount}")
@@ -785,7 +790,7 @@ def replay_tax_currency_event(
     table: _GrossRows | None = None
     gross_refs: tuple[EvidenceReference, ...] = ()
     if any(isinstance(entry, dict) and entry.get("type") == "PAYMENT" and entry.get("exDate") is None for entry in entries):
-        table, gross_refs = _tax_gross_table(root, tax.gross_context, policy_sha256, receipt)
+        table, gross_refs = _tax_gross_table(root, tax.gross_context, policy_sha256, receipt, paths=paths)
     matches, annotations = _tax_payment_matches(entries, table, ex_date)
     if len(matches) != 1 or matches[0][0] != tax.entry_index:
         raise DividendEvidenceUnavailable("tax distribution ex-date is absent or ambiguous")
@@ -801,7 +806,7 @@ def replay_tax_currency_event(
         if tax_amount - resolved_amount != resolved_difference:
             raise DataReadinessError("tax-minus-resolved distribution amount comparison differs")
     if table is None:
-        table, gross_refs = _tax_gross_table(root, tax.gross_context, policy_sha256, receipt)
+        table, gross_refs = _tax_gross_table(root, tax.gross_context, policy_sha256, receipt, paths=paths)
     gross_rows = [index for index, row in enumerate(table.rows)
         if len(row) == 13 and row[5] == ex_date.strftime("%d.%m.") and row[8] == "USD"
         and _decimal(row[9]) == tax_amount]
@@ -864,7 +869,8 @@ class CurrencyCorroboration(HoldingContract):
 
     def validates_against(self, original: Mapping[str, Any], root: Path, policy_sha256: str, *,
                           amount_correction: IssuerDividendAmountCorrection | None = None,
-                          stock_identity_cache: dict[str, Any] | None = None) -> tuple[EvidenceReference, ...]:
+                          stock_identity_cache: dict[str, Any] | None = None,
+                          paths: EvidencePaths | None = None) -> tuple[EvidenceReference, ...]:
         """Replay separate currency and optional cash-class evidence; retain provider terms."""
         if self._supplying_manifest is not None and self._supplying_manifest[1] != policy_sha256:
             raise DataReadinessError("currency corroboration supplying manifest interpretation policy differs")
@@ -876,7 +882,7 @@ class CurrencyCorroboration(HoldingContract):
                 raise DataReadinessError("special cash distribution cannot use an amount correction")
             special_refs = self.special_cash_distribution.validates_against(original, root, policy_sha256,
                 action_id=self.action_id, digest=self.original_record_sha256, symbol=self.symbol,
-                ex_date=self.ex_date, cusip=self.identity.cusip)
+                ex_date=self.ex_date, cusip=self.identity.cusip, paths=paths)
         cusip = self.identity.cusip
         if _isin(cusip) != self.tax.isin or original.get("cusip") not in (None, "", cusip):
             raise DataReadinessError("independent currency CUSIP/ISIN identity differs")
@@ -885,7 +891,7 @@ class CurrencyCorroboration(HoldingContract):
         if amount_correction is not None:
             if amount_correction.cusip != cusip or amount_correction.isin != self.tax.isin:
                 raise DataReadinessError("currency and amount correction security identities differ")
-            resolved = amount_correction.resolve_against(original, root, policy_sha256)
+            resolved = amount_correction.resolve_against(original, root, policy_sha256, paths=paths)
             effective_amount = resolved.gross_amount
             refs.extend(resolved.evidence)
             if self.tax_resolved_value_difference is None:
@@ -893,14 +899,15 @@ class CurrencyCorroboration(HoldingContract):
         elif self.tax_resolved_value_difference is not None:
             raise DataReadinessError("tax-minus-resolved comparison requires an explicit amount correction")
         if isinstance(self.identity, IssuerWorkbookIdentity):
-            _, found = _issuer_row(root, self.identity.source, self.identity.row, self.symbol, cusip, self.ex_date, policy_sha256)
+            _, found = _issuer_row(root, self.identity.source, self.identity.row, self.symbol, cusip, self.ex_date,
+                                   policy_sha256, paths=paths)
         elif isinstance(self.identity, StockCompositeIdentity):
             if self.method != "exact_tax_event" or amount_correction is not None:
                 raise DataReadinessError("stock composite requires exact original gross amount")
-            found = self.identity.validates_against(original, root, policy_sha256, stock_identity_cache)
+            found = self.identity.validates_against(original, root, policy_sha256, stock_identity_cache, paths=paths)
         else:
             raw, _, found = _captured(root, self.identity.source, policy_sha256,
-                {"www.sec.gov", "sec.gov", "www.invesco.com", "invesco.com"})
+                {"www.sec.gov", "sec.gov", "www.invesco.com", "invesco.com"}, paths=paths)
             text = _text(raw.decode("utf-8"))
             quotes = tuple(" ".join(q.split()) for q in self.identity.quotes)
             joined = " ".join(quotes)
@@ -922,7 +929,7 @@ class CurrencyCorroboration(HoldingContract):
             stock_tax_validation=stock_validation, resolved_comparison=None if amount_correction is None
                 else (effective_amount, _decimal(self.tax_resolved_value_difference)),
             original_cash_action=original,
-            explicit_stock_class=isinstance(identity, StockCompositeIdentity) and identity._explicit_tax_class is not None,
+            explicit_stock_class=isinstance(identity, StockCompositeIdentity) and identity._explicit_tax_class is not None, paths=paths,
         )
         refs.extend(tax_refs)
         if self.issuer_rate is None:
@@ -930,7 +937,8 @@ class CurrencyCorroboration(HoldingContract):
                 raise DividendEvidenceUnavailable("independent distribution amount differs from provider rate")
         else:
             issuer_amount, found = _issuer_gross_amount(root, self.issuer_rate,
-                self.symbol, cusip, self.ex_date, policy_sha256)
+                self.symbol, cusip, self.ex_date,
+                                   policy_sha256, paths=paths)
             refs.extend(found)
             if issuer_amount != effective_amount:
                 raise DataReadinessError("issuer gross distribution rate differs from resolved economic amount")
@@ -958,12 +966,13 @@ class CurrencyCorroborationManifest(HoldingContract):
     corroborations: Annotated[tuple[CurrencyCorroboration, ...], Field(min_length=1, max_length=10_000)]
 
 
-def load_currency_corroborations(root: Path, manifest: Path, sha256: str, *, policy_sha256: str) -> dict[str, CurrencyCorroboration]:
+def load_currency_corroborations(root: Path, manifest: Path, sha256: str, *, policy_sha256: str,
+                                paths: EvidencePaths | None = None) -> dict[str, CurrencyCorroboration]:
     """Load closed typed assertions; source admission occurs against each actual action."""
     guard("investment dividend currency manifest")
     # Strict JSON parsing rejects duplicate fields before Pydantic's typed JSON parser.
     manifest_pin = CurrencyArtifactPin(path=manifest.as_posix(), sha256=sha256)
-    raw = _read(root, manifest_pin, MAX_CURRENCY_MANIFEST_BYTES)
+    raw = _read(root, manifest_pin, MAX_CURRENCY_MANIFEST_BYTES, paths=paths)
     _json(raw)
     parsed = CurrencyCorroborationManifest.model_validate_json(raw)
     if re.fullmatch(r"[0-9a-f]{64}", policy_sha256) is None:
@@ -983,9 +992,9 @@ class DividendAmountCorrectionManifest(HoldingContract):
 
 
 def load_dividend_amount_corrections(root: Path, manifest: Path, sha256: str, *,
-                                    policy_sha256: str) -> dict[str, IssuerDividendAmountCorrection]:
+                                    policy_sha256: str, paths: EvidencePaths | None = None) -> dict[str, IssuerDividendAmountCorrection]:
     """Load explicit amount corrections; each consuming action must replay its actual issuer sources."""
-    raw = _read(root, CurrencyArtifactPin(path=manifest.as_posix(), sha256=sha256), MAX_MANIFEST_BYTES)
+    raw = _read(root, CurrencyArtifactPin(path=manifest.as_posix(), sha256=sha256), MAX_MANIFEST_BYTES, paths=paths)
     _json(raw)
     parsed = DividendAmountCorrectionManifest.model_validate_json(raw)
     if re.fullmatch(r"[0-9a-f]{64}", policy_sha256) is None:

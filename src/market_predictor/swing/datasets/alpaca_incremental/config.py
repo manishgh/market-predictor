@@ -10,8 +10,10 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.evidence.hashing import json_sha256
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.sources.provider_symbols import PROVIDER_ALPACA, provider_symbol
 
 START = date(2026, 7, 9)
@@ -44,7 +46,9 @@ def read_object(path: Path, *, maximum_bytes: int = 16 * 1024**2) -> dict[str, A
     return parse_strict_json_object(path.read_bytes(), label="incremental metadata")
 
 
-def load_config(path: Path) -> tuple[Config, Path, dict[str, Any]]:
+def load_config(path: Path, *, paths: EvidencePaths | None = None) -> tuple[Config, Path, dict[str, Any]]:
+    if paths is not None:
+        path = paths.read(path)
     if path.stat().st_size > 1024**2:
         raise ValueError("incremental config exceeds bounded size")
     raw = tomllib.loads(path.read_text(encoding="utf-8"))
@@ -53,17 +57,35 @@ def load_config(path: Path) -> tuple[Config, Path, dict[str, Any]]:
     config = Config.model_validate(raw)
     if config.start < date(2019, 7, 9):
         raise ValueError("incremental start must be on or after 2019-07-09")
-    output = (path.parent / config.output).resolve()
+    def configured(raw: str) -> Path:
+        # This TOML format spells references relative to its config directory.
+        if paths is None:
+            return (path.parent / raw).resolve()
+        relative = Path(raw)
+        if relative.anchor:
+            return paths.identity(raw)
+        base = paths.identity(path).parent
+        if relative.parts and relative.parts[0] == "..":
+            # The retained TOML uses one parent step from configs to the project.
+            if base != paths.project_root / "configs" or ".." in relative.parts[1:]:
+                raise DataReadinessError(f"unsafe incremental config reference: {raw}")
+            base = paths.project_root
+            relative = Path(*relative.parts[1:])
+        return paths.identity(base / relative)
+
+    output_identity = configured(config.output)
+    output = output_identity if paths is None else paths.write(output_identity)
     symbols: set[str] = set(config.additional_symbols)
     pins: list[dict[str, str]] = []
     for kind, references in (("source_manifest", config.source_manifests), ("provenance", config.provenance)):
         for reference in references:
-            source = (path.parent / reference.path).resolve()
-            if source.is_relative_to(output):
+            identity = configured(reference.path)
+            source = identity if paths is None else paths.read(identity)
+            if identity.is_relative_to(output_identity):
                 raise ValueError("incremental output cannot contain input provenance")
             if file_sha256(source) != reference.sha256:
                 raise ValueError("incremental provenance hash mismatch")
-            pins.append({"kind": kind, "path": str(source), "sha256": reference.sha256})
+            pins.append({"kind": kind, "path": str(identity), "sha256": reference.sha256})
             if kind == "source_manifest":
                 manifest = read_object(source)
                 artifacts = manifest.get("artifacts")

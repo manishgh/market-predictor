@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.swing.contracts.holding_materialization import SourcePin
 
 _MAX_FILE_BYTES = 2 * 1024 * 1024
 _MAX_TOTAL_BYTES = 32 * 1024 * 1024
@@ -222,3 +223,23 @@ def verify_implementation_snapshot(
         if digest in requested_hashes:
             result[blob.relative_to(root).as_posix()] = digest
     return result
+
+
+def verify_replayed_implementation(
+    root: Path,
+    current: Mapping[str, str],
+    retained: object,
+    snapshot: SourcePin | None,
+) -> dict[str, str]:
+    """Verify prior producer bytes before comparing the reconstructed request."""
+    if not isinstance(retained, dict) or set(retained) != set(current):
+        raise DataReadinessError("replayed plan implementation file inventory differs")
+    changed = {
+        f"src/market_predictor/{name}": _sha(retained[name])
+        for name, digest in current.items() if retained[name] != digest
+    }
+    if not changed:
+        return {}
+    if snapshot is None:
+        raise DataReadinessError("changed plan producer files require an independently pinned implementation snapshot")
+    return verify_implementation_snapshot(root, Path(snapshot.path), snapshot.sha256, changed)

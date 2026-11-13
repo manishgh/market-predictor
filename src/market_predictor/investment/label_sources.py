@@ -11,7 +11,7 @@ import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.evidence.io import resolve_inside_authority
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference
 from market_predictor.swing.datasets.holding_raw_sources import RAW_COLUMNS
 from market_predictor.swing.labels.holding_paths import validate_outcome_observations
@@ -32,15 +32,16 @@ class InvestmentSourceReader:
     Ingestion is an observed label clock, never a historical feature clock.
     """
 
-    def __init__(self, root: Path, selection: dict[str, Any], interpretation_sha256: str) -> None:
-        self.root = root.resolve()
+    def __init__(self, root: Path, selection: dict[str, Any], interpretation_sha256: str, *,
+                 paths: EvidencePaths | None = None) -> None:
+        self.paths = paths or EvidencePaths(root)
         self.selection = selection
         self.interpretation_sha256 = interpretation_sha256
         self.source_files: dict[str, str] = {}
 
     def recheck(self) -> None:
         for name, digest in self.source_files.items():
-            if file_sha256(resolve_inside_authority(self.root, name)) != digest:
+            if file_sha256(self.paths.read(name)) != digest:
                 raise DataReadinessError("investment raw source changed during materialization")
 
     def read(self, security_id: str, ticker: str, sessions: tuple[date, ...], *, benchmark: bool
@@ -81,14 +82,11 @@ class InvestmentSourceReader:
             covered = tuple(day for day in sessions if owners[day][0] is segment)
             if not covered:
                 continue
-            archive = (self.root / segment["archive"]).resolve()
-            if not archive.is_relative_to(self.root):
-                raise DataReadinessError("investment raw archive escapes source root")
-            path = resolve_inside_authority(archive, artifact["bars_path"])
+            path = self.paths.read_child(segment["archive"], artifact["bars_path"])
             digest = str(artifact["bars_sha256"])
             if file_sha256(path) != digest:
                 raise DataReadinessError("investment raw artifact hash differs")
-            name = path.relative_to(self.root).as_posix()
+            name = self.paths.relative(path).as_posix()
             if name in self.source_files and self.source_files[name] != digest:
                 raise DataReadinessError("investment raw source has conflicting hashes")
             self.source_files[name] = digest

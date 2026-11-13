@@ -11,7 +11,8 @@ import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.runtime_memory import guard
-from market_predictor.evidence.io import inside, write_json_object
+from market_predictor.evidence.io import write_json_object
+from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.investment.dataset import add_pins, load_investment_dataset, pin_source_file, read_object, require
 from market_predictor.investment.diagnostics import PREDICTION, feature_coverage
@@ -72,32 +73,36 @@ def _ranking_check(reports: dict[str, Any]) -> dict[str, Any]:
         "rank_date_support": candidate["rank_date_support"], "auc_date_support": candidate["auc_date_support"]}
 
 
-def train_investment_ranking(*, root: Path, request: Path, request_sha256: str, output: Path) -> dict[str, Any]:
+def train_investment_ranking(
+    *, root: Path, request: Path, request_sha256: str, output: Path, data_root: Path | None = None,
+) -> dict[str, Any]:
     """Reuse exact saved return controls and fit twelve models with a rank target."""
-    root = root.resolve()
-    output = inside(root, output)
+    paths = EvidencePaths(root, data_root)
+    root, output = paths.project_root, paths.identity(output)
     runtime = heavy_job_runtime_dir()
     with heavy_job_lease("train-investment-ranking", runtime_dir=runtime if runtime.is_absolute() else root / runtime):
         guard("investment ranking preparation")
-        if output.exists():
+        if paths.write(output).exists():
             raise FileExistsError(output)
         implementation = _implementation()
         pins = dict(implementation)
+        retained_implementation = frozenset(name for name in implementation if not Path(name).is_relative_to(root))
         parsed = InvestmentRankingRequest.model_validate_json(json.dumps(read_object(root,
-            SourcePin(path=str(request), sha256=request_sha256), pins)))
-        training = read_reference_run(root, parsed.training_manifest, parsed.training_request, pins)
+            SourcePin(path=str(request), sha256=request_sha256), pins, paths=paths)))
+        training = read_reference_run(root, parsed.training_manifest, parsed.training_request, pins, paths=paths)
         train_request = training.request
-        settings = read_object(root, train_request.estimator_settings, pins)
+        settings = read_object(root, train_request.estimator_settings, pins, paths=paths)
         parameters = BoostedReturnSettings.model_validate_json(json.dumps(settings["boosted"])).model_dump()
         dependencies = {name: importlib.metadata.version(name)
             for name in ("numpy", "pandas", "scikit-learn", "xgboost", "joblib", "exchange-calendars")}
         require(parameters == training.experiment["parameters"][FAMILY] and dependencies == training.experiment["dependencies"],
             "investment ranking estimator parameters or dependency versions differ")
-        dataset = load_investment_dataset(root=root, manifest=train_request.dataset_manifest, admission=train_request.dataset_admission)
-        add_pins(root, pins, dataset.source_files)
+        dataset = load_investment_dataset(
+            root=root, manifest=train_request.dataset_manifest, admission=train_request.dataset_admission, paths=paths)
+        add_pins(root, pins, dataset.source_files, paths=paths)
         folds = reference_folds(training, dataset)
         columns = ablation_profiles(dataset.model_columns)
-        ablation = read_ablation_reference(root, parsed, training, columns, pins)
+        ablation = read_ablation_reference(root, parsed, training, columns, pins, paths=paths)
         metadata = dataset.metadata.reset_index(drop=True)
         coverage = feature_coverage(dataset.features, columns[FULL])
         reused_units: dict[str, Any] = {}
@@ -111,9 +116,9 @@ def train_investment_ranking(*, root: Path, request: Path, request_sha256: str, 
                 inventory = "new_units" if profile == NEWS else "units"
                 pin = SourcePin.model_validate_json(json.dumps(reference.manifest[inventory][key]))
                 record, frame = read_validation_predictions(root, reference, pin, key, folds[(horizon, scope, year)],
-                    dataset, metadata, coverage, pins, columns[profile])
-                model_path = inside(root, pin.path).parent / "model.joblib"
-                pin_source_file(root, SourcePin(path=str(model_path), sha256=record["files"]["model.joblib"]), pins)
+                    dataset, metadata, coverage, pins, columns[profile], paths=paths)
+                model_path = paths.identity(pin.path).parent / "model.joblib"
+                pin_source_file(root, SourcePin(path=str(model_path), sha256=record["files"]["model.joblib"]), pins, paths=paths)
                 require(investment_diagnostics(frame) == record["metrics"], "investment ranking saved control metrics differ")
                 unit_reports[key] = ranking_diagnostics(frame, score_column=PREDICTION)
                 reused_units[key] = pin.model_dump(mode="json")
@@ -164,12 +169,12 @@ def train_investment_ranking(*, root: Path, request: Path, request_sha256: str, 
                             prediction_indices=fold.prediction_indices, identity=identity, request_sha256=request_sha256,
                             admitted_at=dataset.admitted_at_utc, ranking_target=True)
                         pin = SourcePin(path=str(staged / key / "_manifest.json"), sha256=fitted["sha256"])
-                        record = read_object(root, pin, staged_pins)
+                        record = read_object(staged, pin, staged_pins)
                         require(record == {name: value for name, value in fitted.items() if name not in ("path", "sha256")},
                             "investment ranking persisted unit differs from the fitted unit")
-                        pin_source_file(root, SourcePin(path=str(staged / key / "model.joblib"),
+                        pin_source_file(staged, SourcePin(path=str(staged / key / "model.joblib"),
                             sha256=record["files"]["model.joblib"]), staged_pins)
-                        frame = read_fit_predictions(root, pin, record, metadata.iloc[fold.score_indices], coverage,
+                        frame = read_fit_predictions(staged, pin, record, metadata.iloc[fold.score_indices], coverage,
                             staged_pins, pd.Timestamp(datetime.now(UTC)), score_column=RANKING_SCORE)
                         diagnostics = ranking_diagnostics(frame)
                         require(diagnostics == record["metrics"], "investment ranking new fit metrics do not replay on saved scores")
@@ -200,7 +205,7 @@ def train_investment_ranking(*, root: Path, request: Path, request_sha256: str, 
                 and len(aggregate_reports) == 16 and len(years) == 12 and len(cells) == 4 and not control_frames,
                 "investment ranking output inventory differs")
             primary_scopes = {scope: cells[f"252/{scope}"]["passes"] for scope in SCOPES}
-            _recheck(pins)
+            _recheck(pins, paths=paths, implementation=retained_implementation)
             _recheck(staged_pins)
             guard("investment ranking publication")
             report.update(experiment_sha256=experiment_sha256, new_units=new_units,
@@ -209,6 +214,6 @@ def train_investment_ranking(*, root: Path, request: Path, request_sha256: str, 
                         "passes": all(primary_scopes.values()) if None not in primary_scopes.values() else None}},
                 fold_scope_fits=len(new_units), final_models=0, completed_at_utc=datetime.now(UTC).isoformat())
 
-        result = _publish(output, report, pins, publish_fits)
+        result = _publish(output, report, pins, publish_fits, paths=paths, retained_external=retained_implementation)
         return {**result, "fold_scope_fits": report["fold_scope_fits"], "reused_validation_fits": len(reused_units),
             "final_models": report["final_models"]}
