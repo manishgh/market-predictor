@@ -17,8 +17,16 @@ C-to-D junctions fail the frozen replay's resolved-path containment and exact
 C SourcePin/source-inventory comparisons; changing --root alone also fails.
 Two Sol reviews independently confirmed this against the real parent and code.
 The current 72eedcf export and all historical source/request/result bytes remain
-immutable. A guarded copy to D:/market-predictor/data is now running; all C:
-originals remain present and no holding replay was resumed.
+immutable. The guarded copy to D:/market-predictor/data stopped when system RAM
+reached 90.4%; the latest check at 16:29 UTC measured 96.0%. The owned Robocopy
+worker exited, and no project Python worker remains. All C: originals remain
+present; the partial D: copy is retained for --resume. There is no completed copy
+receipt or staging receipt, and no C dataset originals have been retired. The
+existing collector task remains enabled with its original C: action. No holding
+replay was resumed. Resume the copy only below the agreed 90% system RAM ceiling:
+from the chat workspace, run C:/project/market-predictor/.venv/Scripts/python.exe
+-B outputs/run_market_dataset_copy.py --resume. Then complete the migration gates
+below before deleting verified C: copies or changing the collector action.
 
 Implementation d3211eef6fa9625610d6d2fb3e044de51083d71c is pushed to main.
 The immutable export contains 480 source files; _export.json SHA256 is
