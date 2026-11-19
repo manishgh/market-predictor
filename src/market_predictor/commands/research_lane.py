@@ -11,6 +11,7 @@ import typer
 
 from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError
+from market_predictor.research_lane.beta_neutral import collect_wider_sec_catalysts
 from market_predictor.research_lane.forward_record import record_forward_scores
 from market_predictor.research_lane.free_backfill import BACKFILL_DIRECTORY, collect_free_sp500_backfill
 from market_predictor.research_lane.panel import DEFAULT_DEVELOPMENT_END, PANEL_DIRECTORY
@@ -22,6 +23,7 @@ from market_predictor.research_lane.run import (
     score_swing_setups,
     score_technical_models,
     score_two_stage_models,
+    score_wider_beta_neutral_models,
     score_wider_two_stage_models,
 )
 from market_predictor.research_lane.setups import VolatilityMode
@@ -218,5 +220,33 @@ def register_research_lane_commands(app: typer.Typer) -> None:
     ) -> None:
         """Score Stage-1 combined base and Stage-2 catalyst residual models on the wider US universe."""
         _invoke(score_wider_two_stage_models, root=root, output=output, development_end=development_end.date(),
+                subset=subset, data_root=data_root, panel=panel, sp500_backfill_dir=sp500_backfill_dir,
+                wider_dir=wider_dir, unseal_final_test_period=unseal_final_test_period)
+
+    @app.command("collect-research-lane-sec-catalysts")
+    def collect_sec_catalysts(
+        root: Path = typer.Option(...),
+        data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
+        development_end: datetime = typer.Option(DEFAULT_DEVELOPMENT_END.isoformat(), formats=["%Y-%m-%d"]),
+        wider_dir: Path = typer.Option(WIDER_UNIVERSE_DIRECTORY),
+    ) -> None:
+        """Resumably collect $0 SEC SC 13D/A, S-3/424B, and NT 10-K/Q catalysts (<= development_end)."""
+        _invoke(collect_wider_sec_catalysts, root=root, development_end=development_end.date(),
+                data_root=data_root, wider_dir=wider_dir)
+
+    @app.command("score-wider-beta-neutral-models")
+    def score_wider_beta_neutral(
+        root: Path = typer.Option(...),
+        data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
+        development_end: datetime = typer.Option(DEFAULT_DEVELOPMENT_END.isoformat(), formats=["%Y-%m-%d"]),
+        subset: UniverseSubset = typer.Option("mid_small_ex_sp500", help="mid_small_ex_sp500 or all_top1200."),
+        output: Path | None = typer.Option(None),
+        panel: Path = typer.Option(PANEL_DIRECTORY),
+        sp500_backfill_dir: Path = typer.Option(BACKFILL_DIRECTORY),
+        wider_dir: Path = typer.Option(WIDER_UNIVERSE_DIRECTORY),
+        unseal_final_test_period: bool = typer.Option(False),
+    ) -> None:
+        """Score Step 5c beta/vol/sector-neutral Stage-1 + precise SEC catalyst Stage-2 models."""
+        _invoke(score_wider_beta_neutral_models, root=root, output=output, development_end=development_end.date(),
                 subset=subset, data_root=data_root, panel=panel, sp500_backfill_dir=sp500_backfill_dir,
                 wider_dir=wider_dir, unseal_final_test_period=unseal_final_test_period)
