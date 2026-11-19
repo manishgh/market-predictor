@@ -1,5 +1,116 @@
 # Active Edge Rebuild Plan
 
+### Research lane step 5c: beta/volatility/sector-neutralized mid/small-cap Stage-1 models & high-precision $0 SEC catalyst residuals (Option 1) — November 19
+
+Status: `complete` (implementation commit `643c801`). Measured November 19 on
+`mid_small_ex_sp500` (`1,559` active + delisted mid/small-cap securities) at `$0` extra
+spend while keeping `2024-05-29..2026-07-08` sealed (`earns_sealed_period_test = false`;
+no step is `in_progress`).
+
+Real runs:
+- High-precision SEC non-`8-K` catalyst collection (`collect-research-lane-sec-catalysts`):
+  `data/research/research_lane/wider_us_universe/wider_non8k_catalysts.parquet`
+  (`2,253/2,253` = `100%` of selected CIKs scanned `<= 2024-05-28`; `208,322` non-`8-K`
+  catalyst filings = `8,215` `SC 13D/SC 13D/A` activist `5%+` stake filings, `199,555`
+  `S-1/S-3/424B` shelf/prospectus offering filings, and `552` `NT 10-K/NT 10-Q` late-filing
+  notices; combined with filtered material `8-K` items after dropping `24,550` boilerplate
+  `5.07/5.03/8.01/9.01`-only filings -> `102,820` qualified `(security_idx, session, family)`
+  catalyst tuples on `mid_small_ex_sp500`).
+- Beta/volatility/sector-neutral two-stage evaluation (`score-wider-beta-neutral-models --subset mid_small_ex_sp500`):
+  `data/research/research_lane/wider_beta_neutral_mid_small_ex_sp500_20261119T222600Z`
+  (`scoreboard.json`, `scoreboard.md`; research label on adjusted prices; `1,559`
+  securities, `747.2` mean eligible stocks/session, `1,128,288` eligible cells across
+  `2018-05-29..2024-05-28`; peak working set `1.84 GiB`; trial log line `11`).
+
+Observed provider facts verified by bounded read-only checks (`<= 3` tickers, zero sealed
+`2024-05-29..2026-07-08` content saved or inspected):
+- Alpaca `/v1beta1/news` migrated from Benzinga to `fiscal.ai` in 2026 and returns `0`
+  historical `2019–2024` rows across all tested symbols (`AAPL`, `ABT`, `CROX`, `BBBY`).
+- Finviz Elite `news_export.ashx` (`v=3`, authenticated via `FINVIZ_API_KEY`) returns
+  `HTTP 200` (`Title, Source, Date, Url, Category, Ticker`) capped at the rolling `100`
+  most recent headlines per active symbol (`AAPL`: `2026-11-09..2026-11-19`; `CROX`:
+  `2026-03-06..2026-11-17`; `MATX`: `2025-07-18..2026-11-19`; `0` rows `<= 2024-05-28`
+  and pagination offsets `r=101`/`c=1` ignored). Finviz Elite therefore powers prospective
+  daily forward capture and live screening rather than `2019–2024` historical training.
+
+Measured findings (research labels on adjusted prices):
+- **Stage-2 precise SEC corporate-action residuals PASSED the pre-registered paired gate
+  (`NW t >= 2.0`, positive in most scored years) in `4` specifications on `mid_small_ex_sp500`**
+  (versus `0` passing specs in step 5b's unfiltered `8-K` dump):
+  - `equal_rank_24 + news_xgboost @ h=5`: **paired delta IC `+0.0005 [NW t = +3.05]`**,
+    positive in **`5/5` OOS years (`100%`)**, lifting combined 5d IC to `+0.0132 [NW t = 2.12]`.
+  - `equal_rank_24 + news_ridge @ h=5`: **paired delta IC `+0.0003 [NW t = +2.06]`**
+    (`3/5` positive years, combined 5d IC `+0.0130 [NW t = 2.08]`).
+  - `equal_rank_24 + news_xgboost @ h=63`: **paired delta IC `+0.0007 [NW t = +2.76]`**,
+    positive in **`4/5` OOS years (`80%`)**, lifting combined 63d IC to `+0.0385 [NW t = 1.87]`.
+  - `equal_rank_24 + news_ridge @ h=63`: **paired delta IC `+0.0004 [NW t = +2.22]`**,
+    positive in **`4/5` OOS years (`80%`)**, lifting combined 63d IC to `+0.0382 [NW t = 1.86]`.
+- **Effect of exact per-session `[sector, beta_252d, idio_vol_60d]` orthogonalization on Stage-1:**
+  - Cut `equal_rank_24`'s `2020` COVID high-beta drawdown in half (`21d` `2020` IC `-0.0714 -> -0.0332`;
+    `63d` `-0.1449 -> -0.0549`) and flipped `2020` IC **positive across all 4 horizons** for
+    residual-target `ridge_rank` (`+0.0183..+0.0296`) and `xgb_shallow_5seed` (`5d` later-date
+    IC **`+0.0088 [NW t = 2.03]`**, `2020 = +0.0202`).
+  - Flipped `equal_rank_24`'s `21d` buffered top-10% skill basket (`skill_buffered_hold33`)
+    from `-0.77%/yr` (`-0.06%/21d`) in step 5b to **positive `+1.01%/yr` (`+0.084%/21d`) net of
+    `20 bps` turnover costs** (`4/6` positive calendar years: `2021..2024`), lifted `63d`
+    buffered skill to **`+3.03%/yr [NW t = 1.00]` net of `20 bps`**, and beat passive
+    cap-weighted mid/small-cap constituents (`own_cap_weighted_constituents`) net of `20 bps`
+    at **every horizon** (`5d +0.05%/yr`, `10d +0.45%/yr`, `21d +0.35%/yr`, `63d +1.27%/yr [NW t = 1.21]`).
+  - Pure idiosyncratic `21d` Stage-1 IC after removing all `beta_252d` and `idio_vol_60d`
+    loadings is `+0.0143 [NW t = 1.33]` (versus `+0.0386 [NW t = 1.83]` unneutralized in step 5b),
+    showing that `~63%` of `equal_rank_24`'s raw mid/small-cap rank spread comes from defensive
+    low-beta/low-volatility quality exposure (`+0.1100` in `2021`, `+0.0782` in `2022`,
+    `+0.1394` in `2024`, `-0.0714` in `2020`), so neither full neutralization (`IC = 0.0143 < 0.030`)
+    nor zero neutralization (`NW t = 1.83 < 3.0`) clears all 5 gates of §5.6 simultaneously.
+
+Verification (component tier): `129` tests pass across `15` suites (`11` in
+`tests/test_cli_surfaces.py` + `118` across `14` `tests/test_research_lane_*.py` suites
+including `3` new in `tests/test_research_lane_beta_neutral.py`); Ruff (`0` errors) and
+strict `mypy` (`0` issues in `25` source files) pass.
+
+Bounded problem & frozen scope recorded before the step 5c run:
+1. **Cross-sectional beta, volatility & sector orthogonalization (`beta_neutral.py`):**
+   - In step 5b, `equal_rank_24` on `mid_small_ex_sp500` achieved `+0.0386` 21d IC (`5/6`
+     positive years) and beat its mid/small-cap benchmark net of `20 bps` in all 4
+     post-COVID years (`2021–2024`), but carried an unhedged negative loading on
+     `beta_252d` and `idio_vol_60d` that caused `-0.0714` IC in `2020`'s post-lockdown
+     high-beta rally (inflating IC standard error to `0.0211`, holding `NW t` to `1.83`,
+     and adding `-3%/yr` bull-market beta drag to the top-10% basket), while `ridge_rank`
+     and `xgb_shallow_5seed` overfitted `beta`/`vol` regimes in raw `target_ranks`.
+   - Define **`equal_rank_24_beta_neutral`** (zero-fit, strictly causal at session `t`
+     close): per-session cross-sectional OLS residual of `equal_rank_24[t]` projected
+     orthogonal to `[1, sector_dummies[t], centered_rank(beta_252d)[t], centered_rank(idio_vol_60d)[t]]`
+     among eligible stocks, re-ranked to `[-0.5, +0.5]`.
+   - Define **`ridge_beta_neutral`** (`alpha=1000`, Cholesky) and
+     **`xgb_shallow_5seed_beta_neutral`** (5 seeds `0..4`, fixed §5.4 depth-3 params)
+     trained on purged forward returns cross-sectionally residualized against realized
+     `(sector, beta_252d[t], idio_vol_60d[t])` factor returns (`t + h < fold.test_start`),
+     with predictions also projected orthogonal to `[1, sector_dummies[t], beta_252d[t], idio_vol_60d[t]]`
+     at decision time `t`.
+2. **High-precision $0 SEC catalyst collection & volume-confirmed Stage-2 residuals:**
+   - Replace step 5b's noisy all-`8-K` dump (`159,528` filings dominated by `Item 5.07`
+     annual-meeting vote tallies and `Item 8.01`/`9.01` boilerplate) by collecting
+     non-`8-K` material SEC catalyst filings (`SC 13D`, `SC 13D/A` activist `5%+` stakes;
+     `S-3`, `S-3ASR`, `424B2`, `424B4`, `424B5` equity/shelf offerings; `NT 10-K`, `NT 10-Q`
+     late-filing notices) from free SEC EDGAR `submissions/CIK{cik}.json` (`<= 2024-05-28`
+     strictly with conservative `max(UTC, NY)` clock) across the `1,559`
+     `mid_small_ex_sp500` CIKs, combined with filtered material `8-K` items ONLY (`2.02`
+     earnings, `1.01`/`2.01` M&A/contracts, `7.01` Reg FD guidance, `5.02` officer change,
+     `1.03`/`2.04`/`2.06`/`3.01`/`4.01`/`4.02` distress/restatement — excluding `5.07`,
+     `5.03`, and `8.01`/`9.01`-only noise) and volume-confirmed reaction interaction
+     (`rx_1d * log1p(abn_vol_20)`).
+3. **Unchanged §5.6 acceptance gate:** evaluate all 3 beta-neutral Stage-1 candidates +
+   6 Stage-2 catalyst residual overlays at `5, 10, 21, 63` sessions (`21` primary, `10`
+   secondary, 5-fold unseen-issuer CV, `skill_buffered_hold33` at `20 bps` and `10 bps`)
+   under §5.6's exact pre-registered rule.
+
+Exit gates: unit tests for exact zero cross-sectional correlation with `beta_252d`,
+`idio_vol_60d`, and sector means on every session, truncated-history and future-poison
+invariance of both Stage-1 beta-neutral features/scores and Stage-2 filtered SEC catalyst
+features, and sealed-date refusal; Ruff and strict mypy; resumable `$0` SEC catalyst
+collection and beta-neutral two-stage evaluation under the heavy-job lease and `< 90%`
+memory ceiling; trial-log entry.
+
 ### Research lane step 5b: zero-cost ($0) survivorship-checked wider US mid/small-cap universe (2016–2024) & two-stage evaluation — November 19
 
 Status: `complete`. Measured November 19. Expanding beyond S&P 500 to the `$0`
