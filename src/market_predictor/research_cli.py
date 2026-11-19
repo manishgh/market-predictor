@@ -5,6 +5,7 @@ from market_predictor.cli_surface import command_names, filtered_app
 from market_predictor.collection_cli import COLLECTION_COMMANDS
 from market_predictor.commands.investment_research import register_investment_research_commands
 from market_predictor.commands.issuer_content_inventory import register_issuer_content_commands
+from market_predictor.commands.research_lane import register_research_lane_commands
 from market_predictor.commands.swing_issuer_reactions import register_issuer_reaction_commands
 from market_predictor.commands.swing_oof_policy_evaluation import register_saved_oof_policy_command
 from market_predictor.commands.swing_research_features import register_research_feature_commands
@@ -28,6 +29,7 @@ register_training_readiness_command(app)
 register_swing_return_training_command(app)
 register_saved_oof_policy_command(app)
 register_investment_research_commands(app)
+register_research_lane_commands(app)
 
 
 if __name__ == "__main__":

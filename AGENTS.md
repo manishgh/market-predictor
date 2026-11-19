@@ -156,6 +156,44 @@ source/consumer conflict or explicit changed requirement; record the smallest re
 Spend the critical path on new features, actual fitting and measured comparison.
 Communicating APIs remain V1; no compatibility aliases or version increments.
 
+### Research Lane — User Decision, November 15
+
+The user approved step 1 of
+`docs/research_briefs/benchmark_outperformance_recommendations_20261115.md` and,
+for exploratory research only, its decisions 1 and 2:
+
+1. Research labels may use the provider's split- and dividend-adjusted daily
+   prices (Alpaca SIP, adjustment `all`) for every row, so that an outcome is not
+   left unknown only because a dividend or corporate action lacks documentary
+   proof. Every result built on them must say "research label". Section 4.3's
+   document-proven holding accounting still applies to audit samples, to any
+   funded comparison presented as evidence, and to any candidate proposed for
+   release.
+2. Exploratory runs in `src/market_predictor/research_lane` record one trial-log
+   line (code commit, input hashes, settings, scoreboard) instead of a frozen
+   checkpoint, independent audit and plan/handoff closure for each run. Sections
+   3.1, 3.4, 3.7 and 6 apply once per research step, not per trial.
+
+Unchanged in the research lane: point-in-time causality with truncation and
+future-poison tests; purged, time-ordered validation; real retained data for
+actual runs; the shared heavy-job lease and the 90% memory ceiling; the
+2019-07-09 first decision date; and no reading of bars, decisions or outcomes
+after 2024-05-28 until one candidate is frozen. Nothing from the research lane is
+served, promoted or described as an improvement before it passes the governed
+path. Decisions 3 to 10 of that document (rank target and 21-session primary
+horizon, earlier history, wider universe, benchmark-tilt evaluation, new
+acceptance rule, purchased data, closing the Astra experiment, base cost) are
+not approved and remain open.
+
+User amendment (November 16, after the step 1 and step 2a results): the user
+approved decisions 4 and 5 for a probe only. The probe may make a small number of
+read-only provider requests to learn how far back daily bars reach and whether
+companies that were later delisted are included. It may not start a bulk
+download, change a collector, or read anything dated after 2024-05-28. Using
+earlier history or a wider stock set in the research lane needs a further user
+decision once the probe result is known; section 3.10 is unchanged for every
+governed model.
+
 ## 2. Source-Of-Truth Order
 
 When instructions disagree, use this order:

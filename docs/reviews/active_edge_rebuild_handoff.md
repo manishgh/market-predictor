@@ -1,5 +1,472 @@
 # Active Edge Rebuild Handoff
 
+### Research lane step 4: cap-weighted benchmark tilt and turnover-buffered reversal & quality (Option C) — November 19
+
+Status: `complete`. Measured November 19. Zero of the 48 product specifications (`4 signals × 4 horizons × 3 product policies`) met the pre-registered reading rule; no sealed-period data (`>= 2024-05-29`) was read, and no step is in progress. Exact next step: user decision between Option B (acquiring survivorship-bias-free broader US equity history `#501–#2500` where liquidity shocks and catalyst under-reaction are larger) or stopping exploratory S&P 500 daily-bar/filing search.
+
+Real run: `data/research/research_lane/benchmark_tilt_20261119T132526Z` (`scoreboard.json`, `scoreboard.md`; research label on adjusted prices; continuous `[open[r_k + 1], open[r_{k+1} + 1]]` windows from `2019-07-09` to `2024-05-28`; exit 0, peak process memory `1.08 GiB`). Trial log `data/research/research_lane/trials.jsonl` now has `7` lines.
+
+Key measured facts (`585` panel securities; mean `467.9` tradable eligible stocks/date; `430` SEC company-facts issuers read including supplemental `0000789019` MSFT; `408` securities / mean `335.1` stocks/date with valid `unadjusted_close * shares` market value):
+- **Skill baskets (`skill_top10_hold33` vs `skill_top10_unbuffered` against equal-weight scored universe):**
+  - Rank hysteresis (`buy top 10% / hold top 33.3%`) + slow quality cut one-way turnover from `71.79%` to `31.34%` on `quality_plus_reversal` (`h = 3`, `409` periods, net excess at `0.20%` rising from `+1.54%/yr` `[NW t = 0.33]` to `+6.10%/yr` `[NW t = 1.94]`, `5/6` positive years) and from `81.26%` to `37.91%` on `quality_gated_reversal` (`h = 5`, `245` periods, `+12.48%/yr` `[NW t = 1.84]`, `4/6` positive years). Pure `reversal_short` buffered at `h = 5` had `66.61%` turnover and `+15.77%/yr` (`NW t = 1.50`, `5/6` positive years). None reached `NW t >= 2.50`.
+- **Cap-weighted tilts (`product_cap_mult_buffered` & `product_sector_active_slice`, `<= ±2.0%` stock active bound, sector-neutral):**
+  - Passive cap-weighted constituent benchmark had `1.83%` turnover at `h = 3` and compounded `+105.04%` (`vs +92.64%` for SPY, `NW t = 0.58`).
+  - Against that matched cap-weighted benchmark, `30 of 32` cap-tilt cells were net negative (and the remaining 2 were `+0.01%` and `+0.02%/yr`, `NW t <= 0.03`); `reversal_short` lost `-2.43%/yr` (`NW t = -2.21`) at `h = 3` because short-term mean reversion in the S&P 500 comes from smaller index members while mega-caps (`AAPL`, `MSFT`, `NVDA`, `LLY`) trend-continue when scaled by market cap.
+- **Core-satellite `80% SPY + 20% Buffered Top-10%` (`product_core_spy_80_sat_20`):**
+  - Positive net of `0.20%` over the full `2019–2024` span at `h = 5` (`+3.02%/yr` `[NW t = 1.28]` for `reversal_short`, `13.50%` turnover; `+2.52%/yr` `[NW t = 1.55]` for `quality_gated_reversal`, `7.72%` turnover), but **negative vs SPY in both `2023` and `2024` across all `16 of 16` cells** due to narrow mega-cap market breadth dragging the `20%` equal-weight sleeve.
+
+Verification & branch state:
+- Commands verified:
+  - `.venv/Scripts/python.exe -m pytest tests/test_cli_surfaces.py tests/test_research_lane_*.py` -> `117 passed` (`11` CLI surface + `106` research-lane including `13` new in `tests/test_research_lane_benchmark_tilt.py`).
+  - `.venv/Scripts/ruff.exe check src/market_predictor/research_lane src/market_predictor/commands/research_lane.py tests/test_research_lane_benchmark_tilt.py` -> `0 errors`.
+  - `.venv/Scripts/python.exe -m mypy --strict src/market_predictor/research_lane src/market_predictor/commands/research_lane.py` -> `0 issues in 20 source files`.
+  - `git diff --check` clean; zero active Python processes; `data/runtime/heavy_job.lease` absent.
+
+### Research lane steps 3a and 3b: event-driven swing setups, catalyst confirmation, Stage-2 meta-labeling and MTR(14) vs Wilder ATR(14) — November 19
+
+Status: `complete`. Measured November 19. Neither `wilder_atr_14` (step 3a) nor
+`mtr_14` (step 3b, Hypothesis V2-01) met the pre-registered reading rule; zero
+specifications passed, no sealed-period data was read, and no step is in progress.
+
+Result (research label on adjusted prices; point-in-time S&P 500 eligible rows;
+decisions 2019-07-09 to 2024-05-28; walk-forward models scored out-of-sample on
+2021, 2022, 2023 and 2024 to May 28; development evidence only).
+Real runs:
+- Step 3a (`wilder_atr_14`): `data/research/research_lane/swing_setups_20261119T121947Z`
+  (exit 0, peak process memory 0.87 GiB).
+- Step 3b (`mtr_14`): `data/research/research_lane/swing_setups_mtr_14_20261119T122119Z`
+  (exit 0, peak process memory 0.87 GiB).
+Two trial-log lines appended to `data/research/research_lane/trials.jsonl` (total 6 lines).
+
+Inputs and candidate counts (`576,101` eligible decision stock-sessions across 585 securities):
+- Point-in-time catalyst inputs strictly `< 2024-05-29 04:00 UTC`: `24,704` classified
+  `direct_issuer` Alpaca news events (`18,505` Tier-1 positive/structural across earnings,
+  raised/reaffirmed guidance, analyst upgrades/target-hikes, M&A, regulatory approvals
+  and product/contract wins; `5,588` bearish/dilutive events excluded from long Setup A
+  and encoded as a 3-day negative feature; `611` outside panel membership) plus `9,977`
+  SEC `8-K` Item `2.02` earnings releases (`20,417` Tier-1 stock-sessions total).
+- Stage-1 deterministic setups (`wilder_atr_14`, primary screen `ADR%_20 >= 1.5%`,
+  `6,908` resolved trades across `1,041` entry dates; unfiltered S&P 500 has `7,640`;
+  strict `ADR%_20 >= 2.5%` drops count to `2,815`):
+  - Setup A (Confirmed Post-Catalyst Breakout: Tier-1 catalyst in `{t, t-1}`, no bearish
+    event, `RVOL_20 > 2.0`, positive market-adjusted return and close in top 30% of
+    daily range): `1,203` full-period trades (`884` out-of-sample 2021–2024).
+  - Setup B (21-EMA Uptrend Pullback & Reversal): `4,704` full-period trades (`3,449` OOS).
+  - Setup C (60-day Bollinger Squeeze Breakout): `1,175` full-period trades (`787` OOS).
+
+Measured findings (entry `open[t+1]`, conservative `stop_first` daily-bar resolution,
+`+2.5x V_t` target, `-1.0x V_t` stop, 10-session vertical stop, `0.20%` round-trip cost):
+- **Stage-1 zero-ML base rates fail before any ML is applied (`wilder_atr_14`):**
+  across `6,908` primary candidates (`2019–2024`), `+2.5 ATR` target-hit rate is `18.79%`,
+  `-1.0 ATR` stop-hit rate is `58.84%`, and 10-day timeout rate is `22.37%` (mean hold
+  `5.49` sessions): standalone net return `-0.09%` (`-0.052R`), matched-interval SPY
+  excess `-0.29%` (entry-date Newey-West `t = -3.57`). Setup A (`-0.46%` vs SPY), Setup B
+  (`-0.21%` vs SPY), Setup C (`-0.42%` vs SPY) and strict `ADR%_20 >= 2.5%` (`-0.31%` vs
+  SPY, `t = -3.98`) all trail matched-interval SPY. Widening barriers to the governed
+  `+3.0 / -1.5 ATR` contract gives `14.72%` target hits, `-0.04%` standalone net
+  (`-0.018R`), and `-0.28%` vs SPY (`t = -2.54`) out-of-sample.
+- **Why `XGBClassifier(p > 0.42)` selected 0 trades (calibration fact):** because `22.4%`
+  of trades expire at the 10-session vertical wall and `58.8%` touch `-1.0 ATR` first,
+  the true `+2.5R` target-hit base rate is `~19%` (not the `31%` zero-timeout textbook
+  figure). Out-of-fold Platt-calibrated probabilities matched empirical reality (`4,837`
+  OOS candidates in `[0.00, 0.25]` had mean predicted `0.181` vs `19.23%` empirical target
+  hits; `148` in `[0.25, 0.35]` had `14.86%`; `0` exceeded `0.35`). Selecting the top
+  quartile of training-calibrated probabilities (`stage2_xgb_barrier_top_q25`, `1,439` OOS
+  trades across `461` dates) gave `19.67%` target hits, `-0.10%` standalone net (`-0.065R`),
+  and `-0.25%` vs SPY (`t = -1.61`).
+- **Continuous SPY-excess Stage-2 regressors also fail out-of-sample (`2021–2024`):**
+  `stage2_xgb_vol_excess_gt_20bps` (`1,304` trades, `-0.07%` net, `-0.34%` vs SPY, `t = -1.72`)
+  and `stage2_ridge_vol_excess_gt_20bps` (`1,716` trades, `-0.05%` net, `-0.29%` vs SPY,
+  `t = -2.27`) were positive vs SPY only in `2022` (`+0.87%` and `+0.49%`) and negative in
+  every bull year (`2021`, `2023`, `2024`), both under bracket exits and fixed 10-session holds.
+- **Step 3b Hypothesis V2-01 (`mtr_14` vs `wilder_atr_14` ceteris paribus) — mechanism
+  confirmed, H1 rejected (H0 holds):** in post-shock `Bucket B` (`max(TR_14) > 3 * MTR(14)`,
+  `1,030` OOS trades), replacing `Wilder ATR(14)` with `MTR(14)` cut the 10-day timeout rate
+  from `25.54%` to `12.91%` and raised target hits from `18.42%` to `24.08%`, but elevated
+  post-shock intraday noise raised stop-outs from `56.04%` to `63.01%`, reducing Bucket B
+  net expectancy from `+0.003R` (`-0.02%`) to `-0.046R` (`-0.11%`, `-0.26%` vs SPY) and
+  overall Stage-1 OOS net R from `-0.037R` to `-0.043R`.
+
+Verification (component tier): 93 synthetic unit tests pass across 10 research-lane test
+modules (85 prior + 8 new covering truncated-history and future-poison invariance for all
+28 stationary setup features and both volatility estimators, after-hours `16:05 ET` news
+lookahead refusal, retrospective-headline/bearish-polarity filtering, `stop_first` gap-fill
+arithmetic, right-censoring exclusion and purged walk-forward fold isolation); Ruff and
+strict mypy pass on all 19 source modules; `git diff --check` clean; no Python worker or
+heavy-job lease remained after the runs. Full suite not run. Nothing is committed.
+
+### Research lane step 2c: very-short-term reversal at 1 to 3 sessions — November 17
+
+Status: `complete`. Measured November 17. The frozen reading rule passed at 3
+sessions only, so the lead earns one test on the sealed period. That test has not
+been run and needs the user's explicit approval; no step is in progress.
+
+Result (research label on adjusted prices; S&P 500 members; decisions 2019-07-09
+to 2024-05-28; development history on which the lead was found). Real run
+short_reversal_20261117T132343Z: exit 0, 113 seconds including an 81-second memory
+pause at 93.4% system use before loading; peak process memory 1.06 GiB. Output:
+data/research/research_lane/short_reversal_20261117T132343Z/scoreboard.json and
+scoreboard.md; one more trial-log line. Known labels: 99.5% to 99.9% of eligible
+stock-sessions.
+- `reversal_short` mean daily rank correlation (Newey-West t): 0.0167 (2.99),
+  0.0191 (3.10), 0.0229 (3.50) and 0.0183 (2.62) at 1, 2, 3 and 5 sessions.
+  Sector-neutral: 0.0122 to 0.0188. Each of the four inputs is positive at every
+  horizon (0.013 to 0.021).
+- At 3 sessions it is positive in all six years (2019 0.018, 2020 0.048, 2021
+  0.019, 2022 0.012, 2023 0.015, 2024 to May 0.020).
+- Top tenth (about 46 stocks) minus the average eligible stock, rebalanced every
+  3 sessions (410 periods): gross 0.203% per period (t 2.44), 89% of names
+  replaced each time. After 0.20% per replaced name: +0.025% per period, about
+  +2.1% a year, roughly t 0.3, so indistinguishable from zero. After 0.10%:
+  +0.114% per period, about +9.6% a year.
+- At 1 and 2 sessions the net figure is negative at both costs; at 5 sessions it
+  is positive (+0.177% per period at 0.20%) but t is 2.62, below the rule's 3.
+- Over the same decisions the average eligible stock trailed SPY by 0.027% per 3
+  sessions (about 2.3% a year), so a long-only top-tenth basket would roughly
+  match SPY at the 0.20% cost.
+Verification (component tier): 85 synthetic unit tests pass, including the frozen
+definition, the composite rule, a truncated-history test for the composite and
+the reading rule's three conditions; Ruff and strict mypy pass on 15 source
+modules. No Python process or lease remained after the run. Full suite not run.
+Nothing is committed.
+User instruction November 17: run the reversal test proposed after step 2b. The
+root session (now Opus 5.5) implements it directly; it is a small change reusing
+the verified panel, labels, indicators and scoreboard.
+
+Problem: in step 2b the only single indicators beyond chance at 5 sessions all
+measured the last one to three sessions' move with a negative sign. That lead was
+picked after looking at the same 2019-07-09 to 2024-05-28 history, so this test
+cannot confirm it. It can only decide whether the lead is strong and cheap enough
+to deserve the one-time use of the sealed period.
+
+Frozen before any result:
+- Inputs, each with sign -1 (higher recent move expected to precede lower return):
+  return_1d, return_3d, intraday_today, streak_length, exactly as built in step 2b.
+  Composite `reversal_short` = average of the four signed centered ranks among
+  eligible stocks, at least 3 of 4 present.
+- Horizons 1, 2, 3 and 5 sessions. Label unchanged: entry at the next session's
+  adjusted open, exit at the adjusted close h sessions after the decision. The
+  overnight move from the decision close to the next open is therefore excluded,
+  because it cannot be traded after a decision made at the close.
+- Same eligibility, scoreboard and top-tenth basket rebalanced every h sessions.
+  Net figures at 0.20% per replaced name (the frozen cost) and, for information,
+  0.10%.
+- Reading rule: the lead earns one test on the sealed period only if
+  `reversal_short`, at one of the four horizons, has a Newey-West t-statistic of
+  at least 3 (higher than 2 because the lead was chosen after looking), is
+  positive in at least 5 of 6 calendar years, and has a positive top-tenth spread
+  after the 0.20% cost. Otherwise the lead is closed. Using the sealed period would
+  still need the user's explicit approval.
+
+Out of scope: any other input, parameter choices after seeing results, fitted
+models, the sealed period, new data. Exit gates: unit test for the composite and
+the horizon setting; existing research-lane tests pass; Ruff and strict mypy; one
+real-data run under the lease and memory ceiling; one trial-log line.
+
+### Research lane step 2b: more technical indicators and fitted combinations — November 16
+
+Status: `complete`. Measured November 16. The pre-registered reading rule was not
+met: technical indicators and fitted combinations do not order stocks by later
+return in this sample. No later step is in progress; the next step is the user's
+decision.
+
+Result (research label on adjusted prices; S&P 500 members; development history to
+2024-05-28; models scored only on 2021, 2022, 2023 and 2024 to May 28, each fitted
+on earlier decisions whose outcomes ended before the scored year). Real run
+technical_models_20261116T071820Z: exit 0, 15.8 minutes, peak process memory
+1.27 GiB; the memory guard paused six times for 5 to 31 seconds near 90 to 93%
+system use and resumed each time. Output:
+data/research/research_lane/technical_models_20261116T071820Z/scoreboard.json and
+scoreboard.md; one more trial-log line.
+- 51 new indicators were built from the adjusted daily prices and volume already
+  loaded; with the 12 from step 1 that is 63 inputs, and 126 with sector-neutral
+  rank versions.
+- 24 fitted specifications (3 input sets, ridge and boosted trees, 4 horizons):
+  median out-of-sample mean daily rank correlation -0.0069, minimum -0.0197,
+  maximum 0.0216. No specification has a t-statistic above 1.31 in size.
+- 2 of 24 specifications are positive in at least 3 of 4 scored years; both are
+  ridge at 63 sessions with t-statistics of 0.36 or less. 2022 is negative in 22
+  of 24.
+- More indicators did not help: median by input set is -0.0071 (12 inputs),
+  -0.0057 (63) and -0.0077 (126). Boosted trees (-0.0105) did worse than ridge
+  (-0.0040).
+- Each indicator alone: at 5, 10 and 21 sessions, 4, 3 and 1 of 51 exceed a
+  t-statistic of 2, against 2.55 expected by chance. The ones that do all measure
+  the last one to three sessions' move with a negative sign (a stock that just
+  rose tends to lag): return_1d -0.0158 (t -2.69), intraday_today -0.0154
+  (t -2.94), streak_length -0.0154 (t -2.64) at 5 sessions. At 63 sessions 22 of
+  51 exceed 2, but those indicators are near-copies of each other and that
+  horizon has under 20 non-overlapping periods, so its t-statistics are too large.
+- Top-tenth baskets after the 0.20% cost are negative for every 5-, 10- and
+  21-session specification.
+Verification (component tier): the coding agent reports 80 synthetic unit tests
+passing (truncated-history and future-poison for every indicator; a fold-purge
+test in which garbage prices from the first scored session leave the fitted ridge
+coefficients bit-identical), Ruff and strict mypy passing. The root session read
+the training-row rule (a decision is used only if its outcome ends before the
+scored year starts) and confirmed the summary figures in the saved scoreboard. The
+root session could not rerun the tests or the process check because the shell
+permission check was unavailable at that time; both remain to be repeated. Full
+suite not run. Nothing is committed.
+User instruction November 16: start solving the problem, stop reading data that is
+not needed, and check whether more technical indicators and better feature
+engineering can solve it. Coding is delegated to Opus 5.5 at high effort.
+
+Dataset research was stopped at this instruction. Partial findings, for a later
+spending decision only: Norgate Data lists US Stocks Platinum at 630 USD for 12
+months (prices from 1990, delisted securities and historical index constituents
+included, fundamentals current only), read on the vendor's package page. Sharadar's
+bundle is reported at 69 USD a month or 499 USD a year for full history under a
+personal-use licence (prices including delisted companies, fundamentals with a
+filing date, S&P 500 constituents); this comes from search summaries of the
+vendor's subscribe page and was not confirmed on the page, and its history start is
+unconfirmed. No individually priced source of dated analyst-estimate history was
+found. Nothing was purchased.
+
+Problem: steps 1 and 2a scored inputs one at a time or as equal-weighted averages.
+The user asks whether a larger set of technical indicators, combined by a fitted
+model that can use interactions, orders stocks by later return.
+
+In scope: about 45 additional indicators computed only from the adjusted daily
+open, high, low, close and volume already loaded by the research panel (no new
+dataset is read); cross-sectional and sector-neutral rank versions; each indicator
+scored on the existing scoreboard; walk-forward fitted combinations (ridge and
+boosted trees, fixed settings, no tuning) with a rank target at 5, 10, 21 and 63
+sessions, scored only on years not used for fitting (2021, 2022, 2023 and 2024 to
+May 28), with every training outcome ending before the scored year starts.
+Out of scope: new downloads, news or financial inputs, parameter search, earlier
+history, a wider stock set, API, serving, promotion.
+
+Reading the result, fixed in advance: 24 fitted specifications are scored (3 input
+sets, 2 learners, 4 horizons). With about 0.03 uncertainty on each out-of-sample
+rank correlation, the best of 24 would reach roughly 0.05 by chance alone, so the
+conclusion rests on the median specification and on agreement across learners,
+horizons and years, not on the best cell. Technical features "solve it" only if
+the median is at or above 0.03 and most specifications are positive in at least 3
+of 4 scored years. Development evidence on inspected history only.
+
+Exit gates: truncated-history and future-poison tests for every new indicator; a
+test proving no training outcome overlaps a scored year; affected Ruff and strict
+mypy; one real-data run under the shared lease and memory ceiling; one trial-log
+line. Verification tier: component. Rollback: remove the added modules and tests.
+
+### Research lane history probe — November 16
+
+Status: `complete`. Read-only probe approved by the user (AGENTS.md, amendment
+after the step 1 and step 2a results). No bulk download, collector change or data
+write occurred, and nothing dated after 2024-05-28 was requested. No step is in
+progress; the next step is the user's decision.
+
+What was asked of the price provider (Alpaca SIP daily bars, adjustment all):
+the first and last bar on or before 2024-05-28 for 29 hand-picked tickers (6 still
+listed, 13 large companies later acquired or removed, 10 smaller companies later
+delisted or bankrupt), and the provider's lists of active and inactive US equity
+symbols. Only dates and counts were read.
+
+Findings:
+- History starts 2016-01-04. All 28 tickers that traded then have their first bar
+  on that date. Earlier years are not available from this provider.
+- Bars of later-delisted companies are retained up to their last trading day for
+  18 of 18 such tickers (for example LinkedIn to 2016-12-07, Yahoo to 2017-06-16,
+  J.C. Penney to 2020-05-18, Bed Bath & Beyond to 2023-05-02).
+- The provider's symbol lists are not a usable roster of past companies. They hold
+  14,412 active and 19,150 inactive symbols (16,263 of the inactive ones traded
+  over the counter), but 14 of the 18 delisted probe tickers appear in neither
+  list. A stock set built from these lists would omit most delisted companies and
+  so overstate returns.
+- Three tickers return bars after the original company was gone (EMC and SHLD to
+  2024-05-28, MON to 2022-12-23), because the symbol was later reused by another
+  security. A series fetched by ticker alone can join two different companies.
+- One ticker (Rite Aid) starts on 2019-04-22, the day of its reverse split,
+  instead of 2016-01-04.
+
+Consequences:
+- Earlier history from this provider adds at most 2016 to mid-2019. After one
+  year of warm-up, decisions could start about January 2017, giving about 7.4
+  years instead of 4.9. The uncertainty on a 21-session rank correlation would
+  fall from about 0.025 to about 0.020, still too wide to confirm a value of 0.02
+  to 0.03.
+- A wider stock set needs a dated roster of every company that traded, with
+  stable identities. The project holds one only for S&P 500 members. This
+  provider does not supply one.
+- Neither change, from this provider alone, makes the question answerable. A
+  purchased history with delisted companies, stable identities and 20 or more
+  years would (recommendation document, decision 8). That is a spending decision.
+
+### Research lane step 2a: earnings-reaction and financial-statement inputs — November 15
+
+Status: `complete`. Measured November 15. Nothing reached a level this sample can
+confirm; no later step is in progress and the next step is the user's decision.
+
+Result (research label on adjusted prices; S&P 500 members; decisions 2019-07-09
+to 2024-05-28; development evidence only). Real run
+fundamental_predictors_20261115T220156Z: exit 0, 4 minutes 7 seconds, peak process
+memory 0.76 GiB; the memory guard paused four times for about 5 seconds near 90%
+system use and resumed each time. Output:
+data/research/research_lane/fundamental_predictors_20261115T220156Z/scoreboard.json
+and scoreboard.md; trial log now has 2 lines (code aa8def5 plus uncommitted work).
+- Population: the same 576,101 eligible stock-sessions from 585 securities as
+  step 1.
+- Inputs found: SEC company facts for 426 issuers; 9,977 earnings releases (8-K
+  with item 2.02) for 538 securities from the initial-fit filing inventory;
+  unadjusted daily closes for 545 securities in
+  data/raw/swing_initial_fit_raw_share_canonical, so the valuation inputs ran.
+- Coverage of eligible stock-sessions: earnings reaction 93.2%; the financial
+  inputs 48.2% to 76.4%. 135,102 stock-sessions (23.5%) belong to securities with
+  no company-facts file, including Microsoft, JPMorgan and Meta.
+- All twelve inputs combined, mean daily rank correlation with later return:
+  0.0036, 0.0056, 0.0111 and 0.0181 at 5, 10, 21 and 63 sessions (t-statistics
+  0.43, 0.49, 0.66, 0.63); positive in 3 of 6 calendar years at 21 sessions.
+- Largest single values at 21 sessions: operating profitability 0.0176 (t 1.35),
+  free cash flow yield 0.0164 (t 0.94), low net share issuance 0.0152 (t 1.15),
+  quality group 0.0132 (t 1.37). None is near the 0.05 this sample can confirm.
+- The reaction to the latest earnings release has the opposite sign from the one
+  fixed in advance at 21 and 63 sessions (-0.0065, -0.0125). Book-to-price and
+  asset growth also have the opposite sign at 5 to 21 sessions.
+- Two cells exceed a t-statistic of 2, both at 63 sessions: quality group 0.0356
+  (t 2.65) and net share issuance 0.0400 (t 2.06). Steps 1 and 2a together scored
+  128 input-horizon cells and found 5 above 2, about the 6 expected by chance, and
+  63 sessions has fewer than 20 non-overlapping periods.
+Verification (component tier): 61 synthetic unit tests pass (30 from step 1
+unchanged, 31 new, including truncated-history and future-poison tests with later
+filings, restatements, late releases and a later split for every input); Ruff and
+strict mypy pass on the package. Step 1's label, input, scoring and panel modules
+are unmodified. The root session checked Apple, Exxon, Johnson & Johnson and
+Nvidia on 2022-06-30 and 2023-11-15: trailing net income and operating cash flow
+equal an independent full-year-plus-year-to-date calculation from the raw SEC
+files, and Apple's figures equal the published ones (net income 101.935 billion
+USD, 16.185 billion shares, close 136.72, market value 2,212.8 billion USD). An
+Apple release accepted after the close on 2022-04-28 first changes the input on
+2022-05-02, with the independently computed value. Nvidia's adjusted close on
+2023-11-15 is one tenth of its unadjusted close because the provider's adjusted
+history embeds the June 2024 split; market value therefore uses unadjusted closes.
+Full suite not run. One bug was found by a unit test and fixed before the real
+run (release times and session closes were compared in different time units).
+Data limits found: 102 panel securities keyed by CIK have no company-facts file;
+47 split-like events in 39 securities blank 1,542 market-value cells; capital
+expenditure, gross profit and operating income tags are absent for many financial
+companies. Nothing is committed.
+User instruction November 15, after seeing the step 1 result: start step 2a. Coding
+is delegated to Opus 5.5 at high effort; the root session reviews and spot-checks.
+No rule changes beyond AGENTS.md "Research Lane — User Decision, November 15".
+
+Problem: step 1 showed that standard price-based inputs do not order S&P 500
+stocks by later return in 2019-07-09 to 2024-05-28. Step 2a measures whether a
+different kind of information does: the market's reaction to the latest earnings
+release, the change in reported earnings and revenue, price-scaled valuation and
+accounting quality. No model is fitted.
+
+In scope: point-in-time readers for retained SEC company facts and the retained
+initial-fit SEC form inventory; twelve inputs with signs fixed before any result;
+the step 1 panel, labels, horizons and scoreboard unchanged; unit tests; one
+real-data run; one more trial-log line.
+Out of scope: model fitting, news inputs, analyst estimates, new downloads, earlier
+history, a wider universe, changes to step 1 inputs or results, API, serving,
+promotion, and any change to existing data, models or collectors.
+
+Availability rules: a reported figure may be used for a decision only when its
+filing date is an earlier calendar day than the decision session, and the value
+first filed for a period is kept (later restatements do not rewrite history). An
+earnings release counts from the first session whose close follows its SEC
+acceptance time, and its reaction is usable from the session after the reaction
+window ends. Market value uses unadjusted prices; adjusted prices are not allowed
+there because they embed later splits and dividends. Nothing filed, accepted or
+priced after 2024-05-28 is used, and the later-sealed SEC inventories are not read.
+
+Exit gates: truncated-history and future-poison tests for every input, including
+later filings and restatements; hand-checked quarter, trailing-year and
+market-value arithmetic; affected Ruff and strict mypy; a real-data run under the
+shared lease and memory ceiling reporting coverage per input (share of eligible
+stock-sessions with a value) and the same scoreboard as step 1. Verification tier:
+component. Rollback: remove the added modules, command and tests.
+
+Reading the result: with about 0.025 uncertainty on a 21-session rank correlation,
+only an effect near 0.05 or larger can be confirmed here. A smaller positive value
+is a reason to seek more history, not evidence of an edge. Development evidence
+on inspected history only.
+
+### Research lane step 1: price-based predictor scoreboard — November 15
+
+Status: `complete`. Measured November 15. The stop rule was reached: the combined
+inputs are below the 0.02 reference, so no later step is in progress and the next
+step is the user's decision.
+
+Result (research label on adjusted prices; S&P 500 members; decisions 2019-07-09
+to 2024-05-28; development evidence only, not proof of anything). Real run
+price_predictors_20261115T210916Z: exit 0, 88 seconds, peak process memory
+0.69 GiB, memory guard never paused. Output:
+data/research/research_lane/price_predictors_20261115T210916Z/scoreboard.json and
+scoreboard.md; trial log data/research/research_lane/trials.jsonl (1 line, code
+aa8def5 plus uncommitted changes).
+- Scored population: 576,101 eligible stock-sessions from 585 securities. Known
+  labels: 99.5%, 99.1%, 98.0% and 94.1% of those at 5, 10, 21 and 63 sessions; the
+  rest mostly have a window that runs past 2024-05-28.
+- Eligibility used: a point-in-time membership row with
+  `pre_catalyst_feature_eligible`. `cross_section_eligible` is False on every row
+  and `feature_eligible` covers about 11 stocks a date, so neither was usable.
+- All twelve inputs combined, mean daily rank correlation with later return:
+  0.0002, -0.0065, -0.0122 and -0.0248 at 5, 10, 21 and 63 sessions (t-statistics
+  0.01, -0.34, -0.48, -0.64, allowing for overlapping outcomes).
+- No single input reaches a t-statistic of 1.3 in either direction at 5 to 21
+  sessions. Momentum, closeness to the 52-week high and the low-risk inputs have
+  the opposite sign from the one fixed in advance. Short-term reversal has the
+  expected sign: 0.0129 at 5 sessions (t 1.30); the two reversal inputs combined
+  are positive in all six calendar years (0.0103, t 1.04).
+- The standard error of a mean daily rank correlation at 21 sessions is about
+  0.025 in this sample, so a true value of 0.02 to 0.03 cannot be told from zero
+  on these five years and about 470 stocks a date.
+- Average eligible stock minus SPY per 21 sessions: -0.12% (t -0.54); minus QQQ:
+  -0.59% (t -1.31). By year versus SPY: 2022 +0.68%, 2023 -0.97%.
+Verification (component tier): 30 synthetic unit tests pass, including a
+truncated-history and a future-poison test for every input; Ruff and strict mypy
+pass on the new package. The root session independently recomputed 60 values
+(4 stocks, 3 dates, 5 quantities) from the raw bar files, largest difference
+1e-7, and 6 daily rank correlations with SciPy, equal to six decimals. Full suite
+not run. Four failures in the command-inventory and dependency-boundary suites
+predate this work (investment commands missing from the fixture; research imports
+inside investment and sources modules; an undeclared pypdf extra).
+Data limits found: 32 securities, including META, are absent from the upstream
+bar build; bars exist only while a stock is an index member; EPAM carries a
+misspelled sector name. Nothing is committed.
+User instruction November 15: go ahead with step 1 of
+docs/research_briefs/benchmark_outperformance_recommendations_20261115.md, with
+coding delegated to Opus 5.5 at high effort and review by the root session. The
+approved rule changes (research labels from adjusted prices; one trial-log line
+per exploratory run) are recorded in AGENTS.md, "Research Lane — User Decision,
+November 15". Decisions 3 to 10 of that document are not approved.
+
+Problem: no saved experiment shows whether any input orders S&P 500 stocks by
+later return in this project's own data. Step 1 measures that for about twelve
+standard price-based inputs, without fitting a model.
+
+In scope: a research panel (dates by securities, float32) built from the retained
+adjusted daily bars and the existing eligibility/sector rows; forward total-return
+labels at 5, 10, 21 and 63 sessions (entry next session open, exit horizon close);
+the price-based inputs with signs fixed before any result; a fast scoreboard; a
+trial log; unit tests; one real-data run.
+Out of scope: model fitting, news or financial inputs, new downloads, history or
+decisions before 2019-07-09, a wider universe, portfolio policy changes, API,
+serving, promotion, and any change to existing data, models or collectors.
+
+Inputs (read only): data/features/edge_rebuild_swing_panel_20180529_20260708_v2,
+subfolders combined_daily/bars (Alpaca SIP daily, adjustment all) and
+final/panel/feature_profile=technical_market. Bars before 2019-07-09 are warm-up
+only. Nothing after 2024-05-28 is loaded; outcomes must end on or before that date.
+
+Exit gates: every input passes a truncated-history test and a future-poison test
+on synthetic fixtures; the label and rank-correlation arithmetic match independent
+calculations; affected Ruff and strict mypy pass; the real-data run completes
+under the shared lease and memory ceiling and reports label coverage, per-input
+rank correlation by horizon and year, the equal-weighted combination, the
+top-tenth-minus-average spread with turnover, and the average stock's return
+versus SPY and QQQ. Verification tier: component. Rollback: remove the new
+package, command and tests; no existing artifact is touched.
+
+Stop rule from the recommendation: if textbook inputs show no relationship at all,
+inspect the panel and labels before any further step. A combination at or above
+0.02 rank correlation at 21 sessions is the reference level for later models.
+This is development evidence on inspected history, not proof of outperformance.
+
 ### Configurable data storage and retained scratch cleanup — November 13
 
 Status: `implementation_complete; data_movement_deferred_by_user`.
