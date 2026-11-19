@@ -1,5 +1,143 @@
 # Active Edge Rebuild Plan
 
+### Research lane step 5b: zero-cost ($0) survivorship-checked wider US mid/small-cap universe (2016–2024) & two-stage evaluation — November 19
+
+Status: `in_progress`. Follows immediately after step 5a under the November 19 user
+instruction (`$0` extra spend: free SEC EDGAR + existing Alpaca SIP only; no paid vendor
+datasets; sealed period `2024-05-29..2026-07-08` untouched).
+
+Bounded problem & frozen scope for step 5b:
+1. **Survivorship-checked SEC-EDGAR + Alpaca US common-stock roster (`wider_universe.py`):**
+   - Enumerate active and later-delisted US domestic XBRL issuers across `2016–2024`
+     using SEC EDGAR quarterly XBRL frames (`dei/EntityCommonStockSharesOutstanding` for
+     `CY2015Q4I..CY2024Q1I`, immediately dropping any fact with `filed > 2024-05-28`),
+     cross-referenced with SEC `company_tickers_exchange.json`, Alpaca corporate actions
+     (`cash_merger`, `stock_merger`, `stock_and_cash_merger`, `name_change`,
+     `reorganization` in `2016-01-01..2024-05-28`), OTC-delisted `Q`-suffix symbols, and
+     SEC `submissions/CIK{cik}.json` (`tickers`, `sic` sector mapping, `10-K/10-Q`
+     `primaryDocument` ticker prefix, and `8-K` Item `2.02` releases `<= 2024-05-28`).
+   - Quarantine ticker reuse (`(cik, ticker)` bounded by point-in-time filing/corporate-action
+     dates so reused symbols never cross issuers).
+   - Fetch `2016-01-04..2024-05-28` adjusted (`all`) and unadjusted (`raw`) daily SIP bars
+     (using active-period `asof <= 2024-05-28`) and free SEC `company_facts.json` files for
+     candidate liquid US common stocks (`price >= $5`, `>= 252` trailing closes, top
+     `1,200` by trailing 60-session dollar volume on decision dates `2018-05-29..2024-05-28`).
+2. **Two-stage evaluation on wider liquid US universe & mid/small-cap slice (`2018-05-29..2024-05-28`):**
+   - Run the verified step 5a Stage-1 engine (`equal_rank_24`, `ridge_rank`,
+     `xgb_shallow_5seed` across `48` cross-sectional + sector-neutral rank features,
+     `5, 10, 21, 63` sessions, 5-fold unseen-issuer CV, buffered skill `buy top 10% /
+     hold top 33%`, and cap-tilt product) plus Stage-2 news-reaction residual overlay on:
+     (a) **Broad Top-1,200 Liquid US Common Stocks**, and
+     (b) **Mid/Small-Cap Ex-S&P-500 Slice** (eligible liquid stocks outside point-in-time S&P 500),
+     evaluated strictly under §5.6's 5-point acceptance rule.
+
+Exit gates: unit tests for ticker-reuse quarantine, trailing-dollar-volume point-in-time
+eligibility (truncated-history and future-poison invariance), and sealed-date refusal;
+Ruff and strict mypy; resumable free wider-universe collection and two-stage evaluation
+runs under the heavy-job lease and `< 90%` memory ceiling; trial-log entry.
+
+### Research lane step 5a: recommendation brief §6 steps 2–4 on complete free SEC + extended S&P 500 history, two-stage news residual model, and forward recorder — November 19
+
+Status: `complete`. Measured November 19. All `3` Stage-1 S&P 500 base models failed §5.6's
+21-session acceptance rule (`earns_sealed_period_test = false`), whereas **Stage-2
+continuous news-reaction residual models passed the pre-registered paired test
+(`Newey-West t >= 2.0` and positive in most scored years) in `5` specifications at `5`
+and `10` sessions**. No row in `2024-05-29..2026-07-08` was requested or read.
+
+Real runs:
+- Free backfill (`collect-research-lane-free-sp500`): `data/research/research_lane/sp500_free_backfill`
+  (`556/556` mapped S&P 500 CIKs — `561` of `585` securities, `95.90%` — now covered by
+  SEC `company_facts.json`, `0` 404s; `585/585` securities covered by unadjusted daily
+  closes; `2016-01-04..2018-05-29` warm-up adjusted bars rescaled via exact `2018-05-29`
+  overlap close to eliminate split/dividend stitch jumps; `13,414` total `8-K` Item `2.02`
+  earnings release rows across `2018–2024`).
+- Two-stage evaluation (`score-two-stage-models`):
+  `data/research/research_lane/two_stage_models_20261119T165647Z` (`scoreboard.json`,
+  `scoreboard.md`; research label on adjusted prices; `2,114` sessions `2016-01-04..2024-05-28`;
+  `704,700` eligible decision cells from `2018-05-29..2024-05-28` including `128,599`
+  newly unlocked pre-`2019-07-09` cells; peak working set `1.06 GiB`; trial log line `8`).
+- Prospective forward score recorder (`record-forward-research-scores`):
+  `data/research/research_lane/forward_records/2026-11-18` (`1,000` liquid US common
+  stocks scored on `2026-11-18` using post-`2026-07-08` bars only, zero future outcomes
+  and zero bars in `2024-05-29..2026-07-08` read).
+
+Measured findings:
+- **Fundamental coverage after $0 backfill:** `equal_rank_24` `99.997%` (`704,678 / 704,700`
+  eligible cells), `fn_asset_growth` `98.78%`, `fn_earnings_reaction_3d` `94.49%`,
+  `fn_revenue_surprise` `92.44%`, `fn_net_share_issuance` `90.86%`, `fn_earnings_surprise`
+  `87.28%`, `fn_sales_to_price` `84.23%`, `fn_accruals` `79.25%`, `fn_earnings_yield`
+  `78.15%`, `fn_book_to_price` `77.95%`.
+- **Stage-1 base models on S&P 500 (`2020..2024` OOS):** at the `21`-session primary
+  horizon, `equal_rank_24` achieved mean daily IC `-0.0005` (`NW t = -0.03`, `50%` positive
+  years, buffered skill `-4.76%/yr` net of `20 bps`), `ridge_rank` `-0.0058` (`NW t = -0.27`,
+  unseen-issuer CV `-0.0077`, sector-neutral IC `+0.0061` `[t = 0.33]`), and
+  `xgb_shallow_5seed` `-0.0043` (`NW t = -0.22`, unseen-issuer CV `-0.0080`, sector-neutral
+  IC `+0.0047` `[t = 0.31]`). Sharp factor-regime inversions inside S&P 500 (`2020` growth
+  vs `2022` value vs `2023–2024` mega-cap AI concentration) flipped walk-forward linear and
+  tree weights across years.
+- **Stage-2 continuous news-reaction residual models (`2021..2024` OOS, `24,704` mapped
+  direct-issuer Alpaca news events):** fitting continuous market-adjusted 1-day news
+  reactions, 20-day abnormal event volume, recency, and 5d/60d unusual article volume on
+  out-of-sample Stage-1 residuals produced statistically significant paired daily IC gains:
+  - `equal_rank_24 + news_xgboost`: `+0.0009` (`NW t = 2.26`, `5/5` positive periods) at
+    `5` sessions and `+0.0016` (`NW t = 2.36`, `5/5` positive periods) at `10` sessions
+    (`+0.0024`, `NW t = 1.96`, `5/5` at `21` sessions).
+  - `xgb_shallow_5seed + news_xgboost`: `+0.0029` (`NW t = 2.36`) at `5` sessions;
+    `ridge_rank + news_ridge`: `+0.0024` (`NW t = 2.04`) at `5` sessions;
+    `xgb_shallow_5seed + news_ridge`: `+0.0017` (`NW t = 2.03`) at `5` sessions.
+
+Verification (component tier): `122` tests pass across `13` suites (`11` in
+`tests/test_cli_surfaces.py` + `111` across `12` `tests/test_research_lane_*.py` suites
+including `5` new in `tests/test_research_lane_two_stage.py`); Ruff (`0` errors) and
+strict `mypy` (`0` issues in `23` source files) pass.
+
+Bounded problem & frozen scope recorded before the step 5a run:
+1. **Free S&P 500 completeness & `2016–2019` history extension (`free_backfill.py`):**
+   - Resolve CIKs for unmapped S&P 500 panel securities via `cik:` IDs,
+     `data/canonical/sec_identity/sec_identity_20190709_20260708_v2/sec_identity_relations.parquet`,
+     and `filings.parquet`, and fetch missing `company_facts.json` files from free SEC
+     EDGAR (`https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json`, `6 req/s`),
+     enforcing Rule 2 (`filed <= development_end`) on every read.
+   - Fetch `2016-01-04..2019-07-08` adjusted (`adjustment="all"`) and unadjusted
+     (`adjustment="raw"`) daily SIP bars (plus any S&P 500 member missing from
+     `combined_daily/bars` strictly `<= 2024-05-28`) via `AlpacaSource.fetch_bars_page`
+     with historical `asof`, and fetch `2018-01-01..2019-07-08` SEC `8-K` Item `2.02`
+     earnings releases via `SecSource` submissions (`accepted_at_utc < 2019-07-09`),
+     never requesting or reading any bar/filing/event dated `>= 2024-05-29`.
+2. **Stage-1 base models on combined Price + Earnings + Value + Quality (`two_stage.py`, §5.4 / §6 Step 2):**
+   - Warm-up bars from `2016-01-04`; point-in-time S&P 500 eligible decisions from
+     `2018-05-29` to `2024-05-28` (`5` out-of-sample walk-forward years `2020..2024`).
+   - 24 signed base predictors (`12` Step-1 price predictors + `12` Step-2a earnings,
+     surprise, valuation and quality predictors) as centered cross-sectional ranks
+     plus 24 sector-neutral centered ranks (`48` base features; native `NaN` handling
+     without duplicate missingness flags).
+   - Three fixed §5.4 learners at `5, 10, 21, 63` sessions (`21` primary, `10` secondary):
+     `equal_rank_24` (zero-fit baseline), `ridge_rank` (`alpha=1000`), and
+     `xgb_shallow_5seed` (`max_depth=3, min_child_weight=200, colsample_bytree=0.5, subsample=0.8, learning_rate=0.03, n_estimators=300`, 5 seeds `0..4`).
+   - Score both **later-date walk-forward** and **5-fold unseen-issuer cross-validation**
+     side-by-side (§5.6 rule 3), plus §5.5 buffered skill (`buy top 10% / hold top 33%`,
+     weekly/horizon rebalance at `20 bps` and `10 bps`) and cap-weighted benchmark tilt.
+3. **Stage-2 news-reaction residual model (`2019-07-09..2024-05-28`, §5.2 / §6 Step 3):**
+   - Build continuous news-reaction features from retained Alpaca `family_events.parquet`
+     (`< 2024-05-29 04:00 UTC`): per-category market-adjusted 1-session reaction and
+     20-day abnormal volume (21-session exponential decay / active window) plus unusual
+     5d/60d article count ratio.
+   - Fit Stage-2 `Ridge` and `5-seed shallow XGBoost` strictly on Stage-1 residuals
+     (`y_rank - stage1_pred`, purged `t + h < fold.test_start`, scored OOS `2021..2024`),
+     accepting news only if paired daily rank-correlation gain achieves Newey-West
+     `t >= 2.0` and is positive in most scored years.
+4. **Step 4 acceptance gate & daily forward score recorder (`forward_record.py`):**
+   - Apply §5.6's 5-point acceptance rule (`21d` IC `>= 0.03`, `NW t >= 3.0`, `>= 70%`
+     positive years, unseen-issuer IC `>= 0.5x` later-date IC, net `20 bps` skill `> 0`,
+     beats `equal_rank_24`); keep `2024-05-29+` sealed unless a candidate passes and is
+     frozen. Provide an append-only `record-forward-research-scores` CLI command for
+     prospective daily score logging from a caller-supplied panel/date.
+
+Exit gates: truncated-history and future-poison tests for extended panel loading,
+news-reaction features, unseen-issuer purge isolation, and Stage-2 residual fitting;
+Ruff and strict mypy; resumable free backfill run and two-stage evaluation run under
+the heavy-job lease and `< 90%` memory ceiling; trial-log entry.
+
 ### Research lane step 4: cap-weighted benchmark tilt and turnover-buffered reversal & quality (Option C) — November 19
 
 Status: `complete`. Measured November 19. None of the 48 product cells (`4 signals × 4 horizons × 3 product policies`) met the pre-registered reading rule; zero specifications passed, no sealed-period data was read, and no step is in progress. The next step is the user's decision.

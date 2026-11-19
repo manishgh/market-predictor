@@ -41,8 +41,9 @@ def load_unadjusted_close(directory: Path, panel: ResearchPanel) -> tuple[npt.ND
             continue
         path = directory / Path(str(item["bars_path"]).replace("\\", "/"))
         table = cast(Any, pq).read_table(path, columns=list(UNADJUSTED_COLUMNS), partitioning=None,
-                                         filters=[("session_date", "<=", end_text)])
+                                         filters=[("session_date", "<=", end_text)], use_threads=False)
         frame = table.to_pandas()
+        del table
         if len(frame) and str(frame["session_date"].max()) > end_text:
             raise SealedPeriodError(f"unadjusted bars after {end_text} reached memory from {path}")
         contract = (frame["security_id"].eq(security) & frame["source"].eq("alpaca") & frame["timeframe"].eq("1Day")

@@ -1,5 +1,16 @@
 # Active Edge Rebuild Handoff
 
+### Research lane step 5a complete; step 5b ($0 wider US mid/small-cap universe) in progress — November 19
+
+Current state:
+- **Step 5a (`complete`):** Executed Recommendation Brief §6 Steps 1–4 on extended `2016–2024` S&P 500 history at `$0` extra spend (`free_backfill.py`, `two_stage.py`, `forward_record.py`).
+  - Backfill artifact: `data/research/research_lane/sp500_free_backfill` (`556/556` mapped S&P 500 CIKs = `561/585` securities covered by SEC `company_facts.json`, `585/585` unadjusted daily closes, `2016-01-04..2018-05-29` overlap-rescaled warm-up bars, `13,414` total SEC `8-K` Item `2.02` rows).
+  - Two-stage artifact: `data/research/research_lane/two_stage_models_20261119T165647Z` (`scoreboard.json`, `scoreboard.md`; research label on adjusted prices; `704,700` eligible cells across `2018-05-29..2024-05-28`; peak working set `1.06 GiB`; line `8` in `data/research/research_lane/trials.jsonl`).
+  - Empirical outcome: `0/3` Stage-1 S&P 500 base models passed §5.6 at `21` sessions (`equal_rank_24` IC `-0.0005` `[NW t = -0.03]`, `ridge_rank` `-0.0058` `[NW t = -0.27]`, `xgb_shallow_5seed` `-0.0043` `[NW t = -0.22]`), whereas **5 Stage-2 continuous news-reaction residual overlays passed paired `NW t >= 2.0` (`equal_rank_24+news_xgboost` `+0.0009` `[NW t = 2.26]` at `5d` and `+0.0016` `[NW t = 2.36]` at `10d`, both positive in `5/5` OOS periods)**.
+  - Forward score snapshot: `data/research/research_lane/forward_records/2026-11-18` (`1,000` liquid US stocks scored using post-`2026-07-08` bars only; sealed `2024-05-29..2026-07-08` window untouched).
+  - Verification: `122 passed` (`11` CLI surface + `111` across `12` `test_research_lane_*.py` suites with `OPENBLAS_NUM_THREADS=1` on low-commit host), `ruff check` (`0` errors), `mypy --strict` (`0` issues in `23` source files).
+- **Step 5b (`in_progress`):** Building `src/market_predictor/research_lane/wider_universe.py` to construct a survivorship-checked SEC-EDGAR + Alpaca US common-stock universe (`CY2015Q4I..CY2024Q1I` XBRL frames + historical/delisted ticker resolution + ticker-reuse quarantine + trailing 60-session dollar-volume top-`1,200` and ex-S&P-500 mid/small-cap slice `<= 2024-05-28`) and evaluate the verified Stage-1/Stage-2 §5.4–§5.6 models at `$0` extra spend.
+
 ### Research lane step 4: cap-weighted benchmark tilt and turnover-buffered reversal & quality (Option C) — November 19
 
 Status: `complete`. Measured November 19. Zero of the 48 product specifications (`4 signals × 4 horizons × 3 product policies`) met the pre-registered reading rule; no sealed-period data (`>= 2024-05-29`) was read, and no step is in progress. Exact next step: user decision between Option B (acquiring survivorship-bias-free broader US equity history `#501–#2500` where liquidity shocks and catalyst under-reaction are larger) or stopping exploratory S&P 500 daily-bar/filing search.

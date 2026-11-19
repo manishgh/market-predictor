@@ -11,6 +11,8 @@ import typer
 
 from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError
+from market_predictor.research_lane.forward_record import record_forward_scores
+from market_predictor.research_lane.free_backfill import BACKFILL_DIRECTORY, collect_free_sp500_backfill
 from market_predictor.research_lane.panel import DEFAULT_DEVELOPMENT_END, PANEL_DIRECTORY
 from market_predictor.research_lane.run import (
     score_benchmark_tilt,
@@ -19,6 +21,7 @@ from market_predictor.research_lane.run import (
     score_short_reversal,
     score_swing_setups,
     score_technical_models,
+    score_two_stage_models,
 )
 from market_predictor.research_lane.setups import VolatilityMode
 
@@ -137,3 +140,47 @@ def register_research_lane_commands(app: typer.Typer) -> None:
         """Score Option C cap-weighted benchmark tilts and turnover-buffered reversal/quality baskets."""
         _invoke(score_benchmark_tilt, root=root, output=output, development_end=development_end.date(),
                 data_root=data_root, panel=panel, unseal_final_test_period=unseal_final_test_period)
+
+    @app.command("collect-research-lane-free-sp500")
+    def collect_free_sp500(
+        root: Path = typer.Option(...),
+        data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
+        development_end: datetime = typer.Option(DEFAULT_DEVELOPMENT_END.isoformat(), formats=["%Y-%m-%d"],
+                                                 help="Last session and filing day read; sealed rows never requested."),
+        panel: Path = typer.Option(PANEL_DIRECTORY),
+        output: Path = typer.Option(BACKFILL_DIRECTORY),
+    ) -> None:
+        """Resumably collect free SEC company_facts, 2016-2019 daily SIP bars, and pre-2019 8-K releases."""
+        _invoke(collect_free_sp500_backfill, root=root, development_end=development_end.date(),
+                data_root=data_root, panel=panel, output=output)
+
+    @app.command("score-two-stage-models")
+    def score_two_stage(
+        root: Path = typer.Option(...),
+        data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
+        development_end: datetime = typer.Option(DEFAULT_DEVELOPMENT_END.isoformat(), formats=["%Y-%m-%d"],
+                                                 help="Last session and filing day read; later rows never read."),
+        output: Path | None = typer.Option(None, help="New directory; default data/research/research_lane/"
+                                                      "two_stage_models_<UTC timestamp>."),
+        panel: Path = typer.Option(PANEL_DIRECTORY),
+        backfill_dir: Path = typer.Option(BACKFILL_DIRECTORY),
+        unseal_final_test_period: bool = typer.Option(
+            False, help="Permit a development end inside the sealed final-test period (2024-05-29 onward)."),
+    ) -> None:
+        """Score Recommendation Brief §5-§6 Stage-1 combined base models and Stage-2 news residual models."""
+        _invoke(score_two_stage_models, root=root, output=output, development_end=development_end.date(),
+                data_root=data_root, panel=panel, backfill_dir=backfill_dir,
+                unseal_final_test_period=unseal_final_test_period)
+
+    @app.command("record-forward-research-scores")
+    def record_forward(
+        root: Path = typer.Option(...),
+        as_of_date: datetime = typer.Option(..., formats=["%Y-%m-%d"], help="Decision date to score prospectively."),
+        data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
+        panel: Path = typer.Option(PANEL_DIRECTORY),
+        live_prospective: bool = typer.Option(False, help="Fetch trailing live Alpaca SIP bars (> 2026-07-08)."),
+        unseal_final_test_period: bool = typer.Option(False),
+    ) -> None:
+        """Publish one append-only dated forward research score snapshot without reading future outcomes."""
+        _invoke(record_forward_scores, root=root, as_of_date=as_of_date.date(), data_root=data_root,
+                panel=panel, live_prospective=live_prospective, unseal_final_test_period=unseal_final_test_period)

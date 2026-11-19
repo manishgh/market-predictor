@@ -7,6 +7,7 @@ earnings releases whose reaction window ended by t. Market value uses unadjusted
 """
 from __future__ import annotations
 
+import gc
 from collections import Counter
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -87,6 +88,7 @@ class FundamentalResult:
     share_tag: npt.NDArray[np.int8]
     reaction_source_event: npt.NDArray[np.int64]  # event id used per cell, -1 none
     report: dict[str, Any] = field(default_factory=dict)
+    market_value: FloatArray = field(default_factory=lambda: np.empty((0, 0), dtype=np.float64))
 
 
 def first_reason(*reasons: ReasonArray) -> ReasonArray:
@@ -221,7 +223,7 @@ def compute_fundamental_predictors(inputs: FundamentalInputs) -> FundamentalResu
     conflicts: Counter[str] = Counter()
     accessions: set[str] = set()
     issuers_without_facts: list[str] = []
-    for cik in sorted(issuers):
+    for idx_cik, cik in enumerate(sorted(issuers)):
         facts = inputs.load_issuer(cik)
         if facts is None:
             issuers_without_facts.append(cik)
@@ -237,6 +239,9 @@ def compute_fundamental_predictors(inputs: FundamentalInputs) -> FundamentalResu
                 component_reasons[name][:, position] = series.reasons[name]
             share_as_of[:, position] = series.share_as_of
             share_tag[:, position] = series.share_tag
+        del series
+        if (idx_cik + 1) % 25 == 0:
+            gc.collect()
     shared = np.zeros(columns, dtype=bool)
     for positions in issuers.values():
         if len(positions) > 1:
@@ -295,7 +300,7 @@ def compute_fundamental_predictors(inputs: FundamentalInputs) -> FundamentalResu
         "securities_with_split_event": int(events.any(axis=0).sum()),
     }
     return FundamentalResult(values=values, reasons=reasons, split_blanked=blanked, share_tag=share_tag,
-                             reaction_source_event=source, report=report)
+                             reaction_source_event=source, report=report, market_value=value_mv)
 
 
 def compute_composites(predictors: Mapping[str, FloatArray], eligible: BoolArray) -> dict[str, FloatArray]:

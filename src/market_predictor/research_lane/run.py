@@ -19,8 +19,8 @@ import numpy.typing as npt
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
-from market_predictor.process_memory import process_memory_snapshot
-from market_predictor.research_lane import benchmark_tilt, fundamentals, reversal
+from market_predictor.process_memory import process_memory_snapshot, release_unused_process_memory
+from market_predictor.research_lane import benchmark_tilt, free_backfill, fundamentals, reversal, two_stage
 from market_predictor.research_lane.barrier_labels import (
     BARRIER_HORIZON_SESSIONS,
     DEFAULT_STOP_MULTIPLE,
@@ -121,6 +121,7 @@ TECHNICAL_COMMAND = "score-technical-models"
 REVERSAL_COMMAND = "score-short-reversal"
 SWING_SETUPS_COMMAND = "score-swing-setups"
 BENCHMARK_TILT_COMMAND = "score-benchmark-tilt"
+TWO_STAGE_COMMAND = "score-two-stage-models"
 OUTPUT_PARENT = Path("data/research/research_lane")
 LABEL_NOTICE = ("research label, adjusted prices, development history {first} to {end}, "
                 "not proof of outperformance")
@@ -1334,5 +1335,308 @@ def score_benchmark_tilt(
         "output": identity.relative_to(root).as_posix(),
         "inputs": input_sha256,
         "reading_summary": evaluation["reading_summary"],
+        "process_memory_after_scoring": document["process_memory_after_scoring"],
+    }
+
+
+def _render_two_stage_markdown(document: Mapping[str, Any]) -> str:
+    settings = document["settings"]
+    ts = document["two_stage"]
+    notice = document["notice"]
+    horizons = [str(h) for h in settings["horizons_sessions"]]
+    years = ["2020", "2021", "2022", "2023", "2024"]
+
+    lines = [
+        "# Recommendation Brief §5-§6 Steps 2-4: Combined Stage-1 & Stage-2 News Residual Scoreboard",
+        "",
+        f"Every figure below: {notice}.",
+        "",
+        "## Method & boundaries",
+        "",
+        f"- **Stage-1 base history:** warm-up daily bars from `2016-01-04`; point-in-time S&P 500 eligible decisions "
+        f"from `{settings['stage1_first_decision_session']}` to `{settings['development_end']}` (out-of-sample walk-forward "
+        "scored across `2020..2024`, purged so `t + h < fold.test_start`).",
+        "- **Stage-1 inputs (`48` features, zero duplicate missingness indicators):** `24` pre-signed cross-sectional "
+        "centered ranks (`12` Step-1 price + `12` Step-2a SEC earnings/surprise/valuation/quality) + `24` sector-neutral "
+        "centered ranks.",
+        "- **Stage-2 news-reaction residual model (`2019-07-09..end`, OOS `2021..2024`):** continuous per-category "
+        "market-adjusted 1d reaction, 20d abnormal volume, recency, and 5d/60d unusual article volume fitted strictly "
+        "on out-of-sample Stage-1 residuals.",
+        "",
+        "## Section A: Stage-1 models — Later-date OOS, Unseen-issuer CV, Buffered Skill & Cap-Tilt Product",
+        "",
+        "| Model | H | Later-date IC [NW t] | Unseen-issuer IC [NW t] | Sector-neutral [t] | "
+        + " | ".join(years)
+        + " | Pos yrs | Skill hold33 net 20bps/yr [t] | Cap-tilt vs SPY/yr [t] |",
+        "|---|---|---|---|---|" + "---|" * len(years) + "---|---|---|",
+    ]
+    for model_name, h_map in ts["stage1_models"].items():
+        for h in horizons:
+            entry = h_map[h]
+            sc = entry["score"]
+            rc = sc["rank_correlation"]
+            sn = sc["sector_neutral_rank_correlation"]
+            u_rc = entry["unseen_issuer_rank_correlation"]
+            u_txt = "n/a" if u_rc is None else f"{_number(u_rc['mean'])} [{_number(u_rc['t'], 2)}]"
+            by_yr = sc["rank_correlation_by_year"]
+            yr_cells = [_number(by_yr.get(y, {}).get("mean")) for y in years]
+            pos_yrs = sum(1 for v in by_yr.values() if v["mean"] > 0)
+            sk = entry["skill_buffered_hold33"]["vs_matched_benchmark"]
+            pr = entry["product_sector_active_slice"]["vs_spy"]
+            lines.append(
+                f"| {model_name} | {h} | {_number(rc['mean'])} [{_number(rc['t'], 2)}] | {u_txt} | "
+                f"{_number(sn['mean'])} [{_number(sn['t'], 2)}] | "
+                + " | ".join(yr_cells)
+                + f" | {pos_yrs}/{sc['years_scored']} | "
+                f"{_percent(sk['net_excess_20bps_annualized'])} [{_number(sk['newey_west_20bps']['t'], 2)}] | "
+                f"{_percent(pr['net_excess_20bps_annualized'])} [{_number(pr['newey_west_20bps']['t'], 2)}] |"
+            )
+
+    lines += [
+        "",
+        "## Section B: Stage-2 news-reaction residual models — Paired daily IC improvement (OOS 2021..2024)",
+        "",
+        "| Specification | H | Combined IC [NW t] | Paired delta IC [NW t] | Pos delta yrs | Passes paired gate (t >= 2.0) |",
+        "|---|---|---|---|---|---|",
+    ]
+    for spec_key, h_map in ts["stage2_news_models"].items():
+        for h in horizons:
+            entry = h_map[h]
+            rc = entry["score"]["rank_correlation"]
+            pi = entry["paired_ic_improvement"]
+            lines.append(
+                f"| {spec_key} | {h} | {_number(rc['mean'])} [{_number(rc['t'], 2)}] | "
+                f"{_number(pi['mean'])} [{_number(pi['t'], 2)}] | {pi['positive_years']}/{pi['years_scored']} | "
+                f"{'yes' if pi['passes_paired_news_gate'] else 'no'} |"
+            )
+
+    lines += [
+        "",
+        "## Section C: Top 12 Stage-1 features at 21 sessions",
+        "",
+    ]
+    for model_name in ("ridge_rank", "xgb_shallow_5seed"):
+        if model_name in ts["stage1_models"] and "21" in ts["stage1_models"][model_name]:
+            feats = ts["stage1_models"][model_name]["21"]["top_features"]
+            lines.append(f"- **{model_name}:** " + ", ".join(f"{f['feature']} {f['importance']:.4g}" for f in feats))
+
+    acc = ts["acceptance_summary"]
+    lines += [
+        "",
+        "## Section D: §5.6 Pre-registered acceptance rule (21-session primary horizon)",
+        "",
+        acc["rule"],
+        "",
+        "| Candidate | 21d IC [NW t] | Pos yrs share | Unseen-issuer 21d IC | "
+        "Buffered skill net 20bps/21d | Beats/is baseline | Passes §5.6 |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for c_name, c_val in acc["candidates"].items():
+        lines.append(
+            f"| {c_name} | {_number(c_val['mean_ic_21d'])} [{_number(c_val['newey_west_t_21d'], 2)}] | "
+            f"{_percent(c_val['share_of_years_positive_21d'])} | {_number(c_val['unseen_issuer_ic_21d'])} | "
+            f"{_percent(c_val['buffered_skill_net_20bps_per_21d'])} | "
+            f"{'yes' if c_val['beats_or_is_equal_rank_24'] else 'no'} | "
+            f"{'yes' if c_val['passes_section_5_6'] else 'no'} |"
+        )
+    lines += [
+        "",
+        f"- Passing Stage-1 base models: `{acc['passing_models']}`.",
+        f"- Accepted Stage-2 news overlays (`paired t >= 2.0`): `{acc['accepted_stage2_news_overlays']}`.",
+        (
+            "Verdict: **earns one sealed-period test**."
+            if acc["earns_sealed_period_test"]
+            else "Verdict: **no candidate passed §5.6**."
+        ),
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def score_two_stage_models(
+    *,
+    root: Path,
+    output: Path | None = None,
+    development_end: date,
+    data_root: Path | None = None,
+    panel: Path = PANEL_DIRECTORY,
+    backfill_dir: Path = free_backfill.BACKFILL_DIRECTORY,
+    early_news_dir: Path = EARLY_NEWS_FAMILY_DIR,
+    later_news_dir: Path = LATER_NEWS_FAMILY_DIR,
+    horizons: tuple[int, ...] = HORIZONS,
+    unseal_final_test_period: bool = False,
+) -> dict[str, Any]:
+    """Run Recommendation Brief §6 Steps 2-3 (Stage-1 combined base + Stage-2 news residual) on extended S&P 500."""
+    check_development_end(development_end, unseal_final_test_period=unseal_final_test_period)
+    paths = EvidencePaths(root, data_root)
+    root = paths.project_root
+    output = output or default_output(prefix="two_stage_models")
+    identity = paths.identity(output)
+    runtime = heavy_job_runtime_dir()
+
+    with heavy_job_lease(TWO_STAGE_COMMAND, runtime_dir=runtime if runtime.is_absolute() else root / runtime):
+        guard("two-stage preparation")
+        destination = paths.write(identity)
+        if destination.exists():
+            raise FileExistsError(f"research lane output already exists: {destination}")
+
+        ext = free_backfill.load_extended_sp500_data(
+            paths,
+            development_end=development_end,
+            panel_rel=panel,
+            backfill_rel=backfill_dir,
+            unseal_final_test_period=unseal_final_test_period,
+        )
+        guard("two-stage extended panel loaded")
+
+        first_row = int(
+            np.searchsorted(ext.panel.sessions, np.datetime64(free_backfill.EARLY_DECISION_START, "D"), side="left")
+        )
+        facts_counts: Counter[str] = Counter()
+        issuers_loaded = 0
+        facts_paths = ext.company_facts_paths
+
+        def _load_fact(cik: str) -> IssuerFacts | None:
+            nonlocal issuers_loaded
+            p = facts_paths.get(cik)
+            if p is None or not p.is_file():
+                return None
+            facts, cnt = read_company_facts(p, development_end)
+            facts_counts.update(cnt)
+            issuers_loaded += 1
+            if issuers_loaded % 30 == 0:
+                guard("two-stage company facts")
+            return facts
+
+        fund_inputs = fundamentals.FundamentalInputs(
+            panel=ext.panel,
+            unadjusted_close=ext.unadjusted_close,
+            releases=ext.releases,
+            security_issuer=ext.security_cik_map,
+            load_issuer=_load_fact,
+        )
+        bundle = two_stage.build_stage1_features(ext.panel, fund_inputs)
+        ext_panel = ext.panel
+        sec_cik_map = ext.security_cik_map
+        ext_sha = dict(ext.input_sha256)
+        ext_rep = dict(ext.report)
+        del fund_inputs, ext
+        release_unused_process_memory()
+        guard("two-stage stage1 features computed")
+
+        news_feats, news_sha, news_rep = two_stage.load_news_reaction_features(
+            ext_panel,
+            panel_root=paths.directory(panel),
+            early_news_dir=paths.directory(early_news_dir),
+            later_news_dir=paths.directory(later_news_dir),
+            unseal_final_test_period=unseal_final_test_period,
+        )
+        release_unused_process_memory()
+        guard("two-stage news features computed")
+
+        stage1_merged: dict[str, dict[str, Any]] = {}
+        stage2_merged: dict[str, dict[str, Any]] = {}
+        acceptance_merged: dict[str, Any] = {
+            "rule": two_stage.SECTION_5_6_ACCEPTANCE_RULE,
+            "candidates": {},
+            "passing_models": [],
+            "accepted_stage2_news_overlays": [],
+            "earns_sealed_period_test": False,
+        }
+        for h in horizons:
+            s1_h = two_stage.run_stage1_walk_forward(
+                ext_panel, bundle, sec_cik_map, first_row=first_row, horizons=(h,), checkpoint=guard,
+            )
+            s2_h = two_stage.run_stage2_news_residuals(
+                ext_panel, s1_h, news_feats, horizons=(h,), checkpoint=guard,
+            )
+            ev_h = two_stage.evaluate_two_stage_scoreboard(
+                ext_panel, bundle, s1_h, s2_h, horizons=(h,),
+            )
+            for m_name, h_dict in ev_h["stage1_models"].items():
+                stage1_merged.setdefault(m_name, {}).update(h_dict)
+            for sp_key, h_dict in ev_h["stage2_news_models"].items():
+                stage2_merged.setdefault(sp_key, {}).update(h_dict)
+            if h == two_stage.PRIMARY_HORIZON:
+                acceptance_merged["candidates"] = ev_h["acceptance_summary"]["candidates"]
+                acceptance_merged["passing_models"] = ev_h["acceptance_summary"]["passing_models"]
+                acceptance_merged["earns_sealed_period_test"] = ev_h["acceptance_summary"]["earns_sealed_period_test"]
+            acceptance_merged["accepted_stage2_news_overlays"].extend(
+                ev_h["acceptance_summary"]["accepted_stage2_news_overlays"]
+            )
+            del s1_h, s2_h, ev_h
+            release_unused_process_memory()
+            guard(f"two-stage horizon {h} completed")
+
+        del news_feats
+        release_unused_process_memory()
+        evaluation: dict[str, Any] = {
+            "stage1_models": stage1_merged,
+            "stage2_news_models": stage2_merged,
+            "acceptance_summary": acceptance_merged,
+        }
+
+        input_sha256 = {**ext_sha, **news_sha}
+        settings: dict[str, Any] = {
+            "development_end": development_end.isoformat(),
+            "unseal_final_test_period": unseal_final_test_period,
+            "stage1_first_decision_session": str(ext_panel.sessions[first_row]),
+            "stage2_news_start_date": two_stage.NEWS_START_DATE.isoformat(),
+            "horizons_sessions": list(horizons),
+            "primary_horizon_sessions": two_stage.PRIMARY_HORIZON,
+            "secondary_horizon_sessions": two_stage.SECONDARY_HORIZON,
+            "stage1_feature_count": len(bundle.feature_names),
+            "stage2_news_feature_count": len(two_stage.NEWS_FEATURE_NAMES),
+            "sample_every_sessions": SAMPLE_EVERY_SESSIONS,
+            "ridge_alpha": RIDGE_ALPHA,
+            "stage1_xgb_params": dict(two_stage.STAGE1_XGB_PARAMS),
+            "stage1_seeds": list(two_stage.STAGE1_SEEDS),
+            "stage2_xgb_params": dict(two_stage.STAGE2_XGB_PARAMS),
+            "stage2_seeds": list(two_stage.STAGE2_XGB_SEEDS),
+            "unseen_issuer_folds": two_stage.UNSEEN_ISSUER_FOLDS,
+            "label": "research label on provider split- and dividend-adjusted SIP daily bars",
+        }
+        document = _json_safe({
+            "notice": LABEL_NOTICE.format(
+                first=settings["stage1_first_decision_session"], end=settings["development_end"],
+            ),
+            "settings": settings,
+            "inputs": input_sha256,
+            "extended_data_report": {
+                **ext_rep,
+                "company_facts_issuers_loaded": issuers_loaded,
+                "company_facts_rows_kept": dict(sorted(facts_counts.items())),
+            },
+            "stage1_coverage": bundle.coverage_report,
+            "stage2_news_report": news_rep,
+            "two_stage": evaluation,
+            "process_memory_after_scoring": _process_memory_gib(),
+        })
+
+        staging = destination.with_name(f".{destination.name}.{uuid4().hex}.partial")
+        staging.mkdir(parents=True)
+        try:
+            (staging / "scoreboard.json").write_text(
+                json.dumps(document, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8",
+            )
+            (staging / "scoreboard.md").write_text(_render_two_stage_markdown(document), encoding="utf-8")
+            os.replace(staging, destination)
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging)
+
+        append_trial(
+            destination.parent / TRIAL_LOG_NAME,
+            root=root,
+            command=TWO_STAGE_COMMAND,
+            output=identity.relative_to(root),
+            input_sha256=input_sha256,
+            settings=settings,
+            scoreboard=document,
+        )
+    return {
+        "output": identity.relative_to(root).as_posix(),
+        "inputs": input_sha256,
+        "acceptance_summary": evaluation["acceptance_summary"],
         "process_memory_after_scoring": document["process_memory_after_scoring"],
     }

@@ -50,6 +50,8 @@ def headline(scoreboard: dict[str, Any]) -> dict[str, Any]:
         result["swing_setups_summary"] = scoreboard["swing_setups"]["reading_summary"]
     if "benchmark_tilt" in scoreboard:
         result["benchmark_tilt_summary"] = scoreboard["benchmark_tilt"]["reading_summary"]
+    if "two_stage" in scoreboard:
+        result["two_stage_summary"] = scoreboard["two_stage"]["acceptance_summary"]
     return result
 
 

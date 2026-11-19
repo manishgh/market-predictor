@@ -194,6 +194,23 @@ earlier history or a wider stock set in the research lane needs a further user
 decision once the probe result is known; section 3.10 is unchanged for every
 governed model.
 
+User amendment (November 19, after commit `5326b51` closing steps 1–4): the user
+approved executing section 6 Steps 1–4 of
+`docs/research_briefs/benchmark_outperformance_recommendations_20261115.md` in the
+research lane at zero extra monetary spend (decision 8 rejected: no paid vendor
+datasets), specifically approving decisions 3, 4, 5, 6 and 7 for research-lane work:
+- rank target with 21 sessions primary and 10 sessions kept as scored secondary;
+- earlier history before 2019-07-09 (using free SEC EDGAR `companyfacts`/submissions
+  and existing Alpaca SIP daily bars back to 2016-01-04) for the Stage-1 base model
+  that uses no news, while news-dependent Stage-2 inputs retain the 2019-07-09 start;
+- completing missing S&P 500 SEC `company_facts` and building a survivorship-checked
+  SEC-EDGAR CIK roster for wider liquid US mid/small caps using free SEC + Alpaca data;
+- evaluating both buffered skill and benchmark-tilt product reports under section 5.6's
+  acceptance rule (including unseen-stock cross-validation and paired Stage-2 news test),
+  plus recording daily forward predictions without reading historical bars, filings,
+  news or outcomes dated `>= 2024-05-29` until one candidate passes and is frozen.
+Section 3.10 remains unchanged for governed promotion until explicitly migrated.
+
 ## 2. Source-Of-Truth Order
 
 When instructions disagree, use this order:
