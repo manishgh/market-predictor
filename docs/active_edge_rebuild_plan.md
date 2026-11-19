@@ -2,11 +2,70 @@
 
 ### Research lane step 5b: zero-cost ($0) survivorship-checked wider US mid/small-cap universe (2016–2024) & two-stage evaluation — November 19
 
-Status: `in_progress`. Follows immediately after step 5a under the November 19 user
-instruction (`$0` extra spend: free SEC EDGAR + existing Alpaca SIP only; no paid vendor
-datasets; sealed period `2024-05-29..2026-07-08` untouched).
+Status: `complete`. Measured November 19. Expanding beyond S&P 500 to the `$0`
+survivorship-checked wider US common-stock universe monotonically increased cross-sectional
+rank correlation from `-0.0005` (`NW t = -0.03`) on S&P 500 to `+0.0253` (`NW t = 1.25`,
+`5/6` positive years) on `all_top1200` and **`+0.0386` (`NW t = 1.83`, `5/6` positive
+years; `+0.0656` `[NW t = 1.91]` at `63` sessions) on `mid_small_ex_sp500`**, clearing
+§5.6's `IC >= 0.030`, `>= 70%` positive-years, and `>= 50%` unseen-issuer retention gates,
+but staying below §5.6's `NW t >= 3.0` and `21d` net `20 bps` buffered skill (`-0.06%/21d`,
+`-0.77%/yr`) gates (`earns_sealed_period_test = false`). No row in `2024-05-29..2026-07-08`
+was requested or read, and no step is in progress.
 
-Bounded problem & frozen scope for step 5b:
+Real runs:
+- Wider universe collection (`collect-research-lane-wider-universe`):
+  `data/research/research_lane/wider_us_universe` (`3,500` active and delisted/bankrupt/acquired
+  US XBRL issuers screened across `CY2016Q2I..CY2024Q1I` with `Assets >= $600M` and
+  `Shares >= 5M`; `3,493` ticker-reuse-quarantined `(cik, ticker)` spans; `2,253` liquid
+  US common-stock CIKs selected = `556` S&P 500 + `1,697` mid/small caps; `2,253/2,253` =
+  `100%` SEC `company_facts.json` coverage, `0` 404s; `2,253/2,253` unadjusted daily closes;
+  `159,528` SEC `8-K` events including `51,908` Item `2.02` earnings releases).
+- Broad Top-1,200 evaluation (`score-wider-two-stage-models --subset all_top1200`):
+  `data/research/research_lane/wider_two_stage_all_top1200_20261119T182045Z`
+  (`scoreboard.json`, `scoreboard.md`; research label on adjusted prices; `2,253`
+  securities, `1,200.0` mean eligible stocks/session, `1,812,000` eligible cells across
+  `2018-05-29..2024-05-28`; peak working set `2.51 GiB`; trial log line `9`).
+- Mid/Small-Cap Ex-S&P-500 evaluation (`score-wider-two-stage-models --subset mid_small_ex_sp500`):
+  `data/research/research_lane/wider_two_stage_mid_small_ex_sp500_20261119T202946Z`
+  (`scoreboard.json`, `scoreboard.md`; research label on adjusted prices; `1,559` active
+  non-S&P-500 securities after inactive-column pruning, `747.2` mean eligible stocks/session,
+  `1,128,288` eligible cells across `2018-05-29..2024-05-28`; peak working set `1.80 GiB`;
+  trial log line `10`).
+
+Measured findings (research labels on adjusted prices):
+- **Monotonic cross-sectional IC expansion across market-cap tiers (`equal_rank_24`, OOS `2020..2024`):**
+  - `S&P 500` (`~485` mega/large caps): `5d +0.0044 [0.42]`, `10d +0.0011 [0.07]`,
+    `21d -0.0005 [-0.03]`, `63d +0.0019 [0.07]`.
+  - `all_top1200` (`1,200` liquid US stocks/day): `5d +0.0176 [1.77]`, `10d +0.0193 [1.37]`,
+    `21d +0.0253 [1.25]` (`5/6` positive years), `63d +0.0456 [1.41]` (`+0.36%/yr` net `20 bps` skill).
+  - `mid_small_ex_sp500` (`747.2` liquid mid/small caps/day): **`5d +0.0240 [NW t = 2.38]`**
+    (sector-neutral `+0.0182 [t = 2.13]`, `+0.14%/yr` net `20 bps` buffered skill),
+    **`10d +0.0288 [NW t = 2.00]`**, **`21d +0.0386 [NW t = 1.83]`** (`2021: +0.1100`,
+    `2022: +0.0782`, `2023: +0.0318`, `2024: +0.1394`, `2020: -0.0714`; `5/6` positive
+    years), and **`63d +0.0656 [NW t = 1.91]`** (`+2.62%/yr` net `20 bps` buffered skill).
+- **Why zero-fit `equal_rank_24` beat fitted `ridge_rank` and `xgb_shallow_5seed` on Stage-1:**
+  `2020`'s COVID lockdown and unprofitable-stock rally inverted quality/value factors
+  (`-0.0714` at `21d`), causing linear/tree learners fitted on `2018..2020` to down-weight
+  quality and valuation entering `2021–2022` (missing `+0.1100` and `+0.0782`), whereas
+  `xgb_shallow_5seed` retained `88%` of its later-date IC on unseen issuers (`+0.0082` vs
+  `+0.0093`) and achieved `5d` IC `+0.0126 [NW t = 1.63]` (`5/6` positive years).
+- **Why Stage-2 Alpaca news beat Stage-2 raw SEC 8-K item codes:** on S&P 500 (where
+  classified `direct_issuer` Alpaca news exists), `equal_rank_24+news_xgboost` achieved
+  paired `NW t = 2.26` (`5d`) and `2.36` (`10d`), whereas on the wider universe (where
+  retained Alpaca news covers S&P 500 only and mid/small caps rely on raw `8-K` item numbers
+  without headline polarity), Stage-2 paired delta IC stayed near zero (`NW t = -1.75..+1.88`).
+- **Why mid/small-cap cap-tilts trailed `SPY` (`2019–2024`):** passive equal-weight
+  mid/small caps compounded `+80.94%` vs `+130.57%` for mega-cap-heavy `SPY` (`-49.6%`
+  asset-class size headwind); within mid/small caps, `equal_rank_24` `skill_buffered_hold33`
+  beat its matched mid/small-cap benchmark net of `20 bps` in **all 4 post-COVID years
+  (`2021`, `2022`, `2023`, `2024`)**, losing only in `2019–2020`.
+
+Verification (component tier): `126` tests pass across `14` suites (`11` in
+`tests/test_cli_surfaces.py` + `115` across `13` `tests/test_research_lane_*.py` suites
+including `4` new in `tests/test_research_lane_wider_universe.py`); Ruff (`0` errors) and
+strict `mypy` (`0` issues in `24` source files) pass.
+
+Bounded problem & frozen scope recorded before the step 5b run:
 1. **Survivorship-checked SEC-EDGAR + Alpaca US common-stock roster (`wider_universe.py`):**
    - Enumerate active and later-delisted US domestic XBRL issuers across `2016–2024`
      using SEC EDGAR quarterly XBRL frames (`dei/EntityCommonStockSharesOutstanding` for

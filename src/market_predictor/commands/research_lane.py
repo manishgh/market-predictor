@@ -22,8 +22,14 @@ from market_predictor.research_lane.run import (
     score_swing_setups,
     score_technical_models,
     score_two_stage_models,
+    score_wider_two_stage_models,
 )
 from market_predictor.research_lane.setups import VolatilityMode
+from market_predictor.research_lane.wider_universe import (
+    WIDER_UNIVERSE_DIRECTORY,
+    UniverseSubset,
+    collect_wider_us_universe,
+)
 
 
 def _invoke(function: Callable[..., dict[str, Any]], **arguments: Any) -> None:
@@ -184,3 +190,33 @@ def register_research_lane_commands(app: typer.Typer) -> None:
         """Publish one append-only dated forward research score snapshot without reading future outcomes."""
         _invoke(record_forward_scores, root=root, as_of_date=as_of_date.date(), data_root=data_root,
                 panel=panel, live_prospective=live_prospective, unseal_final_test_period=unseal_final_test_period)
+
+    @app.command("collect-research-lane-wider-universe")
+    def collect_wider(
+        root: Path = typer.Option(...),
+        data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
+        development_end: datetime = typer.Option(DEFAULT_DEVELOPMENT_END.isoformat(), formats=["%Y-%m-%d"]),
+        panel: Path = typer.Option(PANEL_DIRECTORY),
+        sp500_backfill: Path = typer.Option(BACKFILL_DIRECTORY),
+        output: Path = typer.Option(WIDER_UNIVERSE_DIRECTORY),
+    ) -> None:
+        """Resumably collect the $0 survivorship-checked wider US common-stock universe (<= development_end)."""
+        _invoke(collect_wider_us_universe, root=root, development_end=development_end.date(),
+                data_root=data_root, panel=panel, sp500_backfill=sp500_backfill, output=output)
+
+    @app.command("score-wider-two-stage-models")
+    def score_wider_two_stage(
+        root: Path = typer.Option(...),
+        data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
+        development_end: datetime = typer.Option(DEFAULT_DEVELOPMENT_END.isoformat(), formats=["%Y-%m-%d"]),
+        subset: UniverseSubset = typer.Option("all_top1200", help="all_top1200 or mid_small_ex_sp500."),
+        output: Path | None = typer.Option(None),
+        panel: Path = typer.Option(PANEL_DIRECTORY),
+        sp500_backfill_dir: Path = typer.Option(BACKFILL_DIRECTORY),
+        wider_dir: Path = typer.Option(WIDER_UNIVERSE_DIRECTORY),
+        unseal_final_test_period: bool = typer.Option(False),
+    ) -> None:
+        """Score Stage-1 combined base and Stage-2 catalyst residual models on the wider US universe."""
+        _invoke(score_wider_two_stage_models, root=root, output=output, development_end=development_end.date(),
+                subset=subset, data_root=data_root, panel=panel, sp500_backfill_dir=sp500_backfill_dir,
+                wider_dir=wider_dir, unseal_final_test_period=unseal_final_test_period)

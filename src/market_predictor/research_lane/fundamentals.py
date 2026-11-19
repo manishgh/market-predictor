@@ -288,6 +288,8 @@ def compute_fundamental_predictors(inputs: FundamentalInputs) -> FundamentalResu
             values[name] = np.where(reasons[name] == PRESENT, values[name], np.nan)
             reasons[name] = np.where((reasons[name] == PRESENT) & ~np.isfinite(values[name]), INCOMPLETE_HISTORY,
                                      reasons[name]).astype(np.int8)
+    del components, component_reasons, c, r, share_as_of, reason_mv
+    gc.collect()
     report = {
         "earnings_releases": release_report,
         "issuers_mapped": len(issuers),

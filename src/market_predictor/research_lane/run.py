@@ -20,7 +20,14 @@ from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.process_memory import process_memory_snapshot, release_unused_process_memory
-from market_predictor.research_lane import benchmark_tilt, free_backfill, fundamentals, reversal, two_stage
+from market_predictor.research_lane import (
+    benchmark_tilt,
+    free_backfill,
+    fundamentals,
+    reversal,
+    two_stage,
+    wider_universe,
+)
 from market_predictor.research_lane.barrier_labels import (
     BARRIER_HORIZON_SESSIONS,
     DEFAULT_STOP_MULTIPLE,
@@ -122,6 +129,7 @@ REVERSAL_COMMAND = "score-short-reversal"
 SWING_SETUPS_COMMAND = "score-swing-setups"
 BENCHMARK_TILT_COMMAND = "score-benchmark-tilt"
 TWO_STAGE_COMMAND = "score-two-stage-models"
+WIDER_TWO_STAGE_COMMAND = "score-wider-two-stage-models"
 OUTPUT_PARENT = Path("data/research/research_lane")
 LABEL_NOTICE = ("research label, adjusted prices, development history {first} to {end}, "
                 "not proof of outperformance")
@@ -1637,6 +1645,207 @@ def score_two_stage_models(
     return {
         "output": identity.relative_to(root).as_posix(),
         "inputs": input_sha256,
+        "acceptance_summary": evaluation["acceptance_summary"],
+        "process_memory_after_scoring": document["process_memory_after_scoring"],
+    }
+
+
+def score_wider_two_stage_models(
+    *,
+    root: Path,
+    output: Path | None = None,
+    development_end: date,
+    subset: wider_universe.UniverseSubset = "all_top1200",
+    data_root: Path | None = None,
+    panel: Path = PANEL_DIRECTORY,
+    sp500_backfill_dir: Path = free_backfill.BACKFILL_DIRECTORY,
+    wider_dir: Path = wider_universe.WIDER_UNIVERSE_DIRECTORY,
+    early_news_dir: Path = EARLY_NEWS_FAMILY_DIR,
+    later_news_dir: Path = LATER_NEWS_FAMILY_DIR,
+    horizons: tuple[int, ...] = HORIZONS,
+    unseal_final_test_period: bool = False,
+) -> dict[str, Any]:
+    """Run Step 5b Stage-1 combined base + Stage-2 catalyst residual models on the $0 wider US universe."""
+    check_development_end(development_end, unseal_final_test_period=unseal_final_test_period)
+    paths = EvidencePaths(root, data_root)
+    root = paths.project_root
+    output = output or default_output(prefix=f"wider_two_stage_{subset}")
+    identity = paths.identity(output)
+    runtime = heavy_job_runtime_dir()
+
+    with heavy_job_lease(WIDER_TWO_STAGE_COMMAND, runtime_dir=runtime if runtime.is_absolute() else root / runtime):
+        guard("wider two-stage preparation")
+        destination = paths.write(identity)
+        if destination.exists():
+            raise FileExistsError(f"research lane output already exists: {destination}")
+
+        wdata = wider_universe.load_wider_universe_data(
+            paths,
+            development_end=development_end,
+            subset=subset,
+            panel_rel=panel,
+            sp500_backfill_rel=sp500_backfill_dir,
+            wider_rel=wider_dir,
+            unseal_final_test_period=unseal_final_test_period,
+        )
+        guard("wider universe panel loaded")
+
+        first_row = int(
+            np.searchsorted(wdata.panel.sessions, np.datetime64(free_backfill.EARLY_DECISION_START, "D"), side="left")
+        )
+        facts_counts: Counter[str] = Counter()
+        issuers_loaded = 0
+        facts_paths = wdata.company_facts_paths
+
+        def _load_fact(cik: str) -> IssuerFacts | None:
+            nonlocal issuers_loaded
+            p = facts_paths.get(cik)
+            if p is None or not p.is_file():
+                return None
+            facts, cnt = read_company_facts(p, development_end)
+            facts_counts.update(cnt)
+            issuers_loaded += 1
+            if issuers_loaded % 40 == 0:
+                guard("wider two-stage company facts")
+            return facts
+
+        fund_inputs = fundamentals.FundamentalInputs(
+            panel=wdata.panel,
+            unadjusted_close=wdata.unadjusted_close,
+            releases=wdata.releases_202,
+            security_issuer=wdata.security_cik_map,
+            load_issuer=_load_fact,
+        )
+        bundle = two_stage.build_stage1_features(wdata.panel, fund_inputs)
+        w_panel = wdata.panel
+        sec_cik_map = wdata.security_cik_map
+        all_8k_events = wdata.all_8k_events
+        w_sha = dict(wdata.input_sha256)
+        w_rep = dict(wdata.report)
+        del fund_inputs, wdata
+        release_unused_process_memory()
+        guard("wider two-stage stage1 features computed")
+
+        cat_feats, cat_rep = wider_universe.build_wider_catalyst_reaction_features(
+            w_panel,
+            all_8k_events,
+            early_news_dir=paths.directory(early_news_dir),
+            later_news_dir=paths.directory(later_news_dir),
+            unseal_final_test_period=unseal_final_test_period,
+        )
+        del all_8k_events
+        release_unused_process_memory()
+        guard("wider two-stage catalyst features computed")
+
+        stage1_merged: dict[str, dict[str, Any]] = {}
+        stage2_merged: dict[str, dict[str, Any]] = {}
+        acceptance_merged: dict[str, Any] = {
+            "rule": two_stage.SECTION_5_6_ACCEPTANCE_RULE,
+            "candidates": {},
+            "passing_models": [],
+            "accepted_stage2_news_overlays": [],
+            "earns_sealed_period_test": False,
+        }
+        for h in horizons:
+            s1_h = two_stage.run_stage1_walk_forward(
+                w_panel, bundle, sec_cik_map, first_row=first_row, horizons=(h,), checkpoint=guard,
+            )
+            s2_h = two_stage.run_stage2_news_residuals(
+                w_panel,
+                s1_h,
+                cat_feats,
+                horizons=(h,),
+                feature_names=wider_universe.WIDER_STAGE2_FEATURE_NAMES,
+                checkpoint=guard,
+            )
+            ev_h = two_stage.evaluate_two_stage_scoreboard(
+                w_panel, bundle, s1_h, s2_h, horizons=(h,),
+            )
+            for m_name, h_dict in ev_h["stage1_models"].items():
+                stage1_merged.setdefault(m_name, {}).update(h_dict)
+            for sp_key, h_dict in ev_h["stage2_news_models"].items():
+                stage2_merged.setdefault(sp_key, {}).update(h_dict)
+            if h == two_stage.PRIMARY_HORIZON:
+                acceptance_merged["candidates"] = ev_h["acceptance_summary"]["candidates"]
+                acceptance_merged["passing_models"] = ev_h["acceptance_summary"]["passing_models"]
+                acceptance_merged["earns_sealed_period_test"] = ev_h["acceptance_summary"]["earns_sealed_period_test"]
+            acceptance_merged["accepted_stage2_news_overlays"].extend(
+                ev_h["acceptance_summary"]["accepted_stage2_news_overlays"]
+            )
+            del s1_h, s2_h, ev_h
+            release_unused_process_memory()
+            guard(f"wider two-stage horizon {h} completed")
+
+        del cat_feats
+        release_unused_process_memory()
+        evaluation: dict[str, Any] = {
+            "stage1_models": stage1_merged,
+            "stage2_news_models": stage2_merged,
+            "acceptance_summary": acceptance_merged,
+        }
+
+        settings: dict[str, Any] = {
+            "universe_subset": subset,
+            "development_end": development_end.isoformat(),
+            "unseal_final_test_period": unseal_final_test_period,
+            "stage1_first_decision_session": str(w_panel.sessions[first_row]),
+            "stage2_news_start_date": two_stage.NEWS_START_DATE.isoformat(),
+            "horizons_sessions": list(horizons),
+            "primary_horizon_sessions": two_stage.PRIMARY_HORIZON,
+            "secondary_horizon_sessions": two_stage.SECONDARY_HORIZON,
+            "stage1_feature_count": len(bundle.feature_names),
+            "stage2_catalyst_feature_count": len(wider_universe.WIDER_STAGE2_FEATURE_NAMES),
+            "sample_every_sessions": SAMPLE_EVERY_SESSIONS,
+            "ridge_alpha": RIDGE_ALPHA,
+            "stage1_xgb_params": dict(two_stage.STAGE1_XGB_PARAMS),
+            "stage1_seeds": list(two_stage.STAGE1_SEEDS),
+            "stage2_xgb_params": dict(two_stage.STAGE2_XGB_PARAMS),
+            "stage2_seeds": list(two_stage.STAGE2_XGB_SEEDS),
+            "unseen_issuer_folds": two_stage.UNSEEN_ISSUER_FOLDS,
+            "label": "research label on provider split- and dividend-adjusted SIP daily bars",
+        }
+        document = _json_safe({
+            "notice": LABEL_NOTICE.format(
+                first=settings["stage1_first_decision_session"], end=settings["development_end"],
+            ),
+            "settings": settings,
+            "inputs": w_sha,
+            "extended_data_report": {
+                **w_rep,
+                "company_facts_issuers_loaded": issuers_loaded,
+                "company_facts_rows_kept": dict(sorted(facts_counts.items())),
+            },
+            "stage1_coverage": bundle.coverage_report,
+            "stage2_news_report": cat_rep,
+            "two_stage": evaluation,
+            "process_memory_after_scoring": _process_memory_gib(),
+        })
+
+        staging = destination.with_name(f".{destination.name}.{uuid4().hex}.partial")
+        staging.mkdir(parents=True)
+        try:
+            (staging / "scoreboard.json").write_text(
+                json.dumps(document, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8",
+            )
+            (staging / "scoreboard.md").write_text(_render_two_stage_markdown(document), encoding="utf-8")
+            os.replace(staging, destination)
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging)
+
+        append_trial(
+            destination.parent / TRIAL_LOG_NAME,
+            root=root,
+            command=WIDER_TWO_STAGE_COMMAND,
+            output=identity.relative_to(root),
+            input_sha256=w_sha,
+            settings=settings,
+            scoreboard=document,
+        )
+    return {
+        "output": identity.relative_to(root).as_posix(),
+        "subset": subset,
+        "inputs": w_sha,
         "acceptance_summary": evaluation["acceptance_summary"],
         "process_memory_after_scoring": document["process_memory_after_scoring"],
     }

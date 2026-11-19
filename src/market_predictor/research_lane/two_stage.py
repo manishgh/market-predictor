@@ -164,20 +164,6 @@ def build_stage1_features(
     fundamental_inputs: fundamentals.FundamentalInputs,
 ) -> Stage1FeatureBundle:
     """Build §5.3's 24 signed base predictors (cross-sectional + sector-neutral ranks) and market value."""
-    price_raw = predictors.compute_predictors(panel)
-    fund_res = fundamentals.compute_fundamental_predictors(fundamental_inputs)
-    mv = fund_res.market_value
-    fund_report = fund_res.report
-
-    signed_names_and_arrays: list[tuple[str, FloatArray]] = []
-    for name in predictors.PREDICTOR_NAMES:
-        signed_names_and_arrays.append((f"px_{name}", predictors.EXPECTED_SIGNS[name] * price_raw.pop(name)))
-    del price_raw
-    for name in fundamentals.PREDICTOR_NAMES:
-        signed_names_and_arrays.append((f"fn_{name}", fundamentals.EXPECTED_SIGNS[name] * fund_res.values.pop(name)))
-    del fund_res
-    gc.collect()
-
     shape = panel.eligible.shape
     present = np.zeros(shape, dtype=np.int32)
     total = np.zeros(shape, dtype=np.float64)
@@ -187,8 +173,8 @@ def build_stage1_features(
     elig_total = max(1, int(panel.eligible.sum()))
     cov: dict[str, float] = {}
 
-    while signed_names_and_arrays:
-        key, arr = signed_names_and_arrays.pop(0)
+    def _consume(key: str, arr: FloatArray) -> None:
+        nonlocal present, total
         cov[key] = float((panel.eligible & np.isfinite(arr)).sum() / elig_total)
         cs = centered_rank(arr, panel.eligible)
         fin = np.isfinite(cs)
@@ -201,7 +187,25 @@ def build_stage1_features(
         sn_key = f"{key}_sector"
         feat_map[sn_key] = _sector_centered_rank(arr, panel.eligible, panel.sector)
         ordered_sn.append(sn_key)
-        del arr
+
+    # Rank and free the 12 price predictors BEFORE computing the 12 fundamental predictors to halve peak RAM.
+    price_raw = predictors.compute_predictors(panel)
+    for name in predictors.PREDICTOR_NAMES:
+        raw_p = predictors.EXPECTED_SIGNS[name] * price_raw.pop(name)
+        _consume(f"px_{name}", raw_p)
+        del raw_p
+    del price_raw
+    gc.collect()
+
+    fund_res = fundamentals.compute_fundamental_predictors(fundamental_inputs)
+    mv = fund_res.market_value
+    fund_report = fund_res.report
+    fund_res.reasons.clear()
+    for name in fundamentals.PREDICTOR_NAMES:
+        raw_f = fundamentals.EXPECTED_SIGNS[name] * fund_res.values.pop(name)
+        _consume(f"fn_{name}", raw_f)
+        del raw_f
+    del fund_res
     gc.collect()
 
     with np.errstate(invalid="ignore", divide="ignore"):
@@ -616,6 +620,7 @@ def run_stage2_news_residuals(
     news_features: Mapping[str, Float32Array],
     *,
     horizons: tuple[int, ...] = HORIZONS,
+    feature_names: tuple[str, ...] = NEWS_FEATURE_NAMES,
     checkpoint: Callable[[str], None] | None = None,
 ) -> dict[int, dict[str, Any]]:
     """Fit Stage-2 residual models (`ridge`, `xgboost`) on `target_rank - stage1_oos_pred` for `2021..2024`."""
@@ -625,7 +630,7 @@ def run_stage2_news_residuals(
     if not news_folds:
         return out_by_horizon
 
-    n_names = NEWS_FEATURE_NAMES
+    n_names = feature_names
     news_scored_start = news_folds[0].test_start
     decision_rows_news = np.arange(len(panel.sessions)) >= news_scored_start
 
@@ -689,7 +694,7 @@ def run_stage2_news_residuals(
                 pairs[f"{base_name}+news_{s2_learner}"] = {
                     "base_model": base_name,
                     "stage2_learner": s2_learner,
-                    "combined_scores": comb_scores,
+                    "combined_scores": comb_scores.astype(np.float32),
                     "news_scored_start": news_scored_start,
                     "paired_ic_improvement": {
                         **nw_delta,
@@ -699,8 +704,12 @@ def run_stage2_news_residuals(
                         "passes_paired_news_gate": accepted_news,
                     },
                 }
+                del comb_scores
+                gc.collect()
                 if checkpoint is not None:
                     checkpoint(f"stage2 {base_name}+{s2_learner} h={horizon}")
+            del residual
+            gc.collect()
 
         out_by_horizon[horizon] = {"folds": news_folds, "specifications": pairs}
 
@@ -789,11 +798,12 @@ def evaluate_two_stage_scoreboard(
             for spec_key, s2_entry in stage2_by_horizon[horizon]["specifications"].items():
                 n_start = int(s2_entry["news_scored_start"])
                 n_mask = np.arange(len(panel.sessions)) >= n_start
-                c_scores: FloatArray = s2_entry["combined_scores"]
+                c_scores = np.asarray(s2_entry["combined_scores"], dtype=np.float64)
                 c_board = score_predictor(
                     c_scores, labels, eligible=panel.eligible, decision_rows=n_mask,
                     sector=panel.sector, years=years, first_row=n_start,
                 )
+                del c_scores
                 stage2_table.setdefault(spec_key, {})[h_key] = {
                     "base_model": s2_entry["base_model"],
                     "stage2_learner": s2_entry["stage2_learner"],

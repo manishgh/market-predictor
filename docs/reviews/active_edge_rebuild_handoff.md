@@ -1,15 +1,27 @@
 # Active Edge Rebuild Handoff
 
-### Research lane step 5a complete; step 5b ($0 wider US mid/small-cap universe) in progress — November 19
+### Research lane steps 5a & 5b ($0 S&P 500 + wider US mid/small-cap two-stage evaluation & forward recorder) — November 19
 
-Current state:
-- **Step 5a (`complete`):** Executed Recommendation Brief §6 Steps 1–4 on extended `2016–2024` S&P 500 history at `$0` extra spend (`free_backfill.py`, `two_stage.py`, `forward_record.py`).
-  - Backfill artifact: `data/research/research_lane/sp500_free_backfill` (`556/556` mapped S&P 500 CIKs = `561/585` securities covered by SEC `company_facts.json`, `585/585` unadjusted daily closes, `2016-01-04..2018-05-29` overlap-rescaled warm-up bars, `13,414` total SEC `8-K` Item `2.02` rows).
-  - Two-stage artifact: `data/research/research_lane/two_stage_models_20261119T165647Z` (`scoreboard.json`, `scoreboard.md`; research label on adjusted prices; `704,700` eligible cells across `2018-05-29..2024-05-28`; peak working set `1.06 GiB`; line `8` in `data/research/research_lane/trials.jsonl`).
-  - Empirical outcome: `0/3` Stage-1 S&P 500 base models passed §5.6 at `21` sessions (`equal_rank_24` IC `-0.0005` `[NW t = -0.03]`, `ridge_rank` `-0.0058` `[NW t = -0.27]`, `xgb_shallow_5seed` `-0.0043` `[NW t = -0.22]`), whereas **5 Stage-2 continuous news-reaction residual overlays passed paired `NW t >= 2.0` (`equal_rank_24+news_xgboost` `+0.0009` `[NW t = 2.26]` at `5d` and `+0.0016` `[NW t = 2.36]` at `10d`, both positive in `5/5` OOS periods)**.
-  - Forward score snapshot: `data/research/research_lane/forward_records/2026-11-18` (`1,000` liquid US stocks scored using post-`2026-07-08` bars only; sealed `2024-05-29..2026-07-08` window untouched).
-  - Verification: `122 passed` (`11` CLI surface + `111` across `12` `test_research_lane_*.py` suites with `OPENBLAS_NUM_THREADS=1` on low-commit host), `ruff check` (`0` errors), `mypy --strict` (`0` issues in `23` source files).
-- **Step 5b (`in_progress`):** Building `src/market_predictor/research_lane/wider_universe.py` to construct a survivorship-checked SEC-EDGAR + Alpaca US common-stock universe (`CY2015Q4I..CY2024Q1I` XBRL frames + historical/delisted ticker resolution + ticker-reuse quarantine + trailing 60-session dollar-volume top-`1,200` and ex-S&P-500 mid/small-cap slice `<= 2024-05-28`) and evaluate the verified Stage-1/Stage-2 §5.4–§5.6 models at `$0` extra spend.
+Status: `complete`. All steps in Recommendation Brief §6 Steps 1–4 (`5a` on extended `2016–2024` S&P 500 and `5b` on the `$0` survivorship-checked wider US `all_top1200` and `mid_small_ex_sp500` universes, plus day-1 prospective forward score recording) have been executed, verified, and logged (`10` lines in `data/research/research_lane/trials.jsonl`). Zero candidates passed all 5 gates of §5.6 (`earns_sealed_period_test = false`), so `2024-05-29..2026-07-08` remains 100% untouched and sealed. No step is `in_progress`.
+
+Summary of completed artifacts & empirical results (research labels on adjusted prices):
+- **Step 5a — Extended S&P 500 (`2016–2024`, commit `140f63c`):**
+  - `data/research/research_lane/sp500_free_backfill` (`556/556` mapped S&P 500 CIKs = `561/585` securities with SEC `company_facts.json`, `585/585` unadjusted closes, `13,414` `8-K` Item `2.02` rows).
+  - `data/research/research_lane/two_stage_models_20261119T165647Z` (`704,700` eligible cells; peak `1.06 GiB`): Stage-1 21d IC near zero (`equal_rank_24` `-0.0005` `[NW t = -0.03]`), while **Stage-2 continuous Alpaca news-reaction residuals passed paired `NW t >= 2.0` in `5` specs** (`equal_rank_24+news_xgboost` `+0.0009` `[NW t = 2.26]` at `5d` and `+0.0016` `[NW t = 2.36]` at `10d`, both positive in `5/5` OOS periods).
+  - `data/research/research_lane/forward_records/2026-11-18`: `1,000` liquid US common stocks prospectively scored on `2026-11-18` using post-`2026-07-08` bars only.
+- **Step 5b — Survivorship-Checked Wider US Universe (`2016–2024`, `$0` free SEC XBRL + Alpaca SIP):**
+  - `data/research/research_lane/wider_us_universe`: `3,500` active + delisted/bankrupt/acquired US XBRL issuers screened (`CY2016Q2I..CY2024Q1I`), `3,493` ticker-reuse-quarantined `(cik, ticker)` spans, `2,253` selected liquid CIKs (`556` S&P 500 + `1,697` mid/small caps), `2,253/2,253` (`100%`) SEC `company_facts.json` coverage, `2,253/2,253` unadjusted closes, `159,528` `8-K` events (`51,908` Item `2.02`).
+  - `data/research/research_lane/wider_two_stage_all_top1200_20261119T182045Z` (`1,200.0` stocks/day, `1,812,000` eligible cells, peak `2.51 GiB`): `equal_rank_24` 21d IC jumped to `+0.0253` (`NW t = 1.25`, `5/6` positive years; `63d +0.0456`), `xgb_shallow_5seed` 21d IC `+0.0098` (unseen-issuer `+0.0079`).
+  - `data/research/research_lane/wider_two_stage_mid_small_ex_sp500_20261119T202946Z` (`1,559` active mid/small-cap securities, `747.2` stocks/day, `1,128,288` eligible cells, peak `1.80 GiB`): `equal_rank_24` reached **`5d +0.0240 [NW t = 2.38]`** (`+0.14%/yr` net `20 bps` buffered skill), **`10d +0.0288 [NW t = 2.00]`**, **`21d +0.0386 [NW t = 1.83]`** (`5/6` positive years: `2021 +0.1100`, `2022 +0.0782`, `2023 +0.0318`, `2024 +0.1394`, `2020 -0.0714`), and **`63d +0.0656 [NW t = 1.91]`** (`+2.62%/yr` net `20 bps` buffered skill), beating its matched mid/small-cap benchmark net of `20 bps` in all 4 post-COVID years (`2021–2024`) while falling short of `NW t >= 3.0` due to `2020` and trailing mega-cap `SPY` due to the `-49.6%` mid-cap vs mega-cap asset-class gap.
+
+Verification & exact next step:
+- Verified commands (`OPENBLAS_NUM_THREADS=1`, `OMP_NUM_THREADS=1`):
+  - `pytest tests/test_cli_surfaces.py tests/test_research_lane_*.py` -> `126 passed` across `14` suites.
+  - `ruff check src/market_predictor/research_lane src/market_predictor/commands/research_lane.py tests/test_research_lane_*.py` -> `0` errors.
+  - `mypy --strict src/market_predictor/research_lane src/market_predictor/commands/research_lane.py` -> `0` issues in `24` source files.
+  - `git diff --check` clean; zero active Python processes; `data/runtime/heavy_job.lease` absent.
+- Exact next step (user decision):
+  1. Keep `2024-05-29..2026-07-08` sealed and run daily/weekly prospective forward snapshots (`record-forward-research-scores --live-prospective`) while deciding whether to collect `$0` Alpaca direct-issuer news on the `1,559` mid/small-cap CIKs (combining `mid_small_ex_sp500`'s `+0.0386` / `+0.0656` base IC with Step 5a's proven `NW t = 2.36` Alpaca news-reaction residual overlay) or evaluate `63`-session investment-horizon ranking (`IC = +0.0656`, `+2.62%/yr` net `20 bps` skill vs mid-cap benchmark, paired with a passive `SPY` core so mega-cap beta is never underweighted).
 
 ### Research lane step 4: cap-weighted benchmark tilt and turnover-buffered reversal & quality (Option C) — November 19
 
