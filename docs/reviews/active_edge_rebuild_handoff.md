@@ -1,5 +1,28 @@
 # Active Edge Rebuild Handoff
 
+### Research lane steps 5e, 5f & 5g (All 3 options completed: $0 CBOE vol-regime conditioning, zero-fit live OPRA option-chain overlay, and idempotent daily prospective forward accumulation) — November 20
+
+Status: `complete` (implementation commits `cfa52f8` -> `934b6e3` -> `8eae9ca`, trial log lines `1..13`). All three post-Step-5d tracks requested by the user (`Option B` CBOE historical volatility term-structure conditioning, `Option A` zero-fit live Alpaca `OPRA` option-chain metrics & falling-knife veto, and `Option C` frozen prospective candidate registry + idempotent `--as-of-date latest --skip-existing` daily forward recorder) are complete, verified, and pushed to `origin/main`. The final-test holdout window (`2024-05-29..2026-07-08`) remains `100%` untouched and sealed (`earns_sealed_period_test = false`). No step is `in_progress`.
+
+Authoritative state & verification summary:
+- **Step 5e (`cfa52f8`, `data/research/research_lane/vol_regime_core_satellite_20261120T104017Z`, research labels on adjusted prices, net `20 bps`):**
+  - Zero-fit `R2_adaptive_hedge_sec_xgb` (`raw + SEC` in contango `VIX <= VIX3M`, switching to `0.7*beta_neutral_SEC + 0.3*reversal_5d` in backwardation) beat `SPY` standalone at all `4` horizons (`OOS 2021..2024`), compounding **`+98.03%` vs. `+72.68%` for `SPY` at `63d`** (`+9.70%/yr [NW t = 1.77]` vs. matched mid/small; joint `80/20` `+79.81%` vs. `+72.68%`).
+  - Zero-fit `R1_backwardation_to_spy` (`OOS 2020..2024` `10d`) compounded **`+162.51%` vs. `+130.57%` for `SPY`** (`+2.74%/yr [NW t = 0.93]`, lower MaxDD `-22.92%` vs. `-24.15%`), while fitted `R3_vol_interaction_xgb` overfit (`-1.66%..+19.79%`).
+- **Step 5f (`934b6e3`, `src/market_predictor/research_lane/opra_options.py`, real snapshots `2026-11-17` & `2026-11-16`):**
+  - Integrated safeguarded Newton-Raphson + bisection Black-Scholes IV/delta inversion, 3-window `OPRA` contract selection (`[2..20d]` front ATM, `[21..55d]` 1M ATM + `25d` put/call wings, `[72..125d]` 3M ATM), `SPY`/`QQQ` constant-maturity `30d/90d` IV term structure (`spy_iv_30d = 18.25%`, `spy_iv_90d = 17.67%`, `spy_iv_term_30_90 = 1.0330`; `qqq_iv_30d = 28.84%`, `qqq_iv_90d = 26.33%`, `qqq_iv_term_30_90 = 1.0955` on `2026-11-16`), `ATM Straddle %`, `catalyst_shock_to_straddle`, `25d` Put–Call IV Skew, `falling_knife_put_skew_veto`, and `score_r2_opra_conditioned`.
+- **Step 5g (`8eae9ca`, `src/market_predictor/research_lane/forward_record.py` & `commands/research_lane.py`):**
+  - Stamped `FROZEN_PROSPECTIVE_CANDIDATES` (`90_10__sp500_tilt_news__R1_backwardation_to_spy@10d` and `80_20__spy__R2_adaptive_hedge_sec_xgb@63d`) + `sealed_holdout_untouched = True` into `_manifest.json`.
+  - Added `resolve_latest_completed_session` (`16:20 ET` post-close settlement cutoff on `SPY` `1Day` SIP bars strictly `> 2026-07-08`) and `--as-of-date latest --skip-existing` fast-path idempotency (`4` immutable snapshots recorded on disk: `2026-11-16`, `2026-11-17`, `2026-11-18`, `2026-11-19`).
+- **Verified commands (`OPENBLAS_NUM_THREADS=1`, `OMP_NUM_THREADS=1`):**
+  - `.venv/Scripts/python.exe -m pytest tests/test_cli_surfaces.py tests/test_config_secrets.py tests/test_research_lane_*.py` -> `139 passed` across `19` suites (`162.10s`).
+  - `.venv/Scripts/ruff.exe check src/market_predictor/config.py src/market_predictor/research_lane src/market_predictor/commands/research_lane.py tests/test_research_lane_*.py` -> `0` errors.
+  - `.venv/Scripts/python.exe -m mypy --strict src/market_predictor/config.py src/market_predictor/research_lane src/market_predictor/commands/research_lane.py` -> `0` issues in `29` source files.
+  - `.venv/Scripts/python.exe -m market_predictor.research_cli record-forward-research-scores --root C:\project\market-predictor --as-of-date latest --live-prospective --skip-existing` -> `{"status": "already_recorded", "scored_session": "2026-11-19"}` (`exit 0`, `data/runtime/heavy_job.lease` absent).
+- **Files to read first when resuming:** `AGENTS.md`, `docs/active_edge_rebuild_plan.md`, `docs/reviews/active_edge_rebuild_handoff.md`, `src/market_predictor/research_lane/forward_record.py`, `src/market_predictor/research_lane/opra_options.py`, and `src/market_predictor/research_lane/vol_regime.py`.
+- **Exact next step (standing operational mode / user decision):**
+  1. Run daily post-close (`>= 16:25 ET`) prospective forward accumulation via `.venv\Scripts\python.exe -m market_predictor.research_cli record-forward-research-scores --root C:\project\market-predictor --as-of-date latest --live-prospective --skip-existing` while `2024-05-29..2026-07-08` remains sealed, OR
+  2. By explicit user approval only, unseal `2024-05-29..2026-07-08` once for a single frozen candidate evaluation.
+
 ### Research lane step 5f (Zero-fit live Alpaca OPRA option-chain overlay in prospective forward recorder) — November 20
 
 Status: `complete` (implementation commit `934b6e3`). Zero-fit point-in-time Alpaca `OPRA` option-chain metrics (`SPY`/`QQQ` constant-maturity `30d/90d` IV term structure, front-expiry `ATM Straddle %` + Catalyst Shock-to-Straddle ratio, `25-Delta` Put–Call IV Skew, `falling_knife_put_skew_veto`, and live `OPRA`-conditioned `R2` score) are integrated into `forward_record.py` and verified on real prospective sessions (`2026-11-17` and `2026-11-16`, strictly `> 2026-07-08`). `2024-05-29..2026-07-08` remains `100%` untouched and sealed. No step is `in_progress`.

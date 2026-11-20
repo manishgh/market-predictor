@@ -1,5 +1,58 @@
 # Active Edge Rebuild Plan
 
+### Research lane step 5g: freeze pre-declared prospective candidate registry & operationalize idempotent `--as-of-date latest --skip-existing` daily forward accumulation (Option C) — November 20
+
+Status: `complete` (implementation commit `8eae9ca`). All three requested post-Step-5d
+options (`Step 5e` Option B, `Step 5f` Option A, and `Step 5g` Option C) are complete,
+verified, and pushed while keeping `2024-05-29..2026-07-08` `100%` untouched and sealed
+(`no step is in_progress`).
+
+Real verification & prospective snapshot inventory:
+- Live end-to-end CLI verification (`python -m market_predictor.research_cli record-forward-research-scores --root C:\project\market-predictor --as-of-date latest --live-prospective --skip-existing`):
+  queried post-`2026-07-08` `SPY` `1Day` SIP bars before Friday `2026-11-20 16:20 ET`,
+  resolved latest completed US session to `2026-11-19` (refusing incomplete intraday Friday
+  bars), detected `data/research/research_lane/forward_records/2026-11-19/_manifest.json`,
+  returned `{"status": "already_recorded", "scored_session": "2026-11-19"}` cleanly with exit
+  `0`, and preserved `forward_log.jsonl` unchanged at exact line count `4` (`2026-11-18`,
+  `2026-11-19`, `2026-11-17`, `2026-11-16`).
+- Frozen prospective candidate registry stamped in `FROZEN_PROSPECTIVE_CANDIDATES`:
+  1. `90_10__sp500_tilt_news__R1_backwardation_to_spy` (`10d` primary swing candidate — shifts
+     the `10%` mid/small satellite into `SPY` when `30d/90d` IV term structure `> 1.0` and
+     holds `score_beta_neutral_price_12` + catalyst ranker in contango).
+  2. `80_20__spy__R2_adaptive_hedge_sec_xgb` (`63d` core-satellite candidate —
+     `score_r2_opra_conditioned`, holding `score_price_equal_12` in contango and switching to
+     `0.70 * score_beta_neutral_price_12 + 0.30 * score_reversal_skew_vetoed` in backwardation).
+
+Verification (component tier): `139` tests pass across all `19` CLI, config, and research-lane
+suites (`tests/test_cli_surfaces.py`, `tests/test_config_secrets.py`, and all
+`tests/test_research_lane_*.py`); Ruff (`0` errors) and strict `mypy` (`0` issues in `29`
+source files) pass.
+
+Bounded problem & frozen scope recorded before building (`forward_record.py` + `commands/research_lane.py`):
+1. **Frozen Prospective Candidate Registry (`FROZEN_PROSPECTIVE_CANDIDATES`):**
+   - Stamp explicit frozen candidate definitions (`90_10__sp500_tilt_news__R1_backwardation_to_spy`
+     at `10d` and `80_20__spy__R2_adaptive_hedge_sec_xgb` via `score_r2_opra_conditioned` at
+     `63d`) and `sealed_holdout_window = "2024-05-29..2026-07-08"` (`untouched = True`) into
+     every prospective `_manifest.json`.
+2. **Causal Completed-Session Resolver (`resolve_latest_completed_session`):**
+   - Query `SPY` `1Day` SIP bars strictly `> 2026-07-08` and resolve the latest regular US
+     session whose `16:20 ET` post-close settlement cutoff has already passed (`today_ny` if
+     `now_ny >= 16:20 ET`, else `today_ny - 1d`), refusing intraday incomplete bars and any
+     sealed date `<= 2026-07-08`.
+3. **Idempotent `--as-of-date latest --skip-existing` CLI & Fast-Path Short-Circuit:**
+   - Support `as_of_date: date | None = None` (`--as-of-date latest`) and
+     `skip_existing: bool = False` (`--skip-existing`). Keep `skip_existing=False` fail-closed
+     (`FileExistsError`) by default; when `skip_existing=True` and the resolved session
+     already has `_manifest.json`, return `{**existing_manifest, "status": "already_recorded"}`
+     without overwriting or duplicating `forward_log.jsonl`.
+
+Exit gates: unit tests for `16:20 ET` intraday vs. post-close session resolution, sealed-date
+rejection, `skip_existing=True` idempotency vs. `skip_existing=False` `FileExistsError`, and
+frozen candidate registry manifest fields; Ruff, strict `mypy`, and full `pytest` across all
+CLI/config/research-lane suites; real live CLI verification of
+`record-forward-research-scores --as-of-date latest --live-prospective --skip-existing`
+confirming idempotent resolution of `2026-11-19`.
+
 ### Research lane step 5f: zero-fit live Alpaca `OPRA` option-chain metrics (`SPY`/`QQQ` IV term structure, `ATM Straddle %`, `25d` Put–Call IV Skew & falling-knife veto) in prospective forward recorder (Option A) — November 20
 
 Status: `complete` (implementation commit `934b6e3`). Measured November 20 across two real
