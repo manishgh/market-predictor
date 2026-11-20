@@ -29,6 +29,7 @@ from market_predictor.research_lane import (
     fundamentals,
     reversal,
     two_stage,
+    vol_regime,
     wider_universe,
 )
 from market_predictor.research_lane.barrier_labels import (
@@ -2330,6 +2331,307 @@ def score_core_satellite_spy(
         "output": identity.relative_to(root).as_posix(),
         "inputs": all_sha,
         "universe_alignment": alignment_report,
+        "reading_summary": evaluation["reading_summary"],
+        "process_memory_after_scoring": document["process_memory_after_scoring"],
+    }
+
+
+def score_vol_regime_core_satellite(
+    *,
+    root: Path,
+    output: Path | None = None,
+    development_end: date,
+    data_root: Path | None = None,
+    panel: Path = PANEL_DIRECTORY,
+    sp500_backfill_dir: Path = free_backfill.BACKFILL_DIRECTORY,
+    wider_dir: Path = wider_universe.WIDER_UNIVERSE_DIRECTORY,
+    cboe_dir: Path = vol_regime.CBOE_DIRECTORY,
+    early_news_dir: Path = EARLY_NEWS_FAMILY_DIR,
+    later_news_dir: Path = LATER_NEWS_FAMILY_DIR,
+    horizons: tuple[int, ...] = HORIZONS,
+    unseal_final_test_period: bool = False,
+) -> dict[str, Any]:
+    """Run Step 5e CBOE volatility term-structure & skew regime conditioning on Core-Satellite vs. SPY."""
+    check_development_end(development_end, unseal_final_test_period=unseal_final_test_period)
+    paths = EvidencePaths(root, data_root)
+    root = paths.project_root
+    output = output or default_output(prefix="vol_regime_core_satellite")
+    identity = paths.identity(output)
+    runtime = heavy_job_runtime_dir()
+
+    with heavy_job_lease(vol_regime.VOL_REGIME_COMMAND, runtime_dir=runtime if runtime.is_absolute() else root / runtime):
+        guard("vol-regime preparation")
+        destination = paths.write(identity)
+        if destination.exists():
+            raise FileExistsError(f"research lane output already exists: {destination}")
+
+        cboe_pq = paths.directory(cboe_dir) / vol_regime.CBOE_PARQUET_NAME
+        if not cboe_pq.is_file():
+            raise FileNotFoundError(f"missing {cboe_pq}; run {vol_regime.COLLECT_CBOE_COMMAND} first")
+        cboe_sha = {"cboe_daily_sha256": file_sha256(cboe_pq)}
+        cboe_df = cast(Any, pq).read_table(cboe_pq, use_threads=False).to_pandas()
+
+        # Phase 1: S&P 500 Core (`equal_rank_24` + Stage-2 Alpaca `news_xgboost`)
+        ext = free_backfill.load_extended_sp500_data(
+            paths,
+            development_end=development_end,
+            panel_rel=panel,
+            backfill_rel=sp500_backfill_dir,
+            unseal_final_test_period=unseal_final_test_period,
+        )
+        first_row = int(
+            np.searchsorted(ext.panel.sessions, np.datetime64(free_backfill.EARLY_DECISION_START, "D"), side="left")
+        )
+        sp_facts_paths = ext.company_facts_paths
+
+        def _load_sp_fact(cik: str) -> IssuerFacts | None:
+            p = sp_facts_paths.get(cik)
+            if p is None or not p.is_file():
+                return None
+            facts, _ = read_company_facts(p, development_end)
+            return facts
+
+        sp_bundle = two_stage.build_stage1_features(
+            ext.panel,
+            fundamentals.FundamentalInputs(
+                panel=ext.panel,
+                unadjusted_close=ext.unadjusted_close,
+                releases=ext.releases,
+                security_issuer=ext.security_cik_map,
+                load_issuer=_load_sp_fact,
+            ),
+        )
+        sp500_panel = ext.panel
+        sp500_cik_map = dict(ext.security_cik_map)
+        sp_sha = dict(ext.input_sha256)
+        sp500_mv = sp_bundle.market_value.copy()
+        sp500_eq24 = sp_bundle.equal_rank_24.copy()
+        del sp_bundle, ext
+        release_unused_process_memory()
+
+        vol_feats = vol_regime.build_causal_vol_regime_features(
+            sp500_panel.sessions,
+            sp500_panel.spy_close,
+            cboe_df,
+            development_end=development_end,
+            unseal_final_test_period=unseal_final_test_period,
+        )
+        del cboe_df
+
+        sp_news_feats, sp_news_sha, _ = two_stage.load_news_reaction_features(
+            sp500_panel,
+            panel_root=paths.directory(panel),
+            early_news_dir=paths.directory(early_news_dir),
+            later_news_dir=paths.directory(later_news_dir),
+            unseal_final_test_period=unseal_final_test_period,
+        )
+        sp_targets = {
+            h: target_ranks(research_labels(sp500_panel, h).stock, sp500_panel.eligible)
+            for h in horizons
+        }
+        sp500_eq24_news_by_h, stage2_oos_start_row, _ = core_satellite.fit_eq24_stage2_xgb_by_horizon(
+            sp500_panel,
+            sp500_eq24,
+            targets_by_horizon=sp_targets,
+            catalyst_features=sp_news_feats,
+            catalyst_feature_names=two_stage.NEWS_FEATURE_NAMES,
+            horizons=horizons,
+            checkpoint=guard,
+        )
+        del sp_news_feats, sp_targets
+        release_unused_process_memory()
+        guard("vol-regime sp500 computed")
+
+        # Phase 2: `mid_small_ex_sp500` Satellite + R1/R2/R3 signals
+        wdata = wider_universe.load_wider_universe_data(
+            paths,
+            development_end=development_end,
+            subset="mid_small_ex_sp500",
+            panel_rel=panel,
+            sp500_backfill_rel=sp500_backfill_dir,
+            wider_rel=wider_dir,
+            unseal_final_test_period=unseal_final_test_period,
+        )
+        alignment_report = core_satellite.verify_disjoint_core_satellite_universes(
+            sp500_panel, sp500_cik_map, wdata.panel, wdata.security_cik_map,
+        )
+        mid_facts_paths = wdata.company_facts_paths
+        mid_loaded = 0
+
+        def _load_mid_fact(cik: str) -> IssuerFacts | None:
+            nonlocal mid_loaded
+            p = mid_facts_paths.get(cik)
+            if p is None or not p.is_file():
+                return None
+            facts, _ = read_company_facts(p, development_end)
+            mid_loaded += 1
+            if mid_loaded % 40 == 0:
+                guard("vol-regime mid_small company facts")
+            return facts
+
+        mid_bundle = two_stage.build_stage1_features(
+            wdata.panel,
+            fundamentals.FundamentalInputs(
+                panel=wdata.panel,
+                unadjusted_close=wdata.unadjusted_close,
+                releases=wdata.releases_202,
+                security_issuer=wdata.security_cik_map,
+                load_issuer=_load_mid_fact,
+            ),
+        )
+        mid_panel = wdata.panel
+        all_8k_events = wdata.all_8k_events
+        w_sha = dict(wdata.input_sha256)
+        del wdata
+
+        mid_raw_eq24 = mid_bundle.equal_rank_24.copy()
+        beta_rk = mid_bundle.features["px_beta_252d"].copy()
+        ivol_rk = mid_bundle.features["px_idio_vol_60d"]
+        rev5_rk = mid_bundle.features["px_reversal_5d"].copy()
+        op_prof_rk = mid_bundle.features["fn_operating_profitability"].copy()
+        mid_bn_eq24 = beta_neutral.cross_sectional_neutralize(
+            mid_raw_eq24, mid_panel.eligible, mid_panel.sector, beta_rk, ivol_rk, rerank=True,
+        )
+        mid_raw_targets = {
+            h: target_ranks(research_labels(mid_panel, h).stock, mid_panel.eligible)
+            for h in horizons
+        }
+        mid_bn_targets = {
+            h: beta_neutral.cross_sectional_neutralize(
+                mid_raw_targets[h], mid_panel.eligible, mid_panel.sector, beta_rk, ivol_rk, rerank=True,
+            )
+            for h in horizons
+        }
+        del mid_bundle, ivol_rk
+        release_unused_process_memory()
+
+        non8k_pq = paths.directory(wider_dir) / beta_neutral.NON8K_CATALYST_PARQUET
+        w_sha["wider_non8k_catalysts_sha256"] = file_sha256(non8k_pq)
+        non8k_df = cast(Any, pq).read_table(non8k_pq, use_threads=False).to_pandas()
+        sec_cat_feats, _ = beta_neutral.build_precise_sec_catalyst_features(
+            mid_panel, all_8k_events, non8k_df, unseal_final_test_period=unseal_final_test_period,
+        )
+        del all_8k_events, non8k_df
+        release_unused_process_memory()
+
+        mid_raw_sec_by_h, _, _ = core_satellite.fit_eq24_stage2_xgb_by_horizon(
+            mid_panel,
+            mid_raw_eq24,
+            targets_by_horizon=mid_raw_targets,
+            catalyst_features=sec_cat_feats,
+            catalyst_feature_names=beta_neutral.PRECISE_STAGE2_FEATURE_NAMES,
+            horizons=horizons,
+            checkpoint=guard,
+        )
+        mid_bn_sec_by_h, _, _ = core_satellite.fit_eq24_stage2_xgb_by_horizon(
+            mid_panel,
+            mid_bn_eq24,
+            targets_by_horizon=mid_bn_targets,
+            catalyst_features=sec_cat_feats,
+            catalyst_feature_names=beta_neutral.PRECISE_STAGE2_FEATURE_NAMES,
+            horizons=horizons,
+            checkpoint=guard,
+        )
+        del sec_cat_feats, mid_bn_targets
+        release_unused_process_memory()
+
+        mid_r3_by_h = vol_regime.fit_r3_vol_interaction_xgb_by_horizon(
+            mid_panel,
+            targets_by_horizon=mid_raw_targets,
+            base_raw_eq24=mid_raw_eq24,
+            base_bn_eq24=mid_bn_eq24,
+            sec_xgb_by_h=mid_raw_sec_by_h,
+            px_beta_252d=beta_rk,
+            px_reversal_5d=rev5_rk,
+            fn_op_prof=op_prof_rk,
+            vol_feats=vol_feats,
+            horizons=horizons,
+            checkpoint=guard,
+        )
+        del mid_raw_targets, beta_rk, op_prof_rk
+        release_unused_process_memory()
+        guard("vol-regime r3 interactions computed")
+
+        s1_folds = two_stage._dynamic_folds(sp500_panel.sessions, first_row)
+        stage1_oos_start_row = s1_folds[0].test_start
+
+        evaluation = vol_regime.evaluate_vol_regime_core_satellite(
+            sp500_panel=sp500_panel,
+            sp500_mv=sp500_mv,
+            sp500_eq24=sp500_eq24,
+            sp500_eq24_news_by_h=sp500_eq24_news_by_h,
+            mid_panel=mid_panel,
+            mid_raw_eq24=mid_raw_eq24,
+            mid_bn_eq24=mid_bn_eq24,
+            mid_raw_sec_by_h=mid_raw_sec_by_h,
+            mid_bn_sec_by_h=mid_bn_sec_by_h,
+            mid_r3_by_h=mid_r3_by_h,
+            mid_rev5_rank=rev5_rk,
+            vol_feats=vol_feats,
+            stage1_oos_start_row=stage1_oos_start_row,
+            stage2_oos_start_row=stage2_oos_start_row,
+            horizons=horizons,
+        )
+        guard("vol-regime joint simulation completed")
+
+        all_sha = {**cboe_sha, **sp_sha, **sp_news_sha, **w_sha}
+        term_v = vol_feats["vix_term_30_90"]
+        regime_diagnostics = {
+            "sessions_with_vix_term_30_90": int(np.isfinite(term_v).sum()),
+            "backwardation_sessions": int((vol_feats["is_backwardation"] > 0.5).sum()),
+            "backwardation_session_share": float((vol_feats["is_backwardation"] > 0.5).mean()),
+            "mean_vix_term_30_90": float(np.nanmean(term_v)),
+            "mean_vxn_to_vix": float(np.nanmean(vol_feats["vxn_to_vix"])),
+        }
+        settings: dict[str, Any] = {
+            "development_end": development_end.isoformat(),
+            "unseal_final_test_period": unseal_final_test_period,
+            "stage1_oos_first_session": str(sp500_panel.sessions[stage1_oos_start_row]),
+            "stage2_oos_first_session": str(sp500_panel.sessions[stage2_oos_start_row]),
+            "horizons_sessions": list(horizons),
+            "allocations": {tag: w for tag, w in core_satellite.ALLOCATIONS},
+            "cost_per_one_way_turnover_primary": benchmark_tilt.FROZEN_COST_PER_TURNOVER,
+            "label": "research label on provider split- and dividend-adjusted SIP daily bars",
+        }
+        document = _json_safe({
+            "notice": LABEL_NOTICE.format(
+                first=settings["stage1_oos_first_session"], end=settings["development_end"],
+            ),
+            "settings": settings,
+            "inputs": all_sha,
+            "universe_alignment": alignment_report,
+            "regime_diagnostics": regime_diagnostics,
+            "vol_regime": evaluation,
+            "process_memory_after_scoring": _process_memory_gib(),
+        })
+
+        staging = destination.with_name(f".{destination.name}.{uuid4().hex}.partial")
+        staging.mkdir(parents=True)
+        try:
+            (staging / "scoreboard.json").write_text(
+                json.dumps(document, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8",
+            )
+            (staging / "scoreboard.md").write_text(
+                vol_regime.render_vol_regime_markdown(document), encoding="utf-8",
+            )
+            os.replace(staging, destination)
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging)
+
+        append_trial(
+            destination.parent / TRIAL_LOG_NAME,
+            root=root,
+            command=vol_regime.VOL_REGIME_COMMAND,
+            output=identity.relative_to(root),
+            input_sha256=all_sha,
+            settings=settings,
+            scoreboard=document,
+        )
+    return {
+        "output": identity.relative_to(root).as_posix(),
+        "inputs": all_sha,
+        "regime_diagnostics": regime_diagnostics,
         "reading_summary": evaluation["reading_summary"],
         "process_memory_after_scoring": document["process_memory_after_scoring"],
     }

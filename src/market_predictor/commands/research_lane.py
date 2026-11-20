@@ -24,10 +24,12 @@ from market_predictor.research_lane.run import (
     score_swing_setups,
     score_technical_models,
     score_two_stage_models,
+    score_vol_regime_core_satellite,
     score_wider_beta_neutral_models,
     score_wider_two_stage_models,
 )
 from market_predictor.research_lane.setups import VolatilityMode
+from market_predictor.research_lane.vol_regime import CBOE_DIRECTORY, collect_cboe_vol_indices
 from market_predictor.research_lane.wider_universe import (
     WIDER_UNIVERSE_DIRECTORY,
     UniverseSubset,
@@ -286,5 +288,49 @@ def register_research_lane_commands(app: typer.Typer) -> None:
             panel=panel,
             sp500_backfill_dir=sp500_backfill_dir,
             wider_dir=wider_dir,
+            unseal_final_test_period=unseal_final_test_period,
+        )
+
+    @app.command("collect-research-lane-cboe-term-structure")
+    def collect_cboe_term(
+        root: Path = typer.Option(...),
+        data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
+        development_end: datetime = typer.Option(DEFAULT_DEVELOPMENT_END.isoformat(), formats=["%Y-%m-%d"]),
+        output: Path = typer.Option(CBOE_DIRECTORY),
+        unseal_final_test_period: bool = typer.Option(False),
+    ) -> None:
+        """Collect $0 public CBOE VIX/VIX3M/VIX9D/VXN/SKEW daily history truncated <= development_end."""
+        _invoke(
+            collect_cboe_vol_indices,
+            root=root,
+            development_end=development_end.date(),
+            data_root=data_root,
+            output=output,
+            unseal_final_test_period=unseal_final_test_period,
+        )
+
+    @app.command("score-vol-regime-core-satellite")
+    def score_vol_regime(
+        root: Path = typer.Option(...),
+        data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
+        development_end: datetime = typer.Option(DEFAULT_DEVELOPMENT_END.isoformat(), formats=["%Y-%m-%d"]),
+        output: Path | None = typer.Option(None),
+        panel: Path = typer.Option(PANEL_DIRECTORY),
+        sp500_backfill_dir: Path = typer.Option(BACKFILL_DIRECTORY),
+        wider_dir: Path = typer.Option(WIDER_UNIVERSE_DIRECTORY),
+        cboe_dir: Path = typer.Option(CBOE_DIRECTORY),
+        unseal_final_test_period: bool = typer.Option(False),
+    ) -> None:
+        """Score Step 5e CBOE volatility term-structure & skew regime Core-Satellite vs. SPY."""
+        _invoke(
+            score_vol_regime_core_satellite,
+            root=root,
+            output=output,
+            development_end=development_end.date(),
+            data_root=data_root,
+            panel=panel,
+            sp500_backfill_dir=sp500_backfill_dir,
+            wider_dir=wider_dir,
+            cboe_dir=cboe_dir,
             unseal_final_test_period=unseal_final_test_period,
         )
