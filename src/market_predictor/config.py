@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from pydantic import Field, SecretStr
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from market_predictor.app_config import config_get, load_app_config
@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     )
     finviz_elite_auth: SecretStr | None = Field(
         default=None,
-        alias="FINVIZ_ELITE_AUTH",
+        validation_alias=AliasChoices("FINVIZ_ELITE_AUTH", "FINVIZ_API_KEY", "finviz_elite_auth"),
     )
     finbert_model: str = Field(default="ProsusAI/finbert", alias="FINBERT_MODEL")
     azure_storage_connection_string: SecretStr | None = Field(

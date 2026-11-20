@@ -17,6 +17,7 @@ from market_predictor.research_lane.free_backfill import BACKFILL_DIRECTORY, col
 from market_predictor.research_lane.panel import DEFAULT_DEVELOPMENT_END, PANEL_DIRECTORY
 from market_predictor.research_lane.run import (
     score_benchmark_tilt,
+    score_core_satellite_spy,
     score_fundamental_predictors,
     score_price_predictors,
     score_short_reversal,
@@ -187,11 +188,24 @@ def register_research_lane_commands(app: typer.Typer) -> None:
         data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
         panel: Path = typer.Option(PANEL_DIRECTORY),
         live_prospective: bool = typer.Option(False, help="Fetch trailing live Alpaca SIP bars (> 2026-07-08)."),
+        include_live_catalysts: bool = typer.Option(
+            True, help="Capture live Finviz Elite, Alpaca, and SEC catalysts in live_prospective mode."
+        ),
+        catalyst_top_k: int = typer.Option(100, help="Top-ranked stocks queried for per-symbol live catalysts."),
         unseal_final_test_period: bool = typer.Option(False),
     ) -> None:
         """Publish one append-only dated forward research score snapshot without reading future outcomes."""
-        _invoke(record_forward_scores, root=root, as_of_date=as_of_date.date(), data_root=data_root,
-                panel=panel, live_prospective=live_prospective, unseal_final_test_period=unseal_final_test_period)
+        _invoke(
+            record_forward_scores,
+            root=root,
+            as_of_date=as_of_date.date(),
+            data_root=data_root,
+            panel=panel,
+            live_prospective=live_prospective,
+            include_live_catalysts=include_live_catalysts,
+            catalyst_top_k=catalyst_top_k,
+            unseal_final_test_period=unseal_final_test_period,
+        )
 
     @app.command("collect-research-lane-wider-universe")
     def collect_wider(
@@ -250,3 +264,27 @@ def register_research_lane_commands(app: typer.Typer) -> None:
         _invoke(score_wider_beta_neutral_models, root=root, output=output, development_end=development_end.date(),
                 subset=subset, data_root=data_root, panel=panel, sp500_backfill_dir=sp500_backfill_dir,
                 wider_dir=wider_dir, unseal_final_test_period=unseal_final_test_period)
+
+    @app.command("score-core-satellite-spy")
+    def score_core_satellite(
+        root: Path = typer.Option(...),
+        data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
+        development_end: datetime = typer.Option(DEFAULT_DEVELOPMENT_END.isoformat(), formats=["%Y-%m-%d"]),
+        output: Path | None = typer.Option(None),
+        panel: Path = typer.Option(PANEL_DIRECTORY),
+        sp500_backfill_dir: Path = typer.Option(BACKFILL_DIRECTORY),
+        wider_dir: Path = typer.Option(WIDER_UNIVERSE_DIRECTORY),
+        unseal_final_test_period: bool = typer.Option(False),
+    ) -> None:
+        """Score Step 5d unified Core SPY / S&P 500 tilt + mid/small SEC-catalyst satellite vs. SPY."""
+        _invoke(
+            score_core_satellite_spy,
+            root=root,
+            output=output,
+            development_end=development_end.date(),
+            data_root=data_root,
+            panel=panel,
+            sp500_backfill_dir=sp500_backfill_dir,
+            wider_dir=wider_dir,
+            unseal_final_test_period=unseal_final_test_period,
+        )

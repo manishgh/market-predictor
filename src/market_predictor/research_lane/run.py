@@ -24,6 +24,7 @@ from market_predictor.process_memory import process_memory_snapshot, release_unu
 from market_predictor.research_lane import (
     benchmark_tilt,
     beta_neutral,
+    core_satellite,
     free_backfill,
     fundamentals,
     reversal,
@@ -133,6 +134,7 @@ BENCHMARK_TILT_COMMAND = "score-benchmark-tilt"
 TWO_STAGE_COMMAND = "score-two-stage-models"
 WIDER_TWO_STAGE_COMMAND = "score-wider-two-stage-models"
 WIDER_BETA_NEUTRAL_COMMAND = "score-wider-beta-neutral-models"
+CORE_SATELLITE_COMMAND = core_satellite.CORE_SATELLITE_COMMAND
 OUTPUT_PARENT = Path("data/research/research_lane")
 LABEL_NOTICE = ("research label, adjusted prices, development history {first} to {end}, "
                 "not proof of outperformance")
@@ -2053,5 +2055,281 @@ def score_wider_beta_neutral_models(
         "subset": subset,
         "inputs": w_sha,
         "acceptance_summary": evaluation["acceptance_summary"],
+        "process_memory_after_scoring": document["process_memory_after_scoring"],
+    }
+
+
+def score_core_satellite_spy(
+    *,
+    root: Path,
+    output: Path | None = None,
+    development_end: date,
+    data_root: Path | None = None,
+    panel: Path = PANEL_DIRECTORY,
+    sp500_backfill_dir: Path = free_backfill.BACKFILL_DIRECTORY,
+    wider_dir: Path = wider_universe.WIDER_UNIVERSE_DIRECTORY,
+    early_news_dir: Path = EARLY_NEWS_FAMILY_DIR,
+    later_news_dir: Path = LATER_NEWS_FAMILY_DIR,
+    horizons: tuple[int, ...] = HORIZONS,
+    unseal_final_test_period: bool = False,
+) -> dict[str, Any]:
+    """Run Step 5d unified Core SPY / S&P 500 active tilt + mid/small SEC-catalyst satellite vs. SPY."""
+    check_development_end(development_end, unseal_final_test_period=unseal_final_test_period)
+    paths = EvidencePaths(root, data_root)
+    root = paths.project_root
+    output = output or default_output(prefix="core_satellite_spy")
+    identity = paths.identity(output)
+    runtime = heavy_job_runtime_dir()
+
+    with heavy_job_lease(CORE_SATELLITE_COMMAND, runtime_dir=runtime if runtime.is_absolute() else root / runtime):
+        guard("core-satellite preparation")
+        destination = paths.write(identity)
+        if destination.exists():
+            raise FileExistsError(f"research lane output already exists: {destination}")
+
+        # Phase 1: S&P 500 Core signals (`equal_rank_24` + Stage-2 Alpaca `news_xgboost`)
+        ext = free_backfill.load_extended_sp500_data(
+            paths,
+            development_end=development_end,
+            panel_rel=panel,
+            backfill_rel=sp500_backfill_dir,
+            unseal_final_test_period=unseal_final_test_period,
+        )
+        first_row = int(
+            np.searchsorted(ext.panel.sessions, np.datetime64(free_backfill.EARLY_DECISION_START, "D"), side="left")
+        )
+        sp_facts_paths = ext.company_facts_paths
+
+        def _load_sp_fact(cik: str) -> IssuerFacts | None:
+            p = sp_facts_paths.get(cik)
+            if p is None or not p.is_file():
+                return None
+            facts, _ = read_company_facts(p, development_end)
+            return facts
+
+        sp_bundle = two_stage.build_stage1_features(
+            ext.panel,
+            fundamentals.FundamentalInputs(
+                panel=ext.panel,
+                unadjusted_close=ext.unadjusted_close,
+                releases=ext.releases,
+                security_issuer=ext.security_cik_map,
+                load_issuer=_load_sp_fact,
+            ),
+        )
+        sp500_panel = ext.panel
+        sp500_cik_map = dict(ext.security_cik_map)
+        sp_sha = dict(ext.input_sha256)
+        sp500_mv = sp_bundle.market_value.copy()
+        sp500_eq24 = sp_bundle.equal_rank_24.copy()
+        del sp_bundle, ext
+        release_unused_process_memory()
+        guard("core-satellite sp500 stage1 computed")
+
+        sp_news_feats, sp_news_sha, sp_news_rep = two_stage.load_news_reaction_features(
+            sp500_panel,
+            panel_root=paths.directory(panel),
+            early_news_dir=paths.directory(early_news_dir),
+            later_news_dir=paths.directory(later_news_dir),
+            unseal_final_test_period=unseal_final_test_period,
+        )
+        sp_targets = {
+            h: target_ranks(research_labels(sp500_panel, h).stock, sp500_panel.eligible)
+            for h in horizons
+        }
+        sp500_eq24_news_by_h, stage2_oos_start_row, sp_paired_ic = core_satellite.fit_eq24_stage2_xgb_by_horizon(
+            sp500_panel,
+            sp500_eq24,
+            targets_by_horizon=sp_targets,
+            catalyst_features=sp_news_feats,
+            catalyst_feature_names=two_stage.NEWS_FEATURE_NAMES,
+            horizons=horizons,
+            checkpoint=guard,
+        )
+        del sp_news_feats, sp_targets
+        release_unused_process_memory()
+        guard("core-satellite sp500 stage2 computed")
+
+        # Phase 2: Disjoint `mid_small_ex_sp500` Satellite signals (`raw` & `beta_neutral` + precise SEC `news_xgboost`)
+        wdata = wider_universe.load_wider_universe_data(
+            paths,
+            development_end=development_end,
+            subset="mid_small_ex_sp500",
+            panel_rel=panel,
+            sp500_backfill_rel=sp500_backfill_dir,
+            wider_rel=wider_dir,
+            unseal_final_test_period=unseal_final_test_period,
+        )
+        alignment_report = core_satellite.verify_disjoint_core_satellite_universes(
+            sp500_panel, sp500_cik_map, wdata.panel, wdata.security_cik_map,
+        )
+        mid_facts_paths = wdata.company_facts_paths
+        mid_loaded = 0
+
+        def _load_mid_fact(cik: str) -> IssuerFacts | None:
+            nonlocal mid_loaded
+            p = mid_facts_paths.get(cik)
+            if p is None or not p.is_file():
+                return None
+            facts, _ = read_company_facts(p, development_end)
+            mid_loaded += 1
+            if mid_loaded % 40 == 0:
+                guard("core-satellite mid_small company facts")
+            return facts
+
+        mid_bundle = two_stage.build_stage1_features(
+            wdata.panel,
+            fundamentals.FundamentalInputs(
+                panel=wdata.panel,
+                unadjusted_close=wdata.unadjusted_close,
+                releases=wdata.releases_202,
+                security_issuer=wdata.security_cik_map,
+                load_issuer=_load_mid_fact,
+            ),
+        )
+        mid_panel = wdata.panel
+        all_8k_events = wdata.all_8k_events
+        w_sha = dict(wdata.input_sha256)
+        del wdata
+
+        mid_raw_eq24 = mid_bundle.equal_rank_24.copy()
+        beta_rk = mid_bundle.features["px_beta_252d"]
+        ivol_rk = mid_bundle.features["px_idio_vol_60d"]
+        mid_bn_eq24 = beta_neutral.cross_sectional_neutralize(
+            mid_raw_eq24, mid_panel.eligible, mid_panel.sector, beta_rk, ivol_rk, rerank=True,
+        )
+        mid_raw_targets = {
+            h: target_ranks(research_labels(mid_panel, h).stock, mid_panel.eligible)
+            for h in horizons
+        }
+        mid_bn_targets = {
+            h: beta_neutral.cross_sectional_neutralize(
+                mid_raw_targets[h], mid_panel.eligible, mid_panel.sector, beta_rk, ivol_rk, rerank=True,
+            )
+            for h in horizons
+        }
+        del mid_bundle, beta_rk, ivol_rk
+        release_unused_process_memory()
+        guard("core-satellite mid_small stage1 computed")
+
+        wider_abs = paths.directory(wider_dir)
+        non8k_pq = wider_abs / beta_neutral.NON8K_CATALYST_PARQUET
+        if not non8k_pq.is_file():
+            raise FileNotFoundError(f"missing {non8k_pq}; run {beta_neutral.COLLECT_SEC_CATALYSTS_COMMAND} first")
+        w_sha["wider_non8k_catalysts_sha256"] = file_sha256(non8k_pq)
+        non8k_df = cast(Any, pq).read_table(non8k_pq, use_threads=False).to_pandas()
+        sec_cat_feats, sec_cat_rep = beta_neutral.build_precise_sec_catalyst_features(
+            mid_panel, all_8k_events, non8k_df, unseal_final_test_period=unseal_final_test_period,
+        )
+        del all_8k_events, non8k_df
+        release_unused_process_memory()
+
+        mid_raw_sec_by_h, _, mid_raw_paired_ic = core_satellite.fit_eq24_stage2_xgb_by_horizon(
+            mid_panel,
+            mid_raw_eq24,
+            targets_by_horizon=mid_raw_targets,
+            catalyst_features=sec_cat_feats,
+            catalyst_feature_names=beta_neutral.PRECISE_STAGE2_FEATURE_NAMES,
+            horizons=horizons,
+            checkpoint=guard,
+        )
+        mid_bn_sec_by_h, _, mid_bn_paired_ic = core_satellite.fit_eq24_stage2_xgb_by_horizon(
+            mid_panel,
+            mid_bn_eq24,
+            targets_by_horizon=mid_bn_targets,
+            catalyst_features=sec_cat_feats,
+            catalyst_feature_names=beta_neutral.PRECISE_STAGE2_FEATURE_NAMES,
+            horizons=horizons,
+            checkpoint=guard,
+        )
+        del sec_cat_feats, mid_raw_targets, mid_bn_targets
+        release_unused_process_memory()
+        guard("core-satellite mid_small stage2 computed")
+
+        # Phase 3: Joint Core-Satellite simulation vs. SPY
+        s1_folds = two_stage._dynamic_folds(sp500_panel.sessions, first_row)
+        stage1_oos_start_row = s1_folds[0].test_start
+
+        evaluation = core_satellite.evaluate_core_satellite_grid(
+            sp500_panel=sp500_panel,
+            sp500_mv=sp500_mv,
+            sp500_eq24=sp500_eq24,
+            sp500_eq24_news_by_h=sp500_eq24_news_by_h,
+            mid_panel=mid_panel,
+            mid_signals_stage1={
+                "sat_raw_eq24": mid_raw_eq24,
+                "sat_beta_neutral_eq24": mid_bn_eq24,
+            },
+            mid_signals_stage2_by_h={
+                h: {
+                    "sat_raw_eq24_sec_xgb": mid_raw_sec_by_h[h],
+                    "sat_beta_neutral_eq24_sec_xgb": mid_bn_sec_by_h[h],
+                }
+                for h in horizons
+            },
+            stage1_oos_start_row=stage1_oos_start_row,
+            stage2_oos_start_row=stage2_oos_start_row,
+            horizons=horizons,
+        )
+        guard("core-satellite joint simulation completed")
+
+        all_sha = {**sp_sha, **sp_news_sha, **w_sha}
+        settings: dict[str, Any] = {
+            "development_end": development_end.isoformat(),
+            "unseal_final_test_period": unseal_final_test_period,
+            "stage1_oos_first_session": str(sp500_panel.sessions[stage1_oos_start_row]),
+            "stage2_oos_first_session": str(sp500_panel.sessions[stage2_oos_start_row]),
+            "horizons_sessions": list(horizons),
+            "allocations": {tag: w for tag, w in core_satellite.ALLOCATIONS},
+            "cost_per_one_way_turnover_primary": benchmark_tilt.FROZEN_COST_PER_TURNOVER,
+            "cost_per_one_way_turnover_info": benchmark_tilt.INFO_COST_PER_TURNOVER,
+            "label": "research label on provider split- and dividend-adjusted SIP daily bars",
+        }
+        document = _json_safe({
+            "notice": LABEL_NOTICE.format(
+                first=settings["stage1_oos_first_session"], end=settings["development_end"],
+            ),
+            "settings": settings,
+            "inputs": all_sha,
+            "universe_alignment": alignment_report,
+            "catalyst_reports": {
+                "sp500_alpaca_news": sp_news_rep,
+                "sp500_paired_ic": {str(k): v for k, v in sp_paired_ic.items()},
+                "mid_small_precise_sec": sec_cat_rep,
+                "mid_small_raw_paired_ic": {str(k): v for k, v in mid_raw_paired_ic.items()},
+                "mid_small_beta_neutral_paired_ic": {str(k): v for k, v in mid_bn_paired_ic.items()},
+            },
+            "core_satellite": evaluation,
+            "process_memory_after_scoring": _process_memory_gib(),
+        })
+
+        staging = destination.with_name(f".{destination.name}.{uuid4().hex}.partial")
+        staging.mkdir(parents=True)
+        try:
+            (staging / "scoreboard.json").write_text(
+                json.dumps(document, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8",
+            )
+            (staging / "scoreboard.md").write_text(
+                core_satellite.render_core_satellite_markdown(document), encoding="utf-8",
+            )
+            os.replace(staging, destination)
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging)
+
+        append_trial(
+            destination.parent / TRIAL_LOG_NAME,
+            root=root,
+            command=CORE_SATELLITE_COMMAND,
+            output=identity.relative_to(root),
+            input_sha256=all_sha,
+            settings=settings,
+            scoreboard=document,
+        )
+    return {
+        "output": identity.relative_to(root).as_posix(),
+        "inputs": all_sha,
+        "universe_alignment": alignment_report,
+        "reading_summary": evaluation["reading_summary"],
         "process_memory_after_scoring": document["process_memory_after_scoring"],
     }
