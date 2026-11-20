@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -186,7 +186,10 @@ def register_research_lane_commands(app: typer.Typer) -> None:
     @app.command("record-forward-research-scores")
     def record_forward(
         root: Path = typer.Option(...),
-        as_of_date: datetime = typer.Option(..., formats=["%Y-%m-%d"], help="Decision date to score prospectively."),
+        as_of_date: str = typer.Option(
+            "latest",
+            help="Decision date YYYY-MM-DD to score prospectively, or 'latest' for latest completed session.",
+        ),
         data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
         panel: Path = typer.Option(PANEL_DIRECTORY),
         live_prospective: bool = typer.Option(False, help="Fetch trailing live Alpaca SIP bars (> 2026-07-08)."),
@@ -197,19 +200,31 @@ def register_research_lane_commands(app: typer.Typer) -> None:
             True, help="Capture zero-fit OPRA option straddle, 25d IV skew, and SPY/QQQ term structure."
         ),
         catalyst_top_k: int = typer.Option(100, help="Top-ranked stocks queried for per-symbol live catalysts/options."),
+        skip_existing: bool = typer.Option(
+            False, "--skip-existing", help="Return existing snapshot cleanly instead of raising FileExistsError."
+        ),
         unseal_final_test_period: bool = typer.Option(False),
     ) -> None:
         """Publish one append-only dated forward research score snapshot without reading future outcomes."""
+        raw_day = as_of_date.strip()
+        if raw_day.lower() == "latest":
+            parsed_day: date | None = None
+        else:
+            try:
+                parsed_day = date.fromisoformat(raw_day)
+            except ValueError as err:
+                raise typer.BadParameter(f"expected YYYY-MM-DD or 'latest', got {as_of_date!r}") from err
         _invoke(
             record_forward_scores,
             root=root,
-            as_of_date=as_of_date.date(),
+            as_of_date=parsed_day,
             data_root=data_root,
             panel=panel,
             live_prospective=live_prospective,
             include_live_catalysts=include_live_catalysts,
             include_live_options=include_live_options,
             catalyst_top_k=catalyst_top_k,
+            skip_existing=skip_existing,
             unseal_final_test_period=unseal_final_test_period,
         )
 

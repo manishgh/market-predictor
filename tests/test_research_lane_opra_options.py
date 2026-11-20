@@ -1,7 +1,8 @@
 """Unit tests for Step 5f: OPRA OCC parser, Black-Scholes IV/Delta solver, ATM Straddle, 25d Skew, and Falling-Knife Veto."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -148,3 +149,105 @@ def test_straddle_25d_skew_falling_knife_veto_and_sealed_bar_rejection() -> None
     assert bool(s0["falling_knife_put_skew_veto"]) is True
     assert pd.isna(s0["score_reversal_skew_vetoed"])
     assert len(opt_df) == 6
+
+
+def test_latest_completed_session_cutoff_and_idempotent_skip_existing(tmp_path: Path) -> None:
+    cfg = Settings(_env_file=None, ALPACA_API_KEY_ID="k", ALPACA_API_SECRET_KEY=SecretStr("s"))  # type: ignore[call-arg]
+    fake_page = MagicMock(
+        bars={
+            "SPY": [
+                {"t": "2026-11-18T05:00:00Z", "o": 590, "h": 592, "l": 588, "c": 591, "v": 1e7},
+                {"t": "2026-11-19T05:00:00Z", "o": 591, "h": 595, "l": 590, "c": 594, "v": 1e7},
+                {"t": "2026-11-20T05:00:00Z", "o": 594, "h": 596, "l": 592, "c": 595, "v": 1e7},
+            ]
+        }
+    )
+    with patch("market_predictor.research_lane.forward_record.AlpacaSource") as mock_alp:
+        mock_alp.return_value.fetch_bars_page.return_value = fake_page
+        # Intraday Friday 14:00 ET (19:00 UTC < 16:20 ET) must NOT pick incomplete Friday 2026-11-20 -> picks 2026-11-19!
+        d_intra = forward_record.resolve_latest_completed_session(cfg, now_utc=datetime(2026, 11, 20, 19, 0, tzinfo=UTC))
+        assert d_intra == date(2026, 11, 19)
+        # Post-close Friday 16:30 ET (21:30 UTC >= 16:20 ET) picks completed Friday 2026-11-20!
+        d_after = forward_record.resolve_latest_completed_session(cfg, now_utc=datetime(2026, 11, 20, 21, 30, tzinfo=UTC))
+        assert d_after == date(2026, 11, 20)
+        # Sunday afternoon picks completed Friday 2026-11-20!
+        d_sun = forward_record.resolve_latest_completed_session(cfg, now_utc=datetime(2026, 11, 22, 17, 0, tzinfo=UTC))
+        assert d_sun == date(2026, 11, 20)
+        # Sealed date <= 2026-07-08 must raise SealedPeriodError!
+        with pytest.raises(SealedPeriodError):
+            forward_record.resolve_latest_completed_session(cfg, now_utc=datetime(2026, 7, 8, 22, 0, tzinfo=UTC))
+
+    sessions = pd.bdate_range("2026-07-15", "2026-11-19").to_numpy().astype("datetime64[D]")
+    n_s, n_c = len(sessions), 4
+    close = np.full((n_s, n_c), 50.0, dtype=np.float32) * np.linspace(1.0, 1.15, n_s, dtype=np.float32)[:, None]
+    spy_c = np.full(n_s, 500.0, dtype=np.float32)
+    panel = ResearchPanel(
+        sessions=sessions,
+        security_ids=tuple(f"ticker:T{i}" for i in range(n_c)),
+        open=close,
+        high=close * np.float32(1.01),
+        low=close * np.float32(0.99),
+        close=close,
+        volume=np.full((n_s, n_c), 5e5, dtype=np.float32),
+        eligible=np.ones((n_s, n_c), dtype=bool),
+        sector=np.zeros((n_s, n_c), dtype=np.int16),
+        sector_names=("Tech",),
+        spy_open=spy_c,
+        spy_close=spy_c,
+        qqq_open=spy_c,
+        qqq_close=spy_c,
+        development_end=date(2026, 11, 19),
+        load_report={},
+    )
+    with patch(
+        "market_predictor.research_lane.forward_record.resolve_latest_completed_session",
+        return_value=date(2026, 11, 19),
+    ), patch(
+        "market_predictor.research_lane.forward_record._fetch_live_prospective_panel",
+        return_value=panel,
+    ) as mock_panel, patch("market_predictor.research_lane.forward_record.guard"), patch.dict(
+        "os.environ", {"MARKET_PREDICTOR_RUNTIME_DIR": str(tmp_path / "rt")}
+    ):
+        m1 = forward_record.record_forward_scores(
+            root=tmp_path,
+            as_of_date=None,
+            live_prospective=True,
+            include_live_catalysts=False,
+            include_live_options=False,
+            skip_existing=True,
+            settings=cfg,
+        )
+        assert m1["status"] == "recorded"
+        assert m1["requested_as_of_date"] == "latest"
+        assert m1["scored_session"] == "2026-11-19"
+        assert m1["sealed_holdout_untouched"] is True
+        assert len(m1["frozen_prospective_candidates"]) == 2
+        assert mock_panel.call_count == 1
+
+        # Second call with skip_existing=True short-circuits before panel fetch & does not duplicate log!
+        m2 = forward_record.record_forward_scores(
+            root=tmp_path,
+            as_of_date=None,
+            live_prospective=True,
+            include_live_catalysts=False,
+            include_live_options=False,
+            skip_existing=True,
+            settings=cfg,
+        )
+        assert m2["status"] == "already_recorded"
+        assert mock_panel.call_count == 1
+        log_lines = (tmp_path / forward_record.FORWARD_RECORD_DIRECTORY / forward_record.FORWARD_LOG_NAME).read_text(
+            encoding="utf-8"
+        ).splitlines()
+        assert len(log_lines) == 1
+
+        # Default skip_existing=False remains fail-closed (`FileExistsError`)!
+        with pytest.raises(FileExistsError):
+            forward_record.record_forward_scores(
+                root=tmp_path,
+                as_of_date=date(2026, 11, 19),
+                live_prospective=True,
+                include_live_catalysts=False,
+                include_live_options=False,
+                settings=cfg,
+            )

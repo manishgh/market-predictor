@@ -68,10 +68,25 @@ from market_predictor.sources.sec import SecSource
 FORWARD_RECORD_DIRECTORY: Final = Path("data/research/research_lane/forward_records")
 FORWARD_LOG_NAME: Final = "forward_log.jsonl"
 HISTORICAL_SEALED_END: Final = date(2026, 7, 8)
+POST_CLOSE_SETTLEMENT_ET: Final = time(16, 20)
 RECORD_FORWARD_COMMAND: Final = "record-forward-research-scores"
 FINVIZ_ELITE_NEWS_URL: Final = "https://elite.finviz.com/news_export.ashx"
 SEC_COMPANY_TICKERS_URL: Final = "https://www.sec.gov/files/company_tickers.json"
 DEFAULT_CATALYST_TOP_K: Final = 100
+FROZEN_PROSPECTIVE_CANDIDATES: Final[tuple[dict[str, Any], ...]] = (
+    {
+        "candidate_id": "90_10__sp500_tilt_news__R1_backwardation_to_spy",
+        "horizon_sessions": 10,
+        "regime_rule": "shift_satellite_to_spy_when_iv_term_30_90_gt_1",
+        "satellite_score_column": "score_beta_neutral_price_12",
+    },
+    {
+        "candidate_id": "80_20__spy__R2_adaptive_hedge_sec_xgb",
+        "horizon_sessions": 63,
+        "regime_rule": "contango_raw_else_70_beta_neutral_30_skew_vetoed_reversal",
+        "satellite_score_column": "score_r2_opra_conditioned",
+    },
+)
 
 
 def redact_finviz_auth(value: object, token: str | None = None) -> str:
@@ -735,10 +750,47 @@ def collect_live_prospective_catalysts(
     }
 
 
+def resolve_latest_completed_session(
+    settings: Settings,
+    *,
+    now_utc: datetime | None = None,
+    unseal_final_test_period: bool = False,
+) -> date:
+    """Resolve the latest regular US session whose `16:20 ET` post-close settlement cutoff has passed."""
+    ts_utc = now_utc.astimezone(UTC) if now_utc is not None else datetime.now(UTC)
+    ts_ny = ts_utc.astimezone(ZoneInfo(MARKET_TIMEZONE))
+    cutoff_day = ts_ny.date() if ts_ny.time() >= POST_CLOSE_SETTLEMENT_ET else (ts_ny.date() - timedelta(days=1))
+    if cutoff_day <= HISTORICAL_SEALED_END and not unseal_final_test_period:
+        raise SealedPeriodError(
+            f"latest completed session {cutoff_day.isoformat()} is inside sealed window <= {HISTORICAL_SEALED_END.isoformat()}"
+        )
+
+    start_day = cutoff_day - timedelta(days=14)
+    if not unseal_final_test_period:
+        start_day = max(start_day, HISTORICAL_SEALED_END + timedelta(days=1))
+    start_utc = datetime.combine(start_day, time(0, 0), tzinfo=UTC)
+    end_utc = datetime.combine(cutoff_day, time(23, 59, 59), tzinfo=UTC)
+
+    alpaca = AlpacaSource(settings)
+    page = alpaca.fetch_bars_page(
+        ("SPY",), start_utc, end_utc, timeframe="1Day", asof=cutoff_day, adjustment="all",
+    )
+    spy_days: list[date] = []
+    for b in page.bars.get("SPY", []):
+        b_day = pd.Timestamp(str(b["t"])).tz_convert(MARKET_TIMEZONE).date()
+        if b_day <= HISTORICAL_SEALED_END and not unseal_final_test_period:
+            raise SealedPeriodError(f"SPY session {b_day.isoformat()} leaked from sealed window")
+        if start_day <= b_day <= cutoff_day:
+            spy_days.append(b_day)
+    if not spy_days:
+        raise ValueError(f"no completed SPY trading session found in [{start_day.isoformat()}, {cutoff_day.isoformat()}]")
+    return max(spy_days)
+
+
 def record_forward_scores(
     *,
     root: Path,
-    as_of_date: date,
+    as_of_date: date | None = None,
     data_root: Path | None = None,
     panel: Path = PANEL_DIRECTORY,
     output_parent: Path = FORWARD_RECORD_DIRECTORY,
@@ -746,17 +798,21 @@ def record_forward_scores(
     include_live_catalysts: bool = True,
     include_live_options: bool = True,
     catalyst_top_k: int = DEFAULT_CATALYST_TOP_K,
+    skip_existing: bool = False,
     unseal_final_test_period: bool = False,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
     """Publish one immutable dated forward-score snapshot (plus live catalysts & OPRA options) and append to log."""
-    if not live_prospective:
-        check_development_end(as_of_date, unseal_final_test_period=unseal_final_test_period)
-    elif as_of_date <= HISTORICAL_SEALED_END and not unseal_final_test_period:
-        raise SealedPeriodError(
-            f"cannot record live prospective scores inside sealed window ({as_of_date.isoformat()} <= "
-            f"{HISTORICAL_SEALED_END.isoformat()})"
-        )
+    if as_of_date is not None:
+        if not live_prospective:
+            check_development_end(as_of_date, unseal_final_test_period=unseal_final_test_period)
+        elif as_of_date <= HISTORICAL_SEALED_END and not unseal_final_test_period:
+            raise SealedPeriodError(
+                f"cannot record live prospective scores inside sealed window ({as_of_date.isoformat()} <= "
+                f"{HISTORICAL_SEALED_END.isoformat()})"
+            )
+    elif not live_prospective:
+        raise ValueError("as_of_date=None ('latest') requires live_prospective=True")
 
     paths = EvidencePaths(root, data_root)
     root = paths.project_root
@@ -765,25 +821,38 @@ def record_forward_scores(
     with heavy_job_lease(RECORD_FORWARD_COMMAND, runtime_dir=runtime if runtime.is_absolute() else root / runtime):
         guard("forward score recorder start")
         cfg = settings or get_settings()
+        resolved_date = (
+            resolve_latest_completed_session(cfg, unseal_final_test_period=unseal_final_test_period)
+            if as_of_date is None
+            else as_of_date
+        )
+        dest_parent = paths.write(paths.identity(output_parent))
+        pre_manifest = dest_parent / resolved_date.isoformat() / "_manifest.json"
+        if skip_existing and pre_manifest.is_file():
+            existing_pre = cast(dict[str, Any], json.loads(pre_manifest.read_text(encoding="utf-8")))
+            return {**existing_pre, "status": "already_recorded"}
+
         if live_prospective:
             loaded_panel = _fetch_live_prospective_panel(
-                as_of_date, cfg, root=root, unseal_final_test_period=unseal_final_test_period,
+                resolved_date, cfg, root=root, unseal_final_test_period=unseal_final_test_period,
             )
         else:
             loaded_panel = load_research_panel(
                 paths.directory(panel),
-                development_end=as_of_date,
+                development_end=resolved_date,
                 unseal_final_test_period=unseal_final_test_period,
             )
 
         scores_df = _score_panel_last_session(loaded_panel)
         if scores_df.empty:
-            raise ValueError(f"no eligible stocks scored on {as_of_date.isoformat()}")
+            raise ValueError(f"no eligible stocks scored on {resolved_date.isoformat()}")
         scored_session = str(scores_df["session_date"].iloc[0])
 
-        dest_parent = paths.write(paths.identity(output_parent))
         dest_dir = dest_parent / scored_session
         if dest_dir.exists():
+            if skip_existing and (dest_dir / "_manifest.json").is_file():
+                existing_post = cast(dict[str, Any], json.loads((dest_dir / "_manifest.json").read_text(encoding="utf-8")))
+                return {**existing_post, "status": "already_recorded"}
             raise FileExistsError(f"forward score snapshot already exists for session {scored_session}: {dest_dir}")
 
         catalysts_df: pd.DataFrame | None = None
@@ -812,10 +881,15 @@ def record_forward_scores(
         staging = dest_parent / f".{scored_session}.{uuid4().hex}.partial"
         staging.mkdir(parents=True)
         manifest: dict[str, Any] = {
+            "status": "recorded",
             "recorded_at_utc": datetime.now(UTC).isoformat(),
-            "requested_as_of_date": as_of_date.isoformat(),
+            "requested_as_of_date": "latest" if as_of_date is None else resolved_date.isoformat(),
+            "resolved_as_of_date": resolved_date.isoformat(),
             "scored_session": scored_session,
             "live_prospective": live_prospective,
+            "sealed_holdout_window": "2024-05-29..2026-07-08",
+            "sealed_holdout_untouched": not unseal_final_test_period,
+            "frozen_prospective_candidates": list(FROZEN_PROSPECTIVE_CANDIDATES),
             "eligible_stocks_scored": len(scores_df),
             "catalyst_summary": catalyst_summary,
             "options_summary": options_summary,
@@ -852,10 +926,13 @@ __all__ = [
     "FINVIZ_ELITE_NEWS_URL",
     "FORWARD_LOG_NAME",
     "FORWARD_RECORD_DIRECTORY",
+    "FROZEN_PROSPECTIVE_CANDIDATES",
     "HISTORICAL_SEALED_END",
+    "POST_CLOSE_SETTLEMENT_ET",
     "RECORD_FORWARD_COMMAND",
     "collect_live_prospective_catalysts",
     "parse_finviz_elite_news_csv",
     "record_forward_scores",
     "redact_finviz_auth",
+    "resolve_latest_completed_session",
 ]
