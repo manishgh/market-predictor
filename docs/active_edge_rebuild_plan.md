@@ -1,5 +1,115 @@
 # Active Edge Rebuild Plan
 
+### Research lane step 5d: unified Core SPY / S&P 500 tilt + mid/small SEC-catalyst satellite evaluation & live Finviz Elite / Alpaca / SEC forward recorder (Option 1) — November 20
+
+Status: `complete` (implementation commit `e247eda`). Measured November 20 across the
+disjoint `585`-security S&P 500 + `1,559`-security `mid_small_ex_sp500` universes (`0`
+simultaneous active CIK overlaps across `2,114` aligned sessions `2016-01-04..2024-05-28`)
+and live prospective snapshot `2026-11-19` (`1,000` liquid US common stocks + `1,464` live
+Finviz Elite, Alpaca `fiscal.ai`, and SEC catalyst items) at `$0` extra spend while keeping
+`2024-05-29..2026-07-08` `100%` sealed (`earns_sealed_period_test = false`; no step is
+`in_progress`).
+
+Real runs:
+- Unified Core-Satellite vs. `SPY` evaluation (`score-core-satellite-spy`):
+  `data/research/research_lane/core_satellite_spy_20261120T095345Z` (`scoreboard.json`,
+  `scoreboard.md`; research label on adjusted prices; continuous `[open[r_k + 1], open[r_{k+1} + 1]]`
+  windows; exact post-drift turnover across core + satellite legs at `20 bps`; peak working
+  set `1.69 GiB`; trial log line `12`).
+- Live multi-source prospective forward snapshot (`record-forward-research-scores --as-of-date 2026-11-19 --live-prospective`):
+  `data/research/research_lane/forward_records/2026-11-19` (`scores.parquet`,
+  `catalysts.parquet`, `_manifest.json`; `1,000` liquid US common stocks scored at
+  `2026-11-19 21:00 UTC` using post-`2026-07-08` bars only; `1,464` live catalyst items =
+  `689` Finviz Elite `news_export.ashx` headlines, `657` Alpaca `fiscal.ai` single-symbol
+  articles, and `118` SEC EDGAR material filings across top `100` candidates, classified
+  into `104` `sec_material_event`, `66` `earnings`, `48` `analyst_revision`, `21`
+  `merger_acquisition`, `20` `guidance`, `11` `offering`, `1` `product_event`, and `1`
+  `regulatory_decision` rows).
+
+Observed Alpaca Options provider fact recorded via bounded read-only probe (`AAPL`, zero
+sealed `2024-05-29..2026-07-08` access):
+- Live `/v1beta1/options/snapshots/{symbol}?feed=opra` returns `HTTP 200` (`latestQuote`,
+  `latestTrade`, `dailyBar`, `minuteBar`, `prevDailyBar`), whereas historical
+  `/v1beta1/options/bars` returns `0` bars across `2022–2023` and begins `2024-01-18` /
+  `2024-02-01` (`82` sessions before `2024-05-28`). Single-stock Alpaca option features
+  (`ATM straddle expected move`, `25-delta put-call IV skew`) therefore cannot fit tree
+  models inside `<= 2024-05-28` without severe 82-day overfitting, and belong to zero-fit
+  prospective forward recording (`2026-07-09+`) until `2024-05-29..2026-07-08` is unsealed
+  once after freezing one V1 candidate; index-level `SPY`/`QQQ` volatility term structure
+  (`VIX`, `VIX3M`, `VIX9D`, `VXN`) has pre-2016 public CBOE daily history if later needed.
+
+Measured findings (research labels on adjusted prices, net of `20 bps` turnover costs):
+- **Standalone `mid_small_ex_sp500` + precise SEC-catalyst satellites (`OOS 2021..2024`):**
+  - `sat_beta_neutral_eq24_sec_xgb` (`63d`): compounded **`+73.20%` net `20 bps` vs. `+72.68%`
+    for `SPY`**, beating equal-weight mid/small caps by **`+6.64%/yr [NW t = +2.00]`**
+    (clearing the `NW t >= 2.00` standalone satellite gate) and `+5.42%/yr` arithmetic mean
+    vs. `SPY`.
+  - `sat_raw_eq24_sec_xgb` (`63d`): compounded **`+82.88%` net `20 bps` vs. `+72.68%` for
+    `SPY`** (`+10.20%` cumulative above `SPY`, `+6.66%/yr [NW t = 1.63]` vs. matched mid/small).
+  - `sat_beta_neutral_eq24_sec_xgb` (`21d`): `+4.72%/yr [NW t = +1.41]` vs. matched mid/small
+    caps (up from `+2.95%/yr [t = 0.74]` without SEC catalysts).
+- **Joint Core + Satellite portfolios vs. passive `SPY`:**
+  - `10d` swing (`OOS 2021..2024`): `90_10__sp500_tilt_news__sat_beta_neutral_eq24_sec_xgb`
+    compounded **`+77.18%` net `20 bps` vs. `+75.90%` for `SPY`** (`+1.86%/yr [NW t = 0.41]`
+    at `20 bps`, `+2.10%/yr` at `10 bps`, `8.85%` turnover, `3/5` positive years).
+  - `10d` swing (`Full OOS 2020..2024` incl. `2020`): `90_10__sp500_tilt_eq24__sat_raw_eq24`
+    and `sat_beta_neutral_eq24` compounded **`+158.34%` and `+157.82%` net `20 bps` vs.
+    `+130.57%` for `SPY`** (`+2.40%..+2.44%/yr [NW t = 0.79..0.82]`).
+  - `63d` quarterly (`OOS 2021..2024`): `80_20__spy__sat_raw_eq24_sec_xgb` and
+    `sat_beta_neutral_eq24_sec_xgb` compounded **`+76.36%` and `+74.93%` net `20 bps` vs.
+    `+72.68%` for `SPY`** (`+1.06%..+1.07%/yr [NW t = 0.60..0.80]`, `7.37%–7.88%` turnover).
+  - Narrow mega-cap (`NVDA`/`MSFT`/`META`) leadership in `2023–2024` kept `Newey-West t`
+    against `SPY` at `0.41..0.82` (`< 2.50`), so `earns_sealed_period_test = false` and
+    `2024-05-29..2026-07-08` remains sealed.
+
+Verification (component tier): `134` tests pass across `17` suites (`11` in
+`tests/test_cli_surfaces.py` + `2` in `tests/test_config_secrets.py` + `121` across `15`
+`tests/test_research_lane_*.py` suites including `3` new in
+`tests/test_research_lane_core_satellite_and_forward.py`); Ruff (`0` errors) and strict
+`mypy` (`0` issues in `27` source files) pass.
+
+Bounded problem & frozen scope recorded before building:
+1. **Unified Core-Satellite vs. `SPY` Evaluation (`core_satellite.py`, command `score-core-satellite-spy`):**
+   - Combine the `585`-security S&P 500 panel (`Step 5a`) and the disjoint `1,559`-security
+     survivorship-checked `mid_small_ex_sp500` panel (`Steps 5b/5c`) on aligned trading
+     sessions through `2024-05-28` (`0` overlap between S&P 500 and `mid_small_ex_sp500`
+     eligible sets on every session).
+   - Evaluate `2` Core sleeves (`core_spy` passive `SPY`; `core_sp500_tilt_news` point-in-time
+     S&P 500 cap-weighted `sector_active_slice` `<= +-2.0%` driven by walk-forward
+     `equal_rank_24 + news_xgboost` Alpaca news residuals) paired with `4`
+     `mid_small_ex_sp500` Satellite signals (`sat_raw_eq24`, `sat_beta_neutral_eq24`,
+     `sat_raw_eq24_sec_xgb`, `sat_beta_neutral_eq24_sec_xgb`) under `2` long-only
+     capital-allocation structures (`80% Core + 20% Buffered Top-10%/Hold-33% Satellite`
+     and `90% Core + 10% Buffered Top-10%/Hold-33% Satellite`, `w_i >= 0`, `sum(w) == 1.0`)
+     across `horizons = (5, 10, 21, 63)` on continuous `[open[r_k + 1], open[r_{k+1} + 1]]`
+     windows (`2021..2024` OOS for all `16` Stage-1+Stage-2 combinations, plus `2020..2024`
+     OOS for Stage-1-only combinations), charging `20 bps` per one-way post-drift turnover
+     (`10 bps` informational).
+   - Pre-registered reading rule for unsealing `2024-05-29+`: positive mean net excess vs
+     `SPY` at `20 bps` with `Newey-West t >= 2.50` (`t >= 3.00` reported alongside),
+     positive vs `SPY` in `>= 75%` of scored calendar years, and standalone mid/small
+     satellite positive vs its matched equal-weight mid/small benchmark at `20 bps` with
+     `Newey-West t >= 2.00`.
+2. **Finviz Elite Config Alias & Multi-Source Live Forward Recorder (`config.py`, `forward_record.py`):**
+   - Accept `AliasChoices("FINVIZ_ELITE_AUTH", "FINVIZ_API_KEY", "finviz_elite_auth")` on
+     `Settings.finviz_elite_auth` without breaking existing env or keyword initialization,
+     and redact `auth=` query parameters from any transport error message.
+   - Extend `record-forward-research-scores --live-prospective` (`as_of_date > 2026-07-08`)
+     to record `score_beta_neutral_price_12` alongside `score_price_equal_12` and
+     `score_reversal_short`, and capture live point-in-time catalysts strictly inside
+     `[max(2026-07-09, as_of_date - 21d), close_utc(as_of_date)]` from Finviz Elite
+     (`news_export.ashx`), Alpaca (`fiscal.ai` `/v1beta1/news`), and SEC EDGAR
+     (`submissions/CIK{cik}.json` `8-K`, `SC 13D/A`, `S-1/S-3/424B`, `NT 10-K/Q`),
+     classified deterministically via `classify_event_families` into `catalysts.parquet`
+     and summarized per stock in `scores.parquet`.
+
+Exit gates: unit tests for `FINVIZ_API_KEY` alias resolution & secret redaction, live
+catalyst parsing/classification & sealed-window/future-timestamp rejection, and
+core-satellite weight conservation, disjointness, turnover accounting & future-poison
+invariance; Ruff, strict `mypy`, and full research-lane/CLI/config `pytest`; real runs of
+`score-core-satellite-spy` and `record-forward-research-scores --as-of-date 2026-11-19 --live-prospective`
+under the heavy-job lease and `< 90%` memory ceiling; trial-log entry.
+
 ### Research lane step 5c: beta/volatility/sector-neutralized mid/small-cap Stage-1 models & high-precision $0 SEC catalyst residuals (Option 1) — November 19
 
 Status: `complete` (implementation commit `643c801`). Measured November 19 on

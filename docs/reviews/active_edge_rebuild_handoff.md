@@ -1,5 +1,34 @@
 # Active Edge Rebuild Handoff
 
+### Research lane steps 5a–5d ($0 S&P 500 + wider mid/small-cap two-stage, beta-neutral, Core-Satellite vs SPY & multi-source live forward recorder) — November 20
+
+Status: `complete` (implementation commits `140f63c` -> `e423199` -> `643c801` -> `e247eda`). All steps in Recommendation Brief §6 Steps 1–4 plus Steps 5c and 5d (unified Core `SPY` / S&P 500 tilt + `mid_small_ex_sp500` Stage-1 & Stage-2 precise SEC-catalyst satellite evaluation against `SPY`, `FINVIZ_API_KEY` config alias alignment, and live Finviz Elite + Alpaca `fiscal.ai` + SEC forward catalyst capture on `2026-11-19`) have been executed, verified, and logged (`12` lines in `data/research/research_lane/trials.jsonl`). `2024-05-29..2026-07-08` remains `100%` untouched and sealed (`earns_sealed_period_test = false`). No step is `in_progress`.
+
+Summary of completed Step 5d artifacts & empirical results (research labels on adjusted prices):
+- **Unified Core-Satellite vs. `SPY` (`data/research/research_lane/core_satellite_spy_20261120T095345Z`, commit `e247eda`, peak `1.69 GiB`):**
+  - Disjoint `585` S&P 500 + `1,559` survivorship-checked `mid_small_ex_sp500` securities (`0` active CIK overlaps across `2,114` sessions `2016-01-04..2024-05-28`).
+  - Standalone `mid_small_ex_sp500` + precise SEC catalysts (`OOS 2021..2024`): `sat_beta_neutral_eq24_sec_xgb` (`63d`) compounded **`+73.20%` net `20 bps` vs. `+72.68%` for `SPY`** (**`+6.64%/yr [NW t = +2.00]`** vs. equal-weight mid/small caps, clearing the `NW t >= 2.00` satellite gate); `sat_raw_eq24_sec_xgb` (`63d`) compounded **`+82.88%` net `20 bps` vs. `+72.68%` for `SPY`** (`+10.20%` cumulative above `SPY`).
+  - Joint Core + Satellite portfolios vs. `SPY` net of `20 bps` exact post-drift turnover:
+    - `90_10__sp500_tilt_news__sat_beta_neutral_eq24_sec_xgb` (`10d`, `OOS 2021..2024`): **`+77.18%` vs. `+75.90%` for `SPY`** (`+1.86%/yr [NW t = 0.41]` at `20 bps`, `+2.10%/yr` at `10 bps`).
+    - `90_10__sp500_tilt_eq24__sat_raw_eq24` & `sat_beta_neutral_eq24` (`10d`, `OOS 2020..2024`): **`+158.34%` & `+157.82%` vs. `+130.57%` for `SPY`** (`+2.40%..+2.44%/yr [NW t = 0.79..0.82]`).
+    - `80_20__spy__sat_raw_eq24_sec_xgb` & `sat_beta_neutral_eq24_sec_xgb` (`63d`, `OOS 2021..2024`): **`+76.36%` & `+74.93%` vs. `+72.68%` for `SPY`** (`+1.06%..+1.07%/yr [NW t = 0.60..0.80]`, `7.37%–7.88%` turnover).
+    - Because `2023–2024` mega-cap breadth concentration kept `NW t` vs. `SPY` below `2.50`, `earns_sealed_period_test` remained `false`.
+- **Live `2026-11-19` Multi-Source Forward Snapshot (`data/research/research_lane/forward_records/2026-11-19`):**
+  - `1,000` liquid US common stocks scored (`score_price_equal_12`, `score_beta_neutral_price_12`, `score_reversal_short`) using post-`2026-07-08` bars only, plus **`1,464` live catalyst items** (`689` Finviz Elite `news_export.ashx`, `657` Alpaca `fiscal.ai`, `118` SEC EDGAR material filings across top `100` candidates, classified into `272` canonical family hits in `catalysts.parquet`).
+- **Alpaca Options Probe Fact Recorded:** Live `/v1beta1/options/snapshots/{symbol}?feed=opra` is `HTTP 200`, whereas `/v1beta1/options/bars` starts `2024-01-18` / `2024-02-01` (`0` bars in `2022–2023`; only `82` sessions before `2024-05-28`). Single-stock option features (`ATM straddle expected move`, `25d put-call IV skew`) can be added zero-fit to prospective forward snapshots (`2026-07-09+`), while fitted tree training awaits holdout unsealing; index-level CBOE `VIX`/`VIX3M`/`VXN` term structure has pre-2016 public daily history.
+
+Verification & exact next step:
+- Verified commands (`OPENBLAS_NUM_THREADS=1`, `OMP_NUM_THREADS=1`):
+  - `pytest tests/test_cli_surfaces.py tests/test_config_secrets.py tests/test_research_lane_*.py` -> `134 passed` across `17` suites.
+  - `ruff check src/market_predictor/config.py src/market_predictor/research_lane src/market_predictor/commands/research_lane.py tests/test_research_lane_core_satellite_and_forward.py` -> `0` errors.
+  - `mypy --strict src/market_predictor/config.py src/market_predictor/research_lane src/market_predictor/commands/research_lane.py` -> `0` issues in `27` source files.
+  - `git diff --check` clean; zero active Python processes; `data/runtime/heavy_job.lease` absent.
+- Files to read first when resuming: `AGENTS.md`, `docs/active_edge_rebuild_plan.md`, `docs/reviews/active_edge_rebuild_handoff.md`, `src/market_predictor/research_lane/core_satellite.py`, `src/market_predictor/research_lane/forward_record.py`, and `src/market_predictor/research_lane/beta_neutral.py`.
+- Exact next step (user decision):
+  1. Accumulate daily/weekly prospective forward snapshots (`record-forward-research-scores --live-prospective`, optionally adding zero-fit live Alpaca `OPRA` `ATM straddle expected move` & `25d put-call IV skew` columns to `forward_record.py`), OR
+  2. Test free pre-2016 public CBOE volatility term structure (`VIX / VIX3M`, `VXN`, `SKEW`) as a `2018–2024` regime interaction on the Core-Satellite model, OR
+  3. Freeze one explicit V1 research candidate by user decision if ready to run its single governed `2024-05-29..2026-07-08` holdout test.
+
 ### Research lane steps 5a, 5b & 5c ($0 S&P 500 + wider US mid/small-cap two-stage, beta-neutral & precise SEC catalyst evaluation) — November 19
 
 Status: `complete` (implementation commits `140f63c` -> `e423199` -> `643c801`). All steps in Recommendation Brief §6 Steps 1–4 plus Step 5c (`mid_small_ex_sp500` `[sector, beta_252d, idio_vol_60d]` orthogonalization and `$0` high-precision SEC non-`8-K` + filtered `8-K` catalyst residuals) have been executed, verified, and logged (`11` lines in `data/research/research_lane/trials.jsonl`). Zero Stage-1 base candidates cleared all 5 simultaneous gates of §5.6 (`earns_sealed_period_test = false`), while **Stage-2 catalyst residual overlays passed §5.6's pre-registered paired `NW t >= 2.0` gate on both S&P 500 (`5` specs via Alpaca news) and `mid_small_ex_sp500` (`4` specs up to `NW t = +3.05` via precise SEC filings)**. `2024-05-29..2026-07-08` remains 100% untouched and sealed. No step is `in_progress`.
