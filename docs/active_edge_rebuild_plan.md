@@ -1,5 +1,75 @@
 # Active Edge Rebuild Plan
 
+### Research lane step 5f: zero-fit live Alpaca `OPRA` option-chain metrics (`SPY`/`QQQ` IV term structure, `ATM Straddle %`, `25d` Put–Call IV Skew & falling-knife veto) in prospective forward recorder (Option A) — November 20
+
+Status: `complete` (implementation commit `934b6e3`). Measured November 20 across two real
+post-holdout prospective sessions (`2026-11-17` and `2026-11-16`, strictly `> 2026-07-08`
+with zero sealed-window access; no step is `in_progress`).
+
+Real runs & defects caught/remediated before closing Step 5f:
+- Initial `2026-11-17` prospective run (`data/research/research_lane/forward_records/2026-11-17`):
+  scored `1,000` stocks, captured `958` live catalysts (`492` Finviz Elite + `395` Alpaca + `71`
+  SEC) and `417/950` `OPRA` session option bars (`22` `ATM Straddle %`, `12` `25d` skews, `2`
+  falling-knife vetoes, `3` catalyst shocks exceeding straddle), and surfaced two real-data
+  truncation defects:
+  1. Single-range `/v2/options/contracts` (`limit=200` across `2..125` DTE) filled up on
+     `0DTE..3DTE` daily/weekly strikes on `SPY`, `QQQ`, and `AAPL`, leaving `spy_iv_30d`,
+     `spy_iv_90d`, and `qqq_iv_30d` `null`.
+  2. Post-holdout `92`-session live panels (`clamped >= 2026-07-09`) had `6` active `<=60d`
+     predictors (`< 8`) and needed `wider_roster_spans.parquet` `A..Z` common-stock selection
+     plus `60d` beta fallback while `< 253` post-holdout sessions exist.
+- Remediated `2026-11-16` prospective run (`data/research/research_lane/forward_records/2026-11-16`,
+  3-window `OPRA` contract queries `[2..20d]` front ATM, `[21..55d]` 1M ATM + `25d` put/call
+  wings, and `[72..125d]` 3M ATM + `A..Z` SEC common-stock roster):
+  - Scored `1,000` SEC-verified US common stocks (`A..Z`, `>= $5`) with finite
+    `score_price_equal_12`, `score_beta_neutral_price_12`, `score_reversal_skew_vetoed`, and
+    `score_r2_opra_conditioned`.
+  - Captured `384` live catalysts (`188` Finviz Elite + `124` Alpaca `fiscal.ai` + `72` SEC ->
+    `55` `sec_material_event`, `35` `earnings`, `13` `offering`, `9` `guidance`, `7`
+    `analyst_revision`, `2` `merger_acquisition`).
+  - Measured complete live `OPRA` index term structure: **`spy_iv_30d = 18.25%` vs.
+    `spy_iv_90d = 17.67%` (`spy_iv_term_30_90 = 1.0330`)** and **`qqq_iv_30d = 28.84%` vs.
+    `qqq_iv_90d = 26.33%` (`qqq_iv_term_30_90 = 1.0955`)**, detecting live `OPRA` backwardation
+    (`opra_backwardation = true`) and automatically engaging Step 5e's zero-fit `R2` defensive
+    hedge (`0.70 * beta_neutral + 0.30 * skew_vetoed_reversal`), alongside `157/384` option
+    contract bars across the top `60` low-vol/mid-cap candidates (`falling_knife_veto_cutoff =
+    +10.25%` skew, `1` falling-knife reversal veto).
+
+Verification (component tier): `16` tests pass across `tests/test_cli_surfaces.py`,
+`tests/test_research_lane_opra_options.py`, and
+`tests/test_research_lane_core_satellite_and_forward.py`; Ruff (`0` errors) and strict `mypy`
+(`0` issues in `29` source files) pass.
+
+Bounded problem & frozen scope recorded before building (`opra_options.py` + `forward_record.py`):
+1. **Point-in-time `OPRA` chain pricing, Black-Scholes IV/Delta solver & 3 structural option metrics (`opra_options.py`):**
+   - Strictly refuse `as_of_date <= 2026-07-08` unless `unseal_final_test_period=True`, and
+     query session-exact `1Day` `OPRA` option bars (`/v2/options/contracts` +
+     `/v1beta1/options/bars` on `[as_of_date 00:00Z, as_of_date 23:59:59Z]`) so historical
+     post-holdout sessions (`2026-07-09+`) never leak later-day option quotes.
+   - Invert exact Black-Scholes implied volatility (safeguarded Newton-Raphson + bisection on
+     `[0.01, 5.00]`) and analytic `delta` to compute:
+     (a) **`SPY` & `QQQ` `30d / 90d` ATM IV Term Structure** (`spy_iv_30d`, `spy_iv_90d`,
+         `spy_iv_term_30_90`, `qqq_iv_30d`, `qqq_iv_90d`, `qqq_iv_term_30_90`,
+         `opra_backwardation`);
+     (b) **Front-Expiry `ATM Straddle %` (`DTE in [2, 35]`) & Catalyst Shock-to-Straddle
+         Ratio** (`atm_straddle_pct = (call_px + put_px) / spot`,
+         `catalyst_shock_to_straddle = |latest_catalyst_rx_1d| / atm_straddle_pct`);
+     (c) **`25-Delta` Put–Call IV Skew (`DTE in [14, 65]`) & `ATM_IV / ATR%` Ratio**
+         (`put_call_skew_25d = iv_put_25d - iv_call_25d`, `atm_iv_to_atr_ratio`), plus
+         zero-fit `falling_knife_put_skew_veto` (masking `score_reversal_short` ->
+         `score_reversal_skew_vetoed` when `put_call_skew_25d >= 90th pct` and `> 0.05`) and
+         `score_r2_opra_conditioned` (Step 5e's zero-fit `R2` contango/backwardation rule
+         driven by live `OPRA` `spy_iv_term_30_90`).
+2. **Forward Recorder Integration (`forward_record.py`, `--include-live-options/--no-live-options`):**
+   - Attach per-stock `OPRA` columns onto `scores.parquet`, write `options_metrics.parquet`
+     and `options_summary` in `_manifest.json`, and execute real live prospective runs
+     (`> 2026-07-08`).
+
+Exit gates: unit tests for Black-Scholes IV/Delta inversion accuracy, OCC symbol parser,
+`ATM Straddle %` & `25d` put-call skew calculation, falling-knife skew veto, and sealed-date
+/ future-bar rejection; Ruff, strict `mypy`, and `pytest`; real post-holdout `OPRA` + Finviz
+Elite + Alpaca + SEC forward snapshot under heavy-job lease and `< 90%` memory ceiling.
+
 ### Research lane step 5e: $0 public CBOE index volatility term-structure & skew regime conditioning (`2016–2024`) on Core-Satellite vs. `SPY` (Option B) — November 20
 
 Status: `complete` (implementation commit `cfa52f8`). Measured November 20 across `2,635`

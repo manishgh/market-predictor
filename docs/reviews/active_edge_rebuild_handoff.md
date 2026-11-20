@@ -1,5 +1,17 @@
 # Active Edge Rebuild Handoff
 
+### Research lane step 5f (Zero-fit live Alpaca OPRA option-chain overlay in prospective forward recorder) — November 20
+
+Status: `complete` (implementation commit `934b6e3`). Zero-fit point-in-time Alpaca `OPRA` option-chain metrics (`SPY`/`QQQ` constant-maturity `30d/90d` IV term structure, front-expiry `ATM Straddle %` + Catalyst Shock-to-Straddle ratio, `25-Delta` Put–Call IV Skew, `falling_knife_put_skew_veto`, and live `OPRA`-conditioned `R2` score) are integrated into `forward_record.py` and verified on real prospective sessions (`2026-11-17` and `2026-11-16`, strictly `> 2026-07-08`). `2024-05-29..2026-07-08` remains `100%` untouched and sealed. No step is `in_progress`.
+
+Key measured Step 5f facts:
+- **Real `2026-11-16` snapshot (`data/research/research_lane/forward_records/2026-11-16`):**
+  - `1,000` SEC-verified `A..Z` US common stocks (`>= $5`) scored with finite `score_price_equal_12`, `score_beta_neutral_price_12`, `score_reversal_skew_vetoed`, and `score_r2_opra_conditioned`.
+  - `384` live catalysts (`188` Finviz Elite + `124` Alpaca `fiscal.ai` + `72` SEC -> `121` classified family occurrences).
+  - Live `OPRA` `30d/90d` constant-maturity index term structure: **`spy_iv_30d = 18.25%` vs. `spy_iv_90d = 17.67%` (`spy_iv_term_30_90 = 1.0330`)** and **`qqq_iv_30d = 28.84%` vs. `qqq_iv_90d = 26.33%` (`qqq_iv_term_30_90 = 1.0955`)**, detecting live backwardation (`opra_backwardation = true`) and activating `R2` defensive hedging (`157/384` contract bars across top `60` candidates, `falling_knife_veto_cutoff = +10.25%`, `1` falling-knife reversal veto; `2026-11-17` additionally verified `417/950` contract bars, `22` `ATM Straddle %`, `12` `25d` skews, `2` falling-knife vetoes, and `3` catalyst shocks `> 1.0x` straddle).
+- Verified: `mypy --strict` (`0` issues in `29` source files), `ruff` (`0` errors), focused `pytest` (`16/16` passed).
+- Exact next step (Step 3 of 3 per user instruction): execute **Step 5g** (freeze the pre-declared prospective candidate registry in `_manifest.json` and add idempotent `--as-of-date latest` completed-session resolution + `--skip-existing` to `record-forward-research-scores` for repeatable daily forward accumulation).
+
 ### Research lane step 5e ($0 public CBOE volatility term-structure & skew regime conditioning on Core-Satellite vs. SPY) — November 20
 
 Status: `complete` (implementation commit `cfa52f8`, trial log line `13`). Zero-fit volatility term-structure state machines (`R1_backwardation_to_spy` and `R2_adaptive_hedge_sec_xgb`) improved cumulative returns, Sharpe, and drawdowns over unconditioned satellites while fitted `XGBoost` macro-regime interactions (`R3`) overfit historical crises. `2024-05-29..2026-07-08` remains `100%` untouched and sealed (`earns_sealed_period_test = false`). No step is `in_progress`.
