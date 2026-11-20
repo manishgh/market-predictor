@@ -193,7 +193,10 @@ def register_research_lane_commands(app: typer.Typer) -> None:
         include_live_catalysts: bool = typer.Option(
             True, help="Capture live Finviz Elite, Alpaca, and SEC catalysts in live_prospective mode."
         ),
-        catalyst_top_k: int = typer.Option(100, help="Top-ranked stocks queried for per-symbol live catalysts."),
+        include_live_options: bool = typer.Option(
+            True, help="Capture zero-fit OPRA option straddle, 25d IV skew, and SPY/QQQ term structure."
+        ),
+        catalyst_top_k: int = typer.Option(100, help="Top-ranked stocks queried for per-symbol live catalysts/options."),
         unseal_final_test_period: bool = typer.Option(False),
     ) -> None:
         """Publish one append-only dated forward research score snapshot without reading future outcomes."""
@@ -205,6 +208,7 @@ def register_research_lane_commands(app: typer.Typer) -> None:
             panel=panel,
             live_prospective=live_prospective,
             include_live_catalysts=include_live_catalysts,
+            include_live_options=include_live_options,
             catalyst_top_k=catalyst_top_k,
             unseal_final_test_period=unseal_final_test_period,
         )

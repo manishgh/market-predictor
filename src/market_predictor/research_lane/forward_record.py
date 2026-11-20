@@ -41,7 +41,7 @@ from market_predictor.config import Settings, get_settings
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
-from market_predictor.research_lane import indicators, predictors, reversal
+from market_predictor.research_lane import indicators, opra_options, predictors, reversal
 from market_predictor.research_lane.beta_neutral import (
     _ACTIVIST_FORMS,
     _DISTRESS_8K_ITEMS,
@@ -101,18 +101,27 @@ def _score_panel_last_session(panel: ResearchPanel) -> pd.DataFrame:
     stack = np.stack(signed_ranks)
     fin = np.isfinite(stack)
     cnt = fin.sum(axis=0)
+    avail_preds = int(sum(1 for rk_row in ranked_last.values() if np.isfinite(rk_row[elig_row]).any()))
+    min_req = max(4, predictors.minimum_present(avail_preds)) if avail_preds > 0 else 8
     with np.errstate(invalid="ignore", divide="ignore"):
         price_eq_12 = np.where(
-            elig_row & (cnt >= 8),
+            elig_row & (cnt >= min_req),
             np.where(fin, stack, 0.0).sum(axis=0) / np.maximum(cnt, 1),
             np.nan,
         )
+
+    beta_rk = ranked_last["beta_252d"]
+    if not np.isfinite(beta_rk[elig_row]).any() and len(panel.sessions) >= 61:
+        ret_stock = predictors.daily_returns(panel.close)
+        ret_mkt = predictors.daily_returns(panel.spy_close)
+        beta_60 = predictors._regression(ret_stock, ret_mkt, 60).beta
+        beta_rk = centered_rank(beta_60, panel.eligible)[last_idx]
 
     beta_neutral_12 = cross_sectional_neutralize(
         price_eq_12[None, :],
         elig_row[None, :],
         panel.sector[last_idx : last_idx + 1],
-        ranked_last["beta_252d"][None, :],
+        beta_rk[None, :],
         ranked_last["idio_vol_60d"][None, :],
         rerank=True,
     )[0]
@@ -175,8 +184,19 @@ def _fetch_live_prospective_panel(
         )
     alpaca = AlpacaSource(settings)
     assets = alpaca.fetch_ticker_universe()
-    symbols = sorted(set(assets["symbol"].astype(str).str.upper()) - {"SPY", "QQQ"})
-    symbols = [s for s in symbols if len(s) <= 5 and s.replace(".", "").isalpha()][:1500]
+    asset_syms = {
+        s for s in (set(assets["symbol"].astype(str).str.upper()) - {"SPY", "QQQ"})
+        if len(s) <= 5 and s.replace(".", "").isalpha()
+    }
+    roster_pq = (root / WIDER_UNIVERSE_DIRECTORY / "wider_roster_spans.parquet") if root is not None else None
+    if roster_pq is not None and roster_pq.is_file():
+        r_df = cast(Any, pq).read_table(roster_pq, columns=["ticker"], use_threads=False).to_pandas()
+        sec_common = sorted({str(t).upper().strip() for t in r_df["ticker"]} & asset_syms)
+        symbols = sec_common[:2000] if len(sec_common) >= 500 else sorted(asset_syms)[:1500]
+    else:
+        all_sorted = sorted(asset_syms)
+        step = max(1, len(all_sorted) // 1500)
+        symbols = all_sorted[::step][:1500]
     query_syms = ["SPY", "QQQ", *symbols]
 
     start_day = as_of_date - timedelta(days=410)
@@ -259,6 +279,9 @@ def _fetch_live_prospective_panel(
     with np.errstate(invalid="ignore", divide="ignore"):
         dvol_60 = np.where(dv_cnt > 0, np.where(dv_fin, dv_slice, 0.0).sum(axis=0) / np.maximum(dv_cnt, 1), np.nan)
     elig_last = fin_win & np.isfinite(dvol_60) & np.isfinite(mats["close"][-1])
+    above_5 = elig_last & (mats["close"][-1] >= 5.0)
+    if int(above_5.sum()) >= 50:
+        elig_last = above_5
     if int(elig_last.sum()) > 1000:
         cutoff_dv = float(np.sort(dvol_60[elig_last])[-1000])
         elig_last = elig_last & (dvol_60 >= cutoff_dv)
@@ -721,11 +744,12 @@ def record_forward_scores(
     output_parent: Path = FORWARD_RECORD_DIRECTORY,
     live_prospective: bool = False,
     include_live_catalysts: bool = True,
+    include_live_options: bool = True,
     catalyst_top_k: int = DEFAULT_CATALYST_TOP_K,
     unseal_final_test_period: bool = False,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
-    """Publish one immutable dated forward-score snapshot (plus live catalysts) and append to `forward_log.jsonl`."""
+    """Publish one immutable dated forward-score snapshot (plus live catalysts & OPRA options) and append to log."""
     if not live_prospective:
         check_development_end(as_of_date, unseal_final_test_period=unseal_final_test_period)
     elif as_of_date <= HISTORICAL_SEALED_END and not unseal_final_test_period:
@@ -773,6 +797,17 @@ def record_forward_scores(
                 unseal_final_test_period=unseal_final_test_period,
             )
 
+        options_df: pd.DataFrame | None = None
+        options_summary: dict[str, Any] | None = None
+        if live_prospective and include_live_options:
+            scores_df, options_df, options_summary = opra_options.collect_live_opra_options_overlay(
+                loaded_panel,
+                scores_df,
+                cfg,
+                options_top_k=catalyst_top_k,
+                unseal_final_test_period=unseal_final_test_period,
+            )
+
         dest_parent.mkdir(parents=True, exist_ok=True)
         staging = dest_parent / f".{scored_session}.{uuid4().hex}.partial"
         staging.mkdir(parents=True)
@@ -783,6 +818,7 @@ def record_forward_scores(
             "live_prospective": live_prospective,
             "eligible_stocks_scored": len(scores_df),
             "catalyst_summary": catalyst_summary,
+            "options_summary": options_summary,
             "code": git_identity(root),
             "label_notice": "research forward score snapshot (zero future outcomes read)",
         }
@@ -791,6 +827,10 @@ def record_forward_scores(
             if catalysts_df is not None:
                 cast(Any, pq).write_table(
                     pa.Table.from_pandas(catalysts_df, preserve_index=False), staging / "catalysts.parquet",
+                )
+            if options_df is not None and len(options_df):
+                cast(Any, pq).write_table(
+                    pa.Table.from_pandas(options_df, preserve_index=False), staging / "options_metrics.parquet",
                 )
             (staging / "_manifest.json").write_text(
                 json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8",
