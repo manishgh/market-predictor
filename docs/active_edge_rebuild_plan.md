@@ -1,5 +1,87 @@
 # Active Edge Rebuild Plan
 
+### Research lane step 5e: $0 public CBOE index volatility term-structure & skew regime conditioning (`2016–2024`) on Core-Satellite vs. `SPY` (Option B) — November 20
+
+Status: `complete` (implementation commit `cfa52f8`). Measured November 20 across `2,635`
+public CBOE daily rows (`2014-01-02..2024-05-28`, `100%` truncated in memory `<= 2024-05-28`)
+and `2,114` aligned S&P 500 + `mid_small_ex_sp500` sessions (`313` backwardation sessions =
+`14.81%`) while keeping `2024-05-29..2026-07-08` `100%` sealed (`earns_sealed_period_test =
+false`; no step is `in_progress`).
+
+Real runs:
+- Public CBOE daily volatility index ingestion (`collect-research-lane-cboe-term-structure`):
+  `data/research/research_lane/cboe_vol_indices/cboe_daily.parquet` (`2,635` daily rows
+  `2014-01-02..2024-05-28`: `VIX` `2,633`, `VXN` `2,620`, `VIX3M` `2,618`, `VIX9D` `2,618`,
+  `SKEW` `2,615`; `2,114/2,114` panel sessions covered; mean `VIX/VIX3M = 0.8876`, mean
+  `VXN/VIX = 1.2371`).
+- Volatility-regime Core-Satellite evaluation (`score-vol-regime-core-satellite`):
+  `data/research/research_lane/vol_regime_core_satellite_20261120T104017Z`
+  (`scoreboard.json`, `scoreboard.md`; research label on adjusted prices; peak working set
+  `1.70 GiB`; trial log line `13`).
+
+Measured findings (research labels on adjusted prices, net of `20 bps` exact post-drift turnover):
+- **Zero-fit term-structure state machines (`R1` & `R2`) substantially outperformed fitted
+  `XGBoost` macro-regime interactions (`R3`):**
+  - `R3_vol_interaction_xgb` collapsed out-of-sample (`-1.66%..+19.79%` standalone vs.
+    `+75.57%` for `SPY`; `-6.46%/yr` vs. matched mid/small at `5d`) because date-level
+    macro volatility ratios only experience a handful of distinct crisis episodes per
+    decade, causing tree splits on `VIX/VIX3M` to memorize calendar regimes.
+  - Zero-fit **`R2_adaptive_hedge_sec_xgb`** (`raw + SEC` in contango `VIX <= VIX3M`,
+    switching to `0.7*beta_neutral_SEC + 0.3*reversal_5d` in backwardation):
+    - Standalone `100%` mid/small (`OOS 2021..2024`): beat `SPY` in arithmetic excess at
+      **all 4 horizons** (`5d +1.81%/yr`, `10d +0.14%/yr`, `21d +1.44%/yr`, `63d +8.48%/yr`),
+      compounding **`+98.03%` net `20 bps` vs. `+72.68%` for `SPY` at `63d`** (`+25.35%`
+      cumulative net excess, `+9.70%/yr [NW t = +1.77]` vs. matched mid/small caps).
+    - Joint `80% SPY + 20% R2_adaptive_hedge_sec_xgb`: compounded **`+76.71%` vs. `+75.57%`
+      at `5d`** (`2.32%` turnover) and **`+79.81%` vs. `+72.68%` at `63d`** (`+1.67%/yr
+      [NW t = 0.95]`, `8.02%` turnover).
+  - Zero-fit **`R1_backwardation_to_spy`** (shifting the satellite into `SPY` when `VIX > VIX3M`):
+    - Full `OOS 2020..2024` (`10d` swing incl. March 2020 COVID spike):
+      `90_10__sp500_tilt_eq24__R1` compounded **`+162.51%` net `20 bps` vs. `+130.57%` for
+      `SPY`** (`+31.94%` cumulative excess, **`+2.74%/yr [NW t = 0.93]`**, `4/6` positive
+      years, **lower MaxDD `-22.92%` vs. `-24.15%` for `SPY`**); `80_20__sp500_tilt_eq24__R1`
+      compounded **`+157.08%` vs. `+130.57%` for `SPY`** (`+2.34%/yr [NW t = 0.83]`, `4/6`
+      positive years, **MaxDD `-23.33%` vs. `-24.15%` for `SPY`**).
+    - `OOS 2021..2024`: `80_20__spy__R1` (`21d`) compounded **`+76.19%` vs. `+72.15%` for
+      `SPY`** with higher Sharpe (`0.77` vs. `0.75`) and matched MaxDD (`-23.15%` vs.
+      `-23.12%`); `90_10__sp500_tilt_news__R1` (`10d`) compounded **`+78.81%` vs. `+75.90%`
+      for `SPY`** (`+1.91%/yr [NW t = 0.44]`).
+  - Because `NW t` vs. `SPY` stayed below `2.50` (`0.44..0.95`), `earns_sealed_period_test =
+    false` and `2024-05-29..2026-07-08` remains sealed.
+
+Verification (component tier): `13` tests pass across `tests/test_cli_surfaces.py` and
+`tests/test_research_lane_vol_regime.py` (`136` total across all `18` CLI/config/research-lane
+suites); Ruff (`0` errors) and strict `mypy` (`0` issues in `28` source files) pass.
+
+Bounded problem & frozen scope recorded before building (`vol_regime.py`):
+1. **Causal CBOE daily volatility index collector (`collect-research-lane-cboe-term-structure`):**
+   - Fetch free public CBOE daily CSVs (`VIX`, `VIX3M`, `VIX9D`, `VXN`, `SKEW`), truncate
+     strictly to `DATE <= development_end` (`2024-05-28`) in memory before writing
+     `data/research/research_lane/cboe_vol_indices/cboe_daily_le_20240528.parquet`, and
+     compute causal session-close (`16:15 ET`, strictly before `open[t+1]`) regime series:
+     `vix_term_30_90 = VIX / VIX3M`, `vix_term_9_30 = VIX9D / VIX`, `vxn_to_vix = VXN / VIX`,
+     `cboe_skew_z60`, and `spy_vrp_20 = VIX / (100 * spy_rvol_20d)`.
+2. **Pre-registered volatility-regime Core-Satellite evaluation (`score-vol-regime-core-satellite`):**
+   - Evaluate `3` pre-registered volatility-regime policies across `80/20` and `90/10`
+     (`core_spy` and `core_sp500_tilt_news`) at `5, 10, 21, 63` sessions (`OOS 2021..2024`
+     and `OOS 2020..2024`) net of `20 bps` exact post-drift turnover:
+     - `R1_backwardation_to_spy`: shifts the satellite allocation into `SPY` whenever
+       `VIX[t] / VIX3M[t] > 1.0` (front-month IV backwardation) and holds
+       `sat_beta_neutral_eq24_sec_xgb` in contango (`<= 1.0`).
+     - `R2_adaptive_hedge_switch`: holds `sat_raw_eq24_sec_xgb` in calm contango
+       (`VIX / VIX3M <= 1.0` and `VIX9D / VIX <= 1.05`) and switches to beta/vol-hedged
+       `sat_beta_neutral_eq24_sec_xgb` + short-reversal snapback tilt in backwardation.
+     - `R3_walk_forward_vol_interaction_xgb`: purged (`t + h < fold.test_start`) shallow
+       `XGBoost` ranker combining Stage-1/Stage-2 scores with `px_beta_252d * (vix_term_30_90 - 1)`
+       and `px_reversal_5d * (vix_term_30_90 - 1)` cross-sectional regime interactions.
+   - Unchanged reading rule (`net excess vs SPY > 0` at `20 bps`, `NW t >= 2.50` [reporting
+     `>= 3.00`], `>= 75%` positive years vs `SPY`, standalone satellite `NW t >= 2.00`).
+
+Exit gates: unit tests for CBOE CSV truncation (`<= development_end`), sealed-date refusal,
+and truncated-history / future-poison invariance of all 5 volatility regime features and
+`R1`/`R2`/`R3` weights; Ruff, strict `mypy`, and `pytest`; real collection and evaluation
+runs under the heavy-job lease and `< 90%` memory ceiling; trial-log entry.
+
 ### Research lane step 5d: unified Core SPY / S&P 500 tilt + mid/small SEC-catalyst satellite evaluation & live Finviz Elite / Alpaca / SEC forward recorder (Option 1) — November 20
 
 Status: `complete` (implementation commit `e247eda`). Measured November 20 across the

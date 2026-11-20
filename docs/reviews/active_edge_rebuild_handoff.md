@@ -1,5 +1,17 @@
 # Active Edge Rebuild Handoff
 
+### Research lane step 5e ($0 public CBOE volatility term-structure & skew regime conditioning on Core-Satellite vs. SPY) — November 20
+
+Status: `complete` (implementation commit `cfa52f8`, trial log line `13`). Zero-fit volatility term-structure state machines (`R1_backwardation_to_spy` and `R2_adaptive_hedge_sec_xgb`) improved cumulative returns, Sharpe, and drawdowns over unconditioned satellites while fitted `XGBoost` macro-regime interactions (`R3`) overfit historical crises. `2024-05-29..2026-07-08` remains `100%` untouched and sealed (`earns_sealed_period_test = false`). No step is `in_progress`.
+
+Key measured Step 5e facts (`data/research/research_lane/vol_regime_core_satellite_20261120T104017Z`, research labels on adjusted prices, net of `20 bps`, peak `1.70 GiB`):
+- **CBOE daily history (`data/research/research_lane/cboe_vol_indices/cboe_daily.parquet`):** `2,635` rows (`2014-01-02..2024-05-28`), `2,114/2,114` sessions covered, `313` backwardation sessions (`14.81%`).
+- **`R2_adaptive_hedge_sec_xgb` (`OOS 2021..2024`):** standalone mid/small compounded **`+98.03%` vs. `+72.68%` for `SPY` at `63d`** (`+9.70%/yr [NW t = 1.77]` vs. matched mid/small); joint `80% SPY + 20% R2` compounded **`+79.81%` vs. `+72.68%` at `63d`** (`+1.67%/yr [NW t = 0.95]`) and **`+76.71%` vs. `+75.57%` at `5d`**.
+- **`R1_backwardation_to_spy` (`OOS 2020..2024` incl. March 2020 COVID spike):** `90_10__sp500_tilt_eq24__R1` (`10d`) compounded **`+162.51%` vs. `+130.57%` for `SPY`** (`+2.74%/yr [NW t = 0.93]`, `4/6` positive years, **MaxDD `-22.92%` vs. `-24.15%` for `SPY`**); `80_20__spy__R1` (`21d`, `2021..2024`) compounded **`+76.19%` vs. `+72.15%` for `SPY`** (`Sharpe 0.77` vs. `0.75`).
+- **`R3_vol_interaction_xgb`:** failed out-of-sample (`-1.66%..+19.79%` standalone), confirming macro IV term structure must be applied as a zero-fit structural conditioner rather than a fitted tree feature.
+- Verified: `mypy --strict` (`0` issues in `28` source files), `ruff` (`0` errors), focused `pytest` (`13/13` passed).
+- Exact next step (Step 2 of 3 per user instruction): execute **Step 5f** (wire zero-fit live Alpaca `OPRA` `SPY`/`QQQ` `30d/90d` IV term structure, front-week `ATM Straddle %` + Catalyst Shock-to-Straddle ratio, and `25-Delta` Put-Call IV Skew into `forward_record.py`), followed by **Step 5g** (idempotent `"latest"` daily prospective forward accumulation).
+
 ### Research lane steps 5a–5d ($0 S&P 500 + wider mid/small-cap two-stage, beta-neutral, Core-Satellite vs SPY & multi-source live forward recorder) — November 20
 
 Status: `complete` (implementation commits `140f63c` -> `e423199` -> `643c801` -> `e247eda`). All steps in Recommendation Brief §6 Steps 1–4 plus Steps 5c and 5d (unified Core `SPY` / S&P 500 tilt + `mid_small_ex_sp500` Stage-1 & Stage-2 precise SEC-catalyst satellite evaluation against `SPY`, `FINVIZ_API_KEY` config alias alignment, and live Finviz Elite + Alpaca `fiscal.ai` + SEC forward catalyst capture on `2026-11-19`) have been executed, verified, and logged (`12` lines in `data/research/research_lane/trials.jsonl`). `2024-05-29..2026-07-08` remains `100%` untouched and sealed (`earns_sealed_period_test = false`). No step is `in_progress`.
