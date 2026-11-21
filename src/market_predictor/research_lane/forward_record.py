@@ -41,7 +41,7 @@ from market_predictor.config import Settings, get_settings
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
-from market_predictor.research_lane import indicators, opra_options, predictors, reversal
+from market_predictor.research_lane import indicators, opra_options, predictors, reversal, sec_catalyst_model
 from market_predictor.research_lane.beta_neutral import (
     _ACTIVIST_FORMS,
     _DISTRESS_8K_ITEMS,
@@ -74,6 +74,12 @@ FINVIZ_ELITE_NEWS_URL: Final = "https://elite.finviz.com/news_export.ashx"
 SEC_COMPANY_TICKERS_URL: Final = "https://www.sec.gov/files/company_tickers.json"
 DEFAULT_CATALYST_TOP_K: Final = 100
 FROZEN_PROSPECTIVE_CANDIDATES: Final[tuple[dict[str, Any], ...]] = (
+    {
+        "candidate_id": "mid_small_bn_sec_xgb_opra_10d",
+        "horizon_sessions": 10,
+        "regime_rule": "shift_satellite_to_spy_when_iv_term_30_90_gt_1",
+        "satellite_score_column": "score_mid_small_bn_sec_xgb_opra_10d",
+    },
     {
         "candidate_id": "90_10__sp500_tilt_news__R1_backwardation_to_spy",
         "horizon_sessions": 10,
@@ -480,6 +486,7 @@ def collect_live_prospective_catalysts(
     settings: Settings,
     *,
     catalyst_top_k: int = DEFAULT_CATALYST_TOP_K,
+    sec_model_bundle_dir: Path | None = None,
     unseal_final_test_period: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     """Collect & classify live Finviz Elite, Alpaca (`fiscal.ai`), and SEC catalysts `<= close_utc(scored_session)`."""
@@ -487,10 +494,16 @@ def collect_live_prospective_catalysts(
     if scored_day <= HISTORICAL_SEALED_END and not unseal_final_test_period:
         raise SealedPeriodError(f"cannot collect live catalysts on or before {HISTORICAL_SEALED_END.isoformat()}")
 
+    loaded_sec_bundle: sec_catalyst_model.LoadedSecCatalystBundle | None = None
+    if sec_model_bundle_dir is not None and (sec_model_bundle_dir / "_manifest.json").is_file():
+        loaded_sec_bundle = sec_catalyst_model.verify_and_load_sec_catalyst_bundle(sec_model_bundle_dir)
+
     cutoff_utc = datetime.combine(scored_day, time(16, 0), tzinfo=ZoneInfo(MARKET_TIMEZONE)).astimezone(UTC)
     window_start_utc = cutoff_utc - timedelta(days=30)
+    sec_batch_start_utc = cutoff_utc - timedelta(days=sec_catalyst_model.LIVE_SEC_LOOKBACK_DAYS)
     if not unseal_final_test_period:
         window_start_utc = max(window_start_utc, datetime(2026, 7, 9, 0, 0, tzinfo=UTC))
+        sec_batch_start_utc = max(sec_batch_start_utc, datetime(2026, 7, 9, 0, 0, tzinfo=UTC))
 
     rank_col = (
         "score_beta_neutral_price_12"
@@ -502,6 +515,9 @@ def collect_live_prospective_catalysts(
     top_tickers = [sid.split(":", 1)[1] if ":" in sid else sid for sid in top_sec_ids]
 
     raw_events: list[dict[str, Any]] = []
+    batch_8k_rows: list[dict[str, Any]] = []
+    batch_non8k_rows: list[dict[str, Any]] = []
+    sec_queried_sids: set[str] = set()
     company_meta: dict[str, tuple[str, str | None]] = {}
     source_errors: dict[str, int] = {"finviz": 0, "alpaca": 0, "sec": 0}
 
@@ -528,6 +544,7 @@ def collect_live_prospective_catalysts(
                 sub = sec.client.get_json(sec.submissions_url.format(cik=cik_10))
                 if not isinstance(sub, dict):
                     continue
+                sec_queried_sids.add(f"ticker:{tk}")
                 s_rows, comp_name, comp_avail = _extract_live_sec_catalysts_and_company(
                     sub,
                     ticker=tk,
@@ -538,6 +555,16 @@ def collect_live_prospective_catalysts(
                 )
                 company_meta[tk] = (comp_name, comp_avail)
                 raw_events.extend(s_rows)
+                if loaded_sec_bundle is not None:
+                    b8, bn8 = sec_catalyst_model.extract_live_sec_batch_tables_for_cik(
+                        sub,
+                        security_id=f"ticker:{tk}",
+                        cik=cik_10,
+                        window_start_utc=sec_batch_start_utc,
+                        cutoff_utc=cutoff_utc,
+                    )
+                    batch_8k_rows.extend(b8)
+                    batch_non8k_rows.extend(bn8)
             except Exception:
                 source_errors["sec"] += 1
 
@@ -632,6 +659,22 @@ def collect_live_prospective_catalysts(
             enriched[c_int] = 0
         enriched["latest_catalyst_family"] = None
         enriched["latest_catalyst_rx_1d"] = None
+        sec_model_rep_empty: dict[str, Any] = {"model_scored": False, "reason": "bundle_not_present"}
+        if loaded_sec_bundle is not None:
+            df_8k_e = pd.DataFrame(batch_8k_rows, columns=[
+                "security_id", "sec_cik", "accession_number", "sec_form", "item_codes", "accepted_at_utc", "available_at_utc",
+            ])
+            df_n8_e = pd.DataFrame(batch_non8k_rows, columns=[
+                "security_id", "sec_cik", "accession_number", "sec_form", "catalyst_family", "available_at_utc",
+            ])
+            enriched, sec_model_rep_empty = sec_catalyst_model.predict_live_sec_catalyst_scores(
+                panel,
+                enriched,
+                all_8k_events=df_8k_e,
+                non8k_events=df_n8_e,
+                queried_security_ids=sec_queried_sids,
+                bundle=loaded_sec_bundle,
+            )
         empty_cat = pd.DataFrame(columns=[
             "event_id", "security_id", "ticker", "source_family", "provider_source", "provider_category",
             "sec_form", "structured_catalyst", "classified_families", "feature_available_at_utc",
@@ -646,6 +689,7 @@ def collect_live_prospective_catalysts(
             "total_events": 0,
             "by_source_family": {},
             "by_classified_family": {},
+            "sec_xgb_model": sec_model_rep_empty,
             "source_errors": source_errors,
         }
 
@@ -726,6 +770,31 @@ def collect_live_prospective_catalysts(
     enriched["latest_catalyst_family"] = [latest_fam.get(s) for s in sids]
     enriched["latest_catalyst_rx_1d"] = [latest_rx.get(s) for s in sids]
 
+    sec_model_rep: dict[str, Any] = {"model_scored": False, "reason": "bundle_not_present"}
+    if loaded_sec_bundle is not None:
+        df_8k = (
+            pd.DataFrame(batch_8k_rows).drop_duplicates(["security_id", "accession_number"])
+            if batch_8k_rows
+            else pd.DataFrame(columns=[
+                "security_id", "sec_cik", "accession_number", "sec_form", "item_codes", "accepted_at_utc", "available_at_utc",
+            ])
+        )
+        df_n8 = (
+            pd.DataFrame(batch_non8k_rows).drop_duplicates(["security_id", "accession_number"])
+            if batch_non8k_rows
+            else pd.DataFrame(columns=[
+                "security_id", "sec_cik", "accession_number", "sec_form", "catalyst_family", "available_at_utc",
+            ])
+        )
+        enriched, sec_model_rep = sec_catalyst_model.predict_live_sec_catalyst_scores(
+            panel,
+            enriched,
+            all_8k_events=df_8k,
+            non8k_events=df_n8,
+            queried_security_ids=sec_queried_sids,
+            bundle=loaded_sec_bundle,
+        )
+
     keep_cols = [
         "event_id", "security_id", "ticker", "source_family", "provider_source", "provider_category",
         "sec_form", "structured_catalyst", "classified_families", "feature_available_at_utc",
@@ -746,6 +815,7 @@ def collect_live_prospective_catalysts(
         "total_events": len(cat_out),
         "by_source_family": dict(sorted(by_src.items())),
         "by_classified_family": dict(sorted(by_cfam.items())),
+        "sec_xgb_model": sec_model_rep,
         "source_errors": source_errors,
     }
 
@@ -794,6 +864,7 @@ def record_forward_scores(
     data_root: Path | None = None,
     panel: Path = PANEL_DIRECTORY,
     output_parent: Path = FORWARD_RECORD_DIRECTORY,
+    sec_model_bundle: Path = sec_catalyst_model.DEFAULT_SEC_MODEL_BUNDLE_DIR,
     live_prospective: bool = False,
     include_live_catalysts: bool = True,
     include_live_options: bool = True,
@@ -857,12 +928,14 @@ def record_forward_scores(
 
         catalysts_df: pd.DataFrame | None = None
         catalyst_summary: dict[str, Any] | None = None
+        bundle_abs = sec_model_bundle if sec_model_bundle.is_absolute() else paths.write(paths.identity(sec_model_bundle))
         if live_prospective and include_live_catalysts:
             scores_df, catalysts_df, catalyst_summary = collect_live_prospective_catalysts(
                 loaded_panel,
                 scores_df,
                 cfg,
                 catalyst_top_k=catalyst_top_k,
+                sec_model_bundle_dir=bundle_abs,
                 unseal_final_test_period=unseal_final_test_period,
             )
 

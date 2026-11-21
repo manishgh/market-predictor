@@ -31,7 +31,7 @@ import requests
 
 from market_predictor.config import Settings
 from market_predictor.core.runtime_memory import guard
-from market_predictor.research_lane import indicators
+from market_predictor.research_lane import indicators, sec_catalyst_model
 from market_predictor.research_lane.panel import MARKET_TIMEZONE, ResearchPanel, SealedPeriodError
 from market_predictor.research_lane.predictors import centered_rank
 
@@ -473,6 +473,7 @@ def collect_live_opra_options_overlay(
         for col in (
             "atm_straddle_pct", "put_call_skew_25d", "atm_iv_30d", "atm_iv_to_atr_ratio",
             "catalyst_shock_to_straddle", "score_reversal_skew_vetoed", "score_r2_opra_conditioned",
+            "score_mid_small_bn_sec_xgb_opra_10d", "score_mid_small_bn_sec_xgb_opra_21d",
         ):
             enriched[col] = None
         enriched["falling_knife_put_skew_veto"] = False
@@ -487,9 +488,13 @@ def collect_live_opra_options_overlay(
     col_of = {sid: idx for idx, sid in enumerate(panel.security_ids)}
 
     rank_col = (
-        "score_beta_neutral_price_12"
-        if "score_beta_neutral_price_12" in enriched.columns and enriched["score_beta_neutral_price_12"].notna().any()
-        else "score_price_equal_12"
+        "score_mid_small_bn_sec_xgb_10d"
+        if "score_mid_small_bn_sec_xgb_10d" in enriched.columns and enriched["score_mid_small_bn_sec_xgb_10d"].notna().any()
+        else (
+            "score_beta_neutral_price_12"
+            if "score_beta_neutral_price_12" in enriched.columns and enriched["score_beta_neutral_price_12"].notna().any()
+            else "score_price_equal_12"
+        )
     )
     ordered = enriched.sort_values(rank_col, ascending=False, na_position="last")
     # Also include top reversal candidates so the `falling_knife_put_skew_veto` covers reversal longs!
@@ -620,6 +625,15 @@ def collect_live_opra_options_overlay(
     else:
         r2_vals = raw_arr
     enriched["score_r2_opra_conditioned"] = [None if not np.isfinite(v) else float(v) for v in r2_vals]
+
+    # 5. Combine persisted `mid_small_beta_neutral_sec` XGBoost scores with live `OPRA` `25d` put-skew veto & `ATM straddle` shock!
+    for h_tag in ("10d", "21d"):
+        src_c = f"score_mid_small_bn_sec_xgb_{h_tag}"
+        dst_c = f"score_mid_small_bn_sec_xgb_opra_{h_tag}"
+        if src_c in enriched.columns:
+            enriched[dst_c] = sec_catalyst_model.apply_opra_straddle_skew_overlay(
+                enriched, base_col=src_c, out_col=dst_c,
+            )
 
     shock_gt_straddle = sum(
         1 for m in metrics_by_sid.values()

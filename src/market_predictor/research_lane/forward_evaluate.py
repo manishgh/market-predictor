@@ -39,6 +39,9 @@ EVALUATE_FORWARD_COMMAND: Final = "evaluate-forward-research-scores"
 FORWARD_EVAL_DIRECTORY: Final = Path("data/research/research_lane/forward_evaluations")
 DEFAULT_EVAL_HORIZONS: Final[tuple[int, ...]] = (1, 2, 3, 5, 10, 21, 63)
 SIGNAL_COLUMNS: Final[tuple[str, ...]] = (
+    "score_mid_small_bn_sec_xgb_opra_10d",
+    "score_mid_small_bn_sec_xgb_10d",
+    "score_mid_small_bn_sec_xgb_21d",
     "score_price_equal_12",
     "score_beta_neutral_price_12",
     "score_r2_opra_conditioned",

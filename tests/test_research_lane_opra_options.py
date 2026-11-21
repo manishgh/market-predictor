@@ -221,7 +221,8 @@ def test_latest_completed_session_cutoff_and_idempotent_skip_existing(tmp_path: 
         assert m1["requested_as_of_date"] == "latest"
         assert m1["scored_session"] == "2026-11-19"
         assert m1["sealed_holdout_untouched"] is True
-        assert len(m1["frozen_prospective_candidates"]) == 2
+        assert len(m1["frozen_prospective_candidates"]) == 3
+        assert m1["frozen_prospective_candidates"][0]["candidate_id"] == "mid_small_bn_sec_xgb_opra_10d"
         assert mock_panel.call_count == 1
 
         # Second call with skip_existing=True short-circuits before panel fetch & does not duplicate log!

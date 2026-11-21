@@ -139,6 +139,7 @@
     "train-edge-swing-broker-specialists",
     "train-investment-models",
     "train-investment-ranking",
+    "train-research-lane-sec-catalyst-model",
     "train-swing-returns",
     "validate-strategy-execution-ledger",
     "validate-strategy-research-contracts",

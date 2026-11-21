@@ -9,7 +9,7 @@ from typing import Any
 
 import typer
 
-from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
+from market_predictor.core.errors import ArtifactIntegrityError, DataReadinessError, MemoryBudgetError
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError
 from market_predictor.research_lane.beta_neutral import collect_wider_sec_catalysts
 from market_predictor.research_lane.forward_evaluate import evaluate_forward_scores
@@ -18,6 +18,10 @@ from market_predictor.research_lane.free_backfill import BACKFILL_DIRECTORY, col
 from market_predictor.research_lane.panel import DEFAULT_DEVELOPMENT_END, PANEL_DIRECTORY
 from market_predictor.research_lane.run import score_wider_beta_neutral_models
 from market_predictor.research_lane.sealed_holdout import SEALED_EXTENSION_DIR, evaluate_sealed_holdout_2024_2026
+from market_predictor.research_lane.sec_catalyst_model import (
+    DEFAULT_SEC_MODEL_BUNDLE_DIR,
+    train_and_persist_sec_catalyst_model,
+)
 from market_predictor.research_lane.vol_regime import CBOE_DIRECTORY, collect_cboe_vol_indices
 from market_predictor.research_lane.wider_universe import (
     WIDER_UNIVERSE_DIRECTORY,
@@ -32,7 +36,7 @@ def _invoke(function: Callable[..., dict[str, Any]], **arguments: Any) -> None:
     except HeavyJobBusyError as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(code=HEAVY_JOB_BUSY_EXIT_CODE) from error
-    except (DataReadinessError, MemoryBudgetError, OSError, ValueError, RuntimeError) as error:
+    except (ArtifactIntegrityError, DataReadinessError, MemoryBudgetError, OSError, ValueError, RuntimeError) as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(code=2) from error
     typer.echo(json.dumps(result, sort_keys=True, allow_nan=False))
@@ -70,6 +74,10 @@ def register_research_lane_commands(app: typer.Typer) -> None:
         ),
         data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
         panel: Path = typer.Option(PANEL_DIRECTORY),
+        sec_model_bundle: Path = typer.Option(
+            DEFAULT_SEC_MODEL_BUNDLE_DIR,
+            help="Persisted Stage-2 SEC Catalyst XGBoost bundle directory scored when present.",
+        ),
         live_prospective: bool = typer.Option(False, help="Fetch trailing live Alpaca SIP bars (> 2026-07-08)."),
         include_live_catalysts: bool = typer.Option(
             True, help="Capture live Finviz Elite, Alpaca, and SEC catalysts in live_prospective mode."
@@ -98,6 +106,7 @@ def register_research_lane_commands(app: typer.Typer) -> None:
             as_of_date=parsed_day,
             data_root=data_root,
             panel=panel,
+            sec_model_bundle=sec_model_bundle,
             live_prospective=live_prospective,
             include_live_catalysts=include_live_catalysts,
             include_live_options=include_live_options,
@@ -240,5 +249,33 @@ def register_research_lane_commands(app: typer.Typer) -> None:
             sp500_backfill_dir=sp500_backfill_dir,
             wider_dir=wider_dir,
             ext_dir=ext_dir,
+            unseal_final_test_period=unseal_final_test_period,
+        )
+
+    @app.command("train-research-lane-sec-catalyst-model")
+    def train_sec_catalyst_model(
+        root: Path = typer.Option(...),
+        data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
+        output: Path = typer.Option(DEFAULT_SEC_MODEL_BUNDLE_DIR),
+        panel: Path = typer.Option(PANEL_DIRECTORY),
+        sp500_backfill_dir: Path = typer.Option(BACKFILL_DIRECTORY),
+        wider_dir: Path = typer.Option(WIDER_UNIVERSE_DIRECTORY),
+        ext_dir: Path = typer.Option(SEALED_EXTENSION_DIR),
+        overwrite: bool = typer.Option(False, "--overwrite", help="Replace existing model bundle atomically."),
+        unseal_final_test_period: bool = typer.Option(
+            False, help="Explicit authorization required to train through 2026-07-08."
+        ),
+    ) -> None:
+        """Train & persist the surviving mid_small_beta_neutral_sec Stage-2 XGBoost bundle (2019-07-09..2026-07-08)."""
+        _invoke(
+            train_and_persist_sec_catalyst_model,
+            root=root,
+            output=output,
+            data_root=data_root,
+            panel=panel,
+            sp500_backfill_dir=sp500_backfill_dir,
+            wider_dir=wider_dir,
+            ext_dir=ext_dir,
+            overwrite=overwrite,
             unseal_final_test_period=unseal_final_test_period,
         )
