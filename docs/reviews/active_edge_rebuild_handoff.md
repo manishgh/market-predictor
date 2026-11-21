@@ -19,7 +19,7 @@
 2. **Operational Live Prospective Forward Recorder (`> 2026-07-08`, Zero Future Outcomes Read):**
    - Modules: `src/market_predictor/research_lane/forward_record.py` and `src/market_predictor/research_lane/opra_options.py`.
    - Captures `1,000` SEC-verified `A..Z` US common stocks (`>= $5`), live Finviz Elite (`news_export.ashx`), Alpaca (`fiscal.ai`), and SEC EDGAR catalysts classified via `classify_event_families`, plus zero-fit `OPRA` `SPY`/`QQQ` `30d/90d` constant-maturity IV term structure, front-expiry `ATM Straddle %`, `catalyst_shock_to_straddle`, `25d` Put–Call IV Skew, `falling_knife_put_skew_veto`, and `score_r2_opra_conditioned`.
-   - Retained append-only snapshots in `data/research/research_lane/forward_records/`: `2026-11-16`, `2026-11-17`, `2026-11-18`, `2026-11-19` (`4` lines in `forward_log.jsonl`).
+   - Retained append-only snapshots in `data/research/research_lane/forward_records/`: `2026-11-16`, `2026-11-17`, `2026-11-18`, `2026-11-19`, `2026-11-20` (`5` lines in `forward_log.jsonl`), plus matured outcome evaluation `data/research/research_lane/forward_evaluations/forward_eval_20261121T185348Z` (`commit 1e65122`: `9` matured pairs through `2026-11-20` confirming `OPRA` `25d` put-skew vetoed stocks trailed `SPY` by `-1.66%` to `-6.02%` at `3d` while `shock > straddle` stocks beat `SPY` by `+0.22%..+1.77%`).
 
 ## 3. Files To Read First When Resuming
 
@@ -39,4 +39,4 @@
   - `.\.venv\Scripts\python.exe -m mypy --strict src/market_predictor/config.py src/market_predictor/research_lane src/market_predictor/commands/research_lane.py`
   - `.\.venv\Scripts\python.exe -m pytest -q tests/test_active_continuity_documents.py tests/test_architecture_boundaries.py tests/test_model_artifact_retention.py tests/test_strategy_governance.py tests/test_strategy_research_contracts.py tests/test_cli_surfaces.py tests/test_config_secrets.py tests/test_research_lane_*.py`
 
-Exact next checkpoint: run daily post-close (`>= 16:25 ET` on weekdays) prospective forward score, multi-source catalyst, and `OPRA` option-chain accumulation via `.\.venv\Scripts\python.exe -m market_predictor.research_cli record-forward-research-scores --root C:\project\market-predictor --as-of-date latest --live-prospective --skip-existing` while `2024-05-29..2026-07-08` remains sealed, or await explicit user approval before running a single governed final-test evaluation on one frozen candidate.
+Exact next checkpoint: execute Step 6 (user-authorized one-time final-test holdout evaluation on `2024-05-29..2026-07-08` for the pre-declared frozen `R1` and `R2` Core-Satellite volatility-regime candidates vs. `SPY`, keeping all `<= 2024-05-28` development artifacts byte-for-byte unchanged).

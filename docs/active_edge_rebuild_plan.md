@@ -1,21 +1,29 @@
 # Active Edge Rebuild Plan
 
-## 1. Standing Operational Checkpoint
+## 1. Current Active Checkpoint
 
-Current checkpoint: **Daily prospective forward score, multi-source catalyst & OPRA option accumulation while 2024-05-29..2026-07-08 remains sealed** (`in progress`).
+Current checkpoint: **Step 6 — Pre-registered single final-test holdout evaluation (`2024-05-29..2026-07-08`) of frozen `R1` and `R2` Core-Satellite volatility-regime candidates vs. `SPY`** (`in progress`).
 
-- **Operational command (post-close `>= 16:25 ET` on weekdays):**
-  `.\.venv\Scripts\python.exe -m market_predictor.research_cli record-forward-research-scores --root C:\project\market-predictor --as-of-date latest --live-prospective --skip-existing`
-- **Frozen invariants:**
-  1. The historical final-test holdout window (`2024-05-29..2026-07-08`) remains `100%` untouched and sealed (`earns_sealed_period_test = false` across all `13` historical development trials in `data/research/research_lane/trials.jsonl`). Unsealing requires explicit user approval for one frozen candidate.
-  2. Prospective snapshots (`> 2026-07-08`) clamp trailing SIP daily bars strictly to `>= 2026-07-09`, enforce the `16:20 America/New_York` post-close settlement cutoff (`resolve_latest_completed_session`), and record zero future outcomes.
-  3. Every prospective `_manifest.json` stamps `FROZEN_PROSPECTIVE_CANDIDATES`:
-     - `90_10__sp500_tilt_news__R1_backwardation_to_spy` (`10d` primary swing candidate — shifts the `10%` mid/small satellite into `SPY` when `30d/90d` IV term structure `> 1.0` and holds `score_beta_neutral_price_12` + catalyst ranker in contango).
-     - `80_20__spy__R2_adaptive_hedge_sec_xgb` (`63d` core-satellite candidate — `score_r2_opra_conditioned`, holding `score_price_equal_12` in contango and switching to `0.70 * score_beta_neutral_price_12 + 0.30 * score_reversal_skew_vetoed` in backwardation).
+- **User authorization (November 21):** `"lets start 1 and then 2 and in the end we will see about 3"` — Step 1 (`Step 5h` live forward snapshot & outcome maturation scorer) is complete and pushed (`1e65122`); now execute Step 2 (`one-time final-test evaluation on 2024-05-29..2026-07-08`).
+- **Pre-declared frozen final-test protocol (locked on `main` before loading any `2024-05-29..2026-07-08` rows):**
+  1. **Evaluation window:** strictly `2024-05-29` through `2026-07-08` (`~529` sessions), scored via purged walk-forward folds (`2024H2` `2024-05-29..2024-12-31`, `2025` `2025-01-02..2025-12-31`, `2026H1` `2026-01-02..2026-07-08` where every training row satisfies `t + h < fold.test_start`, zero tuning, zero hyperparameter changes, zero feature edits).
+  2. **Pre-declared primary & secondary candidates (`FROZEN_PROSPECTIVE_CANDIDATES`):**
+     - **Primary Swing Candidate (`10d`):** `90_10__sp500_tilt_news__R1_backwardation_to_spy` (`90%` S&P 500 cap-weighted `equal_rank_24 + news_xgboost` tilt + `10%` `mid_small_ex_sp500` `beta_neutral + precise SEC xgboost` sleeve shifting to `SPY` when `VIX > VIX3M`), alongside passive-core reference `90_10__spy__R1_backwardation_to_spy`.
+     - **Primary Position Candidate (`63d`, plus `10d` & `21d` diagnostics):** `80_20__spy__R2_adaptive_hedge_sec_xgb` (`80%` `SPY` + `20%` `mid_small_ex_sp500` `R2` adaptive hedge: `raw + SEC xgboost` in contango `VIX <= VIX3M`, `0.70 * beta_neutral_SEC + 0.30 * reversal_5d` in backwardation), alongside standalone `R2_adaptive_hedge_sec_xgb` (`100%` mid/small).
+  3. **Immutable development-data preservation:** all `2024-05-29..2026-07-08` incremental CBOE, Alpaca SIP bar, and SEC `8-K`/non-`8-K` inputs are written to a separate `data/research/research_lane/sealed_holdout_extension_20240529_20260708/` directory so all `<= 2024-05-28` development artifacts remain byte-for-byte unchanged.
+  4. **Final-test acceptance criteria:** net excess return vs. `SPY` `> 0` after `20 bps` exact post-drift turnover across `2024-05-29..2026-07-08`, with Newey-West `t`-statistic, Sharpe, MaxDD, and per-year (`2024H2`, `2025`, `2026H1`) breakdown reported honestly without post-hoc adjustment.
 
 ---
 
-## 2. Completed Active Research-Lane Architecture (Steps 5c–5g, November 19–20)
+## 2. Completed Active Research-Lane Architecture (Steps 5c–5h, November 19–21)
+
+### Step 5h — Live `2026-11-20` Prospective Snapshot & Forward-Outcome Maturation Evaluator (`complete`, commit `1e65122`)
+- Added `src/market_predictor/research_lane/forward_evaluate.py` (`evaluate-forward-research-scores`) and `tests/test_research_lane_forward_evaluate.py`.
+- Captured Friday `2026-11-20` live snapshot (`data/research/research_lane/forward_records/2026-11-20`: `1,000` SEC-verified `A..Z` common stocks, `647` live catalysts = `284` Finviz Elite + `279` Alpaca `fiscal.ai` + `84` SEC, **`spy_iv_30d = 29.83%` vs. `spy_iv_90d = 25.85%` [`1.1539`]** and **`qqq_iv_30d = 39.59%` vs. `qqq_iv_90d = 31.73%` [`1.2477`]**, `opra_backwardation = true`, `2` falling-knife vetoes, `1` shock `>` straddle).
+- Evaluated `9` matured `(snapshot, horizon)` pairs across `2026-11-16..2026-11-19` through `2026-11-20` (`data/research/research_lane/forward_evaluations/forward_eval_20261121T185348Z`, *research labels*, zero sealed data read):
+  - **`OPRA` `falling_knife_put_skew_veto` (`25d` Put–Call IV Skew):** vetoed falling-knife stocks trailed `SPY` by **`-1.66%` (`3d` from `2026-11-16`)** and **`-6.02%` (`3d` from `2026-11-17`, `-11.96%` absolute drop vs. `-5.94%` `SPY`)**.
+  - **`OPRA` `catalyst_shock_to_straddle > 1.0`:** the `3` `2026-11-17` stocks whose catalyst shock exceeded `ATM Straddle %` **beat `SPY` at all 3 matured horizons (`1d +1.77%`, `2d +0.22%`, `3d +0.31%`)** during the `-5.94%` market sell-off.
+  - **`R1` backwardation shift (`2026-11-16`):** live `OPRA` backwardation (`1.0330 > 1.0`) shifted the `10%` satellite into `SPY` (`+0.00%` vs. `SPY`, avoiding `-1.07%` unhedged `beta_neutral` / `-9.21%` unhedged reversal drawdown).
 
 ### Step 5g — Frozen Prospective Candidate Registry & Idempotent `"latest"` Daily Recorder (`complete`, commit `8eae9ca`)
 - Added `FROZEN_PROSPECTIVE_CANDIDATES`, `resolve_latest_completed_session` (`16:20 ET` post-close `SPY` `1Day` SIP bar check strictly `> 2026-07-08`), and `--as-of-date latest --skip-existing` fast-path idempotency in `src/market_predictor/research_lane/forward_record.py` and `src/market_predictor/commands/research_lane.py`.
