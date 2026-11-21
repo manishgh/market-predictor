@@ -21,14 +21,9 @@ from market_predictor.research_lane.run import (
     score_fundamental_predictors,
     score_price_predictors,
     score_short_reversal,
-    score_swing_setups,
-    score_technical_models,
-    score_two_stage_models,
     score_vol_regime_core_satellite,
     score_wider_beta_neutral_models,
-    score_wider_two_stage_models,
 )
-from market_predictor.research_lane.setups import VolatilityMode
 from market_predictor.research_lane.vol_regime import CBOE_DIRECTORY, collect_cboe_vol_indices
 from market_predictor.research_lane.wider_universe import (
     WIDER_UNIVERSE_DIRECTORY,
@@ -82,22 +77,6 @@ def register_research_lane_commands(app: typer.Typer) -> None:
         _invoke(score_fundamental_predictors, root=root, output=output, development_end=development_end.date(),
                 data_root=data_root, panel=panel, unseal_final_test_period=unseal_final_test_period)
 
-    @app.command("score-technical-models")
-    def score_technical(
-        root: Path = typer.Option(...),
-        data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
-        development_end: datetime = typer.Option(DEFAULT_DEVELOPMENT_END.isoformat(), formats=["%Y-%m-%d"],
-                                                 help="Last session loaded; later rows are never read."),
-        output: Path | None = typer.Option(None, help="New directory; default data/research/research_lane/"
-                                                      "technical_models_<UTC timestamp>."),
-        panel: Path = typer.Option(PANEL_DIRECTORY),
-        unseal_final_test_period: bool = typer.Option(
-            False, help="Permit a development end inside the sealed final-test period (2024-05-29 onward)."),
-    ) -> None:
-        """Score additional technical indicators alone and walk-forward ridge/boosted-tree combinations."""
-        _invoke(score_technical_models, root=root, output=output, development_end=development_end.date(),
-                data_root=data_root, panel=panel, unseal_final_test_period=unseal_final_test_period)
-
     @app.command("score-short-reversal")
     def score_reversal(
         root: Path = typer.Option(...),
@@ -113,28 +92,6 @@ def register_research_lane_commands(app: typer.Typer) -> None:
         """Score frozen 1-3 session reversal inputs at 1, 2, 3 and 5 sessions with a pre-registered reading rule."""
         _invoke(score_short_reversal, root=root, output=output, development_end=development_end.date(),
                 data_root=data_root, panel=panel, unseal_final_test_period=unseal_final_test_period)
-
-    @app.command("score-swing-setups")
-    def score_setups(
-        root: Path = typer.Option(...),
-        data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
-        development_end: datetime = typer.Option(DEFAULT_DEVELOPMENT_END.isoformat(), formats=["%Y-%m-%d"],
-                                                 help="Last session and catalyst day read; later rows never read."),
-        output: Path | None = typer.Option(None, help="New directory; default data/research/research_lane/"
-                                                      "swing_setups_<UTC timestamp>."),
-        panel: Path = typer.Option(PANEL_DIRECTORY),
-        volatility_mode: str = typer.Option("wilder_atr_14", help="wilder_atr_14 or mtr_14 (Hypothesis V2-01)."),
-        unseal_final_test_period: bool = typer.Option(
-            False, help="Permit a development end inside the sealed final-test period (2024-05-29 onward)."),
-    ) -> None:
-        """Score Stage-1 deterministic swing setups and Stage-2 purged walk-forward meta-models."""
-        if volatility_mode not in ("wilder_atr_14", "mtr_14"):
-            typer.echo(f"unsupported volatility_mode: {volatility_mode}", err=True)
-            raise typer.Exit(code=2)
-        mode: VolatilityMode = "wilder_atr_14" if volatility_mode == "wilder_atr_14" else "mtr_14"
-        _invoke(score_swing_setups, root=root, output=output, development_end=development_end.date(),
-                data_root=data_root, panel=panel, volatility_mode=mode,
-                unseal_final_test_period=unseal_final_test_period)
 
     @app.command("score-benchmark-tilt")
     def score_tilt(
@@ -164,24 +121,6 @@ def register_research_lane_commands(app: typer.Typer) -> None:
         """Resumably collect free SEC company_facts, 2016-2019 daily SIP bars, and pre-2019 8-K releases."""
         _invoke(collect_free_sp500_backfill, root=root, development_end=development_end.date(),
                 data_root=data_root, panel=panel, output=output)
-
-    @app.command("score-two-stage-models")
-    def score_two_stage(
-        root: Path = typer.Option(...),
-        data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
-        development_end: datetime = typer.Option(DEFAULT_DEVELOPMENT_END.isoformat(), formats=["%Y-%m-%d"],
-                                                 help="Last session and filing day read; later rows never read."),
-        output: Path | None = typer.Option(None, help="New directory; default data/research/research_lane/"
-                                                      "two_stage_models_<UTC timestamp>."),
-        panel: Path = typer.Option(PANEL_DIRECTORY),
-        backfill_dir: Path = typer.Option(BACKFILL_DIRECTORY),
-        unseal_final_test_period: bool = typer.Option(
-            False, help="Permit a development end inside the sealed final-test period (2024-05-29 onward)."),
-    ) -> None:
-        """Score Recommendation Brief §5-§6 Stage-1 combined base models and Stage-2 news residual models."""
-        _invoke(score_two_stage_models, root=root, output=output, development_end=development_end.date(),
-                data_root=data_root, panel=panel, backfill_dir=backfill_dir,
-                unseal_final_test_period=unseal_final_test_period)
 
     @app.command("record-forward-research-scores")
     def record_forward(
@@ -240,23 +179,6 @@ def register_research_lane_commands(app: typer.Typer) -> None:
         """Resumably collect the $0 survivorship-checked wider US common-stock universe (<= development_end)."""
         _invoke(collect_wider_us_universe, root=root, development_end=development_end.date(),
                 data_root=data_root, panel=panel, sp500_backfill=sp500_backfill, output=output)
-
-    @app.command("score-wider-two-stage-models")
-    def score_wider_two_stage(
-        root: Path = typer.Option(...),
-        data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
-        development_end: datetime = typer.Option(DEFAULT_DEVELOPMENT_END.isoformat(), formats=["%Y-%m-%d"]),
-        subset: UniverseSubset = typer.Option("all_top1200", help="all_top1200 or mid_small_ex_sp500."),
-        output: Path | None = typer.Option(None),
-        panel: Path = typer.Option(PANEL_DIRECTORY),
-        sp500_backfill_dir: Path = typer.Option(BACKFILL_DIRECTORY),
-        wider_dir: Path = typer.Option(WIDER_UNIVERSE_DIRECTORY),
-        unseal_final_test_period: bool = typer.Option(False),
-    ) -> None:
-        """Score Stage-1 combined base and Stage-2 catalyst residual models on the wider US universe."""
-        _invoke(score_wider_two_stage_models, root=root, output=output, development_end=development_end.date(),
-                subset=subset, data_root=data_root, panel=panel, sp500_backfill_dir=sp500_backfill_dir,
-                wider_dir=wider_dir, unseal_final_test_period=unseal_final_test_period)
 
     @app.command("collect-research-lane-sec-catalysts")
     def collect_sec_catalysts(
