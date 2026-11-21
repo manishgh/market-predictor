@@ -2,7 +2,7 @@
 
 ## 1. Current Repository & Branch State (November 21)
 
-- **Checkout & Branch:** `C:/project/market-predictor` on `main` (single canonical checkout per `AGENTS.md`; latest implementation commit `c484658`).
+- **Checkout & Branch:** `C:/project/market-predictor` on `main` (single canonical checkout per `AGENTS.md`; latest implementation commit `eb600e5`).
 - **Unsealed Historical Window (`2016-01-04..2026-07-08`):** `2024-05-29..2026-07-08` (`528` sessions) was evaluated once in Step 6 (`c484658`, `data/research/research_lane/sealed_holdout_20240529_20260708_20261121T193257Z`, `trials.jsonl` line `14`) with all `<= 2024-05-28` artifacts left byte-for-byte untouched. That window is now **permanently development history**; the **prospective live forward ledger (`2026-11-16+`)** is the sole untouched out-of-sample test clock.
 - **Heavy-Job Lease:** `data/runtime/heavy_job.lease` absent (`0` background workers).
 
@@ -20,7 +20,7 @@
 2. **Retained Research-Lane Scoreboards & Retired Failed Artifacts:**
    - **Retained authoritative scoreboards:** `data/research/research_lane/wider_beta_neutral_mid_small_ex_sp500_20261119T222600Z` (`trials.jsonl` line `11`, validated `mid_small` beta-neutral + SEC catalyst model) and `data/research/research_lane/sealed_holdout_20240529_20260708_20261121T193257Z` (`trials.jsonl` line `14`, Step 6 `2024–2026` holdout verdict), plus `data/research/research_lane/trials.jsonl` (`14` lines).
    - **Retired failed/superseded artifacts:** `127` zero-reference failed/intermediate `data/research` entries (`7.66 GB`), `3` superseded pre-holdout intermediate scoreboards, `docs/contracts/tradingflow_handoff.md`, `R3_vol_interaction_xgb`, and `6` failed standalone scorer CLI commands (`score-price-predictors`, `score-fundamental-predictors`, `score-short-reversal`, `score-benchmark-tilt`, `score-core-satellite-spy`, `score-vol-regime-core-satellite`).
-   - **Model-training state:** `0` production models are promoted (`active_serving_pointer_found = false`, API `V1` `actionable = false`). In `research_lane`, Stage-2 `XGBRegressor` trees (`mid_small_beta_neutral_sec`) were fitted in RAM during `score-wider-beta-neutral-models` and `evaluate-sealed-holdout-2024-2026` without persisting a `.joblib`/`.ubj` bundle yet, while `record-forward-research-scores` currently evaluates zero-fit cross-sectional price/beta-neutral ranks plus `OPRA` straddle/skew overlays.
+   - **Model-training state (`Step 7`, commit `eb600e5`):** `0` production models are promoted (`active_serving_pointer_found = false`, API `V1` `actionable = false`). In `research_lane`, the surviving **`mid_small_beta_neutral_sec` Stage-2 `XGBoost` research bundle** (`10d` `260,081` examples / `1,525` stocks; `21d` `257,820` examples / `1,517` stocks, `2019-07-09..2026-07-08`) is trained, persisted, and SHA-256 verified at `data/research/research_lane/models/mid_small_beta_neutral_sec_xgb` (`_manifest.json` SHA-256 `cd18356701f35b44c884d9f587a8e14ed7473878f12f75e2ec27548b4d8ebf04`), and `record-forward-research-scores` verifies and scores it daily (`score_mid_small_bn_sec_xgb_10d`, `score_mid_small_bn_sec_xgb_21d`, `score_mid_small_bn_sec_xgb_opra_10d`) alongside live `OPRA` straddle/skew overlays.
 
 3. **Operational Live Prospective Forward Recorder & Outcome Evaluator (`> 2026-07-08`):**
    - Modules: `src/market_predictor/research_lane/forward_record.py`, `src/market_predictor/research_lane/forward_evaluate.py`, and `src/market_predictor/research_lane/opra_options.py`.
@@ -32,10 +32,11 @@
 2. `docs/active_edge_rebuild_plan.md`
 3. `docs/reviews/active_edge_rebuild_handoff.md`
 4. `docs/reviews/feature_engineering_audit_20260801.md`
-5. `src/market_predictor/research_lane/sealed_holdout.py`
+5. `src/market_predictor/research_lane/sec_catalyst_model.py`
 6. `src/market_predictor/research_lane/forward_record.py`
 7. `src/market_predictor/research_lane/forward_evaluate.py`
 8. `src/market_predictor/research_lane/opra_options.py`
+9. `src/market_predictor/research_lane/sealed_holdout.py`
 
 ## 4. Verification Commands & Next Actions
 

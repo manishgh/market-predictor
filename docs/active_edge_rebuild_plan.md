@@ -2,17 +2,22 @@
 
 ## 1. Current Active Checkpoint
 
-Current checkpoint: **Step 7 — Standing Daily Prospective `OPRA` + Multi-Source Catalyst Accumulation, Maturation Scoring & Optional `D:` Storage Migration Decision** (`in progress`).
+Current checkpoint: **Step 8 — Standing Daily Prospective `mid_small_beta_neutral_sec_xgb` + `OPRA` Straddle/Skew Accumulation & Maturation Evaluation (`> 2026-11-20`)** (`in progress`).
 
-- **Current state (November 21):**
-  1. **Path #1 (`Step 5h`, commit `1e65122`)** and **Path #2 (`Step 6`, commit `c484658`)** are complete, verified, and recorded.
-  2. Because `2024-05-29..2026-07-08` was unsealed once in Step 6 (`data/research/research_lane/sealed_holdout_20240529_20260708_20261121T193257Z`), `2016-01-04..2026-07-08` is now **permanently development history** and may never again be described as an untouched final test. None of the historical price/SEC/news-only Core-Satellite specifications cleared Step 6's `SPY` outperformance promotion gate, so API `V1` remains `actionable = false`.
-  3. **Sole untouched out-of-sample clock (`2026-11-16+`):** continue daily post-close (`>= 16:20 ET`) append-only recording via `record-forward-research-scores --as-of-date latest --skip-existing` and maturation grading via `evaluate-forward-research-scores`, where live `OPRA` single-stock `ATM Straddle %` (`catalyst_shock_to_straddle`), `25d` Put–Call IV Skew (`falling_knife_put_skew_veto`), `SPY`/`QQQ` `30d/90d` IV term structure, and Finviz Elite + Alpaca `fiscal.ai` + SEC catalysts are captured without lookahead.
-  4. **Path #3 user decision pending:** confirm with the user whether to resume the paused November 13 physical `C:` -> `D:/market-predictor/data` dataset migration (`--data-root`) or keep canonical data on `C:`.
+- **Current operational state (November 21):**
+  1. The surviving **`mid_small_beta_neutral_sec` Stage-2 `XGBoost` research bundle** (`2019-07-09..2026-07-08`) is trained, persisted, and SHA-256 verified on disk at `data/research/research_lane/models/mid_small_beta_neutral_sec_xgb` (`_manifest.json` SHA-256 `cd18356701f35b44c884d9f587a8e14ed7473878f12f75e2ec27548b4d8ebf04`, `research_only = true`, `actionable = false`).
+  2. `record-forward-research-scores --live-prospective --as-of-date latest --skip-existing` now automatically verifies and scores `score_mid_small_bn_sec_xgb_10d`, `score_mid_small_bn_sec_xgb_21d`, and `score_mid_small_bn_sec_xgb_opra_10d` (applying `falling_knife_put_skew_veto` + `catalyst_shock_to_straddle` conviction/fade adjustments), and `evaluate-forward-research-scores` grades them against realized `open[t+1] -> close[t+h]` returns and `SPY`.
 
 ---
 
-## 2. Completed Active Research-Lane Architecture (Steps 5c–6, November 19–21)
+## 2. Completed Active Research-Lane Architecture (Steps 5c–7, November 19–21)
+
+### Step 7 — Persisted `mid_small_beta_neutral_sec` Stage-2 `XGBoost` Research Bundle & Live `OPRA` Forward Wiring (`complete`, commit `eb600e5`)
+- Added `src/market_predictor/research_lane/sec_catalyst_model.py` (`train-research-lane-sec-catalyst-model`) and `tests/test_research_lane_sec_catalyst_model.py` (exact batch/live parity, unqueried `None` missingness, `.ubj`/feature-order `ArtifactIntegrityError` tamper detection, and `OPRA` straddle/skew overlay tests).
+- Trained & persisted `data/research/research_lane/models/mid_small_beta_neutral_sec_xgb` (`trials.jsonl` line `15`, `_manifest.json` SHA-256 `cd18356701f35b44c884d9f587a8e14ed7473878f12f75e2ec27548b4d8ebf04`, feature contract SHA-256 `d244cea55bde7b79c22167da6bc83ad315f5165b33fbb3a39826b32d022b868e`, peak RAM `1.92 GiB`, *research labels*):
+  - **`10`-session (`10d`) `3`-seed `XGBRegressor` (`xgb_h10_seed0..2.ubj`):** `350` sampled decision sessions (`2019-07-09..2026-06-17`, last matured outcome `2026-07-02` `<= 2026-07-08`), **`260,081` `(stock, session)` examples across `1,525` distinct `mid_small_ex_sp500` securities**; top features `rx_vol_confirmed` (`21.1%`), `rx_material_any` (`13.1%`), `material_abn_vol_20` (`13.1%`), `material_unusual_count_5_60` (`11.3%`), `rx_earnings_202` (`9.7%`).
+  - **`21`-session (`21d`) `3`-seed `XGBRegressor` (`xgb_h21_seed0..2.ubj`):** `348` sampled decision sessions (`2019-07-09..2026-06-03`, last matured outcome `2026-07-06`), **`257,820` `(stock, session)` examples across `1,517` securities**; top features `rx_vol_confirmed` (`18.5%`), `rx_material_any` (`15.3%`), `material_abn_vol_20` (`12.4%`), `material_unusual_count_5_60` (`10.2%`), `rx_earnings_202` (`8.6%`).
+- Verified live `2026-11-20` end-to-end scoring (`1,000` eligible stocks, `78` SEC-queried stocks across `203` qualified SEC catalyst tuples + `32` boilerplate `8-K`s dropped, `620` `OPRA` option contracts queried, `3` `25d` put-skew falling-knife vetoes, `2` `shock > ATM straddle` breakouts).
 
 ### Step 6 — One-Time Unsealed Final-Test Holdout Evaluation (`2024-05-29..2026-07-08`) vs. `SPY` (`complete`, commit `c484658`)
 - Added `src/market_predictor/research_lane/sealed_holdout.py` (`evaluate-sealed-holdout-2024-2026`) and `tests/test_research_lane_sealed_holdout.py`, keeping all `<= 2024-05-28` files untouched on disk and writing incremental `2024-05-29..2026-07-08` CBOE, SEC `8-K`/non-`8-K`, and overlap-stitched Alpaca SIP bars to `data/research/research_lane/sealed_holdout_extension_20240529_20260708/`.
