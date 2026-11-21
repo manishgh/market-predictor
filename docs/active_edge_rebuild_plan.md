@@ -2,20 +2,28 @@
 
 ## 1. Current Active Checkpoint
 
-Current checkpoint: **Step 6 — Pre-registered single final-test holdout evaluation (`2024-05-29..2026-07-08`) of frozen `R1` and `R2` Core-Satellite volatility-regime candidates vs. `SPY`** (`in progress`).
+Current checkpoint: **Step 7 — Standing Daily Prospective `OPRA` + Multi-Source Catalyst Accumulation, Maturation Scoring & Optional `D:` Storage Migration Decision** (`in progress`).
 
-- **User authorization (November 21):** `"lets start 1 and then 2 and in the end we will see about 3"` — Step 1 (`Step 5h` live forward snapshot & outcome maturation scorer) is complete and pushed (`1e65122`); now execute Step 2 (`one-time final-test evaluation on 2024-05-29..2026-07-08`).
-- **Pre-declared frozen final-test protocol (locked on `main` before loading any `2024-05-29..2026-07-08` rows):**
-  1. **Evaluation window:** strictly `2024-05-29` through `2026-07-08` (`~529` sessions), scored via purged walk-forward folds (`2024H2` `2024-05-29..2024-12-31`, `2025` `2025-01-02..2025-12-31`, `2026H1` `2026-01-02..2026-07-08` where every training row satisfies `t + h < fold.test_start`, zero tuning, zero hyperparameter changes, zero feature edits).
-  2. **Pre-declared primary & secondary candidates (`FROZEN_PROSPECTIVE_CANDIDATES`):**
-     - **Primary Swing Candidate (`10d`):** `90_10__sp500_tilt_news__R1_backwardation_to_spy` (`90%` S&P 500 cap-weighted `equal_rank_24 + news_xgboost` tilt + `10%` `mid_small_ex_sp500` `beta_neutral + precise SEC xgboost` sleeve shifting to `SPY` when `VIX > VIX3M`), alongside passive-core reference `90_10__spy__R1_backwardation_to_spy`.
-     - **Primary Position Candidate (`63d`, plus `10d` & `21d` diagnostics):** `80_20__spy__R2_adaptive_hedge_sec_xgb` (`80%` `SPY` + `20%` `mid_small_ex_sp500` `R2` adaptive hedge: `raw + SEC xgboost` in contango `VIX <= VIX3M`, `0.70 * beta_neutral_SEC + 0.30 * reversal_5d` in backwardation), alongside standalone `R2_adaptive_hedge_sec_xgb` (`100%` mid/small).
-  3. **Immutable development-data preservation:** all `2024-05-29..2026-07-08` incremental CBOE, Alpaca SIP bar, and SEC `8-K`/non-`8-K` inputs are written to a separate `data/research/research_lane/sealed_holdout_extension_20240529_20260708/` directory so all `<= 2024-05-28` development artifacts remain byte-for-byte unchanged.
-  4. **Final-test acceptance criteria:** net excess return vs. `SPY` `> 0` after `20 bps` exact post-drift turnover across `2024-05-29..2026-07-08`, with Newey-West `t`-statistic, Sharpe, MaxDD, and per-year (`2024H2`, `2025`, `2026H1`) breakdown reported honestly without post-hoc adjustment.
+- **Current state (November 21):**
+  1. **Path #1 (`Step 5h`, commit `1e65122`)** and **Path #2 (`Step 6`, commit `c484658`)** are complete, verified, and recorded.
+  2. Because `2024-05-29..2026-07-08` was unsealed once in Step 6 (`data/research/research_lane/sealed_holdout_20240529_20260708_20261121T193257Z`), `2016-01-04..2026-07-08` is now **permanently development history** and may never again be described as an untouched final test. None of the historical price/SEC/news-only Core-Satellite specifications cleared Step 6's `SPY` outperformance promotion gate, so API `V1` remains `actionable = false`.
+  3. **Sole untouched out-of-sample clock (`2026-11-16+`):** continue daily post-close (`>= 16:20 ET`) append-only recording via `record-forward-research-scores --as-of-date latest --skip-existing` and maturation grading via `evaluate-forward-research-scores`, where live `OPRA` single-stock `ATM Straddle %` (`catalyst_shock_to_straddle`), `25d` Put–Call IV Skew (`falling_knife_put_skew_veto`), `SPY`/`QQQ` `30d/90d` IV term structure, and Finviz Elite + Alpaca `fiscal.ai` + SEC catalysts are captured without lookahead.
+  4. **Path #3 user decision pending:** confirm with the user whether to resume the paused November 13 physical `C:` -> `D:/market-predictor/data` dataset migration (`--data-root`) or keep canonical data on `C:`.
 
 ---
 
-## 2. Completed Active Research-Lane Architecture (Steps 5c–5h, November 19–21)
+## 2. Completed Active Research-Lane Architecture (Steps 5c–6, November 19–21)
+
+### Step 6 — One-Time Unsealed Final-Test Holdout Evaluation (`2024-05-29..2026-07-08`) vs. `SPY` (`complete`, commit `c484658`)
+- Added `src/market_predictor/research_lane/sealed_holdout.py` (`evaluate-sealed-holdout-2024-2026`) and `tests/test_research_lane_sealed_holdout.py`, keeping all `<= 2024-05-28` files untouched on disk and writing incremental `2024-05-29..2026-07-08` CBOE, SEC `8-K`/non-`8-K`, and overlap-stitched Alpaca SIP bars to `data/research/research_lane/sealed_holdout_extension_20240529_20260708/`.
+- Executed single unsealed evaluation `data/research/research_lane/sealed_holdout_20240529_20260708_20261121T193257Z` (`trials.jsonl` line `14`; `528` holdout sessions `2024-05-29..2026-07-08`, `71` backwardation sessions = `13.45%`, `626` S&P 500 + `1,653` `mid_small_ex_sp500` securities across `2,642` aligned sessions `2016-01-04..2026-07-08`, `0` simultaneous active CIK overlaps, peak RAM `2.13 GiB`, *research labels* on adjusted prices, net of `20 bps` exact post-drift turnover):
+  - **Core-Satellite Verdict (`0` specs promoted vs. `SPY`):**
+    - `90_10__spy__R1_backwardation_to_spy` (`10d`): `+44.10%` net vs. `SPY +44.21%` (`-0.04%/yr [NW t = -0.05]`, `1/3` positive years; `80/20` `+44.08%`, `-0.02%/yr [NW t = -0.01]`).
+    - `90_10__sp500_tilt_news__R1_backwardation_to_spy` (`10d`): `+41.65%` walk-forward refit (`-1.05%/yr [NW t = -0.35]`, **higher Sharpe `1.51` vs. `SPY 1.42`**, **lower MaxDD `-12.52%` vs. `-12.59%`**) and `+40.31%` frozen `2024-05-28` weights (`-1.52%/yr [NW t = -0.50]`) vs. `SPY +44.21%`.
+    - `80_20__spy__R2_adaptive_hedge_sec_xgb` (`63d`): `+42.29%` walk-forward refit (`-1.72%/yr [NW t = -1.93]`, `0/3` yrs) and `+42.27%` frozen `2024-05-28` weights (`-1.72%/yr [NW t = -1.96]`) vs. `SPY +46.88%`.
+  - **What genuinely held up vs. what failed on `2024-05-29..2026-07-08`:**
+    - **Validated out-of-sample:** Standalone `100% mid_small_ex_sp500` beta/sector/vol-neutral SEC-catalyst sleeve **`R1_base_bn_sec_xgb` at `10d` beat both matched mid/small (`+2.22%/yr [NW t = +0.67]`) and `SPY` (`+44.59%` vs. `+44.21%`, `+0.97%/yr`)** after `20 bps` turnover (`13.02%`), and `mid_small_beta_neutral_sec` Stage-2 SEC residual XGBoost maintained positive Base IC across all 4 horizons (`+0.0142..+0.0259`) plus positive Paired Delta IC across all 4 horizons (**`+0.0005 [NW t = +1.97]` in `3/3` years at `21d`**).
+    - **Failed out-of-sample:** S&P 500 historical Alpaca news Stage-2 added zero IC (`-0.0004 [NW t = -0.60]` at `10d`); S&P 500 equal-rank active tilt lagged narrow `2025–2026H1` mega-cap returns despite improving Sharpe (`1.51` vs. `1.42`); `R2`'s un-neutralized `raw` mid/small contango leg trailed `SPY` (`+24.99%` vs. `+46.88%` at `63d`); and daily-close `VIX > VIX3M` parking (`R1`) whipsawed `~50 bps` during V-bottom rebounds (`Aug 2024`, `Apr 2025`).
 
 ### Step 5h — Live `2026-11-20` Prospective Snapshot & Forward-Outcome Maturation Evaluator (`complete`, commit `1e65122`)
 - Added `src/market_predictor/research_lane/forward_evaluate.py` (`evaluate-forward-research-scores`) and `tests/test_research_lane_forward_evaluate.py`.
