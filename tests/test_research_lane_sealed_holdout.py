@@ -114,7 +114,6 @@ def test_sealed_holdout_fails_closed_without_unseal_and_purges_pre_holdout(tmp_p
         mid_bn_eq24=base_scores,
         mid_raw_sec_by_h={10: comb_wf[10]},
         mid_bn_sec_by_h={10: comb_wf[10]},
-        mid_r3_by_h={10: comb_wf[10]},
         mid_rev5_rank=base_scores.astype(np.float32),
         vol_feats={"is_backwardation": np.zeros(n_s, dtype=np.float64)},
         stage1_oos_start_row=hold_row,

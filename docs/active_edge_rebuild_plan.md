@@ -43,15 +43,14 @@ Current checkpoint: **Step 7 — Standing Daily Prospective `OPRA` + Multi-Sourc
 - Provider fact recorded via bounded probe (`0` sealed rows read): `/v1beta1/options/bars` begins `2024-01-18` / `2024-02-01` (`82` sessions before `2024-05-28`), preventing pre-holdout tree fitting without unsealing `2024-05-29..2026-07-08`.
 
 ### Step 5e — Public CBOE Volatility Term-Structure & Skew Regime Conditioning (`complete`, commit `cfa52f8`)
-- Added `src/market_predictor/research_lane/vol_regime.py`; retained `data/research/research_lane/cboe_vol_indices/cboe_daily.parquet` (`2,635` rows `2014-01-02..2024-05-28` across `VIX`, `VIX3M`, `VIX9D`, `VXN`, `SKEW`; `313/2,114` backwardation sessions = `14.81%`) and `data/research/research_lane/vol_regime_core_satellite_20261120T104017Z` (`trials.jsonl` line `13`).
+- Added `src/market_predictor/research_lane/vol_regime.py`; retained `data/research/research_lane/cboe_vol_indices/cboe_daily.parquet` (`2,635` rows `2014-01-02..2024-05-28` across `VIX`, `VIX3M`, `VIX9D`, `VXN`, `SKEW`; `313/2,114` backwardation sessions = `14.81%`; `trials.jsonl` line `13`).
 - Measured results (*research labels* on adjusted prices, net of `20 bps` post-drift turnover):
   - Zero-fit **`R2_adaptive_hedge_sec_xgb`** beat `SPY` standalone across all `4` horizons (`OOS 2021..2024`), compounding **`+98.03%` vs. `+72.68%` for `SPY` at `63d`** (`+9.70%/yr [NW t = +1.77]` vs. matched mid/small; joint `80/20` compounded **`+79.81%` vs. `+72.68%`** `[NW t = 0.95]`).
   - Zero-fit **`R1_backwardation_to_spy`** compounded **`+162.51%` vs. `+130.57%` for `SPY`** on `OOS 2020..2024` (`10d`, `90/10`, `+2.74%/yr [NW t = 0.93]`, `4/6` positive years, **MaxDD `-22.92%` vs. `-24.15%` for `SPY`**).
-  - Fitted **`R3_vol_interaction_xgb`** collapsed out-of-sample (`-1.66%..+19.79%` standalone), proving macro term structure must be applied as a zero-fit regime conditioner rather than a tree split feature.
+  - Fitted **`R3_vol_interaction_xgb`** collapsed out-of-sample (`-1.66%..+19.79%` standalone) and its code was retired per `AGENTS.md` §3.2.
 
 ### Step 5d — Unified Core `SPY` / S&P 500 Tilt + Mid/Small SEC-Catalyst Satellite & Multi-Source Live Catalysts (`complete`, commit `e247eda`)
-- Added `src/market_predictor/research_lane/core_satellite.py`, `FINVIZ_API_KEY` alias support in `src/market_predictor/config.py`, and Finviz Elite (`news_export.ashx`) + Alpaca (`fiscal.ai`) + SEC live catalyst capture in `forward_record.py`.
-- Retained `data/research/research_lane/core_satellite_spy_20261120T095345Z` (`trials.jsonl` line `12`, `585` S&P 500 + `1,559` `mid_small_ex_sp500` securities, `0` active CIK overlaps): standalone `sat_beta_neutral_eq24_sec_xgb` (`63d`) cleared `NW t = +2.00` (`+6.64%/yr` vs. matched mid/small, `+73.20%` vs. `+72.68%` `SPY`), and `90_10__sp500_tilt_news__sat_beta_neutral_eq24_sec_xgb` (`10d`) compounded `+77.18%` vs. `+75.90%` `SPY`.
+- Added `src/market_predictor/research_lane/core_satellite.py`, `FINVIZ_API_KEY` alias support in `src/market_predictor/config.py`, and Finviz Elite (`news_export.ashx`) + Alpaca (`fiscal.ai`) + SEC live catalyst capture in `forward_record.py` (`trials.jsonl` line `12`, `585` S&P 500 + `1,559` `mid_small_ex_sp500` securities, `0` active CIK overlaps).
 
 ### Step 5c — Beta/Vol/Sector-Neutralized `mid_small_ex_sp500` & `$0` Precise SEC Catalysts (`complete`, commit `643c801`)
 - Added `src/market_predictor/research_lane/beta_neutral.py`; collected `data/research/research_lane/wider_us_universe/wider_non8k_catalysts.parquet` (`208,322` `SC 13D/A`, `S-1/S-3/424B`, and `NT 10-K/Q` filings `<= 2024-05-28` across `2,253` CIKs) and retained `data/research/research_lane/wider_beta_neutral_mid_small_ex_sp500_20261119T222600Z` (`trials.jsonl` line `11`).
@@ -59,20 +58,20 @@ Current checkpoint: **Step 7 — Standing Daily Prospective `OPRA` + Multi-Sourc
 
 ---
 
-## 3. Consolidated Negative-Evidence & Superseded Trial Ledger (`trials.jsonl` Lines 1–10)
+## 3. Consolidated Negative-Evidence & Superseded Trial Ledger (`trials.jsonl` Lines 1–13)
 
-Superseded intermediate scoreboard folders and isolated dead-end setup modules (`setups.py`, `barrier_labels.py`, `meta_model.py`, `score-swing-setups`, `score-technical-models`, `score-two-stage-models`, `score-wider-two-stage-models`) were retired per `AGENTS.md` §3.2 and §3.8. Full commit, input-hash, and metric provenance remains in `data/research/research_lane/trials.jsonl`:
+Superseded intermediate scoreboard folders, `127` unreferenced failed/intermediate `data/research` work folders (`7.66 GB`), `docs/contracts/tradingflow_handoff.md`, `R3_vol_interaction_xgb`, and failed standalone scorer CLI commands (`score-price-predictors`, `score-fundamental-predictors`, `score-short-reversal`, `score-benchmark-tilt`, `score-core-satellite-spy`, `score-vol-regime-core-satellite`, `score-swing-setups`, `score-technical-models`, `score-two-stage-models`, `score-wider-two-stage-models`) were retired per `AGENTS.md` §3.2 and §3.8. Full commit, input-hash, and metric provenance remains in `data/research/research_lane/trials.jsonl`:
 
 | Trial(s) | Step & Scope | Key Measured Result (*research labels*, `<= 2024-05-28`) | Disposition |
 |---|---|---|---|
-| Line `1` | Step 1: `12` price predictors on S&P 500 (`585` securities) | Weak standalone S&P 500 ordering (`composite_all` `21d` IC near `0`). | Inputs retained in `predictors.py`; intermediate folder retired. |
-| Line `2` | Step 2a: `12` SEC `company_facts` + `8-K` Item `2.02` inputs | Fundamental inputs verified point-in-time; standalone S&P 500 spread weak after `20 bps`. | Inputs retained in `fundamentals.py`; intermediate folder retired. |
+| Line `1` | Step 1: `12` price predictors on S&P 500 (`585` securities) | Weak standalone S&P 500 ordering (`composite_all` `21d` IC near `0`). | Inputs retained in `predictors.py`; `score-price-predictors` & folder retired. |
+| Line `2` | Step 2a: `12` SEC `company_facts` + `8-K` Item `2.02` inputs | Fundamental inputs verified point-in-time; standalone S&P 500 spread weak after `20 bps`. | Inputs retained in `fundamentals.py`; `score-fundamental-predictors` & folder retired. |
 | Line `3` | Step 2b: `~50` technical indicators + `24` Ridge/XGBoost specs | Median OOS IC `< 0.03` across `24` specs; rule not met. | `indicators.py` & `fitted.py` retained; `score-technical-models` retired. |
-| Line `4` | Step 2c: `1–3` session short-term reversal (`short_reversal_20261117T132343Z`) | Passed development reading rule at **`3` sessions only**; negative when cap-weighted (`-2.43%/yr [t = -2.21]`). | Retained (`reversal.py` + `short_reversal_20261117T132343Z`). |
+| Line `4` | Step 2c: `1–3` session short-term reversal | Passed development reading rule at **`3` sessions only**; negative when cap-weighted (`-2.43%/yr [t = -2.21]`). | Math retained in `reversal.py`; `score-short-reversal` & folder retired. |
 | Lines `5–6` | Steps 3a & 3b: `Setup A/B/C` candle breakouts + `+2.5/-1.0 ATR` & `MTR(14)` + Stage-2 `XGBClassifier` | `58.8%` stop-out / `22.4%` timeout rate; all Stage-1 & Stage-2 specs trailed matched `SPY` (`-0.25%..-0.34%/trade`, `t = -1.61..-3.57`); `MTR(14)` raised stop-outs to `63.0%`. | Dead-end modules (`setups.py`, `barrier_labels.py`, `meta_model.py`) deleted. |
-| Line `7` | Step 4: S&P 500 cap-weighted benchmark tilt & rank hysteresis (`buy top 10% / hold top 33%`) | Hysteresis cut turnover `71.8% -> 31.3%` (`+6.10%/yr [t = 1.94]` skill at `3d`), `0/48` product specs hit `NW t >= 2.50` vs. `SPY`. | Hysteresis & tilt engine retained in `benchmark_tilt.py`; intermediate folder retired. |
-| Line `8` | Step 5a: Extended `2016–2024` S&P 500 two-stage (`556` CIKs in `sp500_free_backfill`) | Stage-1 `21d` IC `-0.0005 [t = -0.03]`; **Stage-2 Alpaca news residuals passed `NW t >= 2.0` in `5` specs** (`+2.26` at `5d`, `+2.36` at `10d`, `5/5` yrs). | Backfill & `two_stage.py` retained for Core-Satellite; `score-two-stage-models` retired. |
-| Lines `9–10` | Step 5b: `$0` survivorship-checked wider US universe (`2,253` active + delisted CIKs in `wider_us_universe`) | Moving to `mid_small_ex_sp500` (`1,559` securities) lifted `equal_rank_24` IC to `5d +0.0240 [t = 2.38]`, `10d +0.0288 [t = 2.00]`, `21d +0.0386 [t = 1.83]`, `63d +0.0656 [t = 1.91]`. | `wider_us_universe` & `wider_universe.py` retained; superseded by Step 5c/5d/5e. |
+| Line `7` | Step 4: S&P 500 cap-weighted benchmark tilt & rank hysteresis (`buy top 10% / hold top 33%`) | Hysteresis cut turnover `71.8% -> 31.3%` (`+6.10%/yr [t = 1.94]` skill at `3d`), `0/48` product specs hit `NW t >= 2.50` vs. `SPY`. | Hysteresis & tilt engine retained in `benchmark_tilt.py`; `score-benchmark-tilt` & folder retired. |
+| Line `8` | Step 5a: Extended `2016–2024` S&P 500 two-stage (`556` CIKs in `sp500_free_backfill`) | Stage-1 `21d` IC `-0.0005 [t = -0.03]`; Stage-2 Alpaca news failed on `2024–2026` holdout (`-0.0004 [t = -0.60]`). | `sp500_free_backfill` & `two_stage.py` retained; `score-two-stage-models` retired. |
+| Lines `9–10`, `12–13` | Steps 5b/5d/5e: Wider universe + pre-holdout Core-Satellite grids | Superseded by Step 6 `2024–2026` holdout (`sealed_holdout_20240529_20260708_20261121T193257Z`) and Step 5c `wider_beta_neutral_mid_small_ex_sp500_20261119T222600Z`. | `wider_us_universe` retained; intermediate scoreboards & `score-core-satellite-spy` / `score-vol-regime-core-satellite` retired. |
 
 ---
 

@@ -6,33 +6,15 @@ accounting, rank-hysteresis turnover reduction, and exact +-2% stock / 0% sector
 """
 from __future__ import annotations
 
-import json
 from dataclasses import replace
-from datetime import date
-from pathlib import Path
 from typing import Any
-from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from market_predictor.research_lane import benchmark_tilt, fundamentals
-from market_predictor.research_lane.company_facts import (
-    COMPANY_FACTS_DIRECTORY,
-    COMPANY_FACTS_FILE,
-    COMPANY_FACTS_MANIFEST,
-    COMPANY_FACTS_SOURCES,
-    IssuerFacts,
-)
-from market_predictor.research_lane.panel import MARKET_TIMEZONE, PANEL_DIRECTORY, SealedPeriodError
-from market_predictor.research_lane.run import score_benchmark_tilt
-from market_predictor.research_lane.sec_filings import FILINGS_DIRECTORY, FILINGS_FILE, FILINGS_MANIFEST
-from market_predictor.research_lane.unadjusted_prices import (
-    UNADJUSTED_AUTHORITY,
-    UNADJUSTED_DIRECTORY,
-    UNADJUSTED_MANIFEST,
-)
+from market_predictor.research_lane.company_facts import IssuerFacts
 from tests.support.research_lane_fundamentals import (
     SyntheticFundamentals,
     cik,
@@ -42,7 +24,7 @@ from tests.support.research_lane_fundamentals import (
     tiny_panel,
     truncated_inputs,
 )
-from tests.support.research_lane_panel import synthetic_panel, write_panel_files
+from tests.support.research_lane_panel import synthetic_panel
 
 CUTS = (300, 371, 455, 530)
 
@@ -302,93 +284,3 @@ def test_evaluate_option_c_active_bounds_and_reading_rule_on_60_stocks() -> None
             assert cell["product_cap_mult_buffered"]["max_sector_active_abs"] <= 1e-12
             assert cell["product_sector_active_slice"]["max_stock_active_abs"] <= 0.02 + 1e-12
             assert cell["product_sector_active_slice"]["max_sector_active_abs"] <= 1e-12
-
-
-def test_end_to_end_score_benchmark_tilt_and_sealed_period_refusal(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("MARKET_PREDICTOR_RUNTIME_DIR", str(tmp_path / "runtime"))
-    end_day = date(2024, 5, 28)
-    info = write_panel_files(tmp_path / PANEL_DIRECTORY, end=end_day)
-    sec_ids = ("sec:A", "sec:B", "sec:C", "sec:D")
-
-    # Write SEC filings parquet & manifest mapping sec:A..sec:D to CIKs 0..3.
-    filings_dir = tmp_path / FILINGS_DIRECTORY
-    filings_dir.mkdir(parents=True, exist_ok=True)
-    accepted = pd.Timestamp("2024-04-15 12:00", tz=MARKET_TIMEZONE).tz_convert("UTC")
-    filings_df = pd.DataFrame({
-        "security_id": list(sec_ids),
-        "sec_cik": [cik(i) for i in range(4)],
-        "accession_number": [f"acc-{i}" for i in range(4)],
-        "sec_form": ["10-Q"] * 4,
-        "item_codes": [""] * 4,
-        "accepted_at_utc": [accepted] * 4,
-        "available_at_utc": [accepted] * 4,
-    })
-    filings_df.to_parquet(filings_dir / FILINGS_FILE, index=False)
-    (filings_dir / FILINGS_MANIFEST).write_text("{}", encoding="utf-8")
-
-    # Write primary company facts for issuers 1..3, and put issuer 0 in `extra_company_facts` with a post-end row!
-    facts_root = tmp_path / COMPANY_FACTS_DIRECTORY
-    (facts_root / "final").mkdir(parents=True, exist_ok=True)
-    (facts_root / COMPANY_FACTS_MANIFEST).write_text("{}", encoding="utf-8")
-    sources_dir = facts_root / COMPANY_FACTS_SOURCES
-    for i in range(1, 4):
-        c_str = cik(i)
-        dest = sources_dir / c_str
-        dest.mkdir(parents=True, exist_ok=True)
-        (dest / COMPANY_FACTS_FILE).write_text(json.dumps(_facts_to_sec_json(issuer_facts(i))), encoding="utf-8")
-
-    extra_dir = tmp_path / benchmark_tilt.EXTRA_COMPANY_FACTS_DIRECTORY / cik(0) / "20261106"
-    extra_dir.mkdir(parents=True, exist_ok=True)
-    extra_json = _facts_to_sec_json(issuer_facts(0))
-    # Inject a post-development-end filing that Rule 2 must strip cleanly without error or leakage.
-    extra_json["facts"]["us-gaap"]["Assets"]["units"]["USD"].append(
-        {"end": "2025-06-30", "val": 9.99e15, "filed": "2025-08-01", "accn": "sealed-future"}
-    )
-    (extra_dir / COMPANY_FACTS_FILE).write_text(json.dumps(extra_json), encoding="utf-8")
-
-    # Write unadjusted daily bars for sec:A..sec:D.
-    unadj_root = tmp_path / UNADJUSTED_DIRECTORY
-    (unadj_root / "bars").mkdir(parents=True, exist_ok=True)
-    (unadj_root / UNADJUSTED_AUTHORITY).write_text("{}", encoding="utf-8")
-    unit_artifacts = []
-    sess_strings = [d.isoformat() for d in info["days"] if d <= end_day]
-    for i, sec_id in enumerate(sec_ids):
-        rel = f"bars/sec_{i}.parquet"
-        df = pd.DataFrame({
-            "security_id": sec_id,
-            "session_date": sess_strings,
-            "close": np.full(len(sess_strings), 50.0 + 10.0 * i, dtype=np.float64),
-            "source": "alpaca",
-            "timeframe": "1Day",
-            "price_feed": "sip",
-            "adjustment": "raw",
-        })
-        df.to_parquet(unadj_root / rel, index=False)
-        unit_artifacts.append({"role": "stock", "security_id": sec_id, "bars_path": rel})
-    (unadj_root / UNADJUSTED_MANIFEST).write_text(json.dumps({"unit_artifacts": unit_artifacts}), encoding="utf-8")
-
-    out_rel = Path("data/research/research_lane/benchmark_tilt_test")
-    with patch("market_predictor.research_lane.run.guard"):
-        res = score_benchmark_tilt(root=tmp_path, output=out_rel, development_end=end_day, horizons=(3, 5))
-
-    assert cik(0) in [k.split("_")[-2] for k in res["inputs"] if k.startswith("extra_company_facts_")]
-    board = json.loads((tmp_path / out_rel / "scoreboard.json").read_text(encoding="utf-8"))
-    assert "research label" in board["notice"]
-    assert board["quality_and_cap_inputs"]["extra_company_facts_ciks_read"] == [cik(0)]
-    assert set(board["benchmark_tilt"]["cells"]) == set(benchmark_tilt.SIGNAL_NAMES)
-
-    md_text = (tmp_path / out_rel / "scoreboard.md").read_text(encoding="utf-8")
-    assert "Pre-registered reading rule" in md_text
-    trial_lines = (tmp_path / "data/research/research_lane/trials.jsonl").read_text(encoding="utf-8").splitlines()
-    assert len(trial_lines) == 1
-    assert json.loads(trial_lines[0])["command"] == "score-benchmark-tilt"
-
-    # Sealed period must fail closed without explicit override.
-    with pytest.raises(SealedPeriodError):
-        score_benchmark_tilt(
-            root=tmp_path,
-            output=Path("data/research/research_lane/should_fail"),
-            development_end=date(2024, 5, 29),
-        )

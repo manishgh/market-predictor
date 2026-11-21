@@ -1,21 +1,16 @@
 """Unit tests on synthetic data for the frozen step 2c very-short-term reversal test."""
 from __future__ import annotations
 
-import json
 from datetime import date
-from pathlib import Path
 from typing import Any
-from unittest.mock import patch
 
 import numpy as np
 import pytest
 
 from market_predictor.research_lane import reversal
 from market_predictor.research_lane.indicators import compute_indicators
-from market_predictor.research_lane.panel import PANEL_DIRECTORY
 from market_predictor.research_lane.predictors import centered_rank
-from market_predictor.research_lane.run import score_short_reversal
-from tests.support.research_lane_panel import synthetic_panel, write_panel_files
+from tests.support.research_lane_panel import synthetic_panel
 
 END = date(2024, 5, 28)
 
@@ -83,17 +78,3 @@ def test_reading_rule_requires_all_three_conditions() -> None:
     board["predictors"][reversal.REVERSAL_COMPOSITE]["1"] = _entry(3.2, good_years, 0.0010, 0.8)
     assert reversal.reading(board)["earns_sealed_period_test"] is False
     assert "lead closed" in "\n".join(reversal.reading_markdown(reversal.reading(board)))
-
-
-def test_run_scores_the_frozen_horizons_and_records_the_reading(tmp_path: Path,
-                                                               monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MARKET_PREDICTOR_RUNTIME_DIR", str(tmp_path / "runtime"))  # isolated lease
-    write_panel_files(tmp_path / PANEL_DIRECTORY, end=END)
-    output = Path("data/research/research_lane/short_reversal_test")
-    with patch("market_predictor.research_lane.run.guard"):
-        score_short_reversal(root=tmp_path, output=output, development_end=END)
-    board = json.loads((tmp_path / output / "scoreboard.json").read_text(encoding="utf-8"))
-    assert board["settings"]["horizons_sessions"] == [1, 2, 3, 5]
-    assert set(board["predictors"]) == {*reversal.REVERSAL_INPUTS, reversal.REVERSAL_COMPOSITE}
-    assert set(board["reversal_reading"]["horizons"]) == {"1", "2", "3", "5"}
-    assert "Pre-registered reading rule" in (tmp_path / output / "scoreboard.md").read_text(encoding="utf-8")

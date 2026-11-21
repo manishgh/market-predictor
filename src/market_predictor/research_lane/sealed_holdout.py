@@ -1087,8 +1087,6 @@ def _render_holdout_markdown(doc: Mapping[str, Any]) -> str:
         "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for spec_id, h_map in grid_s2.items():
-        if "R3_" in spec_id:
-            continue
         for h_k, e in h_map.items():
             vs = e["vs_spy"]
             by_y = vs["by_year_net_20bps"]
@@ -1304,7 +1302,6 @@ def evaluate_sealed_holdout_2024_2026(
         guard("sealed holdout mid_small stage2 fitted")
 
         holdout_start_row = int(np.searchsorted(sp500_panel.sessions, np.datetime64(SEALED_HOLDOUT_START, "D"), side="left"))
-        dummy_r3 = {h: mid_bn_sec_wf[h] for h in horizons}
 
         holdout_eval = vol_regime.evaluate_vol_regime_core_satellite(
             sp500_panel=sp500_panel,
@@ -1316,7 +1313,6 @@ def evaluate_sealed_holdout_2024_2026(
             mid_bn_eq24=mid_bn_eq24,
             mid_raw_sec_by_h=mid_raw_sec_wf,
             mid_bn_sec_by_h=mid_bn_sec_wf,
-            mid_r3_by_h=dummy_r3,
             mid_rev5_rank=rev5_rk,
             vol_feats=vol_feats,
             stage1_oos_start_row=holdout_start_row,

@@ -1,19 +1,17 @@
-"""Step 5e (Option B): $0 Public CBOE Index Volatility Term-Structure & Skew Regime Conditioning.
+"""$0 Public CBOE Index Volatility Term-Structure & Skew Regime Conditioning.
 
 Collects free daily CBOE implied-volatility indices (`VIX` 30d, `VIX3M` 90d, `VIX9D` 9d,
 `VXN` Nasdaq-100 30d, `SKEW`), truncating strictly in memory to `DATE <= development_end`
-(`2024-05-28`) before writing to disk, and evaluates three pre-registered volatility-regime
-policies (`R1_backwardation_to_spy`, `R2_adaptive_hedge_switch`, `R3_walk_forward_vol_interaction_xgb`)
-on the unified Core `SPY` / S&P 500 Active Tilt + `mid_small_ex_sp500` SEC-Catalyst Satellite
-architecture against passive `SPY` net of `20 bps` exact post-drift turnover.
+before writing to disk, and evaluates zero-fit volatility-regime policies
+(`R1_backwardation_to_spy` and `R2_adaptive_hedge`) against passive `SPY` net of `20 bps`
+exact post-drift turnover.
 """
 from __future__ import annotations
 
 import csv
-import gc
 import io
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Final, cast
@@ -28,8 +26,7 @@ import requests
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
-from market_predictor.research_lane import benchmark_tilt, core_satellite, two_stage
-from market_predictor.research_lane.fitted import date_weights, training_rows
+from market_predictor.research_lane import benchmark_tilt, core_satellite
 from market_predictor.research_lane.panel import (
     ResearchPanel,
     SealedPeriodError,
@@ -43,7 +40,6 @@ Float32Array = npt.NDArray[np.float32]
 CBOE_DIRECTORY: Final = Path("data/research/research_lane/cboe_vol_indices")
 CBOE_PARQUET_NAME: Final = "cboe_daily.parquet"
 COLLECT_CBOE_COMMAND: Final = "collect-research-lane-cboe-term-structure"
-VOL_REGIME_COMMAND: Final = "score-vol-regime-core-satellite"
 
 CBOE_CSV_URLS: Final[Mapping[str, str]] = {
     "vix": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
@@ -52,19 +48,6 @@ CBOE_CSV_URLS: Final[Mapping[str, str]] = {
     "vxn": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv",
     "skew": "https://cdn.cboe.com/api/global/us_indices/daily_prices/SKEW_History.csv",
 }
-
-INTERACTION_FEATURE_NAMES: Final = (
-    "base_raw_eq24",
-    "base_bn_eq24",
-    "sec_xgb_residual",
-    "px_beta_252d",
-    "px_reversal_5d",
-    "fn_operating_profitability",
-    "vix_term_30_90_centered",
-    "vxn_to_vix_centered",
-    "beta_x_term",
-    "rev5_x_term",
-)
 
 
 def parse_cboe_csv_truncated(
@@ -284,79 +267,6 @@ def build_r2_adaptive_hedge_signal(
     return out
 
 
-def fit_r3_vol_interaction_xgb_by_horizon(
-    panel: ResearchPanel,
-    *,
-    targets_by_horizon: Mapping[int, FloatArray],
-    base_raw_eq24: FloatArray,
-    base_bn_eq24: FloatArray,
-    sec_xgb_by_h: Mapping[int, Float32Array],
-    px_beta_252d: Float32Array,
-    px_reversal_5d: Float32Array,
-    fn_op_prof: Float32Array,
-    vol_feats: Mapping[str, FloatArray],
-    horizons: tuple[int, ...] = core_satellite.HORIZONS,
-    checkpoint: Callable[[str], None] | None = None,
-) -> dict[int, Float32Array]:
-    """Fit purged walk-forward shallow XGBoost with cross-sectional x volatility-term-structure interactions."""
-    news_start_row = int(np.searchsorted(panel.sessions, np.datetime64(two_stage.NEWS_START_DATE, "D"), side="left"))
-    folds = two_stage._dynamic_folds(panel.sessions, news_start_row, min_train_sessions=120)
-    shape = panel.eligible.shape
-
-    term_c = np.nan_to_num(vol_feats["vix_term_30_90"] - 1.0, nan=0.0).astype(np.float32)[:, None]
-    vxn_c = np.nan_to_num(vol_feats["vxn_to_vix"] - 1.0, nan=0.0).astype(np.float32)[:, None]
-    term_mat = np.broadcast_to(term_c, shape).copy()
-    vxn_mat = np.broadcast_to(vxn_c, shape).copy()
-    beta_x_term = (px_beta_252d * term_mat).astype(np.float32)
-    rev5_x_term = (px_reversal_5d * term_mat).astype(np.float32)
-
-    out_by_h: dict[int, Float32Array] = {}
-    for horizon in horizons:
-        comb_sec = sec_xgb_by_h[horizon].astype(np.float64)
-        sec_res = np.where(np.isfinite(comb_sec) & np.isfinite(base_raw_eq24), comb_sec - base_raw_eq24, 0.0).astype(np.float32)
-        feat_map: dict[str, Float32Array] = {
-            "base_raw_eq24": base_raw_eq24.astype(np.float32),
-            "base_bn_eq24": base_bn_eq24.astype(np.float32),
-            "sec_xgb_residual": sec_res,
-            "px_beta_252d": px_beta_252d,
-            "px_reversal_5d": px_reversal_5d,
-            "fn_operating_profitability": fn_op_prof,
-            "vix_term_30_90_centered": term_mat,
-            "vxn_to_vix_centered": vxn_mat,
-            "beta_x_term": beta_x_term,
-            "rev5_x_term": rev5_x_term,
-        }
-        target = targets_by_horizon[horizon]
-        preds_mat = np.full(shape, np.nan, dtype=np.float64)
-        for fold in folds:
-            tr_rows = training_rows(news_start_row, fold.test_start, horizon)
-            tr_cells = panel.eligible[tr_rows] & np.isfinite(target[tr_rows])
-            te_rows = np.arange(fold.test_start, fold.test_stop, dtype=np.int64)
-            te_cells = panel.eligible[te_rows]
-            if int(tr_cells.sum()) < 50 or not bool(te_cells.any()):
-                continue
-            p_vals, _ = two_stage._fit_predict_tabular(
-                "xgboost",
-                two_stage._design_matrix(feat_map, INTERACTION_FEATURE_NAMES, tr_rows, tr_cells),
-                target[tr_rows][tr_cells].astype(np.float64),
-                date_weights(tr_cells),
-                two_stage._design_matrix(feat_map, INTERACTION_FEATURE_NAMES, te_rows, te_cells),
-                xgb_params=two_stage.STAGE2_XGB_PARAMS,
-                seeds=two_stage.STAGE2_XGB_SEEDS,
-            )
-            blk = np.full(te_cells.shape, np.nan, dtype=np.float64)
-            blk[te_cells] = p_vals
-            preds_mat[te_rows] = blk
-
-        out_by_h[horizon] = centered_rank(preds_mat, panel.eligible).astype(np.float32)
-        del feat_map, preds_mat, sec_res, comb_sec
-        gc.collect()
-        if checkpoint is not None:
-            checkpoint(f"vol_regime r3 h={horizon}")
-
-    return out_by_h
-
-
 def _simulate_r1_backwardation_to_spy(
     *,
     core_mode: str,
@@ -423,14 +333,13 @@ def evaluate_vol_regime_core_satellite(
     mid_bn_eq24: FloatArray,
     mid_raw_sec_by_h: Mapping[int, Float32Array],
     mid_bn_sec_by_h: Mapping[int, Float32Array],
-    mid_r3_by_h: Mapping[int, Float32Array],
     mid_rev5_rank: Float32Array,
     vol_feats: Mapping[str, FloatArray],
     stage1_oos_start_row: int,
     stage2_oos_start_row: int,
     horizons: tuple[int, ...] = core_satellite.HORIZONS,
 ) -> dict[str, Any]:
-    """Evaluate `R1`, `R2`, and `R3` volatility-regime Core-Satellite portfolios vs. `SPY`."""
+    """Evaluate `R1` and `R2` zero-fit volatility-regime Core-Satellite portfolios vs. `SPY`."""
     is_back = vol_feats["is_backwardation"]
     sat_standalone_2021: dict[str, dict[str, Any]] = {}
     grid_2021_2024: dict[str, dict[str, Any]] = {}
@@ -468,7 +377,6 @@ def evaluate_vol_regime_core_satellite(
         sat_candidates_2021: dict[str, FloatArray] = {
             "R1_base_bn_sec_xgb": mid_bn_sec_by_h[horizon].astype(np.float64),
             "R2_adaptive_hedge_sec_xgb": r2_s2_sig,
-            "R3_vol_interaction_xgb": mid_r3_by_h[horizon].astype(np.float64),
         }
         sat_w_map: dict[str, FloatArray] = {}
         sat_ok_gate: dict[str, bool] = {}
@@ -494,7 +402,6 @@ def evaluate_vol_regime_core_satellite(
                 ("spy", "core_spy", None),
                 ("sp500_tilt_news", "core_sp500_tilt", sp_news_w),
             ):
-                # R1: park satellite in SPY on backwardation rebalance dates
                 spec_r1 = f"{alloc_tag}__{core_label}__R1_backwardation_to_spy"
                 sum_r1 = _simulate_r1_backwardation_to_spy(
                     core_mode=c_mode,
@@ -506,29 +413,21 @@ def evaluate_vol_regime_core_satellite(
                     mid_windows=mid_win,
                     horizon=horizon,
                 )
-                # R2 & R3: continuous joint simulation
-                for pol_key, s_ref in (
-                    ("R2_adaptive_hedge_sec_xgb", "R2_adaptive_hedge_sec_xgb"),
-                    ("R3_vol_interaction_xgb", "R3_vol_interaction_xgb"),
-                ):
-                    spec_id = f"{alloc_tag}__{core_label}__{pol_key}"
-                    j_sum = core_satellite.simulate_joint_core_satellite(
-                        core_mode=c_mode,
-                        core_weight=c_weight,
-                        sp_tilt_weights=sp_w_arg,
-                        mid_sat_weights=sat_w_map[s_ref],
-                        sp_windows=sp_win,
-                        mid_windows=mid_win,
-                        horizon=horizon,
-                    )
-                    grid_2021_2024.setdefault(spec_id, {})[h_key] = j_sum
-
+                spec_r2 = f"{alloc_tag}__{core_label}__R2_adaptive_hedge_sec_xgb"
+                grid_2021_2024.setdefault(spec_r2, {})[h_key] = core_satellite.simulate_joint_core_satellite(
+                    core_mode=c_mode,
+                    core_weight=c_weight,
+                    sp_tilt_weights=sp_w_arg,
+                    mid_sat_weights=sat_w_map["R2_adaptive_hedge_sec_xgb"],
+                    sp_windows=sp_win,
+                    mid_windows=mid_win,
+                    horizon=horizon,
+                )
                 grid_2021_2024.setdefault(spec_r1, {})[h_key] = sum_r1
 
                 for spec_id, sat_gate_key in (
                     (spec_r1, "R1_base_bn_sec_xgb"),
-                    (f"{alloc_tag}__{core_label}__R2_adaptive_hedge_sec_xgb", "R2_adaptive_hedge_sec_xgb"),
-                    (f"{alloc_tag}__{core_label}__R3_vol_interaction_xgb", "R3_vol_interaction_xgb"),
+                    (spec_r2, "R2_adaptive_hedge_sec_xgb"),
                 ):
                     entry = grid_2021_2024[spec_id][h_key]
                     spy_ex = entry["vs_spy"]["net_excess_20bps_per_period"]
@@ -608,124 +507,14 @@ def evaluate_vol_regime_core_satellite(
     }
 
 
-def render_vol_regime_markdown(document: Mapping[str, Any]) -> str:
-    """Render readable markdown scoreboard for Step 5e CBOE Volatility Term-Structure Regime Conditioning."""
-    settings = document["settings"]
-    res = document["vol_regime"]
-    notice = document["notice"]
-    horizons = [str(h) for h in settings["horizons_sessions"]]
-    pct = core_satellite._pct
-    num = core_satellite._num
-
-    lines = [
-        "# Step 5e: CBOE Index Volatility Term-Structure & Skew Regime Conditioning vs. `SPY`",
-        "",
-        f"Every figure below: {notice}.",
-        "",
-        "## Method & boundaries",
-        "",
-        f"- **CBOE daily indices (`<= {settings['development_end']}`):** `VIX` (30d), `VIX3M` (90d), `VIX9D` (9d), "
-        f"`VXN` (Nasdaq-100 30d), `SKEW`. Backwardation share across `2016–2024` sessions: "
-        f"`{pct(document['regime_diagnostics']['backwardation_session_share'])}`.",
-        "- **Policies:** `R1_backwardation_to_spy` (satellite shifts to `SPY` when `VIX > VIX3M`), "
-        "`R2_adaptive_hedge` (`raw` in contango, `0.7*beta_neutral + 0.3*reversal_5d` in backwardation), "
-        "`R3_vol_interaction_xgb` (purged walk-forward shallow XGBoost with `beta * term` & `rev5 * term` interactions).",
-        "",
-        "## Section A: Standalone Volatility-Conditioned Mid/Small Satellites (OOS 2021..2024)",
-        "",
-        "| Satellite | H | Turnover | Net 20bps | SPY | Net vs Matched/yr [NW t] | Net vs SPY/yr [NW t] | Sharpe | MaxDD |",
-        "|---|---|---|---|---|---|---|---|---|",
-    ]
-    for s_name, h_map in res["satellites_standalone_2021_2024"].items():
-        for h in horizons:
-            e = h_map[h]
-            vm = e["vs_matched_benchmark"]
-            vs = e["vs_spy"]
-            lines.append(
-                f"| {s_name} | {h} | {pct(e['mean_steady_one_way_turnover'])} | {pct(e['compounded_net_20bps'])} | "
-                f"{pct(vs['compounded_benchmark'])} | {pct(vm['net_excess_20bps_annualized'])} [{num(vm['newey_west_20bps']['t'])}] | "
-                f"{pct(vs['net_excess_20bps_annualized'])} [{num(vs['newey_west_20bps']['t'])}] | "
-                f"{num(e['risk_net_20bps']['sharpe_annualized'])} | {pct(e['risk_net_20bps']['max_drawdown'])} |"
-            )
-
-    lines += [
-        "",
-        "## Section B: Volatility-Regime Core-Satellite Portfolios vs. `SPY` (OOS 2021..2024, Net of 20 bps)",
-        "",
-        "| Specification | H | Turnover | Port net 20bps | SPY | Net vs SPY/yr [NW t] | "
-        "2021 | 2022 | 2023 | 2024 | Pos yrs | Sharpe | MaxDD | Passes |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
-    ]
-    for spec_id, h_map in res["vol_regime_2021_2024"].items():
-        for h in horizons:
-            e = h_map[h]
-            vs = e["vs_spy"]
-            by_y = vs["by_year_net_20bps"]
-            y_cells = [pct(by_y.get(y, {}).get("mean")) for y in ("2021", "2022", "2023", "2024")]
-            lines.append(
-                f"| {spec_id} | {h} | {pct(e['mean_steady_one_way_turnover'])} | {pct(e['compounded_net_20bps'])} | "
-                f"{pct(vs['compounded_benchmark'])} | {pct(vs['net_excess_20bps_annualized'])} [{num(vs['newey_west_20bps']['t'])}] | "
-                + " | ".join(y_cells)
-                + f" | {vs['positive_years_20bps']}/{vs['years_scored']} | "
-                f"{num(e['risk_net_20bps']['sharpe_annualized'])} | {pct(e['risk_net_20bps']['max_drawdown'])} | "
-                f"{'yes' if e['passes_reading_rule'] else 'no'} |"
-            )
-
-    lines += [
-        "",
-        "## Section C: Full 5-Year OOS 2020..2024 (`R1` & `R2` Including March 2020 VIX Backwardation Spike)",
-        "",
-        "| Specification | H | Turnover | Port net 20bps | SPY | Net vs SPY/yr [NW t] | "
-        "2020 | 2021 | 2022 | 2023 | 2024 | Pos yrs | MaxDD (port / SPY) |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
-    ]
-    for spec_id, h_map in res["vol_regime_2020_2024"].items():
-        for h in horizons:
-            e = h_map[h]
-            vs = e["vs_spy"]
-            by_y = vs["by_year_net_20bps"]
-            y_cells = [pct(by_y.get(y, {}).get("mean")) for y in ("2020", "2021", "2022", "2023", "2024")]
-            lines.append(
-                f"| {spec_id} | {h} | {pct(e['mean_steady_one_way_turnover'])} | {pct(e['compounded_net_20bps'])} | "
-                f"{pct(vs['compounded_benchmark'])} | {pct(vs['net_excess_20bps_annualized'])} [{num(vs['newey_west_20bps']['t'])}] | "
-                + " | ".join(y_cells)
-                + f" | {vs['positive_years_20bps']}/{vs['years_scored']} | "
-                f"{pct(e['risk_net_20bps']['max_drawdown'])} / {pct(e['risk_spy']['max_drawdown'])} |"
-            )
-
-    r_sum = res["reading_summary"]
-    lines += [
-        "",
-        "## Section D: Pre-registered reading rule",
-        "",
-        r_sum["rule"],
-        "",
-        f"- Passing specifications (`NW t >= 2.50`): `{r_sum['passing_specifications']}`.",
-        f"- Passing strict `NW t >= 3.00`: `{r_sum['passing_strict_t3']}`.",
-        "Verdict: **"
-        + (
-            "candidate earned sealed test"
-            if r_sum["earns_sealed_period_test"]
-            else "no specification passed — 2024-05-29+ remains sealed"
-        )
-        + "**.",
-        "",
-    ]
-    return "\n".join(lines)
-
-
 __all__ = [
     "CBOE_CSV_URLS",
     "CBOE_DIRECTORY",
     "CBOE_PARQUET_NAME",
     "COLLECT_CBOE_COMMAND",
-    "INTERACTION_FEATURE_NAMES",
-    "VOL_REGIME_COMMAND",
     "build_causal_vol_regime_features",
     "build_r2_adaptive_hedge_signal",
     "collect_cboe_vol_indices",
     "evaluate_vol_regime_core_satellite",
-    "fit_r3_vol_interaction_xgb_by_horizon",
     "parse_cboe_csv_truncated",
-    "render_vol_regime_markdown",
 ]

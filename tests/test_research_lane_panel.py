@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 from datetime import date
 from pathlib import Path
-from unittest.mock import patch
 
 import numpy as np
 import pyarrow.parquet as pq
@@ -13,12 +12,10 @@ from typer.testing import CliRunner
 
 from market_predictor.research_cli import app as research_app
 from market_predictor.research_lane.panel import (
-    PANEL_DIRECTORY,
     SealedPeriodError,
     check_development_end,
     load_research_panel,
 )
-from market_predictor.research_lane.run import score_price_predictors
 from tests.support.research_lane_panel import POST_END_PRICE, bar_table, write_panel_files
 
 END = date(2024, 5, 28)
@@ -98,26 +95,9 @@ def test_bar_file_breaking_the_price_contract_is_refused(tmp_path: Path) -> None
 
 
 def test_command_refuses_sealed_development_end_before_any_load(tmp_path: Path) -> None:
-    result = CliRunner().invoke(research_app, ["score-price-predictors", "--root", str(tmp_path),
-                                               "--development-end", "2024-06-03"])
+    result = CliRunner().invoke(
+        research_app,
+        ["score-wider-beta-neutral-models", "--root", str(tmp_path), "--development-end", "2024-06-03"],
+    )
     assert result.exit_code == 2
     assert "sealed period" in result.output + (result.stderr if result.stderr_bytes is not None else "")
-
-
-def test_run_writes_scoreboard_and_trial_line_and_refuses_overwrite(tmp_path: Path,
-                                                                   monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MARKET_PREDICTOR_RUNTIME_DIR", str(tmp_path / "runtime"))  # isolated lease
-    write_panel_files(tmp_path / PANEL_DIRECTORY, end=END)
-    output = Path("data/research/research_lane/price_predictors_test")
-    with patch("market_predictor.research_lane.run.guard"):
-        result = score_price_predictors(root=tmp_path, output=output, development_end=END)
-        assert result["output"] == output.as_posix()
-        written = tmp_path / output
-        board = json.loads((written / "scoreboard.json").read_text(encoding="utf-8"))
-        assert "research label" in board["notice"]
-        assert board["settings"]["development_end"] == "2024-05-28"
-        assert "research label, adjusted prices" in (written / "scoreboard.md").read_text(encoding="utf-8")
-        trials = (written.parent / "trials.jsonl").read_text(encoding="utf-8").splitlines()
-        assert len(trials) == 1 and json.loads(trials[0])["inputs"] == board["inputs"]
-        with pytest.raises(FileExistsError):
-            score_price_predictors(root=tmp_path, output=output, development_end=END)

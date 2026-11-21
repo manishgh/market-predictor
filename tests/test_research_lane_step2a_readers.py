@@ -4,35 +4,25 @@ from __future__ import annotations
 import json
 from datetime import date
 from pathlib import Path
-from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
-from typer.testing import CliRunner
 
-from market_predictor.research_cli import app as research_app
 from market_predictor.research_lane.company_facts import (
-    COMPANY_FACTS_DIRECTORY,
-    COMPANY_FACTS_FILE,
-    COMPANY_FACTS_MANIFEST,
-    COMPANY_FACTS_SOURCES,
     IssuerFacts,
 )
-from market_predictor.research_lane.panel import MARKET_TIMEZONE, PANEL_DIRECTORY, SealedPeriodError, load_research_panel
-from market_predictor.research_lane.run import score_fundamental_predictors
+from market_predictor.research_lane.panel import MARKET_TIMEZONE, SealedPeriodError, load_research_panel
 from market_predictor.research_lane.sec_filings import (
-    FILINGS_DIRECTORY,
     FILINGS_FILE,
     FILINGS_MANIFEST,
     earnings_releases,
     read_sec_filings,
     security_issuers,
 )
-from market_predictor.research_lane.unadjusted_prices import UNADJUSTED_DIRECTORY, load_unadjusted_close
-from tests.support.research_lane_fundamentals import issuer_facts
+from market_predictor.research_lane.unadjusted_prices import load_unadjusted_close
 from tests.support.research_lane_panel import POST_END_PRICE, write_panel_files
 
 END = date(2024, 5, 28)
@@ -128,44 +118,3 @@ def companyfacts_document(facts: IssuerFacts) -> dict[str, object]:
                  "accn": f.accession, "filed": f.filed.isoformat(), "form": "10-Q"} for f in items]
         document[taxonomy][tag] = {"units": {unit: rows}}
     return {"facts": document}
-
-
-def test_command_run_writes_outputs_and_refuses_overwrite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MARKET_PREDICTOR_RUNTIME_DIR", str(tmp_path / "runtime"))  # isolated lease
-    layout = write_panel_files(tmp_path / PANEL_DIRECTORY, end=END)
-    write_filings(tmp_path / FILINGS_DIRECTORY)
-    sources = tmp_path / COMPANY_FACTS_DIRECTORY / COMPANY_FACTS_SOURCES / "0000000001"
-    sources.mkdir(parents=True)
-    (sources / COMPANY_FACTS_FILE).write_text(json.dumps(companyfacts_document(issuer_facts(0))), encoding="utf-8")
-    (tmp_path / COMPANY_FACTS_DIRECTORY / COMPANY_FACTS_MANIFEST).parent.mkdir(parents=True, exist_ok=True)
-    (tmp_path / COMPANY_FACTS_DIRECTORY / COMPANY_FACTS_MANIFEST).write_text("{}", encoding="utf-8")
-    write_unadjusted(tmp_path / UNADJUSTED_DIRECTORY, {"u1": ("sec:A", layout["days"])})
-    output = Path("data/research/research_lane/fundamental_predictors_test")
-    with patch("market_predictor.research_lane.run.guard"):
-        result = score_fundamental_predictors(root=tmp_path, output=output, development_end=END)
-        written = tmp_path / output
-        board = json.loads((written / "scoreboard.json").read_text(encoding="utf-8"))
-        assert result["output"] == output.as_posix()
-        assert {"sec_filings_parquet_sha256", "sec_filings_manifest_sha256", "company_facts_final_manifest_sha256",
-                "unadjusted_close_manifest_sha256"} <= set(board["inputs"])
-        assert board["settings"]["expected_signs"]["accruals"] == -1
-        assert set(board["predictors"]) >= {"earnings_reaction_3d", "composite_fundamental_all"}
-        coverage = board["fundamental_input_coverage"]["earnings_yield"]
-        assert coverage["eligible_decision_stock_sessions"] == board["universe"]["21"][
-            "eligible_decisions_stock_sessions"]
-        mapping = board["fundamental_inputs_report"]["security_issuer_mapping"]
-        assert mapping["mapped_securities"] == 1  # sec:A through the filing inventory's recorded CIK
-        assert board["fundamental_inputs_report"]["sec_filings"]["rows_read"] == 5
-        markdown = (written / "scoreboard.md").read_text(encoding="utf-8")
-        assert "research label, adjusted prices" in markdown and "Coverage of the step 2a inputs" in markdown
-        trials = (written.parent / "trials.jsonl").read_text(encoding="utf-8").splitlines()
-        assert json.loads(trials[-1])["command"] == "score-fundamental-predictors"
-        with pytest.raises(FileExistsError):
-            score_fundamental_predictors(root=tmp_path, output=output, development_end=END)
-
-
-def test_fundamental_command_refuses_sealed_development_end_before_any_load(tmp_path: Path) -> None:
-    result = CliRunner().invoke(research_app, ["score-fundamental-predictors", "--root", str(tmp_path),
-                                               "--development-end", "2024-06-03"])
-    assert result.exit_code == 2
-    assert "sealed period" in result.output + (result.stderr if result.stderr_bytes is not None else "")
