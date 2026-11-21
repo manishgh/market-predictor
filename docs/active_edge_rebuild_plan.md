@@ -6,7 +6,7 @@ Current checkpoint: **Step 8 — Standing Daily Prospective `mid_small_beta_neut
 
 - **Current operational state (November 21):**
   1. The surviving **`mid_small_beta_neutral_sec` Stage-2 `XGBoost` research bundle** (`2019-07-09..2026-07-08`) is trained, persisted, and SHA-256 verified on disk at `data/research/research_lane/models/mid_small_beta_neutral_sec_xgb` (`_manifest.json` SHA-256 `cd18356701f35b44c884d9f587a8e14ed7473878f12f75e2ec27548b4d8ebf04`, `research_only = true`, `actionable = false`).
-  2. `record-forward-research-scores --live-prospective --as-of-date latest --skip-existing` now automatically verifies and scores `score_mid_small_bn_sec_xgb_10d`, `score_mid_small_bn_sec_xgb_21d`, and `score_mid_small_bn_sec_xgb_opra_10d` (applying `falling_knife_put_skew_veto` + `catalyst_shock_to_straddle` conviction/fade adjustments), and `evaluate-forward-research-scores` grades them against realized `open[t+1] -> close[t+h]` returns and `SPY`.
+  2. `record-forward-research-scores --live-prospective --as-of-date latest --skip-existing` and `evaluate-forward-research-scores --as-of-date latest` are registered in Windows Task Scheduler as **`MarketPredictorForwardScoringPostClose`** (`Monday–Friday` at `22:35` local time via `scripts/install_forward_research_task.ps1` and `scripts/run_forward_research_scoring.ps1`, commit `43e63cd`, catching up automatically on wake via `StartWhenAvailable`).
 
 ---
 

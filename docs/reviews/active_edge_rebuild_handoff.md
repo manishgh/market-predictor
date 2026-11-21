@@ -2,7 +2,7 @@
 
 ## 1. Current Repository & Branch State (November 21)
 
-- **Checkout & Branch:** `C:/project/market-predictor` on `main` (single canonical checkout per `AGENTS.md`; latest implementation commit `eb600e5`).
+- **Checkout & Branch:** `C:/project/market-predictor` on `main` (single canonical checkout per `AGENTS.md`; latest implementation commit `43e63cd`).
 - **Unsealed Historical Window (`2016-01-04..2026-07-08`):** `2024-05-29..2026-07-08` (`528` sessions) was evaluated once in Step 6 (`c484658`, `data/research/research_lane/sealed_holdout_20240529_20260708_20261121T193257Z`, `trials.jsonl` line `14`) with all `<= 2024-05-28` artifacts left byte-for-byte untouched. That window is now **permanently development history**; the **prospective live forward ledger (`2026-11-16+`)** is the sole untouched out-of-sample test clock.
 - **Heavy-Job Lease:** `data/runtime/heavy_job.lease` absent (`0` background workers).
 
@@ -23,7 +23,7 @@
    - **Model-training state (`Step 7`, commit `eb600e5`):** `0` production models are promoted (`active_serving_pointer_found = false`, API `V1` `actionable = false`). In `research_lane`, the surviving **`mid_small_beta_neutral_sec` Stage-2 `XGBoost` research bundle** (`10d` `260,081` examples / `1,525` stocks; `21d` `257,820` examples / `1,517` stocks, `2019-07-09..2026-07-08`) is trained, persisted, and SHA-256 verified at `data/research/research_lane/models/mid_small_beta_neutral_sec_xgb` (`_manifest.json` SHA-256 `cd18356701f35b44c884d9f587a8e14ed7473878f12f75e2ec27548b4d8ebf04`), and `record-forward-research-scores` verifies and scores it daily (`score_mid_small_bn_sec_xgb_10d`, `score_mid_small_bn_sec_xgb_21d`, `score_mid_small_bn_sec_xgb_opra_10d`) alongside live `OPRA` straddle/skew overlays.
 
 3. **Operational Live Prospective Forward Recorder & Outcome Evaluator (`> 2026-07-08`):**
-   - Modules: `src/market_predictor/research_lane/forward_record.py`, `src/market_predictor/research_lane/forward_evaluate.py`, and `src/market_predictor/research_lane/opra_options.py`.
+   - Modules & Scheduler: `src/market_predictor/research_lane/forward_record.py`, `src/market_predictor/research_lane/forward_evaluate.py`, `src/market_predictor/research_lane/opra_options.py`, `scripts/run_forward_research_scoring.ps1`, and `scripts/install_forward_research_task.ps1` (registered in Windows Task Scheduler as `MarketPredictorForwardScoringPostClose`, `Mon–Fri` at `22:35` local time, commit `43e63cd`).
    - Retained append-only snapshots in `data/research/research_lane/forward_records/`: `2026-11-16`, `2026-11-17`, `2026-11-18`, `2026-11-19`, `2026-11-20` (`5` lines in `forward_log.jsonl`), plus matured outcome evaluation `data/research/research_lane/forward_evaluations/forward_eval_20261121T185348Z` (`commit 1e65122`: `9` matured pairs through `2026-11-20` showing `OPRA` `25d` put-skew vetoed falling-knife stocks trailed `SPY` by `-1.66%` to `-6.02%` at `3d` while `catalyst_shock_to_straddle > 1.0` stocks beat `SPY` at `1d/2d/3d` by `+1.77% / +0.22% / +0.31%`).
 
 ## 3. Files To Read First When Resuming
