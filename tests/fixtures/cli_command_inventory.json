@@ -88,6 +88,7 @@
     "compare-saved-swing-returns",
     "derive-saved-issuer-candidates",
     "diagnose-investment-predictions",
+    "evaluate-forward-research-scores",
     "evaluate-investment-exclusions",
     "evaluate-investment-predictions",
     "evaluate-saved-swing-policy",

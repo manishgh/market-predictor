@@ -12,7 +12,8 @@ import typer
 from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError
 from market_predictor.research_lane.beta_neutral import collect_wider_sec_catalysts
-from market_predictor.research_lane.forward_record import record_forward_scores
+from market_predictor.research_lane.forward_evaluate import evaluate_forward_scores
+from market_predictor.research_lane.forward_record import FORWARD_RECORD_DIRECTORY, record_forward_scores
 from market_predictor.research_lane.free_backfill import BACKFILL_DIRECTORY, collect_free_sp500_backfill
 from market_predictor.research_lane.panel import DEFAULT_DEVELOPMENT_END, PANEL_DIRECTORY
 from market_predictor.research_lane.run import (
@@ -164,6 +165,37 @@ def register_research_lane_commands(app: typer.Typer) -> None:
             include_live_options=include_live_options,
             catalyst_top_k=catalyst_top_k,
             skip_existing=skip_existing,
+            unseal_final_test_period=unseal_final_test_period,
+        )
+
+    @app.command("evaluate-forward-research-scores")
+    def evaluate_forward(
+        root: Path = typer.Option(...),
+        as_of_date: str = typer.Option(
+            "latest",
+            help="Completed session YYYY-MM-DD through which forward outcomes are evaluated, or 'latest'.",
+        ),
+        data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
+        forward_dir: Path = typer.Option(FORWARD_RECORD_DIRECTORY),
+        output: Path | None = typer.Option(None),
+        unseal_final_test_period: bool = typer.Option(False),
+    ) -> None:
+        """Evaluate recorded prospective forward snapshots against matured open[t+1]->close[t+h] returns and SPY."""
+        raw_day = as_of_date.strip()
+        if raw_day.lower() == "latest":
+            parsed_day: date | None = None
+        else:
+            try:
+                parsed_day = date.fromisoformat(raw_day)
+            except ValueError as err:
+                raise typer.BadParameter(f"expected YYYY-MM-DD or 'latest', got {as_of_date!r}") from err
+        _invoke(
+            evaluate_forward_scores,
+            root=root,
+            as_of_date=parsed_day,
+            data_root=data_root,
+            forward_dir=forward_dir,
+            output=output,
             unseal_final_test_period=unseal_final_test_period,
         )
 
