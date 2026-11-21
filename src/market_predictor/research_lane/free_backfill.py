@@ -92,8 +92,10 @@ class ExtendedSP500Data:
     report: dict[str, Any]
 
 
-def _read_panel_membership(panel_root: Path, development_end: date) -> pd.DataFrame:
-    check_development_end(development_end)
+def _read_panel_membership(
+    panel_root: Path, development_end: date, *, unseal_final_test_period: bool = False,
+) -> pd.DataFrame:
+    check_development_end(development_end, unseal_final_test_period=unseal_final_test_period)
     profile_dir = panel_root / PROFILE_DIRECTORY
     end_text = development_end.isoformat()
     frames: list[pd.DataFrame] = []
@@ -126,9 +128,10 @@ def resolve_all_sp500_ciks(
     identity_relations_path: Path,
     filings_path: Path,
     development_end: date,
+    unseal_final_test_period: bool = False,
 ) -> tuple[dict[str, str], dict[str, Any]]:
     """Resolve `security_id -> 10-digit CIK` using `cik:` IDs, canonical SEC relations, and filings."""
-    check_development_end(development_end)
+    check_development_end(development_end, unseal_final_test_period=unseal_final_test_period)
     cutoff = pd.Timestamp(development_end, tz=MARKET_TIMEZONE) + pd.Timedelta(days=1)
 
     rel_ciks: dict[str, set[str]] = {}
@@ -220,11 +223,12 @@ def _fetch_alpaca_daily_batch(
     *,
     adjustment: str,
     asof_day: date,
+    unseal_final_test_period: bool = False,
 ) -> pd.DataFrame:
-    """Fetch daily SIP bars for `symbols` across `[start_day, end_day]` (`<= 2024-05-28` strictly)."""
+    """Fetch daily SIP bars for `symbols` across `[start_day, end_day]`."""
     asof_eff = max(asof_day, end_day)
-    check_development_end(end_day)
-    check_development_end(asof_eff)
+    check_development_end(end_day, unseal_final_test_period=unseal_final_test_period)
+    check_development_end(asof_eff, unseal_final_test_period=unseal_final_test_period)
     start_utc = datetime.combine(start_day, time(0, 0), tzinfo=UTC)
     end_utc = datetime.combine(end_day, time(23, 59, 59), tzinfo=UTC)
 
@@ -700,7 +704,9 @@ def load_extended_sp500_data(
     except Exception:
         pass
 
-    membership = _read_panel_membership(panel_root, development_end)
+    membership = _read_panel_membership(
+        panel_root, development_end, unseal_final_test_period=unseal_final_test_period,
+    )
     release_unused_process_memory()
     security_ids = tuple(sorted(membership["security_id"].astype(str).unique()))
     col_index = pd.Index(security_ids)
@@ -1049,6 +1055,7 @@ def load_extended_sp500_data(
         identity_relations_path=relations_path,
         filings_path=filings_path,
         development_end=development_end,
+        unseal_final_test_period=unseal_final_test_period,
     )
     extra_dir = paths.project_root / EXTRA_FACTS_DIR
     facts_paths = existing_company_facts_paths(

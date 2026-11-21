@@ -25,6 +25,7 @@ from market_predictor.research_lane.run import (
     score_vol_regime_core_satellite,
     score_wider_beta_neutral_models,
 )
+from market_predictor.research_lane.sealed_holdout import SEALED_EXTENSION_DIR, evaluate_sealed_holdout_2024_2026
 from market_predictor.research_lane.vol_regime import CBOE_DIRECTORY, collect_cboe_vol_indices
 from market_predictor.research_lane.wider_universe import (
     WIDER_UNIVERSE_DIRECTORY,
@@ -305,5 +306,31 @@ def register_research_lane_commands(app: typer.Typer) -> None:
             sp500_backfill_dir=sp500_backfill_dir,
             wider_dir=wider_dir,
             cboe_dir=cboe_dir,
+            unseal_final_test_period=unseal_final_test_period,
+        )
+
+    @app.command("evaluate-sealed-holdout-2024-2026")
+    def evaluate_sealed_holdout(
+        root: Path = typer.Option(...),
+        data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
+        output: Path | None = typer.Option(None),
+        panel: Path = typer.Option(PANEL_DIRECTORY),
+        sp500_backfill_dir: Path = typer.Option(BACKFILL_DIRECTORY),
+        wider_dir: Path = typer.Option(WIDER_UNIVERSE_DIRECTORY),
+        ext_dir: Path = typer.Option(SEALED_EXTENSION_DIR),
+        unseal_final_test_period: bool = typer.Option(
+            False, help="Explicit authorization required to run the 2024-05-29..2026-07-08 holdout evaluation."
+        ),
+    ) -> None:
+        """Execute Step 6 one-time governed 2024-05-29..2026-07-08 holdout test on frozen R1/R2 candidates."""
+        _invoke(
+            evaluate_sealed_holdout_2024_2026,
+            root=root,
+            output=output,
+            data_root=data_root,
+            panel=panel,
+            sp500_backfill_dir=sp500_backfill_dir,
+            wider_dir=wider_dir,
+            ext_dir=ext_dir,
             unseal_final_test_period=unseal_final_test_period,
         )

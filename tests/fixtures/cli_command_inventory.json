@@ -92,6 +92,7 @@
     "evaluate-investment-exclusions",
     "evaluate-investment-predictions",
     "evaluate-saved-swing-policy",
+    "evaluate-sealed-holdout-2024-2026",
     "extract-sp500-official-events",
     "finalize-edge-issuer-event-precision-audit",
     "freeze-edge-rebuild-temporal-manifest",

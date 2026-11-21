@@ -1254,13 +1254,16 @@ def load_wider_universe_data(
                     unadj[rr_a[wm], c_i] = cl_a[wm]
 
     # Canonical S&P 500 raw shares (`security_id -> cik` via `resolve_all_sp500_ciks`).
-    membership = _read_panel_membership(panel_dir, development_end)
+    membership = _read_panel_membership(
+        panel_dir, development_end, unseal_final_test_period=unseal_final_test_period,
+    )
     sp500_sec_ids = tuple(sorted(membership["security_id"].astype(str).unique()))
     sp500_cik_map, _ = resolve_all_sp500_ciks(
         sp500_sec_ids,
         identity_relations_path=paths.read(SEC_IDENTITY_RELATIONS),
         filings_path=paths.read(FILINGS_DIRECTORY / FILINGS_FILE),
         development_end=development_end,
+        unseal_final_test_period=unseal_final_test_period,
     )
     raw_dir_can = paths.directory(UNADJUSTED_DIRECTORY)
     raw_units = json.loads((raw_dir_can / "_manifest.json").read_text(encoding="utf-8"))["unit_artifacts"]
