@@ -517,9 +517,17 @@ def collect_live_opra_options_overlay(
                 settings.alpaca_trading_base_url, headers, bench_sym, b_spot, scored_day, max_dte=125,
             )
 
+    tk_by_sid_map: dict[str, str] = {}
+    if "ticker" in enriched.columns:
+        for _, r_tk in enriched[["security_id", "ticker"]].iterrows():
+            s_k = str(r_tk["security_id"])
+            t_k = str(r_tk["ticker"] or "").upper().strip()
+            if t_k:
+                tk_by_sid_map[s_k] = t_k
+
     sid_by_tk: dict[str, str] = {}
     for idx_s, sid in enumerate(cand_sids):
-        tk = sid.split(":", 1)[1] if ":" in sid else sid
+        tk = tk_by_sid_map.get(sid) or (sid.split(":", 1)[1] if ":" in sid else sid)
         c_idx = col_of.get(sid, -1)
         if c_idx < 0:
             continue

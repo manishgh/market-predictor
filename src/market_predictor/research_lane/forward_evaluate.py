@@ -363,8 +363,13 @@ def evaluate_forward_scores(
 
         all_tickers: set[str] = set()
         for _, s_df, _, _ in clock_admitted_snapshots:
-            for sid in s_df["security_id"].astype(str):
-                all_tickers.add(sid.split(":", 1)[1] if ":" in sid else sid)
+            if "ticker" in s_df.columns:
+                for tk_val in s_df["ticker"].dropna().astype(str):
+                    if tk_val.strip():
+                        all_tickers.add(tk_val.upper().strip())
+            else:
+                for sid in s_df["security_id"].astype(str):
+                    all_tickers.add(sid.split(":", 1)[1] if ":" in sid else sid)
 
         earliest_snap = min(d for d, _, _, _ in snapshots)
         bars_df = (
@@ -435,7 +440,10 @@ def evaluate_forward_scores(
 
             t_idx = sess_to_idx[s_iso]
             entry_idx = t_idx + 1
-            tks = [sid.split(":", 1)[1] if ":" in sid else sid for sid in s_df["security_id"].astype(str)]
+            if "ticker" in s_df.columns:
+                tks = [str(t).upper().strip() for t in s_df["ticker"].fillna("").astype(str)]
+            else:
+                tks = [sid.split(":", 1)[1] if ":" in sid else sid for sid in s_df["security_id"].astype(str)]
             opt_sum = m_dict.get("options_summary") or {}
             has_opra = bool(opt_sum.get("opra_enabled"))
             is_backw = bool(opt_sum.get("opra_backwardation", False))

@@ -23,7 +23,7 @@ import os
 import re
 import shutil
 import time as time_mod
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Final, cast
@@ -44,7 +44,14 @@ from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
-from market_predictor.research_lane import indicators, opra_options, predictors, reversal, sec_catalyst_model
+from market_predictor.research_lane import (
+    indicators,
+    live_cohort,
+    opra_options,
+    predictors,
+    reversal,
+    sec_catalyst_model,
+)
 from market_predictor.research_lane.beta_neutral import (
     _ACTIVIST_FORMS,
     _DISTRESS_8K_ITEMS,
@@ -59,7 +66,6 @@ from market_predictor.research_lane.panel import (
     ResearchPanel,
     SealedPeriodError,
     check_development_end,
-    load_research_panel,
 )
 from market_predictor.research_lane.predictors import centered_rank
 from market_predictor.research_lane.prospective_contracts import (
@@ -75,7 +81,6 @@ from market_predictor.research_lane.prospective_contracts import (
 )
 from market_predictor.research_lane.sec_filings import event_rows
 from market_predictor.research_lane.trial_log import git_identity
-from market_predictor.research_lane.wider_universe import WIDER_UNIVERSE_DIRECTORY
 from market_predictor.sources.alpaca import AlpacaSource
 from market_predictor.sources.sec import SecSource
 
@@ -100,7 +105,19 @@ def redact_finviz_auth(value: object, token: str | None = None) -> str:
     return text
 
 
-def _score_panel_last_session(panel: ResearchPanel) -> pd.DataFrame:
+def _default_ticker_for_security_id(sec_id: str, ticker_map: Mapping[str, str] | None = None) -> str:
+    if ticker_map is not None and sec_id in ticker_map:
+        return str(ticker_map[sec_id]).upper().strip()
+    if sec_id.startswith("ticker:"):
+        return sec_id.split(":", 1)[1].upper().strip()
+    return sec_id.split(":", 1)[1].upper().strip() if ":" in sec_id else sec_id.upper().strip()
+
+
+def _score_panel_last_session(
+    panel: ResearchPanel,
+    *,
+    active_ticker_by_security_id: Mapping[str, str] | None = None,
+) -> pd.DataFrame:
     """Compute cross-sectional scores strictly at the final session row `-1` of `panel`."""
     if len(panel.sessions) == 0:
         raise ValueError("cannot score an empty panel")
@@ -156,6 +173,7 @@ def _score_panel_last_session(panel: ResearchPanel) -> pd.DataFrame:
         rows.append({
             "session_date": session_str,
             "security_id": sec_id,
+            "ticker": _default_ticker_for_security_id(sec_id, active_ticker_by_security_id),
             "sector": sec_name,
             "close_adjusted": float(panel.close[last_idx, col]),
             "score_price_equal_12": None if not np.isfinite(price_eq_12[col]) else float(price_eq_12[col]),
@@ -165,171 +183,24 @@ def _score_panel_last_session(panel: ResearchPanel) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _lookup_local_sectors_by_ticker(root: Path, tickers: tuple[str, ...]) -> tuple[npt.NDArray[np.int16], tuple[str, ...]]:
-    """Map tickers to SIC sector codes using retained `wider_us_universe` metadata if present on disk."""
-    roster_pq = root / WIDER_UNIVERSE_DIRECTORY / "wider_roster_spans.parquet"
-    sectors_json = root / WIDER_UNIVERSE_DIRECTORY / "cik_sectors.json"
-    if not (roster_pq.is_file() and sectors_json.is_file()):
-        return np.zeros(len(tickers), dtype=np.int16), ("Unknown",)
-
-    roster_df = cast(Any, pq).read_table(roster_pq, columns=["cik", "ticker", "valid_to"], use_threads=False).to_pandas()
-    cik_to_name: dict[str, str] = json.loads(sectors_json.read_text(encoding="utf-8"))
-    roster_df = roster_df.sort_values("valid_to")
-    tk_to_name: dict[str, str] = {}
-    for _, r in roster_df.iterrows():
-        tk = str(r["ticker"]).upper().strip()
-        cik = str(r["cik"]).zfill(10)
-        if cik in cik_to_name:
-            tk_to_name[tk] = str(cik_to_name[cik])
-
-    per_tk = [tk_to_name.get(tk, "Unknown") for tk in tickers]
-    sec_names = tuple(sorted(set(per_tk)))
-    codes = pd.Index(sec_names).get_indexer(per_tk).astype(np.int16)
-    return codes, sec_names
-
-
 def _fetch_live_prospective_panel(
     as_of_date: date,
     settings: Settings,
     *,
+    paths: EvidencePaths | None = None,
     root: Path | None = None,
     unseal_final_test_period: bool = False,
-) -> ResearchPanel:
-    """Build a trailing live panel ending at `as_of_date` (`> 2026-07-08`), clamped after the sealed window."""
-    if as_of_date <= HISTORICAL_SEALED_END and not unseal_final_test_period:
-        raise SealedPeriodError(
-            f"prospective live mode requires as_of_date > {HISTORICAL_SEALED_END.isoformat()}; got {as_of_date}"
-        )
-    alpaca = AlpacaSource(settings)
-    assets = alpaca.fetch_ticker_universe()
-    asset_syms = {
-        s for s in (set(assets["symbol"].astype(str).str.upper()) - {"SPY", "QQQ"})
-        if len(s) <= 5 and s.replace(".", "").isalpha()
-    }
-    roster_pq = (root / WIDER_UNIVERSE_DIRECTORY / "wider_roster_spans.parquet") if root is not None else None
-    if roster_pq is not None and roster_pq.is_file():
-        r_df = cast(Any, pq).read_table(roster_pq, columns=["ticker"], use_threads=False).to_pandas()
-        sec_common = sorted({str(t).upper().strip() for t in r_df["ticker"]} & asset_syms)
-        symbols = sec_common[:2000] if len(sec_common) >= 500 else sorted(asset_syms)[:1500]
-    else:
-        all_sorted = sorted(asset_syms)
-        step = max(1, len(all_sorted) // 1500)
-        symbols = all_sorted[::step][:1500]
-    query_syms = ["SPY", "QQQ", *symbols]
-
-    start_day = as_of_date - timedelta(days=410)
-    if not unseal_final_test_period:
-        # Strictly forbid reading any historical bar inside `2024-05-29..2026-07-08` while sealed!
-        start_day = max(start_day, HISTORICAL_SEALED_END + timedelta(days=1))
-    start_utc = datetime.combine(start_day, time(0, 0), tzinfo=UTC)
-    end_utc = datetime.combine(as_of_date, time(23, 59, 59), tzinfo=UTC)
-
-    bar_rows: list[dict[str, Any]] = []
-
-    def _fetch_chunk(chunk: tuple[str, ...]) -> None:
-        if not chunk:
-            return
-        token: str | None = None
-        try:
-            while True:
-                page = alpaca.fetch_bars_page(
-                    chunk, start_utc, end_utc, timeframe="1Day", page_token=token, asof=as_of_date, adjustment="all",
-                )
-                for sym, blist in page.bars.items():
-                    for b in blist:
-                        b_day = pd.Timestamp(str(b["t"])).tz_convert(MARKET_TIMEZONE).date()
-                        if start_day <= b_day <= as_of_date:
-                            bar_rows.append({
-                                "ticker": sym,
-                                "session": np.datetime64(b_day, "D"),
-                                "open": float(b["o"]),
-                                "high": float(b["h"]),
-                                "low": float(b["l"]),
-                                "close": float(b["c"]),
-                                "volume": float(b["v"]),
-                            })
-                token = page.next_page_token
-                if not token:
-                    break
-        except Exception as exc:
-            if "status=400" in str(exc):
-                if len(chunk) == 1:
-                    return
-                for single in chunk:
-                    _fetch_chunk((single,))
-                return
-            raise
-
-    for offset in range(0, len(query_syms), 45):
-        _fetch_chunk(tuple(query_syms[offset : offset + 45]))
-        guard("forward live panel fetch")
-
-    df = pd.DataFrame(bar_rows).drop_duplicates(["ticker", "session"], keep="last")
-    spy = df.loc[df["ticker"] == "SPY"].sort_values("session")
-    qqq = df.loc[df["ticker"] == "QQQ"].sort_values("session")
-    sessions = spy["session"].to_numpy().astype("datetime64[D]")
-    qqq_al = pd.DataFrame({"session": sessions}).merge(qqq[["session", "open", "close"]], on="session", how="left")
-
-    stocks_df = df.loc[~df["ticker"].isin(["SPY", "QQQ"]) & df["session"].isin(sessions)]
-    sec_tickers = tuple(sorted(stocks_df["ticker"].unique()))
-    sec_ids = tuple(f"ticker:{tk}" for tk in sec_tickers)
-    col_idx = pd.Index(sec_tickers)
-
-    shape = (len(sessions), len(sec_ids))
-    r_pos = np.searchsorted(sessions, stocks_df["session"].to_numpy().astype("datetime64[D]"))
-    c_pos = col_idx.get_indexer(stocks_df["ticker"])
-    mats: dict[str, npt.NDArray[np.float32]] = {}
-    for f_name in ("open", "high", "low", "close", "volume"):
-        m = np.full(shape, np.nan, dtype=np.float32)
-        m[r_pos, c_pos] = stocks_df[f_name].to_numpy(dtype=np.float32)
-        mats[f_name] = m
-
-    req_win = min(len(sessions), 252)
-    min_valid = max(60, int(0.95 * req_win))
-    fin_win = (
-        (np.isfinite(mats["close"][-req_win:]) & (mats["close"][-req_win:] > 0)).sum(axis=0) >= min_valid
-        if len(sessions) >= 60
-        else np.zeros(len(sec_ids), dtype=bool)
-    )
-    dv_slice = mats["close"][-60:].astype(np.float64) * mats["volume"][-60:].astype(np.float64)
-    dv_fin = np.isfinite(dv_slice)
-    dv_cnt = dv_fin.sum(axis=0)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        dvol_60 = np.where(dv_cnt > 0, np.where(dv_fin, dv_slice, 0.0).sum(axis=0) / np.maximum(dv_cnt, 1), np.nan)
-    elig_last = fin_win & np.isfinite(dvol_60) & np.isfinite(mats["close"][-1])
-    above_5 = elig_last & (mats["close"][-1] >= 5.0)
-    if int(above_5.sum()) >= 50:
-        elig_last = above_5
-    if int(elig_last.sum()) > 1000:
-        cutoff_dv = float(np.sort(dvol_60[elig_last])[-1000])
-        elig_last = elig_last & (dvol_60 >= cutoff_dv)
-    eligible = np.zeros(shape, dtype=bool)
-    eligible[-1] = elig_last
-
-    if root is not None:
-        sec_codes_row, sector_names = _lookup_local_sectors_by_ticker(root, sec_tickers)
-        sector_mat = np.broadcast_to(sec_codes_row[None, :], shape).copy()
-    else:
-        sector_mat = np.zeros(shape, dtype=np.int16)
-        sector_names = ("Unknown",)
-
-    return ResearchPanel(
-        sessions=sessions,
-        security_ids=sec_ids,
-        open=mats["open"],
-        high=mats["high"],
-        low=mats["low"],
-        close=mats["close"],
-        volume=mats["volume"],
-        eligible=eligible,
-        sector=sector_mat,
-        sector_names=sector_names,
-        spy_open=spy["open"].to_numpy(dtype=np.float32),
-        spy_close=spy["close"].to_numpy(dtype=np.float32),
-        qqq_open=qqq_al["open"].to_numpy(dtype=np.float32),
-        qqq_close=qqq_al["close"].to_numpy(dtype=np.float32),
-        development_end=as_of_date,
-        load_report={"mode": "live_prospective_alpaca_sip", "as_of_date": as_of_date.isoformat()},
+) -> live_cohort.DecisionDateMidSmallCohort:
+    """Build the verified live `mid_small_ex_sp500` cohort via `EvidencePaths` & `roster_spans.parquet`."""
+    resolved_paths = paths if paths is not None else EvidencePaths(root or Path("."))
+    clk = resolve_xnys_session_clock(as_of_date)
+    return live_cohort.load_decision_date_mid_small_cohort(
+        resolved_paths,
+        as_of_date=as_of_date,
+        source_cutoff_utc=clk.source_cutoff_utc,
+        live_prospective=True,
+        unseal_final_test_period=unseal_final_test_period,
+        settings=settings,
     )
 
 
@@ -337,6 +208,7 @@ def parse_finviz_elite_news_csv(
     csv_text: str,
     *,
     ticker: str,
+    security_id: str | None = None,
     window_start_utc: datetime,
     cutoff_utc: datetime,
     unseal_final_test_period: bool = False,
@@ -348,6 +220,7 @@ def parse_finviz_elite_news_csv(
 
     eastern = ZoneInfo(MARKET_TIMEZONE)
     symbol = ticker.upper().strip()
+    resolved_sid = security_id or f"ticker:{symbol}"
     reader = csv.DictReader(io.StringIO(csv_text))
     items: list[dict[str, Any]] = []
     for row in reader:
@@ -375,7 +248,7 @@ def parse_finviz_elite_news_csv(
         ev_hash = hashlib.sha256(f"finviz|{symbol}|{pub_utc.isoformat()}|{title}|{url}".encode()).hexdigest()[:20]
         items.append({
             "event_id": f"finviz:{ev_hash}",
-            "security_id": f"ticker:{symbol}",
+            "security_id": resolved_sid,
             "ticker": symbol,
             "source_family": "finviz",
             "provider_source": provider,
@@ -394,6 +267,7 @@ def _extract_live_sec_catalysts_and_company(
     *,
     ticker: str,
     cik: str,
+    security_id: str | None = None,
     fallback_company: str,
     window_start_utc: datetime,
     cutoff_utc: datetime,
@@ -461,7 +335,7 @@ def _extract_live_sec_catalysts_and_company(
         title_txt = f"{company_name} ({ticker}) SEC {form} {structured_fam} {desc}".strip()
         out.append({
             "event_id": f"sec:{cik}:{acc_no}",
-            "security_id": f"ticker:{ticker}",
+            "security_id": security_id or f"ticker:{ticker}",
             "ticker": ticker,
             "source_family": "sec",
             "provider_source": "sec_edgar",
@@ -513,8 +387,20 @@ def collect_live_prospective_catalysts(
         else "score_price_equal_12"
     )
     ordered = scores_df.sort_values(rank_col, ascending=False, na_position="last")
+    sid_to_tk: dict[str, str] = {}
+    tk_to_sid: dict[str, str] = {}
+    for _, r_tk in scores_df.iterrows():
+        s_val = str(r_tk["security_id"])
+        t_val = (
+            str(r_tk["ticker"]).upper().strip()
+            if "ticker" in scores_df.columns and pd.notna(r_tk["ticker"]) and str(r_tk["ticker"]).strip()
+            else _default_ticker_for_security_id(s_val)
+        )
+        sid_to_tk[s_val] = t_val
+        tk_to_sid[t_val] = s_val
+
     top_sec_ids = ordered["security_id"].head(max(1, int(catalyst_top_k))).astype(str).tolist()
-    top_tickers = [sid.split(":", 1)[1] if ":" in sid else sid for sid in top_sec_ids]
+    top_tickers = [sid_to_tk[sid] for sid in top_sec_ids if sid in sid_to_tk]
 
     raw_events: list[dict[str, Any]] = []
     batch_8k_rows: list[dict[str, Any]] = []
@@ -523,34 +409,50 @@ def collect_live_prospective_catalysts(
     company_meta: dict[str, tuple[str, str | None]] = {}
     source_errors: dict[str, int] = {"finviz": 0, "alpaca": 0, "sec": 0}
 
-    # 1. SEC EDGAR ticker -> CIK mapping + recent submissions (`8-K`, `SC 13D/A`, `S-1/S-3/424B`, `NT 10-K/Q`)
+    # 1. SEC EDGAR CIK submissions (`8-K`, `SC 13D/A`, `S-1/S-3/424B`, `NT 10-K/Q`) across full cohort when SEC bundle active
+    sec_target_sids = (
+        scores_df["security_id"].astype(str).tolist()
+        if loaded_sec_bundle is not None
+        else top_sec_ids
+    )
     if settings.sec_user_agent.strip():
         sec = SecSource(settings)
         tk_to_cik_title: dict[str, tuple[str, str]] = {}
-        try:
-            ct_payload = sec.client.get_json(SEC_COMPANY_TICKERS_URL)
-            if isinstance(ct_payload, dict):
-                for entry in ct_payload.values():
-                    if isinstance(entry, dict) and entry.get("ticker") and entry.get("cik_str") is not None:
-                        tk_u = str(entry["ticker"]).upper().strip()
-                        tk_to_cik_title[tk_u] = (str(entry["cik_str"]).zfill(10), str(entry.get("title") or "").strip())
-        except Exception:
-            source_errors["sec"] += 1
+        need_ticker_lookup = any(not sid.startswith("cik:") for sid in sec_target_sids)
+        if need_ticker_lookup:
+            try:
+                ct_payload = sec.client.get_json(SEC_COMPANY_TICKERS_URL)
+                if isinstance(ct_payload, dict):
+                    for entry in ct_payload.values():
+                        if isinstance(entry, dict) and entry.get("ticker") and entry.get("cik_str") is not None:
+                            tk_u = str(entry["ticker"]).upper().strip()
+                            tk_to_cik_title[tk_u] = (
+                                str(entry["cik_str"]).zfill(10),
+                                str(entry.get("title") or "").strip(),
+                            )
+            except Exception:
+                source_errors["sec"] += 1
 
-        for tk in top_tickers:
-            mapped = tk_to_cik_title.get(tk) or tk_to_cik_title.get(tk.replace(".", "-"))
-            if mapped is None:
-                continue
-            cik_10, fallback_title = mapped
+        for sid_q in sec_target_sids:
+            tk = sid_to_tk.get(sid_q, _default_ticker_for_security_id(sid_q))
+            if sid_q.startswith("cik:"):
+                cik_10 = sid_q.removeprefix("cik:").zfill(10)
+                fallback_title = ""
+            else:
+                mapped = tk_to_cik_title.get(tk) or tk_to_cik_title.get(tk.replace(".", "-"))
+                if mapped is None:
+                    continue
+                cik_10, fallback_title = mapped
             try:
                 sub = sec.client.get_json(sec.submissions_url.format(cik=cik_10))
                 if not isinstance(sub, dict):
                     continue
-                sec_queried_sids.add(f"ticker:{tk}")
+                sec_queried_sids.add(sid_q)
                 s_rows, comp_name, comp_avail = _extract_live_sec_catalysts_and_company(
                     sub,
                     ticker=tk,
                     cik=cik_10,
+                    security_id=sid_q,
                     fallback_company=fallback_title,
                     window_start_utc=window_start_utc,
                     cutoff_utc=cutoff_utc,
@@ -560,7 +462,7 @@ def collect_live_prospective_catalysts(
                 if loaded_sec_bundle is not None:
                     b8, bn8 = sec_catalyst_model.extract_live_sec_batch_tables_for_cik(
                         sub,
-                        security_id=f"ticker:{tk}",
+                        security_id=sid_q,
                         cik=cik_10,
                         window_start_utc=sec_batch_start_utc,
                         cutoff_utc=cutoff_utc,
@@ -588,6 +490,7 @@ def collect_live_prospective_catalysts(
                         parse_finviz_elite_news_csv(
                             resp.text,
                             ticker=tk,
+                            security_id=tk_to_sid.get(tk, f"ticker:{tk}"),
                             window_start_utc=window_start_utc,
                             cutoff_utc=cutoff_utc,
                             unseal_final_test_period=unseal_final_test_period,
@@ -638,7 +541,7 @@ def collect_live_prospective_catalysts(
                         nid = str(item.get("id") or hashlib.sha256(f"{tk}|{created_raw}|{title}".encode()).hexdigest()[:16])
                         raw_events.append({
                             "event_id": f"alpaca:{nid}",
-                            "security_id": f"ticker:{tk}",
+                            "security_id": tk_to_sid.get(tk, f"ticker:{tk}"),
                             "ticker": tk,
                             "source_family": "alpaca",
                             "provider_source": str(item.get("source") or "alpaca"),
@@ -980,18 +883,38 @@ def record_forward_scores(
         if effective_mode == "prospective":
             _enforce_prospective_prediction_clock(resolved_date, now_fn())
 
+        cohort_data: live_cohort.DecisionDateMidSmallCohort | None = None
         if live_prospective:
-            loaded_panel = _fetch_live_prospective_panel(
-                resolved_date, cfg, root=root, unseal_final_test_period=unseal_final_test_period,
-            )
-        else:
-            loaded_panel = load_research_panel(
-                paths.directory(panel),
-                development_end=resolved_date,
+            live_loaded = _fetch_live_prospective_panel(
+                resolved_date,
+                cfg,
+                paths=paths,
+                root=root,
                 unseal_final_test_period=unseal_final_test_period,
             )
+            if isinstance(live_loaded, live_cohort.DecisionDateMidSmallCohort):
+                cohort_data = live_loaded
+                loaded_panel = live_loaded.panel
+            else:
+                loaded_panel = live_loaded
+        else:
+            cohort_data = live_cohort.load_decision_date_mid_small_cohort(
+                paths,
+                as_of_date=resolved_date,
+                source_cutoff_utc=session_clock.source_cutoff_utc,
+                panel_rel=panel,
+                live_prospective=False,
+                unseal_final_test_period=unseal_final_test_period,
+                settings=cfg,
+            )
+            loaded_panel = cohort_data.panel
 
-        scores_df = _score_panel_last_session(loaded_panel)
+        scores_df = _score_panel_last_session(
+            loaded_panel,
+            active_ticker_by_security_id=(
+                cohort_data.active_ticker_by_security_id if cohort_data is not None else None
+            ),
+        )
         if scores_df.empty:
             raise ValueError(f"no eligible stocks scored on {resolved_date.isoformat()}")
         scored_session = str(scores_df["session_date"].iloc[0])
@@ -1069,6 +992,7 @@ def record_forward_scores(
                 "live_prospective": live_prospective,
                 "sealed_holdout_window": "2024-05-29..2026-07-08",
                 "sealed_holdout_untouched": not unseal_final_test_period,
+                "cohort_authority_report": cohort_data.authority_report if cohort_data is not None else None,
                 "frozen_prospective_candidates": list(FROZEN_PROSPECTIVE_CANDIDATES),
                 "candidate_registry_sha256": json_sha256(list(FROZEN_PROSPECTIVE_CANDIDATES)),
                 "payload_artifacts": payload_artifacts,

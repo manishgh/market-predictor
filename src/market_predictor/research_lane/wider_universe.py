@@ -1390,13 +1390,15 @@ def load_wider_universe_data(
 
     # Merge SEC 8-K events (`wider_8k_events.parquet` + S&P 500 `filings.parquet` + `pre2019_8k_releases.parquet`).
     cutoff_utc = (pd.Timestamp(development_end, tz=MARKET_TIMEZONE) + pd.Timedelta(days=1)).tz_convert("UTC")
+    sealed_start_utc = pd.Timestamp(date(2024, 5, 29), tz=MARKET_TIMEZONE).tz_convert("UTC")
     ev_frames: list[pd.DataFrame] = []
     w_ev = cast(Any, pq).read_table(events_8k_path, use_threads=False).to_pandas()
     if len(w_ev):
         w_ev["available_at_utc"] = pd.to_datetime(w_ev["available_at_utc"], utc=True)
         w_ev["accepted_at_utc"] = pd.to_datetime(w_ev["accepted_at_utc"], utc=True)
-        if bool((w_ev["available_at_utc"] >= cutoff_utc).any()):
+        if not unseal_final_test_period and bool((w_ev["available_at_utc"] >= sealed_start_utc).any()):
             raise SealedPeriodError("wider_8k_events contains sealed timestamp")
+        w_ev = w_ev.loc[w_ev["available_at_utc"] < cutoff_utc].copy()
         ev_frames.append(w_ev[["security_id", "accession_number", "item_codes", "accepted_at_utc", "available_at_utc"]])
 
     for sp_ev_path in (
@@ -1427,12 +1429,20 @@ def load_wider_universe_data(
     has_202 = all_8k["item_codes"].fillna("").astype(str).map(lambda s: "2.02" in {x.strip() for x in s.split(",")})
     releases_202 = all_8k.loc[has_202, ["security_id", "accession_number", "accepted_at_utc", "available_at_utc"]].reset_index(drop=True)
 
-    # Resolve all available `company_facts.json` paths across the 4 local directories.
-    extra_f = paths.project_root / EXTRA_FACTS_DIR
+    # Resolve all available `company_facts.json` paths across the 4 local directories via EvidencePaths.
+    extra_f: Path | None = None
+    try:
+        cand_extra = paths.directory(EXTRA_FACTS_DIR)
+        if cand_extra.is_dir():
+            extra_f = cand_extra
+    except Exception:
+        fallback_extra = paths.project_root / EXTRA_FACTS_DIR
+        if fallback_extra.is_dir():
+            extra_f = fallback_extra
     facts_paths = existing_company_facts_paths(
         set(selected_ciks),
         primary_sources=paths.directory(COMPANY_FACTS_DIRECTORY / COMPANY_FACTS_SOURCES),
-        extra_sources=extra_f if extra_f.is_dir() else None,
+        extra_sources=extra_f,
         backfill_sources=sp500_bf_dir / "company_facts",
     )
     w_facts_dir = wider_dir / "company_facts"

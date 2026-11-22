@@ -485,8 +485,6 @@ def _load_unsealed_sp500_and_mid_small(
 ]:
     """Load `2016-01-04..2026-07-08` S&P 500 and `mid_small_ex_sp500` panels with exact `2024-05-28` overlap stitching."""
     panel_dir = paths.directory(panel_rel)
-    sp500_bf_dir = paths.directory(sp500_backfill_rel)
-    wider_dir = paths.directory(wider_rel)
 
     bars_adj_ext = cast(Any, pq).read_table(ext_files["bars_adj_parquet"], use_threads=False).to_pandas()
     bars_adj_ext["session"] = pd.to_datetime(bars_adj_ext["session_date"]).to_numpy().astype("datetime64[D]")
@@ -571,7 +569,10 @@ def _load_unsealed_sp500_and_mid_small(
 
     # Append retained `swing_later_sealed_sec_form_inventory_corrected_clock/filings.parquet` 8-K Item 2.02 releases
     sp_releases = ext_sp.releases
-    sealed_sec_path = paths.project_root / LATER_SEALED_SEC_FILINGS
+    try:
+        sealed_sec_path = paths.read(LATER_SEALED_SEC_FILINGS)
+    except Exception:
+        sealed_sec_path = paths.project_root / LATER_SEALED_SEC_FILINGS
     extra_sha: dict[str, str] = {
         "cboe_20260708_sha256": file_sha256(Path(ext_files["cboe_parquet"])),
         "bars_adj_ext_sha256": file_sha256(Path(ext_files["bars_adj_parquet"])),
@@ -631,7 +632,59 @@ def _load_unsealed_sp500_and_mid_small(
         report=ext_sp.report,
     )
 
-    # 2. Build `mid_small_ex_sp500` across `2016-01-04..2026-07-08` with exact `2024-05-28` overlap split-stitching!
+    del bars_adj_ext, bars_raw_ext, mem_full
+    release_unused_process_memory()
+    wdata_full, all_non8k_mid = load_unsealed_mid_small_through_date(
+        paths,
+        ext_files,
+        as_of_date=SEALED_HOLDOUT_END,
+        panel_rel=panel_rel,
+        sp500_backfill_rel=sp500_backfill_rel,
+        wider_rel=wider_rel,
+    )
+    return ext_sp_full, wdata_full, all_non8k_mid, extra_sha
+
+
+def load_unsealed_mid_small_through_date(
+    paths: EvidencePaths,
+    ext_files: Mapping[str, Any],
+    *,
+    as_of_date: date = SEALED_HOLDOUT_END,
+    source_cutoff_utc: pd.Timestamp | None = None,
+    panel_rel: Path = PANEL_DIRECTORY,
+    sp500_backfill_rel: Path = BACKFILL_DIRECTORY,
+    wider_rel: Path = WIDER_UNIVERSE_DIRECTORY,
+) -> tuple[wider_universe.WiderUniverseData, pd.DataFrame]:
+    """Load `mid_small_ex_sp500` across `2016-01-04..as_of_date` (`<= 2026-07-08`) with zero post-`as_of_date` reads."""
+    if as_of_date > SEALED_HOLDOUT_END:
+        raise ValueError(f"load_unsealed_mid_small_through_date requires as_of_date <= {SEALED_HOLDOUT_END.isoformat()}")
+    end_iso = as_of_date.isoformat()
+    panel_dir = paths.directory(panel_rel)
+    sp500_bf_dir = paths.directory(sp500_backfill_rel)
+    wider_dir = paths.directory(wider_rel)
+    stitch_np = np.datetime64(OVERLAP_STITCH_DATE, "D")
+
+    bars_adj_ext = cast(Any, pq).read_table(
+        ext_files["bars_adj_parquet"],
+        filters=[("session_date", "<=", end_iso)],
+        use_threads=False,
+    ).to_pandas()
+    if len(bars_adj_ext):
+        bars_adj_ext["session"] = pd.to_datetime(bars_adj_ext["session_date"]).to_numpy().astype("datetime64[D]")
+    else:
+        bars_adj_ext["session"] = np.empty(0, dtype="datetime64[D]")
+
+    bars_raw_ext = cast(Any, pq).read_table(
+        ext_files["bars_raw_parquet"],
+        filters=[("session_date", "<=", end_iso)],
+        use_threads=False,
+    ).to_pandas()
+    if len(bars_raw_ext):
+        bars_raw_ext["session"] = pd.to_datetime(bars_raw_ext["session_date"]).to_numpy().astype("datetime64[D]")
+    else:
+        bars_raw_ext["session"] = np.empty(0, dtype="datetime64[D]")
+
+    mem_full = _read_panel_membership(panel_dir, as_of_date, unseal_final_test_period=True)
     selected_ciks = tuple(sorted(json.loads((wider_dir / "selected_ciks.json").read_text(encoding="utf-8"))["selected_ciks"]))
     col_of_cik = {c: idx for idx, c in enumerate(selected_ciks)}
     ext_roster = cast(Any, pq).read_table(ext_files["ext_roster_parquet"], use_threads=False).to_pandas()
@@ -639,9 +692,8 @@ def _load_unsealed_sp500_and_mid_small(
     ext_roster["valid_to"] = pd.to_datetime(ext_roster["valid_to"]).dt.date
 
     sessions, spy_open, spy_close, qqq_open, qqq_close, warm_stitch, _ = _load_sessions_and_benchmarks(
-        panel_dir, sp500_bf_dir, SEALED_HOLDOUT_END,
+        panel_dir, sp500_bf_dir, as_of_date,
     )
-    # Stream `<= 2024-05-28` shards + `combined_daily` (`2018..2026`) first
     matrices, in_span = wider_universe._stream_adjusted_bars_into_matrices(
         sessions=sessions,
         ciks=selected_ciks,
@@ -650,11 +702,10 @@ def _load_unsealed_sp500_and_mid_small(
         sp500_bf_dir=sp500_bf_dir,
         adj_dir=wider_dir / "bars_adjusted",
         warm_stitch=warm_stitch,
-        development_end=SEALED_HOLDOUT_END,
+        development_end=as_of_date,
         fields=PRICE_FIELDS,
     )
 
-    # Stitch & place `2024-05-29..2026-07-08` extension adjusted bars onto `mid_small` columns where `2024-05-29+` is NaN!
     n_sess, n_sec = len(sessions), len(selected_ciks)
     st_idx_w = int(np.searchsorted(sessions, stitch_np))
     sub_rost = ext_roster.loc[ext_roster["cik"].isin(col_of_cik)]
@@ -666,45 +717,44 @@ def _load_unsealed_sp500_and_mid_small(
         if r0 < r1:
             tk_ivs.setdefault(str(rec["ticker"]), []).append((r0, r1, c_i))
 
-    for tk_e, grp_e in bars_adj_ext.groupby("ticker", sort=False):
-        ivs = tk_ivs.get(str(tk_e))
-        if not ivs:
-            continue
-        ov_row = grp_e.loc[grp_e["session"] == stitch_np, "close"]
-        new_ov = float(ov_row.iloc[0]) if len(ov_row) else np.nan
-        post_e = grp_e.loc[grp_e["session"] >= np.datetime64(SEALED_HOLDOUT_START, "D")]
-        if post_e.empty:
-            continue
-        b_s = post_e["session"].to_numpy().astype("datetime64[D]")
-        rc = np.searchsorted(sessions, b_s)
-        ok = (rc < n_sess) & (sessions[np.minimum(rc, n_sess - 1)] == b_s)
-        if not bool(ok.any()):
-            continue
-        rr_all = rc[ok]
-        src_all = np.flatnonzero(ok)
-        for r0, r1, col_i in ivs:
-            wm = (rr_all >= r0) & (rr_all < r1) & (~np.isfinite(matrices["close"][rr_all, col_i]))
-            if not bool(wm.any()):
+    if len(bars_adj_ext):
+        for tk_e, grp_e in bars_adj_ext.groupby("ticker", sort=False):
+            ivs = tk_ivs.get(str(tk_e))
+            if not ivs:
                 continue
-            # Rescale pre-2024-05-29 rows of `col_i` inside `[r0, st_idx_w + 1)` using exact 2024-05-28 overlap ratio!
-            old_ov = float(matrices["close"][st_idx_w, col_i]) if r0 <= st_idx_w < r1 else np.nan
-            if np.isfinite(old_ov) and old_ov > 0.0 and np.isfinite(new_ov) and new_ov > 0.0:
-                sc_w = new_ov / old_ov
-                if abs(sc_w - 1.0) > 1e-4:
-                    pre_stop = min(r1, st_idx_w + 1)
-                    for f_px in ("open", "high", "low", "close"):
-                        matrices[f_px][r0:pre_stop, col_i] = (
-                            matrices[f_px][r0:pre_stop, col_i].astype(np.float64) * sc_w
+            ov_row = grp_e.loc[grp_e["session"] == stitch_np, "close"]
+            new_ov = float(ov_row.iloc[0]) if len(ov_row) else np.nan
+            post_e = grp_e.loc[grp_e["session"] >= np.datetime64(SEALED_HOLDOUT_START, "D")]
+            if post_e.empty:
+                continue
+            b_s = post_e["session"].to_numpy().astype("datetime64[D]")
+            rc = np.searchsorted(sessions, b_s)
+            ok = (rc < n_sess) & (sessions[np.minimum(rc, n_sess - 1)] == b_s)
+            if not bool(ok.any()):
+                continue
+            rr_all = rc[ok]
+            src_all = np.flatnonzero(ok)
+            for r0, r1, col_i in ivs:
+                wm = (rr_all >= r0) & (rr_all < r1) & (~np.isfinite(matrices["close"][rr_all, col_i]))
+                if not bool(wm.any()):
+                    continue
+                old_ov = float(matrices["close"][st_idx_w, col_i]) if r0 <= st_idx_w < r1 else np.nan
+                if np.isfinite(old_ov) and old_ov > 0.0 and np.isfinite(new_ov) and new_ov > 0.0:
+                    sc_w = new_ov / old_ov
+                    if abs(sc_w - 1.0) > 1e-4:
+                        pre_stop = min(r1, st_idx_w + 1)
+                        for f_px in ("open", "high", "low", "close"):
+                            matrices[f_px][r0:pre_stop, col_i] = (
+                                matrices[f_px][r0:pre_stop, col_i].astype(np.float64) * sc_w
+                            ).astype(np.float32)
+                        matrices["volume"][r0:pre_stop, col_i] = (
+                            matrices["volume"][r0:pre_stop, col_i].astype(np.float64) / sc_w
                         ).astype(np.float32)
-                    matrices["volume"][r0:pre_stop, col_i] = (
-                        matrices["volume"][r0:pre_stop, col_i].astype(np.float64) / sc_w
-                    ).astype(np.float32)
-            rr_put = rr_all[wm]
-            src_put = src_all[wm]
-            for f_k in PRICE_FIELDS:
-                matrices[f_k][rr_put, col_i] = post_e[f_k].to_numpy(dtype=np.float32)[src_put]
+                rr_put = rr_all[wm]
+                src_put = src_all[wm]
+                for f_k in PRICE_FIELDS:
+                    matrices[f_k][rr_put, col_i] = post_e[f_k].to_numpy(dtype=np.float32)[src_put]
 
-    # Stream unadjusted closes (`<= 2024-05-28` + `bars_raw_ext`)
     unadj_w = np.full((n_sess, n_sec), np.nan, dtype=np.float64)
 
     def _place_raw(df_r: pd.DataFrame) -> None:
@@ -734,7 +784,7 @@ def _load_unsealed_sp500_and_mid_small(
         sp500_sec_ids,
         identity_relations_path=paths.read(SEC_IDENTITY_RELATIONS),
         filings_path=paths.read(FILINGS_DIRECTORY / FILINGS_FILE),
-        development_end=SEALED_HOLDOUT_END,
+        development_end=as_of_date,
         unseal_final_test_period=True,
     )
     raw_dir_can = paths.directory(UNADJUSTED_DIRECTORY)
@@ -748,6 +798,7 @@ def _load_unsealed_sp500_and_mid_small(
         u_df = cast(Any, pq).read_table(
             raw_dir_can / Path(str(item["bars_path"]).replace("\\", "/")),
             columns=["session_date", "close"],
+            filters=[("session_date", "<=", end_iso)],
             use_threads=False,
         ).to_pandas()
         if not u_df.empty:
@@ -762,13 +813,19 @@ def _load_unsealed_sp500_and_mid_small(
         *sorted((wider_dir / "bars_raw").glob("raw_shard_*.parquet")),
     ]:
         if r_sh.is_file():
-            _place_raw(cast(Any, pq).read_table(r_sh, columns=["ticker", "session_date", "close"], use_threads=False).to_pandas())
+            _place_raw(
+                cast(Any, pq).read_table(
+                    r_sh,
+                    columns=["ticker", "session_date", "close"],
+                    filters=[("session_date", "<=", end_iso)],
+                    use_threads=False,
+                ).to_pandas()
+            )
     _place_raw(bars_raw_ext)
 
     del bars_adj_ext, bars_raw_ext
     release_unused_process_memory()
 
-    # Point-in-time S&P 500 mask across all `2016..2026-07-08` sessions
     sp500_mask = np.zeros((n_sess, n_sec), dtype=bool)
     mem_known = mem_full.loc[
         (mem_full["membership_available_at_utc"] <= mem_full["decision_time_utc"]).fillna(False)
@@ -821,10 +878,10 @@ def _load_unsealed_sp500_and_mid_small(
         spy_close=spy_close,
         qqq_open=qqq_open,
         qqq_close=qqq_close,
-        development_end=SEALED_HOLDOUT_END,
+        development_end=as_of_date,
         load_report={
             "subset": "mid_small_ex_sp500",
-            "development_end": SEALED_HOLDOUT_END.isoformat(),
+            "development_end": end_iso,
             "sessions": {"count": n_sess, "first": str(sessions[0]), "last": str(sessions[-1])},
             "panel_securities_total": len(kept_ciks),
             "eligible_cells_total": int(eligible.sum()),
@@ -836,7 +893,11 @@ def _load_unsealed_sp500_and_mid_small(
         },
     )
 
-    # Merge pre-holdout + holdout 8-K and non-8-K SEC catalyst tables for `mid_small_ex_sp500`
+    cutoff_ts = (
+        source_cutoff_utc.tz_convert("UTC")
+        if source_cutoff_utc is not None
+        else acceptance_cutoff(as_of_date)
+    )
     w_8k_pre = cast(Any, pq).read_table(wider_dir / "wider_8k_events.parquet", use_threads=False).to_pandas()
     w_8k_post = cast(Any, pq).read_table(ext_files["holdout_8k_parquet"], use_threads=False).to_pandas()
     for df_ev in (w_8k_pre, w_8k_post):
@@ -850,6 +911,9 @@ def _load_unsealed_sp500_and_mid_small(
         ],
         ignore_index=True,
     ).drop_duplicates(["security_id", "accession_number"])
+    if len(all_8k_mid):
+        all_8k_mid = all_8k_mid.loc[all_8k_mid["available_at_utc"] <= cutoff_ts].copy()
+
     has_202_w = all_8k_mid["item_codes"].fillna("").astype(str).map(
         lambda s: "2.02" in {x.strip() for x in s.split(",")}
     )
@@ -861,12 +925,23 @@ def _load_unsealed_sp500_and_mid_small(
     non8k_pre = cast(Any, pq).read_table(wider_dir / beta_neutral.NON8K_CATALYST_PARQUET, use_threads=False).to_pandas()
     non8k_post = cast(Any, pq).read_table(ext_files["holdout_non8k_parquet"], use_threads=False).to_pandas()
     all_non8k_mid = pd.concat([non8k_pre, non8k_post], ignore_index=True).drop_duplicates(["security_id", "accession_number"])
+    if len(all_non8k_mid):
+        all_non8k_mid["available_at_utc"] = pd.to_datetime(all_non8k_mid["available_at_utc"], utc=True)
+        all_non8k_mid = all_non8k_mid.loc[all_non8k_mid["available_at_utc"] <= cutoff_ts].copy()
 
-    extra_f = paths.project_root / EXTRA_FACTS_DIR
+    extra_f: Path | None = None
+    try:
+        cand_extra = paths.directory(EXTRA_FACTS_DIR)
+        if cand_extra.is_dir():
+            extra_f = cand_extra
+    except Exception:
+        fallback_extra = paths.project_root / EXTRA_FACTS_DIR
+        if fallback_extra.is_dir():
+            extra_f = fallback_extra
     facts_paths_w = existing_company_facts_paths(
         set(kept_ciks),
         primary_sources=paths.directory(COMPANY_FACTS_DIRECTORY / COMPANY_FACTS_SOURCES),
-        extra_sources=extra_f if extra_f.is_dir() else None,
+        extra_sources=extra_f,
         backfill_sources=sp500_bf_dir / "company_facts",
     )
     w_facts_dir = wider_dir / "company_facts"
@@ -886,7 +961,7 @@ def _load_unsealed_sp500_and_mid_small(
         input_sha256=mid_panel.input_sha256,
         report=mid_panel.load_report,
     )
-    return ext_sp_full, wdata_full, all_non8k_mid, extra_sha
+    return wdata_full, all_non8k_mid
 
 
 def build_holdout_folds(sessions: npt.NDArray[np.datetime64]) -> tuple[Fold, ...]:
@@ -1451,4 +1526,5 @@ __all__ = [
     "build_holdout_folds",
     "evaluate_sealed_holdout_2024_2026",
     "fit_stage2_xgb_on_holdout",
+    "load_unsealed_mid_small_through_date",
 ]
