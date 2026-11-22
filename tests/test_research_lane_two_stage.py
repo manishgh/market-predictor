@@ -158,21 +158,56 @@ def test_conservative_edgar_clock_and_trailing_warmup_counter() -> None:
 def test_forward_score_recorder_writes_snapshot_and_blocks_sealed_window(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from market_predictor.core.errors import DataReadinessError
+    from market_predictor.research_lane import live_cohort
+
     monkeypatch.setenv("MARKET_PREDICTOR_RUNTIME_DIR", str(tmp_path / "runtime"))
     write_panel_files(tmp_path / PANEL_DIRECTORY, end=date(2024, 5, 28))
 
-    with patch("market_predictor.research_lane.forward_record.guard"):
+    # Missing wider_us_universe authority must fail closed (`R2`)!
+    with pytest.raises(DataReadinessError, match="evidence directory is missing"), patch(
+        "market_predictor.research_lane.forward_record.guard"
+    ):
+        forward_record.record_forward_scores(root=tmp_path, as_of_date=date(2024, 5, 28))
+
+    base_p = synthetic_panel(sessions=320, securities=20, seed=5)
+    sess_end_2024 = pd.bdate_range(end="2024-05-28", periods=320).to_numpy().astype("datetime64[D]")
+    cik_ids = tuple(f"cik:{idx + 1:010d}" for idx in range(len(base_p.security_ids)))
+    p_cik = replace(
+        base_p,
+        sessions=sess_end_2024,
+        security_ids=cik_ids,
+        eligible=np.ones_like(base_p.eligible, dtype=bool),
+        development_end=date(2024, 5, 28),
+    )
+    fake_cohort = live_cohort.DecisionDateMidSmallCohort(
+        panel=p_cik,
+        unadjusted_close=p_cik.close.astype(np.float64),
+        releases_202=pd.DataFrame(columns=["security_id", "accepted_at_utc", "available_at_utc"]),
+        all_8k_events=pd.DataFrame(),
+        non8k_events=pd.DataFrame(),
+        security_cik_map={sid: sid.split(":")[1] for sid in cik_ids},
+        company_facts_paths={},
+        active_ticker_by_security_id={sid: f"T{i}" for i, sid in enumerate(cik_ids)},
+        security_id_by_active_ticker={f"T{i}": sid for i, sid in enumerate(cik_ids)},
+        authority_report={"as_of_date": "2024-05-28"},
+    )
+    with patch("market_predictor.research_lane.forward_record.guard"), patch(
+        "market_predictor.research_lane.live_cohort.load_decision_date_mid_small_cohort",
+        return_value=fake_cohort,
+    ):
         manifest = forward_record.record_forward_scores(
             root=tmp_path, as_of_date=date(2024, 5, 28),
         )
-    assert manifest["scored_session"] == "2024-05-28"
-    snap_dir = tmp_path / forward_record.FORWARD_RECORD_DIRECTORY / "2024-05-28"
-    assert (snap_dir / "scores.parquet").is_file()
-    assert json.loads((snap_dir / "_manifest.json").read_text(encoding="utf-8"))["eligible_stocks_scored"] > 0
+        assert manifest["scored_session"] == "2024-05-28"
+        snap_dir = tmp_path / forward_record.FORWARD_RECORD_DIRECTORY / "2024-05-28"
+        assert (snap_dir / "scores.parquet").is_file()
+        assert (snap_dir / "holdings.parquet").is_file()
+        assert json.loads((snap_dir / "_manifest.json").read_text(encoding="utf-8"))["eligible_stocks_scored"] > 0
 
-    # Duplicate session must fail closed (immutable append-only).
-    with pytest.raises(FileExistsError), patch("market_predictor.research_lane.forward_record.guard"):
-        forward_record.record_forward_scores(root=tmp_path, as_of_date=date(2024, 5, 28))
+        # Duplicate session must fail closed (immutable append-only).
+        with pytest.raises(FileExistsError):
+            forward_record.record_forward_scores(root=tmp_path, as_of_date=date(2024, 5, 28))
 
     # Historical sealed window (`2024-05-29..2026-07-08`) must fail closed in both panel and live_prospective modes!
     with pytest.raises(SealedPeriodError):

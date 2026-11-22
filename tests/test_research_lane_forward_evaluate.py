@@ -712,3 +712,94 @@ def test_r6_incomplete_candidate_definition_abstention_and_pre_entry_pending_sta
     assert sched[("2026-11-20", "mid_small_bn_sec_xgb_10d")]["entry_session"] == "2026-11-23"
     assert sched[("2026-11-20", "mid_small_bn_sec_xgb_21d")]["status"] == "pending_entry_bar"
     assert sched[("2026-11-20", "mid_small_bn_sec_xgb_opra_10d")]["status"] == "abstained"
+
+
+def test_step8_cli_entry_points_record_and_evaluate_wiring(tmp_path: Path) -> None:
+    """Exercise normal Typer CLI commands `record-forward-research-scores` and `evaluate-forward-research-scores` (`Item 8`)."""
+    import numpy as np
+    import typer
+    from typer.testing import CliRunner
+
+    from market_predictor.commands.research_lane import register_research_lane_commands
+
+    app = typer.Typer()
+    register_research_lane_commands(app)
+    runner = CliRunner()
+
+    sessions = pd.bdate_range("2025-10-15", "2026-11-19").to_numpy().astype("datetime64[D]")
+    n_s, n_c = len(sessions), 6
+    close = np.full((n_s, n_c), 50.0, dtype=np.float32) * np.linspace(1.0, 1.15, n_s, dtype=np.float32)[:, None]
+    spy_c = np.full(n_s, 500.0, dtype=np.float32)
+    panel = ResearchPanel(
+        sessions=sessions,
+        security_ids=tuple(f"cik:{i + 1:010d}" for i in range(n_c)),
+        open=close,
+        high=close * np.float32(1.01),
+        low=close * np.float32(0.99),
+        close=close,
+        volume=np.full((n_s, n_c), 5e5, dtype=np.float32),
+        eligible=np.ones((n_s, n_c), dtype=bool),
+        sector=np.zeros((n_s, n_c), dtype=np.int16),
+        sector_names=("Tech",),
+        spy_open=spy_c,
+        spy_close=spy_c,
+        qqq_open=spy_c,
+        qqq_close=spy_c,
+        development_end=date(2026, 11, 19),
+        load_report={},
+    )
+    fake_bars = pd.DataFrame([
+        {"ticker": tk, "session": d_s, "open": 100.0, "close": 101.0}
+        for d_s in ("2026-11-19", "2026-11-20")
+        for tk in ["SPY", *[f"000000000{i + 1}" for i in range(n_c)]]
+    ])
+    with patch(
+        "market_predictor.research_lane.forward_record._fetch_live_prospective_panel",
+        return_value=panel,
+    ), patch(
+        "market_predictor.research_lane.forward_evaluate._fetch_post_holdout_bars",
+        return_value=fake_bars,
+    ), patch("market_predictor.research_lane.forward_record.guard"), patch(
+        "market_predictor.research_lane.forward_evaluate.guard"
+    ), patch.dict("os.environ", {"MARKET_PREDICTOR_RUNTIME_DIR": str(tmp_path / "rt")}):
+        r_rec = runner.invoke(
+            app,
+            [
+                "record-forward-research-scores",
+                "--root",
+                str(tmp_path),
+                "--as-of-date",
+                "2026-11-19",
+                "--record-mode",
+                "retrospective_replay",
+                "--live-prospective",
+                "--no-include-live-catalysts",
+                "--no-include-live-options",
+                "--output-dir",
+                "data/research/research_lane/forward_records_cli_test",
+            ],
+        )
+        assert r_rec.exit_code == 0, r_rec.output
+        rec_js = json.loads(r_rec.stdout)
+        assert rec_js["record_mode"] == "retrospective_replay"
+        assert "holdings.parquet" in rec_js["payload_artifacts"]
+
+        r_eval = runner.invoke(
+            app,
+            [
+                "evaluate-forward-research-scores",
+                "--root",
+                str(tmp_path),
+                "--as-of-date",
+                "2026-11-20",
+                "--forward-dir",
+                "data/research/research_lane/forward_records_cli_test",
+                "--output",
+                "data/research/research_lane/forward_evaluations/cli_test_eval",
+                "--allow-retrospective-replay",
+            ],
+        )
+        assert r_eval.exit_code == 0, r_eval.output
+        eval_js = json.loads(r_eval.stdout)
+        assert eval_js["evaluation_mode"] == "retrospective_replay"
+        assert eval_js["snapshots_total"] == 1

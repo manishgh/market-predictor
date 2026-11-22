@@ -123,7 +123,7 @@ def register_research_lane_commands(app: typer.Typer) -> None:
             as_of_date=parsed_day,
             data_root=data_root,
             panel=panel,
-            output_dir=output_dir,
+            output_parent=output_dir,
             sec_model_bundle=sec_model_bundle,
             live_prospective=live_prospective,
             record_mode=parsed_mode,
