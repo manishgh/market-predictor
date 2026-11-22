@@ -75,6 +75,10 @@ def register_research_lane_commands(app: typer.Typer) -> None:
         ),
         data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
         panel: Path = typer.Option(PANEL_DIRECTORY),
+        output_dir: Path = typer.Option(
+            FORWARD_RECORD_DIRECTORY,
+            help="Snapshot output directory (use a separate path for retrospective_replay).",
+        ),
         sec_model_bundle: Path = typer.Option(
             DEFAULT_SEC_MODEL_BUNDLE_DIR,
             help="Persisted Stage-2 SEC Catalyst XGBoost bundle directory scored when present.",
@@ -119,6 +123,7 @@ def register_research_lane_commands(app: typer.Typer) -> None:
             as_of_date=parsed_day,
             data_root=data_root,
             panel=panel,
+            output_dir=output_dir,
             sec_model_bundle=sec_model_bundle,
             live_prospective=live_prospective,
             record_mode=parsed_mode,
