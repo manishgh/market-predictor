@@ -319,3 +319,75 @@ def test_r9_edited_score_file_rejected_and_swapped_model_cannot_be_graded_under_
         assert aud["qualifies_for_persisted_sec_model"] is False
         reasons = aud["candidate_admissions"]["mid_small_bn_sec_xgb_10d"]["rejection_reasons"]
         assert any("model_manifest_sha256_mismatch" in r for r in reasons)
+
+
+def test_r5_removing_highest_ranked_exit_preserves_selected_holdings_and_marks_incomplete(tmp_path: Path) -> None:
+    """Reproduce the 20-stock `-50%` vs `+1%` example: missing top exit never replaces holding or fabricates `+0.8%` (`R5`)."""
+    import numpy as np
+
+    from market_predictor.research_lane.forward_evaluate import _score_single_signal_cohort
+    from market_predictor.research_lane.prospective_contracts import (
+        PERSISTED_SEC_FEATURE_CONTRACT_SHA256,
+        PERSISTED_SEC_MODEL_MANIFEST_SHA256,
+    )
+
+    sids = tuple(f"cik:{i + 1:010d}" for i in range(30))
+    # First test exact 20-stock cohort: S00 = -50%, S01..S19 = +1%
+    sids_20 = sids[:20]
+    sig_20 = np.linspace(0.5, -0.5, 20, dtype=np.float64)
+    rets_complete = np.full(20, 0.01, dtype=np.float64)
+    rets_complete[0] = -0.50
+
+    res_ok = _score_single_signal_cohort(sig_20, rets_complete, 0.005, security_ids=sids_20)
+    assert res_ok is not None
+    assert res_ok["top10_complete"] is True
+    assert res_ok["selected_security_ids"] == ["cik:0000000001", "cik:0000000002"]
+    assert res_ok["top10_gross_return"] == pytest.approx(-0.245, abs=1e-12)
+    assert res_ok["top10_net_20bps_return"] == pytest.approx(-0.247, abs=1e-12)
+
+    # Remove ONLY the highest-scored stock's future exit (`NaN`):
+    # Selected identities MUST stay `["cik:0000000001", "cik:0000000002"]` and cohort return MUST be `None` (`incomplete`)!
+    rets_missing_top = rets_complete.copy()
+    rets_missing_top[0] = np.nan
+    res_inc = _score_single_signal_cohort(sig_20, rets_missing_top, 0.005, security_ids=sids_20)
+    assert res_inc is not None
+    assert res_inc["selected_security_ids"] == ["cik:0000000001", "cik:0000000002"]
+    assert res_inc["top10_complete"] is False
+    assert res_inc["selected_unresolved_outcomes"] == 1
+    assert res_inc["top10_gross_return"] is None
+    assert res_inc["top10_net_20bps_return"] is None
+    assert res_inc["rank_ic_scope"] == "observed_subset_diagnostic"
+    assert res_inc["observed_subset_rank_ic"] is not None
+
+    # Also verify `build_snapshot_decision_holdings` freezes target weights (`3` stocks of `30` = `1/3` each) from decision inputs only!
+    scores_df = pd.DataFrame({
+        "session_date": ["2026-11-20"] * 30,
+        "security_id": list(sids),
+        "ticker": [f"T{i:02d}" for i in range(30)],
+        "sector": ["Industrials"] * 30,
+        "score_mid_small_bn_sec_xgb_10d": np.linspace(0.5, -0.5, 30),
+        "score_mid_small_bn_sec_xgb_21d": np.linspace(0.5, -0.5, 30),
+        "score_mid_small_bn_sec_xgb_opra_10d": [None] * 30,
+    })
+    h_df, h_sum = forward_record.build_snapshot_decision_holdings(
+        scores_df,
+        panel_sessions=np.asarray(["2026-11-20"], dtype="datetime64[D]"),
+        dest_parent=tmp_path,
+        options_summary=None,
+        catalyst_summary={
+            "sec_xgb_model": {
+                "model_scored": True,
+                "manifest_sha256": PERSISTED_SEC_MODEL_MANIFEST_SHA256,
+                "feature_contract_sha256": PERSISTED_SEC_FEATURE_CONTRACT_SHA256,
+            }
+        },
+    )
+    c10 = h_df.loc[h_df["candidate_id"] == "mid_small_bn_sec_xgb_10d"].reset_index(drop=True)
+    assert not bool(c10["abstained"].any())
+    assert c10["security_id"].tolist() == ["cik:0000000001", "cik:0000000002", "cik:0000000003"]
+    assert np.allclose(c10["target_weight"].to_numpy(dtype=np.float64), 1.0 / 3.0)
+    # OPRA candidate abstains with explicit reason because OPRA was not collected
+    copra = h_df.loc[h_df["candidate_id"] == "mid_small_bn_sec_xgb_opra_10d"].iloc[0]
+    assert bool(copra["abstained"]) is True
+    assert "opra_observation_not_synchronized_close" in str(copra["abstain_reason"])
+    assert h_sum["mid_small_bn_sec_xgb_10d"]["selected_equities"] == 3

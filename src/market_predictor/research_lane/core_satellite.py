@@ -353,8 +353,7 @@ def evaluate_core_satellite_grid(
             w_s = benchmark_tilt._apply_open_fills(w_s_dec, mid_win.tradable)
             b_s = benchmark_tilt._apply_open_fills(b_s_dec, mid_win.tradable)
             p_s = benchmark_tilt.simulate_portfolio_path(w_s, mid_win.stock_returns, b_s)
-            b_s_gross = np.einsum("ki,ki->k", np.where(np.isfinite(b_s), b_s, 0.0), mid_win.stock_returns)
-            b_s_gross[~np.isfinite(b_s).all(axis=1)] = np.nan
+            b_s_gross = benchmark_tilt.simulate_portfolio_path(b_s, mid_win.stock_returns).gross_returns
             s_sum = _pack_joint_summary(p_s, b_s_gross, "equal_weight_mid_small", mid_win, horizon)
             satellites_2021_2024.setdefault(sat_name, {})[h_key] = s_sum
             sat_w_map[sat_name] = w_s

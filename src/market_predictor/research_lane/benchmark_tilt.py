@@ -130,7 +130,7 @@ class ContinuousWindows:
 
 @dataclass(frozen=True)
 class PathMetrics:
-    """Realized portfolio return, drift-adjusted turnover, and active-bound diagnostics."""
+    """Realized portfolio return, drift-adjusted turnover, active-bound, and unresolved-exit diagnostics."""
 
     weights: FloatArray  # K x A (sum == 1 on active periods, NaN when abstaining)
     gross_returns: FloatArray  # K
@@ -141,6 +141,9 @@ class PathMetrics:
     active_shares: FloatArray  # K
     max_stock_active_abs: float
     max_sector_active_abs: float
+    unresolved_held_periods: int = 0
+    unresolved_held_positions: int = 0
+    portfolio_complete: bool = True
 
 
 def map_security_ciks(
@@ -356,15 +359,14 @@ def continuous_rebalance_windows(
     years = panel.sessions[decision_rows].astype("datetime64[Y]").astype(np.int64) + 1970
 
     opens = panel.open.astype(np.float64)
-    closes = panel.close.astype(np.float64)
     spy_opens = panel.spy_open.astype(np.float64)
 
     k_len = len(decision_rows)
     tradable = np.zeros((k_len, n_sec), dtype=bool)
-    stock_returns = np.zeros((k_len, n_sec), dtype=np.float64)
+    stock_returns = np.full((k_len, n_sec), np.nan, dtype=np.float64)
     spy_returns = np.full(k_len, np.nan, dtype=np.float64)
     unfilled_entries = 0
-    fallback_exits = 0
+    unresolved_exits = 0
 
     for idx in range(k_len):
         r_row = int(decision_rows[idx])
@@ -384,21 +386,8 @@ def continuous_rebalance_windows(
         with np.errstate(invalid="ignore", divide="ignore"):
             stock_returns[idx, normal] = exit_px[normal] / entry_px[normal] - 1.0
 
-        missing_exit_cols = np.flatnonzero(trad & ~exit_ok)
-        for col in missing_exit_cols:
-            c = int(col)
-            last_val = entry_px[c]
-            for bar_row in range(x_row - 1, e_row - 1, -1):
-                cand_close = closes[bar_row, c]
-                if np.isfinite(cand_close) and cand_close > 0.0:
-                    last_val = cand_close
-                    break
-                cand_open = opens[bar_row, c]
-                if np.isfinite(cand_open) and cand_open > 0.0:
-                    last_val = cand_open
-                    break
-            stock_returns[idx, c] = last_val / entry_px[c] - 1.0
-            fallback_exits += 1
+        # Preserve unknown holding returns (`np.nan`) when required terminal exit open[x_row] is missing (`R8`).
+        unresolved_exits += int((trad & ~exit_ok).sum())
 
         if np.isfinite(spy_opens[e_row]) and spy_opens[e_row] > 0.0 and np.isfinite(spy_opens[x_row]) and spy_opens[x_row] > 0.0:
             spy_returns[idx] = float(spy_opens[x_row] / spy_opens[e_row] - 1.0)
@@ -413,7 +402,7 @@ def continuous_rebalance_windows(
         stock_returns=stock_returns,
         spy_returns=spy_returns,
         unfilled_eligible_entries=unfilled_entries,
-        missing_exit_fallbacks=fallback_exits,
+        missing_exit_fallbacks=unresolved_exits,
     )
 
 
@@ -489,8 +478,13 @@ def simulate_portfolio_path(
     bench_weights: FloatArray | None = None,
     sector_matrix: npt.NDArray[np.integer[Any]] | None = None,
 ) -> PathMetrics:
-    """Compute exact gross/net returns and post-drift one-way turnover for weight schedule `weights` (`K x A`)."""
-    k_len, n_assets = weights.shape
+    """Compute exact gross/net returns and post-drift one-way turnover for weight schedule `weights` (`K x A`).
+
+    Missing returns on unheld assets (`w == 0.0`) never contaminate an observed portfolio, whereas any
+    unresolved (`NaN`) exit on an owned asset (`w > 0.0`) leaves that rebalance period unresolved (`NaN`)
+    and marks `portfolio_complete = False` (`R8`).
+    """
+    k_len, _ = weights.shape
     gross = np.full(k_len, np.nan, dtype=np.float64)
     turnovers = np.full(k_len, np.nan, dtype=np.float64)
     steady_turnovers = np.full(k_len, np.nan, dtype=np.float64)
@@ -500,6 +494,8 @@ def simulate_portfolio_path(
 
     max_stock_active = 0.0
     max_sector_active = 0.0
+    unresolved_periods = 0
+    unresolved_positions = 0
     drifted_prev: FloatArray | None = None
 
     for k in range(k_len):
@@ -507,9 +503,6 @@ def simulate_portfolio_path(
         if not bool(np.isfinite(w).all()) or float(w.sum()) <= 0.0:
             drifted_prev = None
             continue
-        r = asset_returns[k]
-        g_ret = float(np.dot(w, r))
-        gross[k] = g_ret
 
         if drifted_prev is None:
             # Initial entry from cash: 0.5 one-way replaced weight (= 10 bps at 20 bps round-trip cost).
@@ -518,16 +511,7 @@ def simulate_portfolio_path(
         else:
             tau = 0.5 * float(np.abs(w - drifted_prev).sum())
             steady_turnovers[k] = tau
-
         turnovers[k] = tau
-        net_20[k] = g_ret - FROZEN_COST_PER_TURNOVER * tau
-        net_10[k] = g_ret - INFO_COST_PER_TURNOVER * tau
-
-        denom = 1.0 + g_ret
-        if denom > 1e-12:
-            drifted_prev = w * (1.0 + r) / denom
-        else:
-            drifted_prev = None
 
         if bench_weights is not None and bool(np.isfinite(bench_weights[k]).all()) and float(bench_weights[k].sum()) > 0.0:
             diff = w - bench_weights[k]
@@ -539,6 +523,28 @@ def simulate_portfolio_path(
                     sec_diff = abs(float(diff[sec_row == code].sum()))
                     max_sector_active = max(max_sector_active, sec_diff)
 
+        r = asset_returns[k]
+        held = w > 0.0
+        r_held = r[held]
+        if not bool(np.isfinite(r_held).all()):
+            unresolved_periods += 1
+            unresolved_positions += int((~np.isfinite(r_held)).sum())
+            drifted_prev = None
+            continue
+
+        g_ret = float(np.dot(w[held], r_held))
+        gross[k] = g_ret
+        net_20[k] = g_ret - FROZEN_COST_PER_TURNOVER * tau
+        net_10[k] = g_ret - INFO_COST_PER_TURNOVER * tau
+
+        denom = 1.0 + g_ret
+        if denom > 1e-12:
+            drifted_next = np.zeros_like(w, dtype=np.float64)
+            drifted_next[held] = w[held] * (1.0 + r_held) / denom
+            drifted_prev = drifted_next
+        else:
+            drifted_prev = None
+
     return PathMetrics(
         weights=weights,
         gross_returns=gross,
@@ -549,7 +555,41 @@ def simulate_portfolio_path(
         active_shares=active_shares,
         max_stock_active_abs=max_stock_active,
         max_sector_active_abs=max_sector_active,
+        unresolved_held_periods=unresolved_periods,
+        unresolved_held_positions=unresolved_positions,
+        portfolio_complete=(unresolved_periods == 0),
     )
+
+
+def select_buffered_top_indices(
+    scores: FloatArray,
+    valid: IntArray,
+    *,
+    prior_held: set[int],
+    buffered: bool,
+    buy_top_fraction: float = BUY_TOP_FRACTION,
+    hold_top_fraction: float = HOLD_TOP_FRACTION,
+) -> IntArray:
+    """Select top-fraction `valid` column indices with rank-hysteresis retention (`buy 10% / hold 33%`)."""
+    target_m = max(1, int(valid.size * buy_top_fraction))
+    desc_order = valid[np.argsort(-scores[valid], kind="stable")]
+    if not buffered or not prior_held:
+        return np.asarray(desc_order[:target_m], dtype=np.int64)
+
+    pct = _percentiles_among_selected(scores, valid)
+    keep_threshold = 1.0 - hold_top_fraction
+    surviving = [
+        int(valid[pos])
+        for pos in range(valid.size)
+        if int(valid[pos]) in prior_held and pct[pos] >= keep_threshold
+    ]
+    if len(surviving) > target_m:
+        surviving.sort(key=lambda col: (-float(scores[col]), col))
+        surviving = surviving[:target_m]
+    surviving_set = set(surviving)
+    needed = target_m - len(surviving)
+    additions = [int(col) for col in desc_order if int(col) not in surviving_set][:needed]
+    return np.asarray(surviving + additions, dtype=np.int64)
 
 
 def build_skill_weights(
@@ -579,27 +619,12 @@ def build_skill_weights(
         b_row[valid] = 1.0 / float(valid.size)
         bench[k] = b_row
 
-        target_m = max(1, int(valid.size * BUY_TOP_FRACTION))
-        desc_order = valid[np.argsort(-scores[valid], kind="stable")]
-
-        if not buffered or not held:
-            chosen = desc_order[:target_m]
-        else:
-            pct = _percentiles_among_selected(scores, valid)
-            keep_threshold = 1.0 - HOLD_TOP_FRACTION
-            surviving = [
-                int(valid[pos])
-                for pos in range(valid.size)
-                if int(valid[pos]) in held and pct[pos] >= keep_threshold
-            ]
-            if len(surviving) > target_m:
-                surviving.sort(key=lambda col: (-float(scores[col]), col))
-                surviving = surviving[:target_m]
-            surviving_set = set(surviving)
-            needed = target_m - len(surviving)
-            additions = [int(col) for col in desc_order if int(col) not in surviving_set][:needed]
-            chosen = np.asarray(surviving + additions, dtype=np.int64)
-
+        chosen = select_buffered_top_indices(
+            scores,
+            valid,
+            prior_held=held,
+            buffered=buffered,
+        )
         held = {int(c) for c in chosen}
         w_row = np.zeros(n_sec, dtype=np.float64)
         w_row[chosen] = 1.0 / float(chosen.size)
@@ -828,15 +853,22 @@ def _pack_policy_summary(
         windows.years,
         horizon,
     )
+    obs_comp_gross = _compounded_return(path.gross_returns)
+    obs_comp_20 = _compounded_return(path.net_returns_20bps)
+    obs_comp_10 = _compounded_return(path.net_returns_10bps)
     return {
         "matched_benchmark_name": matched_name,
+        "portfolio_complete": path.portfolio_complete,
+        "unresolved_held_periods": path.unresolved_held_periods,
+        "unresolved_held_positions": path.unresolved_held_positions,
         "mean_steady_one_way_turnover": float(steady.mean()) if steady.size else None,
         "mean_active_share": float(act.mean()) if act.size else None,
         "max_stock_active_abs": path.max_stock_active_abs,
         "max_sector_active_abs": path.max_sector_active_abs,
-        "compounded_gross": _compounded_return(path.gross_returns),
-        "compounded_net_20bps": _compounded_return(path.net_returns_20bps),
-        "compounded_net_10bps": _compounded_return(path.net_returns_10bps),
+        "compounded_gross": obs_comp_gross if path.portfolio_complete else None,
+        "compounded_net_20bps": obs_comp_20 if path.portfolio_complete else None,
+        "compounded_net_10bps": obs_comp_10 if path.portfolio_complete else None,
+        "observed_periods_compounded_net_20bps": obs_comp_20,
         "vs_matched_benchmark": vs_matched,
         "vs_spy": vs_spy,
     }
@@ -919,8 +951,7 @@ def evaluate_option_c(
             w_s0 = _apply_open_fills(w_s0_dec, windows.tradable)
             b_s0 = _apply_open_fills(b_s0_dec, windows.tradable)
             p_s0 = simulate_portfolio_path(w_s0, windows.stock_returns, b_s0)
-            b_s0_gross = np.einsum("ki,ki->k", np.where(np.isfinite(b_s0), b_s0, 0.0), windows.stock_returns)
-            b_s0_gross[~np.isfinite(b_s0).all(axis=1)] = np.nan
+            b_s0_gross = simulate_portfolio_path(b_s0, windows.stock_returns).gross_returns
 
             w_s1_dec, b_s1_dec = build_skill_weights(
                 panel, sig_matrix, windows.decision_rows, buffered=True,
@@ -928,8 +959,7 @@ def evaluate_option_c(
             w_s1 = _apply_open_fills(w_s1_dec, windows.tradable)
             b_s1 = _apply_open_fills(b_s1_dec, windows.tradable)
             p_s1 = simulate_portfolio_path(w_s1, windows.stock_returns, b_s1)
-            b_s1_gross = np.einsum("ki,ki->k", np.where(np.isfinite(b_s1), b_s1, 0.0), windows.stock_returns)
-            b_s1_gross[~np.isfinite(b_s1).all(axis=1)] = np.nan
+            b_s1_gross = simulate_portfolio_path(b_s1, windows.stock_returns).gross_returns
 
             # 2. Cap-weighted multiplicative buffered tilt (P1) & Sector active slice tilt (P2)
             w_p1_dec, b_cap1_dec = build_cap_tilt_weights(

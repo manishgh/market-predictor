@@ -284,3 +284,84 @@ def test_evaluate_option_c_active_bounds_and_reading_rule_on_60_stocks() -> None
             assert cell["product_cap_mult_buffered"]["max_sector_active_abs"] <= 1e-12
             assert cell["product_sector_active_slice"]["max_stock_active_abs"] <= 0.02 + 1e-12
             assert cell["product_sector_active_slice"]["max_sector_active_abs"] <= 1e-12
+
+
+def test_r8_missing_terminal_exit_disappearing_security_unheld_nan_and_complete_portfolio() -> None:
+    """Verify unresolved exits stay `NaN` for held stocks while unheld missing exits never contaminate observed portfolios (`R8`)."""
+    days = [d.date().isoformat() for d in pd.bdate_range("2023-02-01", periods=16)]
+    base = tiny_panel(days, columns=20, close=100.0)
+    opens = np.full((16, 20), 100.0, dtype=np.float32)
+    closes = np.full((16, 20), 100.0, dtype=np.float32)
+    # Stock 0 enters at 100.0 (row 1), trades at 98.0 intraday, and drops -50% to 50.0 by exit (row 6)
+    for r in range(1, 16):
+        opens[r, 0] = 50.0 if r >= 6 else (100.0 if r == 1 else 98.0)
+        closes[r, 0] = 50.0 if r >= 6 else 98.0
+        opens[r, 1:] = 100.0 * (1.002 ** r)
+        closes[r, 1:] = 100.0 * (1.002 ** r)
+    spy_open = (400.0 * (1.001 ** np.arange(16))).astype(np.float32)
+
+    # Signal puts Stock 0 & Stock 1 in the top-10% (2 of 20 stocks), Stock 19 at bottom
+    sig = np.broadcast_to(np.linspace(0.5, -0.5, 20, dtype=np.float64)[None, :], (16, 20)).copy()
+
+    # Case A: Fully observed portfolio across 2 rebalance windows (decision rows 0, 5 -> entries 1, 6 -> exits 6, 11)
+    panel_ok = replace(base, open=opens.copy(), close=closes.copy(), spy_open=spy_open, spy_close=spy_open.copy())
+    win_ok = benchmark_tilt.continuous_rebalance_windows(panel_ok, first_row=0, horizon=5)
+    w_dec_ok, b_dec_ok = benchmark_tilt.build_skill_weights(
+        panel_ok, sig, win_ok.decision_rows, buffered=True, minimum_stocks=20,
+    )
+    w_ok = benchmark_tilt._apply_open_fills(w_dec_ok, win_ok.tradable)
+    b_ok = benchmark_tilt._apply_open_fills(b_dec_ok, win_ok.tradable)
+    path_ok = benchmark_tilt.simulate_portfolio_path(w_ok, win_ok.stock_returns, b_ok)
+    sum_ok = benchmark_tilt._pack_policy_summary(path_ok, win_ok.spy_returns, "spy", win_ok, 5)
+    assert win_ok.missing_exit_fallbacks == 0
+    assert path_ok.portfolio_complete is True
+    assert path_ok.unresolved_held_periods == 0
+    assert sum_ok["compounded_net_20bps"] is not None
+    # First period gross return on {Stock 0 (-50%), Stock 1 (+1.2%)} is ~ -24.4%
+    assert path_ok.gross_returns[0] < -0.24
+
+    # Case B: Missing exit price on an UNHELD security (Stock 19 disappears from row 5 onward)
+    opens_unheld = opens.copy()
+    closes_unheld = closes.copy()
+    opens_unheld[5:, 19] = np.nan
+    closes_unheld[5:, 19] = np.nan
+    panel_unheld = replace(base, open=opens_unheld, close=closes_unheld, spy_open=spy_open, spy_close=spy_open.copy())
+    win_unheld = benchmark_tilt.continuous_rebalance_windows(panel_unheld, first_row=0, horizon=5)
+    assert np.isnan(win_unheld.stock_returns[0, 19])
+    assert win_unheld.missing_exit_fallbacks >= 1
+    w_dec_u, _ = benchmark_tilt.build_skill_weights(
+        panel_unheld, sig, win_unheld.decision_rows, buffered=True, minimum_stocks=20,
+    )
+    w_u = benchmark_tilt._apply_open_fills(w_dec_u, win_unheld.tradable)
+    path_u = benchmark_tilt.simulate_portfolio_path(w_u, win_unheld.stock_returns)
+    assert path_u.portfolio_complete is True
+    assert path_u.unresolved_held_periods == 0
+    np.testing.assert_allclose(path_u.gross_returns, path_ok.gross_returns, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(path_u.one_way_turnovers, path_ok.one_way_turnovers, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(path_u.net_returns_20bps, path_ok.net_returns_20bps, rtol=0, atol=1e-12)
+
+    # Case C: Highest-ranked HELD security (Stock 0) disappears before terminal exit (row 6 open/close = NaN, prior close = 98.0)!
+    # Must NOT substitute 98.0 (-2% fallback) and must NOT change decision weights!
+    opens_disp = opens.copy()
+    closes_disp = closes.copy()
+    opens_disp[6:, 0] = np.nan
+    closes_disp[6:, 0] = np.nan
+    panel_disp = replace(base, open=opens_disp, close=closes_disp, spy_open=spy_open, spy_close=spy_open.copy())
+    win_disp = benchmark_tilt.continuous_rebalance_windows(panel_disp, first_row=0, horizon=5)
+    assert np.isnan(win_disp.stock_returns[0, 0])
+    w_dec_d, _ = benchmark_tilt.build_skill_weights(
+        panel_disp, sig, win_disp.decision_rows, buffered=True, minimum_stocks=20,
+    )
+    w_d = benchmark_tilt._apply_open_fills(w_dec_d, win_disp.tradable)
+    # Period 0 decision & filled weights are 100% identical to Case A (Stock 0 retains its 50% weight!)
+    np.testing.assert_allclose(w_d[0], w_ok[0], rtol=0, atol=1e-12)
+    path_d = benchmark_tilt.simulate_portfolio_path(w_d, win_disp.stock_returns)
+    assert path_d.portfolio_complete is False
+    assert path_d.unresolved_held_periods == 1
+    assert path_d.unresolved_held_positions == 1
+    assert np.isnan(path_d.gross_returns[0])
+    assert np.isnan(path_d.net_returns_20bps[0])
+    sum_d = benchmark_tilt._pack_policy_summary(path_d, win_disp.spy_returns, "spy", win_disp, 5)
+    assert sum_d["portfolio_complete"] is False
+    assert sum_d["compounded_net_20bps"] is None
+    assert sum_d["compounded_gross"] is None

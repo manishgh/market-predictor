@@ -45,6 +45,7 @@ from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.research_lane import (
+    benchmark_tilt,
     indicators,
     live_cohort,
     opra_options,
@@ -75,6 +76,7 @@ from market_predictor.research_lane.prospective_contracts import (
     ProspectiveCandidateSpec,
     RecordMode,
     build_payload_artifacts_manifest,
+    extract_snapshot_opra_regime,
     latest_settled_xnys_session,
     resolve_xnys_session_clock,
     verify_snapshot_payload_hashes,
@@ -869,6 +871,207 @@ def _attach_stage1_equal_rank_24_baseline(
     return out, stage1_rep
 
 
+def build_snapshot_decision_holdings(
+    scores_df: pd.DataFrame,
+    *,
+    panel_sessions: npt.NDArray[Any],
+    dest_parent: Path,
+    candidate_specs: tuple[ProspectiveCandidateSpec, ...] = FROZEN_PROSPECTIVE_CANDIDATE_SPECS,
+    options_summary: Mapping[str, Any] | None = None,
+    catalyst_summary: Mapping[str, Any] | None = None,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Select and freeze candidate holdings & target weights from decision-time inputs ONLY (`R5`, `R6`).
+
+    Reuses `benchmark_tilt.select_buffered_top_indices` (`buy top 10% / hold top 33%`) and reads
+    prior rebalance holdings from `dest_parent / prev_rebalance_session / holdings.parquet` when
+    recorded, never consulting any future bar or outcome.
+    """
+    scored_session = str(scores_df["session_date"].iloc[0])
+    sess_strs = [str(s) for s in panel_sessions]
+    sids = scores_df["security_id"].astype(str).tolist()
+    tickers = (
+        [str(t).upper().strip() for t in scores_df["ticker"].fillna("").astype(str)]
+        if "ticker" in scores_df.columns
+        else [_default_ticker_for_security_id(s) for s in sids]
+    )
+
+    all_cik = bool(scores_df["security_id"].astype(str).str.startswith("cik:").all()) if len(scores_df) else False
+    unknown_sectors = (
+        int((scores_df["sector"].fillna("Unknown").astype(str) == "Unknown").sum())
+        if "sector" in scores_df.columns
+        else len(scores_df)
+    )
+    sec_meta = catalyst_summary.get("sec_xgb_model") if isinstance(catalyst_summary, Mapping) else None
+    sec_scored = bool(isinstance(sec_meta, Mapping) and sec_meta.get("model_scored") is True)
+    actual_model_sha = str(sec_meta.get("manifest_sha256") or "") if isinstance(sec_meta, Mapping) else ""
+    actual_feat_sha = str(sec_meta.get("feature_contract_sha256") or "") if isinstance(sec_meta, Mapping) else ""
+    opra_reg, opra_obs_kind = extract_snapshot_opra_regime({"options_summary": options_summary})
+
+    rows: list[dict[str, Any]] = []
+    summary_by_cand: dict[str, Any] = {}
+
+    for spec in candidate_specs:
+        h = spec.horizon_sessions
+        prev_sess = sess_strs[-1 - h] if len(sess_strs) > h and sess_strs[-1] == scored_session else None
+        prior_held_sids: set[str] = set()
+        if prev_sess is not None:
+            prev_dir = dest_parent / prev_sess
+            prev_mf = prev_dir / "_manifest.json"
+            prev_hp = prev_dir / "holdings.parquet"
+            if prev_mf.is_file() and prev_hp.is_file():
+                prev_m_dict = cast(dict[str, Any], json.loads(prev_mf.read_text(encoding="utf-8")))
+                verify_snapshot_payload_hashes(prev_dir, prev_m_dict)
+                prev_h_df = cast(Any, pq).read_table(prev_hp, use_threads=False).to_pandas()
+                mask_prev = (
+                    (prev_h_df["candidate_id"].astype(str) == spec.candidate_id)
+                    & (~prev_h_df["abstained"].astype(bool))
+                    & (prev_h_df["asset_role"].astype(str) == "satellite_equity")
+                    & (pd.to_numeric(prev_h_df["target_weight"], errors="coerce") > 0.0)
+                )
+                prior_held_sids = set(prev_h_df.loc[mask_prev, "security_id"].astype(str).tolist())
+
+        abstain_reason: str | None = None
+        if spec.cohort == "mid_small_ex_sp500" and (not all_cik or unknown_sectors > 0):
+            abstain_reason = "cohort_identity_or_sector_not_verified"
+        elif not sec_scored:
+            detail = (
+                str(sec_meta.get("reason") or "sec_xgb_model_not_scored")
+                if isinstance(sec_meta, Mapping)
+                else "sec_xgb_model_not_scored"
+            )
+            abstain_reason = f"missing_sec_model:{detail}"
+        elif actual_model_sha != spec.expected_model_manifest_sha256:
+            abstain_reason = f"model_manifest_sha256_mismatch:{actual_model_sha}!={spec.expected_model_manifest_sha256}"
+        elif actual_feat_sha != spec.expected_feature_contract_sha256:
+            abstain_reason = f"feature_contract_sha256_mismatch:{actual_feat_sha}!={spec.expected_feature_contract_sha256}"
+        elif spec.regime_rule != "none":
+            if spec.opra_observation_policy == "synchronized_close_only" and opra_obs_kind != "synchronized_close":
+                abstain_reason = f"opra_observation_not_synchronized_close:{opra_obs_kind}"
+            elif opra_reg == "unknown" and spec.missing_regime_policy == "abstain":
+                abstain_reason = "opra_regime_unknown"
+
+        scores_arr = (
+            pd.to_numeric(scores_df[spec.score_column], errors="coerce").to_numpy(dtype=np.float64)
+            if spec.score_column in scores_df.columns
+            else np.full(len(scores_df), np.nan, dtype=np.float64)
+        )
+        valid = np.flatnonzero(np.isfinite(scores_arr))
+        if abstain_reason is None and valid.size < spec.min_eligible_stocks:
+            abstain_reason = f"insufficient_scored_stocks_in_{spec.score_column}:{int(valid.size)}<{spec.min_eligible_stocks}"
+
+        cand_reg_str = "not_applicable" if spec.regime_rule == "none" else opra_reg
+        if abstain_reason is not None:
+            rows.append({
+                "session_date": scored_session,
+                "candidate_id": spec.candidate_id,
+                "candidate_spec_sha256": spec.candidate_spec_sha256,
+                "horizon_sessions": h,
+                "abstained": True,
+                "abstain_reason": abstain_reason,
+                "opra_regime": cand_reg_str,
+                "security_id": "",
+                "ticker": "",
+                "asset_role": "abstained",
+                "target_weight": 0.0,
+                "decision_score": None,
+                "selection_rank": None,
+            })
+            summary_by_cand[spec.candidate_id] = {
+                "abstained": True,
+                "abstain_reason": abstain_reason,
+                "selected_equities": 0,
+                "prior_rebalance_session": prev_sess,
+                "retained_from_prior_rebalance": 0,
+            }
+            continue
+
+        if (
+            spec.regime_rule == "shift_satellite_to_spy_when_either_index_iv_term_30_90_gt_1"
+            and opra_reg == "backwardation"
+        ):
+            rows.append({
+                "session_date": scored_session,
+                "candidate_id": spec.candidate_id,
+                "candidate_spec_sha256": spec.candidate_spec_sha256,
+                "horizon_sessions": h,
+                "abstained": False,
+                "abstain_reason": None,
+                "opra_regime": cand_reg_str,
+                "security_id": "benchmark:SPY",
+                "ticker": "SPY",
+                "asset_role": "regime_spy_shift",
+                "target_weight": 1.0,
+                "decision_score": None,
+                "selection_rank": 1,
+            })
+            summary_by_cand[spec.candidate_id] = {
+                "abstained": False,
+                "abstain_reason": None,
+                "opra_regime": cand_reg_str,
+                "selected_equities": 0,
+                "spy_weight": 1.0,
+                "prior_rebalance_session": prev_sess,
+                "retained_from_prior_rebalance": 0,
+            }
+            continue
+
+        prior_idx = {idx for idx, sid in enumerate(sids) if sid in prior_held_sids}
+        chosen = benchmark_tilt.select_buffered_top_indices(
+            scores_arr,
+            valid,
+            prior_held=prior_idx,
+            buffered=(spec.selection_rule == "buffered_top_decile_equal_weight_buy10_hold33"),
+            buy_top_fraction=spec.buy_top_fraction,
+            hold_top_fraction=spec.hold_top_fraction,
+        )
+        eq_weight = float(spec.satellite_weight) / float(chosen.size)
+        retained_cnt = sum(1 for col in chosen if sids[int(col)] in prior_held_sids)
+        for rk_pos, col_i in enumerate(chosen):
+            idx_c = int(col_i)
+            rows.append({
+                "session_date": scored_session,
+                "candidate_id": spec.candidate_id,
+                "candidate_spec_sha256": spec.candidate_spec_sha256,
+                "horizon_sessions": h,
+                "abstained": False,
+                "abstain_reason": None,
+                "opra_regime": cand_reg_str,
+                "security_id": sids[idx_c],
+                "ticker": tickers[idx_c],
+                "asset_role": "satellite_equity",
+                "target_weight": eq_weight,
+                "decision_score": float(scores_arr[idx_c]),
+                "selection_rank": rk_pos + 1,
+            })
+        if spec.core_spy_weight > 0.0:
+            rows.append({
+                "session_date": scored_session,
+                "candidate_id": spec.candidate_id,
+                "candidate_spec_sha256": spec.candidate_spec_sha256,
+                "horizon_sessions": h,
+                "abstained": False,
+                "abstain_reason": None,
+                "opra_regime": cand_reg_str,
+                "security_id": "benchmark:SPY",
+                "ticker": "SPY",
+                "asset_role": "core_spy",
+                "target_weight": float(spec.core_spy_weight),
+                "decision_score": None,
+                "selection_rank": None,
+            })
+        summary_by_cand[spec.candidate_id] = {
+            "abstained": False,
+            "abstain_reason": None,
+            "opra_regime": cand_reg_str,
+            "selected_equities": int(chosen.size),
+            "spy_weight": float(spec.core_spy_weight),
+            "prior_rebalance_session": prev_sess,
+            "retained_from_prior_rebalance": int(retained_cnt),
+        }
+
+    return pd.DataFrame(rows), summary_by_cand
+
+
 def record_forward_scores(
     *,
     root: Path,
@@ -1034,11 +1237,20 @@ def record_forward_scores(
                 unseal_final_test_period=unseal_final_test_period,
             )
 
+        holdings_df, holdings_summary = build_snapshot_decision_holdings(
+            scores_df,
+            panel_sessions=loaded_panel.sessions,
+            dest_parent=dest_parent,
+            options_summary=options_summary,
+            catalyst_summary=catalyst_summary,
+        )
+
         dest_parent.mkdir(parents=True, exist_ok=True)
         staging = dest_parent / f".{scored_session}.{uuid4().hex}.partial"
         staging.mkdir(parents=True)
         try:
             cast(Any, pq).write_table(pa.Table.from_pandas(scores_df, preserve_index=False), staging / "scores.parquet")
+            cast(Any, pq).write_table(pa.Table.from_pandas(holdings_df, preserve_index=False), staging / "holdings.parquet")
             if catalysts_df is not None:
                 cast(Any, pq).write_table(
                     pa.Table.from_pandas(catalysts_df, preserve_index=False), staging / "catalysts.parquet",
@@ -1077,6 +1289,7 @@ def record_forward_scores(
                 "stage1_baseline_report": stage1_baseline_report,
                 "frozen_prospective_candidates": list(FROZEN_PROSPECTIVE_CANDIDATES),
                 "candidate_registry_sha256": json_sha256(list(FROZEN_PROSPECTIVE_CANDIDATES)),
+                "decision_holdings_summary": holdings_summary,
                 "payload_artifacts": payload_artifacts,
                 "eligible_stocks_scored": len(scores_df),
                 "catalyst_summary": catalyst_summary,
@@ -1112,6 +1325,7 @@ __all__ = [
     "HISTORICAL_SEALED_END",
     "POST_CLOSE_SETTLEMENT_ET",
     "RECORD_FORWARD_COMMAND",
+    "build_snapshot_decision_holdings",
     "collect_live_prospective_catalysts",
     "parse_finviz_elite_news_csv",
     "record_forward_scores",

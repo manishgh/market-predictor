@@ -766,8 +766,7 @@ def evaluate_two_stage_scoreboard(
             w_s1 = benchmark_tilt._apply_open_fills(w_s1_dec, windows.tradable)
             b_s1 = benchmark_tilt._apply_open_fills(b_s1_dec, windows.tradable)
             p_s1 = benchmark_tilt.simulate_portfolio_path(w_s1, windows.stock_returns, b_s1)
-            b_s1_gross = np.einsum("ki,ki->k", np.where(np.isfinite(b_s1), b_s1, 0.0), windows.stock_returns)
-            b_s1_gross[~np.isfinite(b_s1).all(axis=1)] = np.nan
+            b_s1_gross = benchmark_tilt.simulate_portfolio_path(b_s1, windows.stock_returns).gross_returns
             skill_buffered = benchmark_tilt._pack_policy_summary(
                 p_s1, b_s1_gross, "equal_weight_scored_stocks", windows, horizon,
             )

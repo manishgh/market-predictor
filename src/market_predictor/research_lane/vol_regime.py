@@ -386,8 +386,7 @@ def evaluate_vol_regime_core_satellite(
             ws = benchmark_tilt._apply_open_fills(ws_dec, mid_win.tradable)
             bs = benchmark_tilt._apply_open_fills(bs_dec, mid_win.tradable)
             ps = benchmark_tilt.simulate_portfolio_path(ws, mid_win.stock_returns, bs)
-            bs_g = np.einsum("ki,ki->k", np.where(np.isfinite(bs), bs, 0.0), mid_win.stock_returns)
-            bs_g[~np.isfinite(bs).all(axis=1)] = np.nan
+            bs_g = benchmark_tilt.simulate_portfolio_path(bs, mid_win.stock_returns).gross_returns
             s_sum = core_satellite._pack_joint_summary(ps, bs_g, "equal_weight_mid_small", mid_win, horizon)
             sat_standalone_2021.setdefault(s_name, {})[h_key] = s_sum
             sat_w_map[s_name] = ws

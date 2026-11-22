@@ -147,37 +147,85 @@ def _score_single_signal_cohort(
     sig_vals: np.ndarray,
     ret_vals: np.ndarray,
     spy_ret: float,
+    *,
+    security_ids: tuple[str, ...] | None = None,
 ) -> dict[str, Any] | None:
-    """Compute Spearman IC, top-10% return, net-20bps spread vs equal-weight & vs SPY on one snapshot-horizon."""
-    mask = np.isfinite(sig_vals) & np.isfinite(ret_vals)
-    n_valid = int(mask.sum())
-    if n_valid < 10:
-        return None
-    s = sig_vals[mask]
-    r = ret_vals[mask]
-    if float(np.std(s)) <= 1e-12 or float(np.std(r)) <= 1e-12:
-        ic_val = 0.0
-    else:
-        rk_s = pd.Series(s).rank(method="average").to_numpy(dtype=np.float64)
-        rk_r = pd.Series(r).rank(method="average").to_numpy(dtype=np.float64)
-        corr = float(np.corrcoef(rk_s, rk_r)[0, 1])
-        ic_val = corr if np.isfinite(corr) else 0.0
+    """Select top-10% cohort strictly from decision-time `sig_vals` before inspecting outcomes (`R5`).
 
-    k_top = max(1, int(round(0.10 * n_valid)))
-    top_idx = np.argsort(-s, kind="stable")[:k_top]
-    top_gross = float(np.mean(r[top_idx]))
-    top_net_20bps = top_gross - ROUND_TRIP_COST_20BPS
-    ew_gross = float(np.mean(r))
+    If any selected top-10% stock has an unresolved (`NaN`) future return, the cohort return is reported
+    as incomplete (`top10_complete=False`, `top10_gross_return=None`, `top10_net_20bps_return=None`)
+    without ever substituting a lower-ranked stock. Observed-subset Spearman rank correlation is kept
+    explicitly labelled under `observed_subset_rank_ic`.
+    """
+    decision_valid = np.flatnonzero(np.isfinite(sig_vals))
+    if decision_valid.size < 10:
+        return None
+
+    k_top = max(1, int(decision_valid.size * 0.10))
+    desc_decision = decision_valid[np.argsort(-sig_vals[decision_valid], kind="stable")]
+    selected_cols = desc_decision[:k_top]
+    selected_ids = (
+        [security_ids[int(c)] for c in selected_cols]
+        if security_ids is not None
+        else [str(int(c)) for c in selected_cols]
+    )
+
+    sel_rets = ret_vals[selected_cols]
+    unresolved_sel = int((~np.isfinite(sel_rets)).sum())
+    top10_complete = unresolved_sel == 0
+
+    all_elig_rets = ret_vals[decision_valid]
+    ew_complete = bool(np.isfinite(all_elig_rets).all())
+    ew_gross = float(np.mean(all_elig_rets)) if ew_complete else None
+
+    if top10_complete:
+        gross_f = float(np.mean(sel_rets))
+        net_f = float(gross_f - ROUND_TRIP_COST_20BPS)
+        top_gross: float | None = gross_f
+        top_net_20bps: float | None = net_f
+        top_minus_spy: float | None = float(net_f - spy_ret)
+        top_minus_ew: float | None = (
+            float(net_f - ew_gross) if ew_gross is not None else None
+        )
+    else:
+        top_gross = None
+        top_net_20bps = None
+        top_minus_spy = None
+        top_minus_ew = None
+
+    obs_mask = np.isfinite(sig_vals) & np.isfinite(ret_vals)
+    n_obs = int(obs_mask.sum())
+    obs_ic: float | None
+    if n_obs < 10:
+        obs_ic = None
+    else:
+        s_obs = sig_vals[obs_mask]
+        r_obs = ret_vals[obs_mask]
+        if float(np.std(s_obs)) <= 1e-12 or float(np.std(r_obs)) <= 1e-12:
+            obs_ic = 0.0
+        else:
+            rk_s = pd.Series(s_obs).rank(method="average").to_numpy(dtype=np.float64)
+            rk_r = pd.Series(r_obs).rank(method="average").to_numpy(dtype=np.float64)
+            corr = float(np.corrcoef(rk_s, rk_r)[0, 1])
+            obs_ic = corr if np.isfinite(corr) else 0.0
+
     return {
-        "stocks_scored_with_outcome": n_valid,
+        "decision_scored_stocks": int(decision_valid.size),
+        "stocks_scored_with_outcome": n_obs,
         "top_decile_count": k_top,
-        "rank_ic": ic_val,
+        "selected_security_ids": selected_ids,
+        "selected_unresolved_outcomes": unresolved_sel,
+        "top10_complete": top10_complete,
+        "equal_weight_complete": ew_complete,
+        "rank_ic_scope": "observed_subset_diagnostic",
+        "observed_subset_rank_ic": obs_ic,
+        "rank_ic": obs_ic,
         "equal_weight_return": ew_gross,
         "spy_return": spy_ret,
         "top10_gross_return": top_gross,
         "top10_net_20bps_return": top_net_20bps,
-        "top10_net_minus_ew": top_net_20bps - ew_gross,
-        "top10_net_minus_spy": top_net_20bps - spy_ret,
+        "top10_net_minus_ew": top_minus_ew,
+        "top10_net_minus_spy": top_minus_spy,
     }
 
 
@@ -505,12 +553,13 @@ def evaluate_forward_scores(
                     "spy_return": spy_r,
                 })
 
+                sids_row = tuple(s_df["security_id"].astype(str).tolist())
                 sig_results_here: dict[str, dict[str, Any]] = {}
                 for col in SIGNAL_COLUMNS:
                     if col not in s_df.columns:
                         continue
                     arr = pd.to_numeric(s_df[col], errors="coerce").to_numpy(dtype=np.float64)
-                    res_c = _score_single_signal_cohort(arr, rets, spy_r)
+                    res_c = _score_single_signal_cohort(arr, rets, spy_r, security_ids=sids_row)
                     if res_c is not None:
                         sig_results_here[col] = res_c
                         per_cell_signals.setdefault(h, {}).setdefault(col, []).append({"snapshot_date": s_iso, **res_c})
@@ -518,25 +567,26 @@ def evaluate_forward_scores(
                 # Frozen Prospective Candidate 1: `90% SPY + 10% R1` (`abstains when OPRA regime is unknown!`)
                 bn_res = sig_results_here.get("score_beta_neutral_price_12")
                 if bn_res is not None and opra_regime in ("backwardation", "contango"):
-                    r1_port = (
-                        spy_r
-                        if opra_regime == "backwardation"
-                        else (0.90 * spy_r + 0.10 * float(bn_res["top10_net_20bps_return"]))
-                    )
-                    per_cell_candidates.setdefault(h, {}).setdefault(
-                        "90_10__spy_core__R1_backwardation_to_spy", []
-                    ).append({
-                        "snapshot_date": s_iso,
-                        "portfolio_net_20bps": r1_port,
-                        "spy_return": spy_r,
-                        "net_excess_vs_spy": r1_port - spy_r,
-                        "opra_regime": opra_regime,
-                        "opra_backwardation": is_backw,
-                    })
+                    if opra_regime == "backwardation" or bool(bn_res["top10_complete"]):
+                        r1_port = (
+                            spy_r
+                            if opra_regime == "backwardation"
+                            else (0.90 * spy_r + 0.10 * float(bn_res["top10_net_20bps_return"]))
+                        )
+                        per_cell_candidates.setdefault(h, {}).setdefault(
+                            "90_10__spy_core__R1_backwardation_to_spy", []
+                        ).append({
+                            "snapshot_date": s_iso,
+                            "portfolio_net_20bps": r1_port,
+                            "spy_return": spy_r,
+                            "net_excess_vs_spy": r1_port - spy_r,
+                            "opra_regime": opra_regime,
+                            "opra_backwardation": is_backw,
+                        })
 
                 # Frozen Prospective Candidate 2: `80% SPY + 20% R2 OPRA-conditioned` (`abstains when OPRA regime is unknown!`)
                 r2_res = sig_results_here.get("score_r2_opra_conditioned")
-                if r2_res is not None and opra_regime in ("backwardation", "contango"):
+                if r2_res is not None and opra_regime in ("backwardation", "contango") and bool(r2_res["top10_complete"]):
                     r2_port = 0.80 * spy_r + 0.20 * float(r2_res["top10_net_20bps_return"])
                     per_cell_candidates.setdefault(h, {}).setdefault(
                         "80_20__spy_core__R2_opra_adaptive_hedge", []
@@ -582,13 +632,27 @@ def evaluate_forward_scores(
         for h in sorted(per_cell_signals):
             pooled_signals[str(h)] = {}
             for sig_name, items in per_cell_signals[h].items():
+                ic_vals = [float(x["observed_subset_rank_ic"]) for x in items if x["observed_subset_rank_ic"] is not None]
+                all_top10_ok = all(bool(x["top10_complete"]) for x in items)
+                all_ew_ok = all(x["top10_net_minus_ew"] is not None for x in items)
                 pooled_signals[str(h)][sig_name] = {
                     "matured_dates": len(items),
-                    "mean_rank_ic": float(np.mean([x["rank_ic"] for x in items])),
-                    "mean_top10_net_20bps": float(np.mean([x["top10_net_20bps_return"] for x in items])),
-                    "mean_spy_return": float(np.mean([x["spy_return"] for x in items])),
-                    "mean_top10_net_minus_spy": float(np.mean([x["top10_net_minus_spy"] for x in items])),
-                    "mean_top10_net_minus_ew": float(np.mean([x["top10_net_minus_ew"] for x in items])),
+                    "complete_top10_dates": sum(1 for x in items if bool(x["top10_complete"])),
+                    "incomplete_top10_dates": sum(1 for x in items if not bool(x["top10_complete"])),
+                    "top10_complete": all_top10_ok,
+                    "rank_ic_scope": "observed_subset_diagnostic",
+                    "observed_subset_mean_rank_ic": float(np.mean(ic_vals)) if ic_vals else None,
+                    "mean_rank_ic": float(np.mean(ic_vals)) if ic_vals else None,
+                    "mean_top10_net_20bps": (
+                        float(np.mean([float(x["top10_net_20bps_return"]) for x in items])) if all_top10_ok else None
+                    ),
+                    "mean_spy_return": float(np.mean([float(x["spy_return"]) for x in items])),
+                    "mean_top10_net_minus_spy": (
+                        float(np.mean([float(x["top10_net_minus_spy"]) for x in items])) if all_top10_ok else None
+                    ),
+                    "mean_top10_net_minus_ew": (
+                        float(np.mean([float(x["top10_net_minus_ew"]) for x in items])) if (all_top10_ok and all_ew_ok) else None
+                    ),
                     "by_snapshot": items,
                 }
 
