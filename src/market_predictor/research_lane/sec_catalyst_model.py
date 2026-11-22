@@ -16,8 +16,8 @@ import math
 import os
 import shutil
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Final, cast
 from uuid import uuid4
@@ -43,6 +43,7 @@ from market_predictor.research_lane.fitted import (
 )
 from market_predictor.research_lane.free_backfill import (
     BACKFILL_DIRECTORY,
+    MINIMUM_WARMUP_CLOSES,
     _conservative_edgar_availability_utc,
 )
 from market_predictor.research_lane.labels import research_labels
@@ -417,6 +418,95 @@ def extract_live_sec_batch_tables_for_cik(
     return ev_8k, ev_non8k
 
 
+def compute_mid_small_stage1_baseline(
+    panel: ResearchPanel,
+    *,
+    unadjusted_close: npt.NDArray[np.float64],
+    releases_202: pd.DataFrame,
+    security_cik_map: Mapping[str, str],
+    company_facts_paths: Mapping[str, Path],
+    as_of_date: date,
+    min_warmup_sessions: int = MINIMUM_WARMUP_CLOSES,
+    min_stocks: int = 20,
+) -> tuple[FloatArray, Float32Array, Float32Array, dict[str, Any]]:
+    """Compute the single shared `24`-predictor (`12` price + `12` fundamental) `mid_bn_eq24` baseline (`R3`).
+
+    Enforces `>= min_warmup_sessions + 1` sessions (`252` daily returns for `beta_252d`; zero `60d` fallback)
+    and `>= min_stocks` finite eligible `beta_252d` and `equal_rank_24` observations on the scored session.
+    """
+    shape = panel.close.shape
+    nan_64 = np.full(shape, np.nan, dtype=np.float64)
+    nan_32 = np.full(shape, np.nan, dtype=np.float32)
+    if len(panel.sessions) < min_warmup_sessions + 1:
+        return nan_64, nan_32, nan_32, {
+            "baseline_scored": False,
+            "abstained": True,
+            "reason": (
+                f"insufficient_beta_252d_history ({len(panel.sessions)} sessions < "
+                f"{min_warmup_sessions + 1} required for {min_warmup_sessions}-session beta)"
+            ),
+        }
+
+    def _load_mid_f(cik: str) -> IssuerFacts | None:
+        p = company_facts_paths.get(cik)
+        return read_company_facts(p, as_of_date)[0] if (p is not None and p.is_file()) else None
+
+    mid_bundle = two_stage.build_stage1_features(
+        panel,
+        fundamentals.FundamentalInputs(
+            panel=panel,
+            unadjusted_close=unadjusted_close,
+            releases=releases_202,
+            security_issuer=dict(security_cik_map),
+            load_issuer=_load_mid_f,
+        ),
+    )
+    beta_rk = mid_bundle.features["px_beta_252d"].copy()
+    ivol_rk = mid_bundle.features["px_idio_vol_60d"].copy()
+    eq24 = mid_bundle.equal_rank_24
+    last_idx = len(panel.sessions) - 1
+    elig_last = panel.eligible[last_idx]
+    n_beta = int((elig_last & np.isfinite(beta_rk[last_idx])).sum())
+    n_eq24 = int((elig_last & np.isfinite(eq24[last_idx])).sum())
+    del mid_bundle
+
+    if n_beta < min_stocks:
+        return nan_64, beta_rk, ivol_rk, {
+            "baseline_scored": False,
+            "abstained": True,
+            "reason": f"insufficient_beta_252d_eligible_stocks ({n_beta} < {min_stocks})",
+            "beta_252d_eligible_stocks": n_beta,
+            "equal_rank_24_eligible_stocks": n_eq24,
+        }
+    if n_eq24 < min_stocks:
+        return nan_64, beta_rk, ivol_rk, {
+            "baseline_scored": False,
+            "abstained": True,
+            "reason": f"insufficient_equal_rank_24_eligible_stocks ({n_eq24} < {min_stocks})",
+            "beta_252d_eligible_stocks": n_beta,
+            "equal_rank_24_eligible_stocks": n_eq24,
+        }
+
+    mid_bn_eq24 = beta_neutral.cross_sectional_neutralize(
+        eq24,
+        panel.eligible,
+        panel.sector,
+        beta_rk,
+        ivol_rk,
+        rerank=True,
+        min_stocks=min_stocks,
+    )
+    n_bn = int(np.isfinite(mid_bn_eq24[last_idx][elig_last]).sum())
+    return mid_bn_eq24, beta_rk, ivol_rk, {
+        "baseline_scored": n_bn >= min_stocks,
+        "abstained": n_bn < min_stocks,
+        "reason": None if n_bn >= min_stocks else f"insufficient_neutralized_stocks ({n_bn} < {min_stocks})",
+        "beta_252d_eligible_stocks": n_beta,
+        "equal_rank_24_eligible_stocks": n_eq24,
+        "neutralized_eligible_stocks": n_bn,
+    }
+
+
 def predict_live_sec_catalyst_scores(
     panel: ResearchPanel,
     scores_df: pd.DataFrame,
@@ -425,54 +515,117 @@ def predict_live_sec_catalyst_scores(
     non8k_events: pd.DataFrame,
     queried_security_ids: set[str],
     bundle: LoadedSecCatalystBundle,
+    baseline_column: str = "score_equal_rank_24_beta_neutral",
+    min_peer_stocks: int = 20,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Score `panel`'s final session using the exact batch `build_precise_sec_catalyst_features` + verified XGBoost."""
+    """Score `panel`'s final session over the full training-defined eligible cohort (`R3`, `R4`).
+
+    1. Tracks `sec_query_status` explicitly (`queried_with_filings`, `queried_zero_filings`, `unqueried`).
+    2. Abstains if ANY eligible cohort peer was not queried for SEC filings (`R4` — never ranks a subset
+       and never treats `unqueried` as `queried_zero_filings`).
+    3. Requires the `24`-predictor `score_equal_rank_24_beta_neutral` Stage-1 baseline (`R3`).
+    """
     enriched = scores_df.copy()
-    n_sess, n_sec = len(panel.sessions), len(panel.security_ids)
+    n_sess = len(panel.sessions)
     last_idx = n_sess - 1
+    sids_df = enriched["security_id"].astype(str).tolist()
 
-    # Restrict `eligible` at `last_idx` strictly to SEC-queried securities so unqueried stocks stay `None` (never `0.0`).
-    queried_elig = np.zeros((n_sess, n_sec), dtype=bool)
-    for col_i, sid in enumerate(panel.security_ids):
-        if bool(panel.eligible[last_idx, col_i]) and sid in queried_security_ids:
-            queried_elig[last_idx, col_i] = True
+    sids_with_filings: set[str] = set()
+    if len(all_8k_events) and "security_id" in all_8k_events.columns:
+        sids_with_filings.update(all_8k_events["security_id"].dropna().astype(str).tolist())
+    if len(non8k_events) and "security_id" in non8k_events.columns:
+        sids_with_filings.update(non8k_events["security_id"].dropna().astype(str).tolist())
 
-    n_queried_elig = int(queried_elig[last_idx].sum())
-    if n_queried_elig < 2:
+    query_statuses: list[str] = []
+    for sid in sids_df:
+        if sid not in queried_security_ids:
+            query_statuses.append("unqueried")
+        elif sid in sids_with_filings:
+            query_statuses.append("queried_with_filings")
+        else:
+            query_statuses.append("queried_zero_filings")
+    enriched["sec_query_status"] = query_statuses
+
+    def _abstain(reason: str, extra: Mapping[str, Any] | None = None) -> tuple[pd.DataFrame, dict[str, Any]]:
+        for fn in bundle.feature_names:
+            enriched[f"s2__{fn}"] = None
         for h in bundle.horizons:
             enriched[f"sec_xgb_residual_{h}d"] = None
             enriched[f"score_mid_small_bn_sec_xgb_{h}d"] = None
-        return enriched, {
+        rep: dict[str, Any] = {
             "model_scored": False,
-            "reason": f"insufficient_sec_queried_stocks ({n_queried_elig} < 2)",
+            "abstained": True,
+            "reason": reason,
             "model_id": MODEL_ID,
             "manifest_sha256": bundle.manifest_sha256,
+            "feature_contract_sha256": str(bundle.manifest["feature_contract_sha256"]),
+            "sec_query_status_counts": {
+                st: int(sum(1 for x in query_statuses if x == st))
+                for st in ("queried_with_filings", "queried_zero_filings", "unqueried")
+            },
         }
+        if extra:
+            rep.update(extra)
+        return enriched, rep
 
-    queried_panel = replace(panel, eligible=queried_elig)
+    eligible_cols = np.flatnonzero(panel.eligible[last_idx])
+    eligible_sids = [panel.security_ids[int(c)] for c in eligible_cols]
+    if len(eligible_sids) < min_peer_stocks:
+        return _abstain(
+            f"insufficient_eligible_cohort_stocks ({len(eligible_sids)} < {min_peer_stocks})",
+            {"eligible_cohort_stocks": len(eligible_sids)},
+        )
+
+    unqueried_eligible = [sid for sid in eligible_sids if sid not in queried_security_ids]
+    if unqueried_eligible:
+        return _abstain(
+            f"incomplete_sec_peer_coverage ({len(unqueried_eligible)}/{len(eligible_sids)} eligible cohort stocks unqueried)",
+            {
+                "eligible_cohort_stocks": len(eligible_sids),
+                "unqueried_eligible_count": len(unqueried_eligible),
+                "unqueried_sample": unqueried_eligible[:10],
+            },
+        )
+
+    if baseline_column not in enriched.columns:
+        return _abstain(f"missing_required_baseline_column:{baseline_column}")
+
+    base_bn = pd.to_numeric(enriched[baseline_column], errors="coerce").to_numpy(dtype=np.float64)
+    if int(np.isfinite(base_bn).sum()) < min_peer_stocks:
+        return _abstain(
+            f"abstained_or_insufficient_{baseline_column} ({int(np.isfinite(base_bn).sum())} < {min_peer_stocks})"
+        )
+
+    # Full-cohort Stage-2 feature transform over `panel` (`panel.eligible` untouched -> exact batch peer population!)
     sec_feats, cat_rep = beta_neutral.build_precise_sec_catalyst_features(
-        queried_panel,
+        panel,
         all_8k_events,
         non8k_events,
         unseal_final_test_period=True,
     )
 
     te_rows = np.asarray([last_idx], dtype=np.int64)
-    te_cells = queried_elig[te_rows]
+    te_cells = panel.eligible[te_rows]
     x_last = two_stage._design_matrix(sec_feats, bundle.feature_names, te_rows, te_cells)
     active_cols = np.flatnonzero(te_cells[0])
     sid_by_col = {int(c): panel.security_ids[int(c)] for c in active_cols}
+    sid_index = {sid: idx for idx, sid in enumerate(sids_df)}
 
-    sids_df = enriched["security_id"].astype(str).tolist()
-    base_bn = pd.to_numeric(enriched["score_beta_neutral_price_12"], errors="coerce").to_numpy(dtype=np.float64)
+    for f_pos, fn in enumerate(bundle.feature_names):
+        f_col_vals: list[float | None] = [None] * len(sids_df)
+        for pos_i, col_arr in enumerate(active_cols):
+            sid = sid_by_col[int(col_arr)]
+            if sid in sid_index:
+                fv = float(x_last[pos_i, f_pos])
+                f_col_vals[sid_index[sid]] = fv if np.isfinite(fv) else None
+        enriched[f"s2__{fn}"] = f_col_vals
+
     base_by_sid = {sid: base_bn[idx] for idx, sid in enumerate(sids_df)}
-
     scored_counts: dict[str, int] = {}
     for h in bundle.horizons:
         r_pred = bundle.predict_residual(h, x_last)
         res_by_sid: dict[str, float] = {}
         raw_comb = np.full(len(sids_df), np.nan, dtype=np.float64)
-        sid_index = {sid: idx for idx, sid in enumerate(sids_df)}
         for pos_i, col_arr in enumerate(active_cols):
             sid = sid_by_col[int(col_arr)]
             rv = float(r_pred[pos_i])
@@ -498,10 +651,19 @@ def predict_live_sec_catalyst_scores(
 
     return enriched, {
         "model_scored": True,
+        "abstained": False,
+        "reason": None,
         "model_id": MODEL_ID,
         "manifest_sha256": bundle.manifest_sha256,
         "feature_contract_sha256": str(bundle.manifest["feature_contract_sha256"]),
-        "sec_queried_eligible_stocks": n_queried_elig,
+        "baseline_column": baseline_column,
+        "ranking_population": "full_eligible_cohort",
+        "eligible_cohort_stocks": len(eligible_sids),
+        "sec_queried_eligible_stocks": len(eligible_sids),
+        "sec_query_status_counts": {
+            st: int(sum(1 for x in query_statuses if x == st))
+            for st in ("queried_with_filings", "queried_zero_filings", "unqueried")
+        },
         "scored_stocks_by_horizon": scored_counts,
         "precise_sec_feature_report": cat_rep,
     }
@@ -602,33 +764,20 @@ def train_and_persist_sec_catalyst_model(
         release_unused_process_memory()
         guard("sec catalyst model mid_small panel loaded")
 
-        mid_facts = wdata.company_facts_paths
-
-        def _load_mid_f(cik: str) -> IssuerFacts | None:
-            p = mid_facts.get(cik)
-            return read_company_facts(p, SEALED_HOLDOUT_END)[0] if (p is not None and p.is_file()) else None
-
-        mid_bundle = two_stage.build_stage1_features(
-            wdata.panel,
-            fundamentals.FundamentalInputs(
-                panel=wdata.panel,
-                unadjusted_close=wdata.unadjusted_close,
-                releases=wdata.releases_202,
-                security_issuer=wdata.security_cik_map,
-                load_issuer=_load_mid_f,
-            ),
-        )
         mid_panel = wdata.panel
         all_8k_mid = wdata.all_8k_events
         input_sha = {**wdata.input_sha256, **extra_sha}
-        del wdata
-
-        beta_rk = mid_bundle.features["px_beta_252d"].copy()
-        ivol_rk = mid_bundle.features["px_idio_vol_60d"].copy()
-        mid_bn_eq24 = beta_neutral.cross_sectional_neutralize(
-            mid_bundle.equal_rank_24, mid_panel.eligible, mid_panel.sector, beta_rk, ivol_rk, rerank=True,
+        mid_bn_eq24, beta_rk, ivol_rk, base_rep = compute_mid_small_stage1_baseline(
+            mid_panel,
+            unadjusted_close=wdata.unadjusted_close,
+            releases_202=wdata.releases_202,
+            security_cik_map=wdata.security_cik_map,
+            company_facts_paths=wdata.company_facts_paths,
+            as_of_date=SEALED_HOLDOUT_END,
         )
-        del mid_bundle
+        if not bool(base_rep.get("baseline_scored")):
+            raise ValueError(f"Stage-1 baseline abstained during SEC model training: {base_rep}")
+        del wdata
         release_unused_process_memory()
         guard("sec catalyst model stage1 computed")
 
@@ -689,6 +838,7 @@ __all__ = [
     "MODEL_SCHEMA_VERSION",
     "TRAIN_SEC_MODEL_COMMAND",
     "apply_opra_straddle_skew_overlay",
+    "compute_mid_small_stage1_baseline",
     "extract_live_sec_batch_tables_for_cik",
     "feature_contract_sha256",
     "fit_and_save_sec_catalyst_bundle_from_panel",

@@ -80,7 +80,7 @@ def test_straddle_25d_skew_falling_knife_veto_and_sealed_bar_rejection() -> None
         opra_options._fetch_session_option_bars({}, [c_atm], as_of)
 
     # Verify `collect_live_opra_options_overlay` triggers `falling_knife_put_skew_veto` on worst-skew stock
-    sessions = pd.bdate_range("2026-07-15", "2026-11-17").to_numpy().astype("datetime64[D]")
+    sessions = pd.bdate_range("2025-10-15", "2026-11-17").to_numpy().astype("datetime64[D]")
     rng = np.random.default_rng(19)
     n_s, n_c = len(sessions), 6
     close = np.full((n_s, n_c), 100.0, dtype=np.float32) * np.cumprod(

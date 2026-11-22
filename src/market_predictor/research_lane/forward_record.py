@@ -146,20 +146,19 @@ def _score_panel_last_session(
         )
 
     beta_rk = ranked_last["beta_252d"]
-    if not np.isfinite(beta_rk[elig_row]).any() and len(panel.sessions) >= 61:
-        ret_stock = predictors.daily_returns(panel.close)
-        ret_mkt = predictors.daily_returns(panel.spy_close)
-        beta_60 = predictors._regression(ret_stock, ret_mkt, 60).beta
-        beta_rk = centered_rank(beta_60, panel.eligible)[last_idx]
-
-    beta_neutral_12 = cross_sectional_neutralize(
-        price_eq_12[None, :],
-        elig_row[None, :],
-        panel.sector[last_idx : last_idx + 1],
-        beta_rk[None, :],
-        ranked_last["idio_vol_60d"][None, :],
-        rerank=True,
-    )[0]
+    has_beta_252 = bool(np.isfinite(beta_rk[elig_row]).any())
+    beta_neutral_12 = (
+        cross_sectional_neutralize(
+            price_eq_12[None, :],
+            elig_row[None, :],
+            panel.sector[last_idx : last_idx + 1],
+            beta_rk[None, :],
+            ranked_last["idio_vol_60d"][None, :],
+            rerank=True,
+        )[0]
+        if has_beta_252
+        else np.full(len(panel.security_ids), np.nan, dtype=np.float64)
+    )
 
     ind = indicators.compute_indicators(panel)
     rev_short = reversal.reversal_signals(ind, panel.eligible)[reversal.REVERSAL_COMPOSITE][last_idx]
@@ -359,6 +358,7 @@ def collect_live_prospective_catalysts(
     catalyst_top_k: int = DEFAULT_CATALYST_TOP_K,
     sec_model_bundle_dir: Path | None = None,
     expected_sec_model_manifest_sha256: str | None = PERSISTED_SEC_MODEL_MANIFEST_SHA256,
+    cohort_for_stage1: live_cohort.DecisionDateMidSmallCohort | None = None,
     unseal_final_test_period: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     """Collect & classify live Finviz Elite, Alpaca (`fiscal.ai`), and SEC catalysts `<= close_utc(scored_session)`."""
@@ -572,6 +572,10 @@ def collect_live_prospective_catalysts(
             df_n8_e = pd.DataFrame(batch_non8k_rows, columns=[
                 "security_id", "sec_cik", "accession_number", "sec_form", "catalyst_family", "available_at_utc",
             ])
+            if cohort_for_stage1 is not None and len(df_8k_e):
+                enriched, _ = _attach_stage1_equal_rank_24_baseline(
+                    enriched, cohort_for_stage1, scored_day, extra_8k_events=df_8k_e,
+                )
             enriched, sec_model_rep_empty = sec_catalyst_model.predict_live_sec_catalyst_scores(
                 panel,
                 enriched,
@@ -691,6 +695,10 @@ def collect_live_prospective_catalysts(
                 "security_id", "sec_cik", "accession_number", "sec_form", "catalyst_family", "available_at_utc",
             ])
         )
+        if cohort_for_stage1 is not None and len(df_8k):
+            enriched, _ = _attach_stage1_equal_rank_24_baseline(
+                enriched, cohort_for_stage1, scored_day, extra_8k_events=df_8k,
+            )
         enriched, sec_model_rep = sec_catalyst_model.predict_live_sec_catalyst_scores(
             panel,
             enriched,
@@ -819,6 +827,48 @@ def _verify_existing_snapshot_for_skip(
     return manifest
 
 
+def _attach_stage1_equal_rank_24_baseline(
+    scores_df: pd.DataFrame,
+    cohort: live_cohort.DecisionDateMidSmallCohort,
+    scored_day: date,
+    *,
+    extra_8k_events: pd.DataFrame | None = None,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Attach `score_equal_rank_24_beta_neutral` computed by the shared batch Stage-1 builder (`R3`)."""
+    releases_202 = cohort.releases_202
+    if extra_8k_events is not None and len(extra_8k_events):
+        has_202 = extra_8k_events["item_codes"].fillna("").astype(str).map(
+            lambda s: "2.02" in {x.strip() for x in s.split(",")}
+        )
+        sub_202 = extra_8k_events.loc[
+            has_202,
+            ["security_id", "accession_number", "accepted_at_utc", "available_at_utc"],
+        ].copy()
+        if len(sub_202):
+            releases_202 = pd.concat([releases_202, sub_202], ignore_index=True).drop_duplicates(
+                ["security_id", "accession_number"]
+            )
+
+    mid_bn_eq24, _, _, stage1_rep = sec_catalyst_model.compute_mid_small_stage1_baseline(
+        cohort.panel,
+        unadjusted_close=cohort.unadjusted_close,
+        releases_202=releases_202,
+        security_cik_map=cohort.security_cik_map,
+        company_facts_paths=cohort.company_facts_paths,
+        as_of_date=scored_day,
+    )
+    out = scores_df.copy()
+    last_row = mid_bn_eq24[-1]
+    val_by_sid = {
+        sid: (None if not np.isfinite(last_row[idx]) else float(last_row[idx]))
+        for idx, sid in enumerate(cohort.panel.security_ids)
+    }
+    out["score_equal_rank_24_beta_neutral"] = [
+        val_by_sid.get(str(s)) for s in out["security_id"].astype(str)
+    ]
+    return out, stage1_rep
+
+
 def record_forward_scores(
     *,
     root: Path,
@@ -928,6 +978,18 @@ def record_forward_scores(
                 return {**existing_post, "status": "already_recorded"}
             raise FileExistsError(f"forward score snapshot already exists for session {scored_session}: {dest_dir}")
 
+        stage1_baseline_report: dict[str, Any] = {
+            "baseline_scored": False,
+            "abstained": True,
+            "reason": "missing_fundamental_cohort_inputs",
+        }
+        if cohort_data is not None:
+            scores_df, stage1_baseline_report = _attach_stage1_equal_rank_24_baseline(
+                scores_df, cohort_data, scored_day,
+            )
+        else:
+            scores_df["score_equal_rank_24_beta_neutral"] = None
+
         catalysts_df: pd.DataFrame | None = None
         catalyst_summary: dict[str, Any] | None = None
         bundle_abs = sec_model_bundle if sec_model_bundle.is_absolute() else paths.write(paths.identity(sec_model_bundle))
@@ -939,8 +1001,27 @@ def record_forward_scores(
                 catalyst_top_k=catalyst_top_k,
                 sec_model_bundle_dir=bundle_abs,
                 expected_sec_model_manifest_sha256=expected_sec_model_manifest_sha256,
+                cohort_for_stage1=cohort_data,
                 unseal_final_test_period=unseal_final_test_period,
             )
+        elif not live_prospective and cohort_data is not None and (bundle_abs / "_manifest.json").is_file():
+            loaded_sec_bundle = sec_catalyst_model.verify_and_load_sec_catalyst_bundle(
+                bundle_abs,
+                expected_manifest_sha256=expected_sec_model_manifest_sha256,
+            )
+            scores_df, sec_model_rep = sec_catalyst_model.predict_live_sec_catalyst_scores(
+                loaded_panel,
+                scores_df,
+                all_8k_events=cohort_data.all_8k_events,
+                non8k_events=cohort_data.non8k_events,
+                queried_security_ids=set(loaded_panel.security_ids),
+                bundle=loaded_sec_bundle,
+            )
+            catalyst_summary = {
+                "mode": "retrospective_replay_retained_sec_events",
+                "decision_cutoff_utc": scored_clock.source_cutoff_utc.isoformat(),
+                "sec_xgb_model": sec_model_rep,
+            }
 
         options_df: pd.DataFrame | None = None
         options_summary: dict[str, Any] | None = None
@@ -993,6 +1074,7 @@ def record_forward_scores(
                 "sealed_holdout_window": "2024-05-29..2026-07-08",
                 "sealed_holdout_untouched": not unseal_final_test_period,
                 "cohort_authority_report": cohort_data.authority_report if cohort_data is not None else None,
+                "stage1_baseline_report": stage1_baseline_report,
                 "frozen_prospective_candidates": list(FROZEN_PROSPECTIVE_CANDIDATES),
                 "candidate_registry_sha256": json_sha256(list(FROZEN_PROSPECTIVE_CANDIDATES)),
                 "payload_artifacts": payload_artifacts,

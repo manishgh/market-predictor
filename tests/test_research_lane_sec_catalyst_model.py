@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -115,7 +116,7 @@ def test_bundle_persistence_batch_live_parity_missingness_and_tamper_detection(t
     scores_df = pd.DataFrame({
         "session_date": [str(panel.sessions[-1])] * n_c,
         "security_id": list(panel.security_ids),
-        "score_beta_neutral_price_12": base_bn[-1].tolist(),
+        "score_equal_rank_24_beta_neutral": base_bn[-1].tolist(),
     })
     live_full, rep_full = sec_catalyst_model.predict_live_sec_catalyst_scores(
         panel,
@@ -126,6 +127,11 @@ def test_bundle_persistence_batch_live_parity_missingness_and_tamper_detection(t
         bundle=loaded,
     )
     assert rep_full["model_scored"] is True
+    assert rep_full["sec_query_status_counts"] == {
+        "queried_with_filings": 18,
+        "queried_zero_filings": 18,
+        "unqueried": 0,
+    }
     x_batch_last = two_stage._design_matrix(
         cat_feats,
         beta_neutral.PRECISE_STAGE2_FEATURE_NAMES,
@@ -148,9 +154,10 @@ def test_bundle_persistence_batch_live_parity_missingness_and_tamper_detection(t
             atol=0,
         )
 
-    # 2. Missingness check: unqueried stocks MUST stay `None`/`NaN`, never `0.0`!
+    # 2. R4: Partial SEC peer coverage (`24/36` queried) MUST distinguish `queried_zero_filings` vs `unqueried`
+    #    and ABSTAIN (`model_scored=False`) rather than silently re-ranking among the 24-stock subset!
     queried_subset = set(panel.security_ids[:24])
-    live_sub, _ = sec_catalyst_model.predict_live_sec_catalyst_scores(
+    live_sub, rep_sub = sec_catalyst_model.predict_live_sec_catalyst_scores(
         panel,
         scores_df,
         all_8k_events=ev_8k,
@@ -158,9 +165,14 @@ def test_bundle_persistence_batch_live_parity_missingness_and_tamper_detection(t
         queried_security_ids=queried_subset,
         bundle=loaded,
     )
-    assert live_sub["score_mid_small_bn_sec_xgb_10d"].iloc[:24].notna().all()
-    assert live_sub["score_mid_small_bn_sec_xgb_10d"].iloc[24:].isna().all()
-    assert live_sub["sec_xgb_residual_10d"].iloc[24:].isna().all()
+    assert rep_sub["model_scored"] is False
+    assert rep_sub["abstained"] is True
+    assert "incomplete_sec_peer_coverage" in str(rep_sub["reason"])
+    assert live_sub["sec_query_status"].iloc[:18].eq("queried_with_filings").all()
+    assert live_sub["sec_query_status"].iloc[18:24].eq("queried_zero_filings").all()
+    assert live_sub["sec_query_status"].iloc[24:].eq("unqueried").all()
+    assert live_sub["score_mid_small_bn_sec_xgb_10d"].isna().all()
+    assert live_sub["sec_xgb_residual_10d"].isna().all()
 
     # 3. Artifact tamper checks (`ArtifactIntegrityError` on `.ubj` byte edit or feature-order edit)
     ubj_file = bundle_dir / "xgb_h10_seed0.ubj"
@@ -245,4 +257,275 @@ def test_extract_live_sec_batch_tables_strips_post_cutoff_filings() -> None:
     assert [r["accession_number"] for r in ev_8k] == ["acc-1"]
     assert ev_8k[0]["item_codes"] == "1.01,2.02"
     assert [r["accession_number"] for r in ev_n8] == ["acc-13d"]
-    assert ev_n8[0]["catalyst_family"] == "rx_activist_13d"
+    assert [r["catalyst_family"] for r in ev_n8] == ["rx_activist_13d"]
+
+
+def _issuer_facts_to_sec_json(facts_map: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {"facts": {}}
+    for full_tag, items in facts_map.items():
+        tax, tag = full_tag.split(":", 1)
+        unit = "shares" if "Shares" in tag else "USD"
+        rows = []
+        for f in items:
+            entry: dict[str, Any] = {
+                "end": f.end.isoformat(),
+                "val": f.value,
+                "filed": f.filed.isoformat(),
+                "accn": f.accession,
+            }
+            if f.start is not None:
+                entry["start"] = f.start.isoformat()
+            rows.append(entry)
+        out["facts"].setdefault(tax, {})[tag] = {"units": {unit: rows}}
+    return out
+
+
+def test_r3_r4_end_to_end_raw_source_batch_vs_live_parity_short_beta_and_future_poison(tmp_path: Path) -> None:
+    """Feed raw source inputs (bars, unadjusted closes, company_facts JSONs, SEC filings) to both batch & live."""
+    from dataclasses import replace as dc_replace
+
+    from market_predictor.research_lane import forward_record, live_cohort
+    from tests.support.research_lane_fundamentals import (
+        poisoned_inputs,
+        synthetic_fundamental_inputs,
+        truncated_inputs,
+    )
+
+    syn = synthetic_fundamental_inputs()
+    # Map synthetic 40-security panel onto canonical distinct `cik:00000000XX` IDs
+    keep_idx = [
+        idx for idx, sid in enumerate(syn.inputs.panel.security_ids)
+        if sid in syn.inputs.security_issuer and idx < 34
+    ]
+    ciks = [syn.inputs.security_issuer[syn.inputs.panel.security_ids[i]] for i in keep_idx]
+    cik_sids = tuple(f"cik:{c}" for c in ciks)
+    base_p = syn.inputs.panel
+    raw_panel = ResearchPanel(
+        sessions=base_p.sessions.copy(),
+        security_ids=cik_sids,
+        open=np.ascontiguousarray(base_p.open[:, keep_idx]),
+        high=np.ascontiguousarray(base_p.high[:, keep_idx]),
+        low=np.ascontiguousarray(base_p.low[:, keep_idx]),
+        close=np.ascontiguousarray(base_p.close[:, keep_idx]),
+        volume=np.ascontiguousarray(base_p.volume[:, keep_idx]),
+        eligible=np.ones((len(base_p.sessions), len(keep_idx)), dtype=bool),
+        sector=np.ascontiguousarray(base_p.sector[:, keep_idx]),
+        sector_names=base_p.sector_names,
+        spy_open=base_p.spy_open.copy(),
+        spy_close=base_p.spy_close.copy(),
+        qqq_open=base_p.qqq_open.copy(),
+        qqq_close=base_p.qqq_close.copy(),
+        development_end=base_p.development_end,
+        load_report={},
+    )
+    raw_unadj = np.ascontiguousarray(syn.inputs.unadjusted_close[:, keep_idx])
+    sec_cik_map = {f"cik:{c}": c for c in ciks}
+
+    facts_root = tmp_path / "company_facts_json"
+    facts_paths: dict[str, Path] = {}
+    for c in ciks:
+        f_obj = syn.facts.get(c)
+        if f_obj is not None:
+            fp = facts_root / c / "company_facts.json"
+            fp.parent.mkdir(parents=True, exist_ok=True)
+            fp.write_text(json.dumps(_issuer_facts_to_sec_json(dict(f_obj))), encoding="utf-8")
+            facts_paths[c] = fp
+
+    # Remap releases & build SEC 8-K + non-8-K filings at session `cut = 460`
+    cut = 460
+    as_of_day = pd.Timestamp(raw_panel.sessions[cut]).date()
+    old_to_new_sid = {
+        syn.inputs.panel.security_ids[i]: f"cik:{syn.inputs.security_issuer[syn.inputs.panel.security_ids[i]]}"
+        for i in keep_idx
+    }
+    rel_202 = syn.inputs.releases.loc[syn.inputs.releases["security_id"].isin(old_to_new_sid)].copy()
+    rel_202["security_id"] = rel_202["security_id"].map(old_to_new_sid)
+    cutoff_ts = pd.Timestamp(f"{as_of_day.isoformat()} 16:00:00", tz="America/New_York").tz_convert("UTC")
+    rel_cut = rel_202.loc[pd.to_datetime(rel_202["available_at_utc"], utc=True) <= cutoff_ts].copy()
+
+    ev_8k = pd.DataFrame([
+        {
+            "security_id": cik_sids[i],
+            "sec_cik": ciks[i],
+            "accession_number": f"0001-20-8k-{i:04d}",
+            "sec_form": "8-K",
+            "item_codes": "2.02" if i % 2 == 0 else "1.01,7.01",
+            "accepted_at_utc": cutoff_ts - pd.Timedelta(days=(i % 7) + 1),
+            "available_at_utc": cutoff_ts - pd.Timedelta(days=(i % 7) + 1),
+        }
+        for i in range(16)
+    ])
+    ev_non8k = pd.DataFrame([
+        {
+            "security_id": cik_sids[i],
+            "sec_cik": ciks[i],
+            "accession_number": f"0002-20-13d-{i:04d}",
+            "sec_form": "SC 13D",
+            "catalyst_family": "rx_activist_13d",
+            "available_at_utc": cutoff_ts - pd.Timedelta(days=4),
+        }
+        for i in range(5)
+    ])
+
+    panel_at_cut = raw_panel.truncated(as_of_day)
+    unadj_at_cut = raw_unadj[: cut + 1].copy()
+
+    # --- Path A: Batch training & batch scoring directly from raw source inputs ---
+    batch_bn_eq24, batch_beta_rk, batch_ivol_rk, batch_base_rep = sec_catalyst_model.compute_mid_small_stage1_baseline(
+        panel_at_cut,
+        unadjusted_close=unadj_at_cut,
+        releases_202=rel_cut,
+        security_cik_map=sec_cik_map,
+        company_facts_paths=facts_paths,
+        as_of_date=as_of_day,
+    )
+    assert batch_base_rep["baseline_scored"] is True
+    batch_sec_feats, batch_cat_rep = beta_neutral.build_precise_sec_catalyst_features(
+        panel_at_cut, ev_8k, ev_non8k, unseal_final_test_period=True,
+    )
+    bundle_dir = tmp_path / "models" / "r3_r4_bundle"
+    sec_catalyst_model.fit_and_save_sec_catalyst_bundle_from_panel(
+        panel_at_cut,
+        batch_bn_eq24,
+        beta_rank=batch_beta_rk,
+        idio_vol_rank=batch_ivol_rk,
+        catalyst_features=batch_sec_feats,
+        destination=bundle_dir,
+        root=tmp_path,
+        input_sha256={"raw": "parity"},
+        catalyst_report=batch_cat_rep,
+        horizons=(10, 21),
+    )
+    loaded = sec_catalyst_model.verify_and_load_sec_catalyst_bundle(bundle_dir)
+
+    # --- Path B: Live / Replay entry point fed ONLY raw source inputs (never injecting batch_bn_eq24!) ---
+    cohort_obj = live_cohort.DecisionDateMidSmallCohort(
+        panel=panel_at_cut,
+        unadjusted_close=unadj_at_cut,
+        releases_202=rel_cut,
+        all_8k_events=ev_8k,
+        non8k_events=ev_non8k,
+        security_cik_map=sec_cik_map,
+        company_facts_paths=facts_paths,
+        active_ticker_by_security_id={sid: f"T{idx:02d}" for idx, sid in enumerate(cik_sids)},
+        security_id_by_active_ticker={f"T{idx:02d}": sid for idx, sid in enumerate(cik_sids)},
+        authority_report={},
+    )
+    live_scores = forward_record._score_panel_last_session(
+        cohort_obj.panel,
+        active_ticker_by_security_id=cohort_obj.active_ticker_by_security_id,
+    )
+    live_scores, live_stage1_rep = forward_record._attach_stage1_equal_rank_24_baseline(
+        live_scores, cohort_obj, as_of_day,
+    )
+    assert live_stage1_rep["baseline_scored"] is True
+    # Confirm 24-predictor baseline differs from 12-predictor price-only baseline (catching R3!)
+    assert not np.allclose(
+        live_scores["score_equal_rank_24_beta_neutral"].to_numpy(dtype=np.float64),
+        live_scores["score_beta_neutral_price_12"].to_numpy(dtype=np.float64),
+        equal_nan=True,
+    )
+    live_scored_df, live_model_rep = sec_catalyst_model.predict_live_sec_catalyst_scores(
+        cohort_obj.panel,
+        live_scores,
+        all_8k_events=cohort_obj.all_8k_events,
+        non8k_events=cohort_obj.non8k_events,
+        queried_security_ids=set(cik_sids),
+        bundle=loaded,
+    )
+    assert live_model_rep["model_scored"] is True
+
+    # Verify exact agreement across IDs, all 12 ordered Stage-2 features, missingness, baseline, residuals, & ranks!
+    assert tuple(live_scored_df["security_id"].tolist()) == cik_sids
+    np.testing.assert_allclose(
+        live_scored_df["score_equal_rank_24_beta_neutral"].to_numpy(dtype=np.float64),
+        batch_bn_eq24[-1],
+        rtol=0,
+        atol=1e-12,
+        equal_nan=True,
+    )
+    x_batch_last = two_stage._design_matrix(
+        batch_sec_feats,
+        beta_neutral.PRECISE_STAGE2_FEATURE_NAMES,
+        np.asarray([len(panel_at_cut.sessions) - 1], dtype=np.int64),
+        panel_at_cut.eligible[[-1]],
+    )
+    for f_i, fn in enumerate(beta_neutral.PRECISE_STAGE2_FEATURE_NAMES):
+        np.testing.assert_allclose(
+            pd.to_numeric(live_scored_df[f"s2__{fn}"], errors="coerce").to_numpy(dtype=np.float64),
+            x_batch_last[:, f_i].astype(np.float64),
+            rtol=0,
+            atol=1e-6,
+            equal_nan=True,
+        )
+    for h in (10, 21):
+        b_res = loaded.predict_residual(h, x_batch_last)
+        b_comb = centered_rank((batch_bn_eq24[-1] + b_res)[None, :], np.isfinite(batch_bn_eq24[-1] + b_res)[None, :])[0]
+        np.testing.assert_allclose(
+            live_scored_df[f"sec_xgb_residual_{h}d"].to_numpy(dtype=np.float64),
+            b_res,
+            rtol=0,
+            atol=1e-6,
+        )
+        np.testing.assert_allclose(
+            live_scored_df[f"score_mid_small_bn_sec_xgb_{h}d"].to_numpy(dtype=np.float64),
+            b_comb,
+            rtol=0,
+            atol=1e-6,
+        )
+
+    # --- R3 Short Beta History Abstention (`120` sessions < `253` required for `beta_252d`) ---
+    short_end = pd.Timestamp(raw_panel.sessions[119]).date()
+    short_panel = raw_panel.truncated(short_end)
+    short_scores = forward_record._score_panel_last_session(short_panel)
+    # Price-only beta_neutral_12 must NOT substitute 60d beta -> all None!
+    assert short_scores["score_beta_neutral_price_12"].isna().all()
+    _, _, _, short_rep = sec_catalyst_model.compute_mid_small_stage1_baseline(
+        short_panel,
+        unadjusted_close=raw_unadj[:120],
+        releases_202=rel_cut,
+        security_cik_map=sec_cik_map,
+        company_facts_paths=facts_paths,
+        as_of_date=short_end,
+    )
+    assert short_rep["abstained"] is True
+    assert "insufficient_beta_252d_history" in str(short_rep["reason"])
+
+    # --- Future-Data Poison Invariance (post-`cut` bars, post-`as_of_day` XBRL facts, post-cutoff 8-Ks) ---
+    _ = truncated_inputs, poisoned_inputs
+    poison_close = raw_panel.close.copy()
+    poison_vol = raw_panel.volume.copy()
+    poison_unadj = raw_unadj.copy()
+    poison_close[cut + 1 :] *= np.float32(50.0)
+    poison_vol[cut + 1 :] *= np.float32(100.0)
+    poison_unadj[cut + 1 :] *= 50.0
+    poison_panel_full = dc_replace(raw_panel, close=poison_close, volume=poison_vol)
+
+    # Also add a post-`as_of_day` XBRL fact (`filed = as_of_day + 5d`) into company_facts JSON on disk
+    poison_facts_root = tmp_path / "poison_facts"
+    poison_facts_paths: dict[str, Path] = {}
+    for c in ciks:
+        f_obj = syn.facts.get(c)
+        if f_obj is not None:
+            js = _issuer_facts_to_sec_json(dict(f_obj))
+            js["facts"].setdefault("us-gaap", {}).setdefault("Assets", {"units": {"USD": []}})["units"]["USD"].append({
+                "end": as_of_day.isoformat(),
+                "val": 9.99e14,
+                "filed": (as_of_day + pd.Timedelta(days=5)).isoformat(),
+                "accn": "9999-99-poison",
+            })
+            pfp = poison_facts_root / c / "company_facts.json"
+            pfp.parent.mkdir(parents=True, exist_ok=True)
+            pfp.write_text(json.dumps(js), encoding="utf-8")
+            poison_facts_paths[c] = pfp
+
+    poison_at_cut = poison_panel_full.truncated(as_of_day)
+    p_bn_eq24, _, _, _ = sec_catalyst_model.compute_mid_small_stage1_baseline(
+        poison_at_cut,
+        unadjusted_close=poison_unadj[: cut + 1],
+        releases_202=rel_cut,
+        security_cik_map=sec_cik_map,
+        company_facts_paths=poison_facts_paths,
+        as_of_date=as_of_day,
+    )
+    np.testing.assert_allclose(p_bn_eq24, batch_bn_eq24, rtol=0, atol=0, equal_nan=True)
