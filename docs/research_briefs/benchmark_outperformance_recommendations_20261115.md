@@ -629,8 +629,7 @@ technology companies, which is an allocation choice and not a prediction.
 - Swing ten-session results: `docs/reviews/feature_engineering_audit_20260801.md`,
   sections "Relationship Return Results" and "Technical Return Experiment
   Acceptance".
-- Investment results: `docs/reviews/active_edge_rebuild_handoff.md`, sections dated
-  November 10 and 11; `docs/research_briefs/fable_5_2_project_brief_20261110.md`.
+- Investment results: the consolidated historical evidence in section 11 below.
 - August candidates: `models/edge_rebuild_swing_candidate_20260802_v3/evaluation.json`.
 - July classifiers: the three `models/sp500_6m_*_v2_20260708_candidate.joblib.manifest.json`.
 - Policy constants: `configs/edge_rebuild_strategy_contract.toml`.
@@ -642,3 +641,70 @@ history ranges, published-research claims and typical information ratios are fro
 memory and should be checked before they drive a purchase. The commit keyword
 counts are approximate. The arithmetic uses a bell-curve approximation and rounded
 inputs; it shows sizes, not precise forecasts.
+
+## 11. Historical investment evidence (consolidated November 22)
+
+This replaces the November 10 external-review request; its original prose remains
+in Git at `cb01c63`. It is historical evidence, not an active experiment or a
+current acceptance decision. The active plan/handoff and feature audit govern
+current work. No source data, model, audit receipt or evidence hash was changed.
+
+- The investment experiment used 252-session primary and 63-session diagnostic
+  targets, separately from swing research. It reused the 209-column nightly
+  snapshot and appended six financial measures. Compared profiles contained 124
+  technical/relationship columns and 215 full columns (124 + 85 news + 6 financial).
+- Completed fitting comprised 48 validation fits and eight final research models:
+  two horizons, two profiles, Ridge/XGBoost, temporal/security-transfer validation
+  and three score years. Fold-local preprocessing used training medians,
+  missingness indicators and Ridge scaling. Dates received equal total weight;
+  outcomes had to mature before the 21-session pre-test boundary.
+- All sixteen aggregate horizon/profile/learner/scope MSEs and MAEs were worse
+  than zero SPY-excess prediction. Full inputs worsened seven of eight paired
+  MSEs and every paired MAE. Annual temporal XGBoost MSE was 27.81% above baseline
+  for technical inputs and 33.81% above baseline for full inputs; quarterly values
+  were 5.22% and 4.85%. These are prediction errors, not portfolio returns.
+- Each temporal specification scored 11,091 rows over 29 monthly dates. Annual
+  known outcomes numbered 7,126; quarterly known outcomes 7,862. Every temporal
+  selected top-decile cohort had an unknown outcome, so none of the 29 monthly
+  selected-cohort returns was complete. Selection preceded outcome availability.
+- The joined dataset retained 74,458 horizon rows. Its source-validated outcomes
+  numbered 27,189. These units and denominators differ from the later accounting
+  recovery counts in the active plan; do not substitute one for another.
+- The completed diagnostic attributed 21–27% of annual temporal MSE to date-level
+  mean errors and 73–79% to within-date errors. Full inputs changed forecasts too
+  much relative to their corrective benefit; annual deterioration occurred in
+  all three scored years. This did not isolate a causal news or financial effect.
+- Proposed causes remained hypotheses: weak transferable signal, magnitude bias,
+  short news windows relative to annual targets, sparse financial coverage and
+  target tails. The proposed 209/130-column factorial comparison would separate
+  news and financial effects using 48 additional validation fits; it was not
+  approved or implemented by the old brief. Neither calibration nor deleting
+  losing examples follows automatically from the diagnostic.
+- Historical classifier AUCs concern different targets, dates and fitted bundles.
+  They do not establish a currently accepted earlier strong model, net SPY
+  outperformance or authorization for an alternative production API.
+
+Retained artifact locators and original pins from that brief follow. These are
+historical citations; this documentation consolidation did not replay their data.
+
+Full target corpus. Path: data/research/investment_full_targets_20261109/corpus_0a1ca7d/final/_manifest.json.
+
+SHA-256: 9b70c348ab17738f5874d42c51bff6af386d94061ef383385bdd6ead5bcad4c3
+
+Joined dataset. Path: data/research/investment_dataset_20261110/joined_30b54bf/dataset/_manifest.json.
+
+SHA-256: 9c19fbf3a9f716b3f82b9958c094f9752f477952f5df8c4cb797123e765c1280
+
+Completed training. Path: data/research/investment_training_20261110/models_30b54bf/_manifest.json.
+
+SHA-256: 16eda742f2b6c0b95d25c03796185aac447c6c348f6710f6b7037640675516b3
+
+Independent post-fit audit. Path: Chat outputs/investment-models-independent-postfit-audit-20261110.json.
+
+SHA-256: b139c5e84d98c332aec3598c4751dedb35b5d4d8f2b414630604839cd94404dd
+
+Completed prediction-error diagnostic. Path: data/research/investment_prediction_errors_20261110/diagnostics_770d0db/_manifest.json.
+
+SHA-256: 2e570a4b714e0305d11909fe23ee48eeb116114be42ada16331070a92ce86981
+
+Historical attachments should include models/sp500_6m_next_day_big_up_v2_20260708_candidate.joblib.manifest.json; the corresponding next_week_big_up manifest; models/edge_rebuild_intraday_candidate_20260802_v1/evaluation.json; and data/models/edge_rebuild_intraday_candidate_v3/evaluation.json with their model cards. Relevant Git excerpts are 87b3aad for the contemporaneous baseline record, 53c51c2 for the workflow replacement, 5ebfa83 for snapshot-feature removal, 0332b16 for intraday V3 completion, and 3b2bff5/7bb128c for the later SPY-relative objective and measured swing regressions.

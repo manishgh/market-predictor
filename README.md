@@ -759,10 +759,11 @@ Issuer history outside index-membership dates can be requested with
 `market-predictor-collect collect-alpaca-news-history --query-scope configs/swing_issuer_news_corrections.json --start-date 2019-07-09 --end-date 2024-05-28 --out-dir data/raw/swing_issuer_news_corrections --workers 1 --chunk-days 31`.
 Use either `--query-scope` or `--memberships`, never both. Scope files bind historical
 symbol intervals and source-document hashes; they do not certify article attribution.
-The collector checks laptop RAM as well as process RSS. Defaults stop new requests
-at 85% physical-memory use or below 2 GiB available; flags
-`--maximum-system-used-percent` and `--minimum-system-free-gib` configure these checks.
-Pressure stops leave pages resumable and never publish a completed collection.
+The shared memory policy requires system RAM use strictly below 90%, without an
+implicit absolute free-memory floor, while retaining workload process budgets.
+See `AGENTS.md` for bounded pressure waits and failure behavior, and the command's
+`--help` for supported options. Interrupted collection leaves pages resumable and
+does not publish a completed collection.
 These are cooperative checks, not a hard limit on allocation spikes or other apps.
 
 ## Setup

@@ -4,6 +4,112 @@
 
 Current checkpoint: **Step 8 — Standing Daily Prospective `mid_small_beta_neutral_sec_xgb` + `OPRA` Straddle/Skew Accumulation & Maturation Evaluation (`> 2026-11-20`)** (`in progress`).
 
+**November 22 review correction:** the historical completion records below do not
+establish current batch/live parity or an untouched prospective test. The existing
+[feature audit](reviews/feature_engineering_audit_20260801.md#1-review-of-research-lane-changes-november-22)
+records R1–R10, their evidence and required regression checks. Three of the five
+retained November 16–20 snapshots were recorded after their intended entry; none
+contains SEC-XGBoost scores, and all five have `Unknown` sectors for every scored
+stock. Resolve these findings before interpreting forward results as evidence for
+the persisted candidate. Preserve original snapshots and historical scoreboards.
+
+### Gemini implementation order for Step 8
+
+Work in the canonical checkout on `main`. Read `AGENTS.md`, the current handoff
+and the November 22 feature audit first. At review time HEAD was `cb01c63` and six
+local documentation edits were pending. Check current Git state and preserve any
+intervening work. The target is a reproducible forward test of the saved SEC model.
+Use the existing 10- and 21-session fits. The OPRA candidate has a 10-session
+policy horizon. Record a distinct research proposal if a fix requires a different
+target, universe, model, or trading rule.
+
+1. **Audit the starting evidence and enforce the prediction clock (R1).**
+   Read the retained manifests, score schemas and exchange calendar. In
+   `forward_record.py` and `forward_evaluate.py`, distinguish as-of date, source
+   cutoff, actual completed publication time and next tradable open. Admit a
+   prediction only if it was published before that open with the required model
+   and score. Exercise a weekend, an early close and a late scheduler retry.
+   **Pass when** the original five snapshots stay readable, the three recorded
+   after entry are identified by date, and zero of the five qualifies for the
+   persisted SEC model. Preserve their original bytes.
+
+2. **Bind each candidate to its evidence (R9, foundation for R6).**
+   Extend the existing candidate definition with the expected model-manifest
+   hash, feature order, cohort, baseline, ranking population, required sources,
+   horizon, selection, rebalance and cost rules. Record its identity and payload
+   hashes when publishing a snapshot. Verify them on read and on `--skip-existing`.
+   Reuse the repository's hashing and atomic publication helpers. **Pass when**
+   an identical retry succeeds once, an edited score file is rejected, and a
+   different internally valid model cannot be graded under the original identity.
+
+3. **Rebuild the live cohort from decision-date evidence (R2).**
+   Use `EvidencePaths` and the roster produced by `wider_universe.py`
+   (`roster_spans.parquet`). Apply its issuer identity, effective dates, S&P
+   exclusions, price and trailing-liquidity rules before any peer calculation.
+   Check that membership actually covers the live date. If coverage ends early,
+   report the missing authority and affected date. **Pass when** a retained
+   dated cohort matches the batch security IDs and sector assignments, including
+   a constituent exclusion, a ticker change and a relocated data-root read.
+
+4. **Use one baseline and one ranking population (R3, R4).** Call the batch
+   Stage-1 builder from live scoring with the same 12 price and 12 fundamental
+   inputs, history requirements and neutralization. Apply the precise SEC
+   transform over the training-defined peer population. Track unqueried issuers
+   separately from queried issuers with zero filings. If the source budget or
+   available history cannot support that population, report the gap and abstain.
+   **Pass when** replaying the same retained session through both entry points
+   yields matching IDs, ordered feature values, missingness, baseline, residuals
+   and final ranks at both horizons within a declared numerical tolerance.
+   Include partial SEC coverage, short beta history and a future-data poison test.
+   Feed both paths their source inputs rather than injecting a common baseline.
+
+5. **Define when the OPRA overlay is measurable (R7, R10).** Carry unknown
+   benchmark term structure through recording and evaluation. Apply the frozen
+   either-index rule only when available observations determine its result.
+   Establish timestamps and freshness for option and underlying prices. Where
+   only daily VWAP is available, retain it as a labelled diagnostic proxy unless
+   the candidate contract explicitly authorizes it. **Pass when** a decisive
+   positive ratio, an indeterminate partial response and a total outage each
+   produce the expected state, and an intraday underlying move cannot be reported
+   as synchronized closing volatility from a daily average.
+
+6. **Freeze holdings before joining outcomes (R5, R8).** Persist selected IDs
+   and weights from decision-time inputs. Fix `continuous_rebalance_windows`
+   and its consumers so a missing exit on an owned security remains unresolved.
+   Keep observed-subset ranking diagnostics separately labelled. **Pass when**
+   removing the highest-ranked holding's exit preserves all holdings and weights
+   and makes the portfolio return incomplete. Cover a disappearing security,
+   a missing price on an unheld security, and a fully observed portfolio. Count
+   affected selected holdings and rebalance periods on retained evidence before
+   revising the historical return figures.
+
+7. **Grade the policy that was recorded (R6).** Read the snapshot's frozen
+   candidate definition. Reuse the batch holdings, rebalance, fill and cost
+   functions in the forward evaluator. Distinguish signal labels ending at
+   `close[t+h]` from continuous holdings ending at `open[t+h+1]`. If a frozen
+   definition lacks a weight or rule, identify that decision before producing
+   portfolio economics. **Pass when** the two paths agree on candidate ID,
+   horizon, holdings, drift, turnover, costs, portfolio return and matched SPY
+   return across consecutive rebalances. Missing required signals must produce
+   a recorded reason for abstaining.
+
+8. **Verify both normal entry points and close each finding individually.**
+   Add the failing regression beside the affected module before or with each
+   fix. Run its focused pytest files, affected Ruff and strict mypy checks, and
+   `git diff --check`. Replay retained real inputs into a fresh research output
+   using the shared lease and memory policy. Exercise the normal recording and
+   evaluation CLIs. Mark replay outputs retrospective. For the first eligible
+   new session, verify publication and candidate identity before entry, then show
+   pending status until the actual horizon matures. Record missing real evidence
+   explicitly if a date, source or outcome is unavailable.
+
+Keep fixes and regression tests together. Prefer sharing the existing transform
+or accounting function wherever these steps expose duplicate behavior. Update
+the existing feature audit with the commit, test, real artifact and remaining
+limitation for each finding. Keep the handoff to the next unfinished action.
+Report software verification, first qualifying prediction and first matured
+portfolio result as separate milestones.
+
 - **Current operational state (November 21):**
   1. The surviving **`mid_small_beta_neutral_sec` Stage-2 `XGBoost` research bundle** (`2019-07-09..2026-07-08`) is trained, persisted, and SHA-256 verified on disk at `data/research/research_lane/models/mid_small_beta_neutral_sec_xgb` (`_manifest.json` SHA-256 `cd18356701f35b44c884d9f587a8e14ed7473878f12f75e2ec27548b4d8ebf04`, `research_only = true`, `actionable = false`).
   2. `record-forward-research-scores --live-prospective --as-of-date latest --skip-existing` and `evaluate-forward-research-scores --as-of-date latest` are registered in Windows Task Scheduler as **`MarketPredictorForwardScoringPostClose`** (`Monday–Friday` at `22:35` local time via `scripts/install_forward_research_task.ps1` and `scripts/run_forward_research_scoring.ps1`, commit `43e63cd`, catching up automatically on wake via `StartWhenAvailable`).
@@ -84,5 +190,5 @@ Superseded intermediate scoreboard folders, `127` unreferenced failed/intermedia
 
 The following pre-research-lane workstreams remain historical or user-deferred evidence; their hash-bound contracts (`docs/strategy_execution_ledger.json`, `docs/strategy_hypothesis_registry.json`, `docs/reference_model_inventory.json`, `docs/model_artifact_retention_inventory.json`, `docs/evidence/*`, `docs/model_cards/*`) are preserved intact:
 - **Configurable `--data-root` Storage Infrastructure (November 13, commit `d3211ee`):** `EvidencePaths` implemented and verified; physical `C:`-to-`D:` dataset copy remains paused by user instruction (`all C: originals intact`).
-- **Investment Cohort `63d/252d` Evaluation (November 6–11, `docs/research_briefs/fable_5_2_project_brief_20261110.md`):** SEC `company_facts` ratios, ICTax benchmark distributions, and `3,177` known / `715` unresolved holding outcomes audited; no investment model promoted or served.
+- **Investment Cohort `63d/252d` Evaluation (November 6–11, `docs/research_briefs/benchmark_outperformance_recommendations_20261115.md section 11`):** SEC `company_facts` ratios, ICTax benchmark distributions, and `3,177` known / `715` unresolved holding outcomes audited; no investment model promoted or served.
 - **Governed Swing Technical & Relationship Return Fits (September–October, `docs/reviews/feature_engineering_audit_20260801.md`):** `314,167`-row technical and relationship fits completed (`mean IC 0.0007..0.0147`, MSE worse than zero-excess baseline); intraday prediction retired (`KS4` / `KS6` historical records only); communicating APIs remain `V1` with `actionable = false`.
