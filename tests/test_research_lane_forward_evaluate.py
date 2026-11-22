@@ -14,9 +14,11 @@ import pytest
 from pydantic import SecretStr
 
 from market_predictor.config import Settings
+from market_predictor.core.errors import ArtifactIntegrityError
+from market_predictor.research_lane import forward_record
 from market_predictor.research_lane.forward_evaluate import evaluate_forward_scores
 from market_predictor.research_lane.forward_record import FORWARD_RECORD_DIRECTORY
-from market_predictor.research_lane.panel import SealedPeriodError, file_sha256
+from market_predictor.research_lane.panel import ResearchPanel, SealedPeriodError, file_sha256
 
 
 def _write_snapshot(
@@ -201,3 +203,112 @@ def test_r1_retained_november_snapshots_stay_untouched_and_zero_qualify_for_sec_
         for fname in ("_manifest.json", "scores.parquet"):
             assert file_sha256(real_records / d_str / fname) == pre_hashes[f"{d_str}/{fname}"]
     _ = datetime(2026, 11, 20, tzinfo=UTC)
+
+
+def test_r9_edited_score_file_rejected_and_swapped_model_cannot_be_graded_under_original_identity(
+    tmp_path: Path,
+) -> None:
+    import numpy as np
+
+    cfg = Settings(_env_file=None, ALPACA_API_KEY_ID="k", ALPACA_API_SECRET_KEY=SecretStr("s"))
+    sessions = pd.bdate_range("2026-07-15", "2026-11-19").to_numpy().astype("datetime64[D]")
+    n_s, n_c = len(sessions), 6
+    close = np.full((n_s, n_c), 60.0, dtype=np.float32) * np.linspace(1.0, 1.12, n_s, dtype=np.float32)[:, None]
+    spy_c = np.full(n_s, 520.0, dtype=np.float32)
+    panel = ResearchPanel(
+        sessions=sessions,
+        security_ids=tuple(f"cik:{i + 1:010d}" for i in range(n_c)),
+        open=close,
+        high=close * np.float32(1.01),
+        low=close * np.float32(0.99),
+        close=close,
+        volume=np.full((n_s, n_c), 8e5, dtype=np.float32),
+        eligible=np.ones((n_s, n_c), dtype=bool),
+        sector=np.zeros((n_s, n_c), dtype=np.int16),
+        sector_names=("Industrials",),
+        spy_open=spy_c,
+        spy_close=spy_c,
+        qqq_open=spy_c,
+        qqq_close=spy_c,
+        development_end=date(2026, 11, 19),
+        load_report={},
+    )
+    with patch(
+        "market_predictor.research_lane.forward_record._fetch_live_prospective_panel",
+        return_value=panel,
+    ), patch("market_predictor.research_lane.forward_record.guard"), patch(
+        "market_predictor.research_lane.forward_evaluate.guard"
+    ), patch.dict("os.environ", {"MARKET_PREDICTOR_RUNTIME_DIR": str(tmp_path / "rt")}):
+        m_first = forward_record.record_forward_scores(
+            root=tmp_path,
+            as_of_date=date(2026, 11, 19),
+            live_prospective=True,
+            include_live_catalysts=False,
+            include_live_options=False,
+            skip_existing=True,
+            settings=cfg,
+            clock_fn=lambda: datetime(2026, 11, 19, 22, 0, tzinfo=UTC),
+        )
+        assert m_first["status"] == "recorded"
+        assert "scores.parquet" in m_first["payload_artifacts"]
+
+        # 1. Identical --skip-existing retry succeeds once cleanly
+        m_retry = forward_record.record_forward_scores(
+            root=tmp_path,
+            as_of_date=date(2026, 11, 19),
+            live_prospective=True,
+            include_live_catalysts=False,
+            include_live_options=False,
+            skip_existing=True,
+            settings=cfg,
+            clock_fn=lambda: datetime(2026, 11, 19, 22, 5, tzinfo=UTC),
+        )
+        assert m_retry["status"] == "already_recorded"
+
+        # 2. Editing scores.parquet (valid Parquet, altered score value) MUST raise ArtifactIntegrityError on BOTH
+        #    record_forward_scores(--skip-existing) AND evaluate_forward_scores!
+        scores_pq = tmp_path / FORWARD_RECORD_DIRECTORY / "2026-11-19" / "scores.parquet"
+        orig_pq_bytes = scores_pq.read_bytes()
+        tampered_df = cast(Any, pq).read_table(scores_pq, use_threads=False).to_pandas()
+        tampered_df.loc[0, "score_price_equal_12"] = 0.999999
+        cast(Any, pq).write_table(pa.Table.from_pandas(tampered_df, preserve_index=False), scores_pq)
+
+        with pytest.raises(ArtifactIntegrityError):
+            forward_record.record_forward_scores(
+                root=tmp_path,
+                as_of_date=date(2026, 11, 19),
+                live_prospective=True,
+                include_live_catalysts=False,
+                include_live_options=False,
+                skip_existing=True,
+                settings=cfg,
+                clock_fn=lambda: datetime(2026, 11, 19, 22, 10, tzinfo=UTC),
+            )
+        with pytest.raises(ArtifactIntegrityError):
+            evaluate_forward_scores(
+                root=tmp_path,
+                as_of_date=date(2026, 11, 20),
+                horizons=(1,),
+                settings=cfg,
+            )
+
+        # Restore valid scores.parquet, then simulate a snapshot claiming a DIFFERENT valid model manifest SHA-256:
+        # audit_snapshot_admission must reject it (`model_manifest_sha256_mismatch`) under original candidate identity!
+        scores_pq.write_bytes(orig_pq_bytes)
+        from market_predictor.research_lane.prospective_contracts import audit_snapshot_admission
+
+        snap_dir = tmp_path / FORWARD_RECORD_DIRECTORY / "2026-11-19"
+        man_doc = json.loads((snap_dir / "_manifest.json").read_text(encoding="utf-8"))
+        man_doc["catalyst_summary"] = {
+            "sec_xgb_model": {
+                "model_scored": True,
+                "manifest_sha256": "f" * 64,
+                "feature_contract_sha256": "d244cea55bde7b79c22167da6bc83ad315f5165b33fbb3a39826b32d022b868e",
+            }
+        }
+        valid_df = cast(Any, pq).read_table(scores_pq, use_threads=False).to_pandas()
+        valid_df["score_mid_small_bn_sec_xgb_10d"] = 0.15
+        aud = audit_snapshot_admission(snap_dir, valid_df, man_doc)
+        assert aud["qualifies_for_persisted_sec_model"] is False
+        reasons = aud["candidate_admissions"]["mid_small_bn_sec_xgb_10d"]["rejection_reasons"]
+        assert any("model_manifest_sha256_mismatch" in r for r in reasons)

@@ -171,11 +171,36 @@ def test_bundle_persistence_batch_live_parity_missingness_and_tamper_detection(t
     ubj_file.write_bytes(orig_bytes)
 
     man_path = bundle_dir / "_manifest.json"
+    orig_man_bytes = man_path.read_bytes()
     man_doc = json.loads(man_path.read_text(encoding="utf-8"))
     man_doc["feature_names"] = list(reversed(man_doc["feature_names"]))
     man_path.write_text(json.dumps(man_doc), encoding="utf-8")
     with pytest.raises(ArtifactIntegrityError, match="feature_names mismatch"):
         sec_catalyst_model.verify_and_load_sec_catalyst_bundle(bundle_dir)
+    man_path.write_bytes(orig_man_bytes)
+
+    # 4. R9: A DIFFERENT internally valid model bundle at the same path cannot pass expected_manifest_sha256!
+    alt_dir = tmp_path / "models" / "alt_valid_bundle"
+    sec_catalyst_model.fit_and_save_sec_catalyst_bundle_from_panel(
+        panel,
+        base_bn,
+        beta_rank=beta_rk,
+        idio_vol_rank=ivol_rk,
+        catalyst_features=cat_feats,
+        destination=alt_dir,
+        root=tmp_path,
+        input_sha256={"synthetic": "different_valid_bundle"},
+        catalyst_report=cat_rep,
+        horizons=(10, 21),
+        seeds=(7, 8, 9),
+    )
+    alt_loaded = sec_catalyst_model.verify_and_load_sec_catalyst_bundle(alt_dir)
+    assert alt_loaded.manifest_sha256 != loaded.manifest_sha256
+    with pytest.raises(ArtifactIntegrityError, match="manifest SHA-256 mismatch"):
+        sec_catalyst_model.verify_and_load_sec_catalyst_bundle(
+            alt_dir,
+            expected_manifest_sha256=loaded.manifest_sha256,
+        )
 
 
 def test_opra_straddle_skew_overlay_vetoes_knives_and_boosts_shock_breakouts() -> None:

@@ -262,13 +262,22 @@ def fit_and_save_sec_catalyst_bundle_from_panel(
     return cast(dict[str, Any], manifest)
 
 
-def verify_and_load_sec_catalyst_bundle(bundle_dir: Path) -> LoadedSecCatalystBundle:
-    """Verify `_manifest.json`, ordered feature hash, and every `.ubj` SHA-256 before loading models."""
+def verify_and_load_sec_catalyst_bundle(
+    bundle_dir: Path,
+    *,
+    expected_manifest_sha256: str | None = None,
+) -> LoadedSecCatalystBundle:
+    """Verify `_manifest.json`, optional expected identity hash, ordered feature hash, and every `.ubj` SHA-256."""
     manifest_path = bundle_dir / "_manifest.json"
     if not manifest_path.is_file():
         raise ArtifactIntegrityError(f"missing SEC catalyst model manifest: {manifest_path}")
 
     manifest_sha = file_sha256(manifest_path)
+    if expected_manifest_sha256 is not None and manifest_sha != expected_manifest_sha256:
+        raise ArtifactIntegrityError(
+            f"SEC catalyst model manifest SHA-256 mismatch at {manifest_path}: "
+            f"expected {expected_manifest_sha256}, got {manifest_sha}"
+        )
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except Exception as exc:

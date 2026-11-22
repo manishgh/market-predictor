@@ -39,8 +39,9 @@ import requests
 
 from market_predictor.catalysts.issuer_events.classification import classify_event_families
 from market_predictor.config import Settings, get_settings
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.errors import ArtifactIntegrityError, DataReadinessError
 from market_predictor.core.runtime_memory import guard
+from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.research_lane import indicators, opra_options, predictors, reversal, sec_catalyst_model
@@ -63,10 +64,14 @@ from market_predictor.research_lane.panel import (
 from market_predictor.research_lane.predictors import centered_rank
 from market_predictor.research_lane.prospective_contracts import (
     FROZEN_PROSPECTIVE_CANDIDATE_SPECS,
+    PERSISTED_SEC_MODEL_MANIFEST_SHA256,
     SNAPSHOT_MANIFEST_SCHEMA,
+    ProspectiveCandidateSpec,
     RecordMode,
+    build_payload_artifacts_manifest,
     latest_settled_xnys_session,
     resolve_xnys_session_clock,
+    verify_snapshot_payload_hashes,
 )
 from market_predictor.research_lane.sec_filings import event_rows
 from market_predictor.research_lane.trial_log import git_identity
@@ -479,6 +484,7 @@ def collect_live_prospective_catalysts(
     *,
     catalyst_top_k: int = DEFAULT_CATALYST_TOP_K,
     sec_model_bundle_dir: Path | None = None,
+    expected_sec_model_manifest_sha256: str | None = PERSISTED_SEC_MODEL_MANIFEST_SHA256,
     unseal_final_test_period: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     """Collect & classify live Finviz Elite, Alpaca (`fiscal.ai`), and SEC catalysts `<= close_utc(scored_session)`."""
@@ -488,7 +494,10 @@ def collect_live_prospective_catalysts(
 
     loaded_sec_bundle: sec_catalyst_model.LoadedSecCatalystBundle | None = None
     if sec_model_bundle_dir is not None and (sec_model_bundle_dir / "_manifest.json").is_file():
-        loaded_sec_bundle = sec_catalyst_model.verify_and_load_sec_catalyst_bundle(sec_model_bundle_dir)
+        loaded_sec_bundle = sec_catalyst_model.verify_and_load_sec_catalyst_bundle(
+            sec_model_bundle_dir,
+            expected_manifest_sha256=expected_sec_model_manifest_sha256,
+        )
 
     session_clock = resolve_xnys_session_clock(scored_day)
     cutoff_utc = session_clock.source_cutoff_utc
@@ -867,6 +876,46 @@ def _enforce_prospective_prediction_clock(session_clock_date: date, now_utc: dat
         )
 
 
+def _verify_existing_snapshot_for_skip(
+    snapshot_dir: Path,
+    *,
+    expected_candidates: tuple[ProspectiveCandidateSpec, ...] = FROZEN_PROSPECTIVE_CANDIDATE_SPECS,
+) -> dict[str, Any]:
+    """Verify payload SHA-256s and candidate registry identity before returning `--skip-existing`."""
+    manifest_path = snapshot_dir / "_manifest.json"
+    if not manifest_path.is_file():
+        raise ArtifactIntegrityError(f"existing snapshot directory missing _manifest.json: {snapshot_dir}")
+    try:
+        manifest = cast(dict[str, Any], json.loads(manifest_path.read_text(encoding="utf-8")))
+    except Exception as exc:
+        raise ArtifactIntegrityError(f"unreadable snapshot _manifest.json in {snapshot_dir}") from exc
+
+    payload_status = verify_snapshot_payload_hashes(snapshot_dir, manifest)
+    if payload_status != "verified":
+        raise ArtifactIntegrityError(
+            f"existing snapshot {snapshot_dir} lacks verified payload_artifacts ({payload_status}); refusing --skip-existing"
+        )
+
+    raw_cands = manifest.get("frozen_prospective_candidates")
+    if not isinstance(raw_cands, list) or len(raw_cands) != len(expected_candidates):
+        raise ArtifactIntegrityError(
+            f"existing snapshot {snapshot_dir} candidate registry length mismatch against FROZEN_PROSPECTIVE_CANDIDATE_SPECS"
+        )
+    for raw_item, expected in zip(raw_cands, expected_candidates, strict=True):
+        if not isinstance(raw_item, dict):
+            raise ArtifactIntegrityError(f"malformed candidate spec in {snapshot_dir}")
+        try:
+            persisted = ProspectiveCandidateSpec.from_mapping(raw_item)
+        except ValueError as exc:
+            raise ArtifactIntegrityError(f"incomplete candidate spec in {snapshot_dir}: {exc}") from exc
+        if persisted.candidate_spec_sha256 != expected.candidate_spec_sha256:
+            raise ArtifactIntegrityError(
+                f"candidate identity mismatch on {expected.candidate_id} in {snapshot_dir}: "
+                f"expected {expected.candidate_spec_sha256}, got {persisted.candidate_spec_sha256}"
+            )
+    return manifest
+
+
 def record_forward_scores(
     *,
     root: Path,
@@ -875,6 +924,7 @@ def record_forward_scores(
     panel: Path = PANEL_DIRECTORY,
     output_parent: Path = FORWARD_RECORD_DIRECTORY,
     sec_model_bundle: Path = sec_catalyst_model.DEFAULT_SEC_MODEL_BUNDLE_DIR,
+    expected_sec_model_manifest_sha256: str | None = PERSISTED_SEC_MODEL_MANIFEST_SHA256,
     live_prospective: bool = False,
     record_mode: RecordMode | None = None,
     include_live_catalysts: bool = True,
@@ -921,9 +971,9 @@ def record_forward_scores(
             else as_of_date
         )
         dest_parent = paths.write(paths.identity(output_parent))
-        pre_manifest = dest_parent / resolved_date.isoformat() / "_manifest.json"
-        if skip_existing and pre_manifest.is_file():
-            existing_pre = cast(dict[str, Any], json.loads(pre_manifest.read_text(encoding="utf-8")))
+        pre_dir = dest_parent / resolved_date.isoformat()
+        if skip_existing and (pre_dir / "_manifest.json").is_file():
+            existing_pre = _verify_existing_snapshot_for_skip(pre_dir)
             return {**existing_pre, "status": "already_recorded"}
 
         session_clock = resolve_xnys_session_clock(resolved_date)
@@ -951,7 +1001,7 @@ def record_forward_scores(
         dest_dir = dest_parent / scored_session
         if dest_dir.exists():
             if skip_existing and (dest_dir / "_manifest.json").is_file():
-                existing_post = cast(dict[str, Any], json.loads((dest_dir / "_manifest.json").read_text(encoding="utf-8")))
+                existing_post = _verify_existing_snapshot_for_skip(dest_dir)
                 return {**existing_post, "status": "already_recorded"}
             raise FileExistsError(f"forward score snapshot already exists for session {scored_session}: {dest_dir}")
 
@@ -965,6 +1015,7 @@ def record_forward_scores(
                 cfg,
                 catalyst_top_k=catalyst_top_k,
                 sec_model_bundle_dir=bundle_abs,
+                expected_sec_model_manifest_sha256=expected_sec_model_manifest_sha256,
                 unseal_final_test_period=unseal_final_test_period,
             )
 
@@ -993,6 +1044,7 @@ def record_forward_scores(
                     pa.Table.from_pandas(options_df, preserve_index=False), staging / "options_metrics.parquet",
                 )
 
+            payload_artifacts = build_payload_artifacts_manifest(staging)
             published_at = now_fn().astimezone(UTC)
             if effective_mode == "prospective":
                 _enforce_prospective_prediction_clock(scored_day, published_at)
@@ -1018,6 +1070,8 @@ def record_forward_scores(
                 "sealed_holdout_window": "2024-05-29..2026-07-08",
                 "sealed_holdout_untouched": not unseal_final_test_period,
                 "frozen_prospective_candidates": list(FROZEN_PROSPECTIVE_CANDIDATES),
+                "candidate_registry_sha256": json_sha256(list(FROZEN_PROSPECTIVE_CANDIDATES)),
+                "payload_artifacts": payload_artifacts,
                 "eligible_stocks_scored": len(scores_df),
                 "catalyst_summary": catalyst_summary,
                 "options_summary": options_summary,
@@ -1031,7 +1085,7 @@ def record_forward_scores(
             (staging / "_manifest.json").write_text(
                 json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8",
             )
-            os.replace(staging, dest_dir)
+            os.rename(staging, dest_dir)
         finally:
             if staging.exists():
                 shutil.rmtree(staging)
