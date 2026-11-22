@@ -12,8 +12,13 @@ import pytest
 from pydantic import SecretStr
 
 from market_predictor.config import Settings
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.research_lane import forward_record, opra_options
 from market_predictor.research_lane.panel import ResearchPanel, SealedPeriodError
+from market_predictor.research_lane.prospective_contracts import (
+    latest_settled_xnys_session,
+    resolve_xnys_session_clock,
+)
 
 
 def test_occ_parser_and_black_scholes_iv_delta_inversion_accuracy() -> None:
@@ -137,7 +142,7 @@ def test_straddle_25d_skew_falling_knife_veto_and_sealed_bar_rejection() -> None
                 bars_out[sym] = [{"t": "2026-11-17T21:00:00Z", "vw": p_norm, "c": p_norm, "n": 20}]
         return MagicMock(status_code=200, json=lambda: {"bars": bars_out})
 
-    cfg = Settings(_env_file=None, ALPACA_API_KEY_ID="k", ALPACA_API_SECRET_KEY=SecretStr("s"))  # type: ignore[call-arg]
+    cfg = Settings(_env_file=None, ALPACA_API_KEY_ID="k", ALPACA_API_SECRET_KEY=SecretStr("s"))
     with patch("market_predictor.research_lane.opra_options.requests.get", side_effect=_fake_get), patch(
         "market_predictor.research_lane.opra_options.guard"
     ):
@@ -152,7 +157,7 @@ def test_straddle_25d_skew_falling_knife_veto_and_sealed_bar_rejection() -> None
 
 
 def test_latest_completed_session_cutoff_and_idempotent_skip_existing(tmp_path: Path) -> None:
-    cfg = Settings(_env_file=None, ALPACA_API_KEY_ID="k", ALPACA_API_SECRET_KEY=SecretStr("s"))  # type: ignore[call-arg]
+    cfg = Settings(_env_file=None, ALPACA_API_KEY_ID="k", ALPACA_API_SECRET_KEY=SecretStr("s"))
     fake_page = MagicMock(
         bars={
             "SPY": [
@@ -216,13 +221,18 @@ def test_latest_completed_session_cutoff_and_idempotent_skip_existing(tmp_path: 
             include_live_options=False,
             skip_existing=True,
             settings=cfg,
+            clock_fn=lambda: datetime(2026, 11, 19, 22, 0, tzinfo=UTC),
         )
         assert m1["status"] == "recorded"
+        assert m1["record_mode"] == "prospective"
         assert m1["requested_as_of_date"] == "latest"
         assert m1["scored_session"] == "2026-11-19"
+        assert m1["published_before_entry"] is True
+        assert m1["next_tradable_session"] == "2026-11-20"
+        assert m1["next_tradable_open_utc"] == "2026-11-20T14:30:00+00:00"
         assert m1["sealed_holdout_untouched"] is True
         assert len(m1["frozen_prospective_candidates"]) == 3
-        assert m1["frozen_prospective_candidates"][0]["candidate_id"] == "mid_small_bn_sec_xgb_opra_10d"
+        assert m1["frozen_prospective_candidates"][0]["candidate_id"] == "mid_small_bn_sec_xgb_10d"
         assert mock_panel.call_count == 1
 
         # Second call with skip_existing=True short-circuits before panel fetch & does not duplicate log!
@@ -234,6 +244,7 @@ def test_latest_completed_session_cutoff_and_idempotent_skip_existing(tmp_path: 
             include_live_options=False,
             skip_existing=True,
             settings=cfg,
+            clock_fn=lambda: datetime(2026, 11, 19, 22, 5, tzinfo=UTC),
         )
         assert m2["status"] == "already_recorded"
         assert mock_panel.call_count == 1
@@ -251,4 +262,42 @@ def test_latest_completed_session_cutoff_and_idempotent_skip_existing(tmp_path: 
                 include_live_catalysts=False,
                 include_live_options=False,
                 settings=cfg,
+                clock_fn=lambda: datetime(2026, 11, 19, 22, 10, tzinfo=UTC),
             )
+
+        # Late scheduler retry on a new unrecorded session AFTER next_tradable_open_utc (`14:30 UTC`) must fail closed!
+        with pytest.raises(DataReadinessError, match="missed next tradable open"):
+            forward_record.record_forward_scores(
+                root=tmp_path,
+                as_of_date=date(2026, 11, 18),
+                live_prospective=True,
+                include_live_catalysts=False,
+                include_live_options=False,
+                settings=cfg,
+                clock_fn=lambda: datetime(2026, 11, 19, 17, 13, 57, tzinfo=UTC),
+            )
+
+
+def test_xnys_session_clock_weekend_holiday_and_early_close_settlement() -> None:
+    # Friday 2026-11-20 -> next tradable open is Monday 2026-11-23 at 14:30 UTC (weekend skipped)
+    fri_clk = resolve_xnys_session_clock(date(2026, 11, 20))
+    assert fri_clk.is_early_close is False
+    assert fri_clk.source_cutoff_utc == datetime(2026, 11, 20, 21, 0, tzinfo=UTC)
+    assert fri_clk.next_tradable_session == date(2026, 11, 23)
+    assert fri_clk.next_tradable_open_utc == datetime(2026, 11, 23, 14, 30, tzinfo=UTC)
+
+    # Black Friday 2026-11-27 is an early close (13:00 EST = 18:00 UTC, settlement 18:20 UTC, next open Monday 2026-11-30)
+    bf_clk = resolve_xnys_session_clock(date(2026, 11, 27))
+    assert bf_clk.is_early_close is True
+    assert bf_clk.session_close_utc == datetime(2026, 11, 27, 18, 0, tzinfo=UTC)
+    assert bf_clk.source_cutoff_utc == datetime(2026, 11, 27, 18, 0, tzinfo=UTC)
+    assert bf_clk.settlement_ready_utc == datetime(2026, 11, 27, 18, 20, tzinfo=UTC)
+    assert bf_clk.next_tradable_session == date(2026, 11, 30)
+    assert bf_clk.next_tradable_open_utc == datetime(2026, 11, 30, 14, 30, tzinfo=UTC)
+
+    # Before 18:20 UTC on Black Friday (`18:10 UTC`), latest settled session is Wednesday 2026-11-25 (skipping Thanksgiving!)
+    pre_bf = latest_settled_xnys_session(datetime(2026, 11, 27, 18, 10, tzinfo=UTC))
+    assert pre_bf.as_of_date == date(2026, 11, 25)
+    # After 18:20 UTC on Black Friday (`18:25 UTC`), Black Friday 2026-11-27 itself is settled!
+    post_bf = latest_settled_xnys_session(datetime(2026, 11, 27, 18, 25, tzinfo=UTC))
+    assert post_bf.as_of_date == date(2026, 11, 27)

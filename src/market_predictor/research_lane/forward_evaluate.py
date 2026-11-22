@@ -32,6 +32,7 @@ from market_predictor.research_lane.forward_record import (
     resolve_latest_completed_session,
 )
 from market_predictor.research_lane.panel import MARKET_TIMEZONE, SealedPeriodError
+from market_predictor.research_lane.prospective_contracts import audit_snapshot_admission
 from market_predictor.research_lane.trial_log import git_identity
 from market_predictor.sources.alpaca import AlpacaSource
 
@@ -181,10 +182,29 @@ def _render_forward_eval_markdown(doc: dict[str, Any]) -> str:
     lines = [
         "# Prospective Forward Research Score & OPRA Option Maturation Report",
         "",
+        f"- **Evaluation mode:** `{doc['evaluation_mode']}`",
         f"- **Evaluated through completed session:** `{doc['evaluated_as_of_date']}`",
         f"- **Sealed holdout (`2024-05-29..2026-07-08`) untouched:** `{doc['sealed_holdout_untouched']}`",
         f"- **Snapshots discovered:** `{doc['snapshots_total']}` (`{', '.join(doc['snapshot_dates'])}`)",
+        f"- **Snapshots recorded after intended entry (`rejected`):** `{len(doc['snapshots_recorded_after_entry_dates'])}` "
+        f"(`{', '.join(doc['snapshots_recorded_after_entry_dates']) or 'none'}`)",
+        f"- **Snapshots qualifying for persisted SEC model:** `{len(doc['snapshots_qualifying_for_persisted_sec_model_dates'])}` "
+        f"(`{', '.join(doc['snapshots_qualifying_for_persisted_sec_model_dates']) or 'none'}`)",
         f"- **Label convention:** `{doc['label_notice']}` (`20 bps` round-trip cost applied to active top-10% sleeves).",
+        "",
+        "## Section 0: Snapshot Prediction-Clock & Candidate Admission Audit",
+        "",
+        "| Snapshot `t` | Mode | Source Cutoff UTC | Published UTC | Next Open UTC | Clock Status | SEC Model Qualified |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for aud in doc["snapshot_admission_audit"]:
+        lines.append(
+            f"| {aud['snapshot_date']} | {aud['record_mode']} | {aud['source_cutoff_utc']} | "
+            f"{aud['published_at_utc'] or '-'} | {aud['next_tradable_open_utc']} | "
+            f"{aud['clock_status']} | {aud['qualifies_for_persisted_sec_model']} |"
+        )
+
+    lines += [
         "",
         "## Section A: Snapshot & Horizon Maturation Matrix",
         "",
@@ -277,6 +297,7 @@ def evaluate_forward_scores(
     forward_dir: Path = FORWARD_RECORD_DIRECTORY,
     output: Path | None = None,
     horizons: tuple[int, ...] = DEFAULT_EVAL_HORIZONS,
+    allow_retrospective_replay: bool = False,
     unseal_final_test_period: bool = False,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
@@ -302,7 +323,7 @@ def evaluate_forward_scores(
             raise SealedPeriodError(f"resolved eval_day {eval_day.isoformat()} <= {HISTORICAL_SEALED_END.isoformat()}")
 
         records_abs = paths.directory(forward_dir)
-        snapshots: list[tuple[date, pd.DataFrame, dict[str, Any]]] = []
+        snapshots: list[tuple[date, pd.DataFrame, dict[str, Any], dict[str, Any]]] = []
         if records_abs.is_dir():
             for child in sorted(records_abs.iterdir()):
                 if not child.is_dir() or child.name.startswith("."):
@@ -320,23 +341,42 @@ def evaluate_forward_scores(
                     continue
                 s_df = cast(Any, pq).read_table(scores_pq, use_threads=False).to_pandas()
                 m_dict = cast(dict[str, Any], json.loads(manifest_js.read_text(encoding="utf-8")))
-                snapshots.append((snap_day, s_df, m_dict))
+                audit = audit_snapshot_admission(
+                    child,
+                    s_df,
+                    m_dict,
+                    allow_retrospective_replay=allow_retrospective_replay,
+                )
+                snapshots.append((snap_day, s_df, m_dict, audit))
 
         if not snapshots:
             raise ValueError(f"no prospective forward snapshots found <= {eval_day.isoformat()} in {records_abs}")
 
+        clock_admitted_snapshots = [
+            (d, s_df, m_dict, aud)
+            for d, s_df, m_dict, aud in snapshots
+            if (
+                (allow_retrospective_replay and aud["record_mode"] == "retrospective_replay")
+                or (aud["record_mode"] != "retrospective_replay" and bool(aud["published_before_entry"]))
+            )
+        ]
+
         all_tickers: set[str] = set()
-        for _, s_df, _ in snapshots:
+        for _, s_df, _, _ in clock_admitted_snapshots:
             for sid in s_df["security_id"].astype(str):
                 all_tickers.add(sid.split(":", 1)[1] if ":" in sid else sid)
 
-        earliest_snap = min(d for d, _, _ in snapshots)
-        bars_df = _fetch_post_holdout_bars(
-            tuple(sorted(all_tickers)),
-            earliest_snap,
-            eval_day,
-            cfg,
-            unseal_final_test_period=unseal_final_test_period,
+        earliest_snap = min(d for d, _, _, _ in snapshots)
+        bars_df = (
+            _fetch_post_holdout_bars(
+                tuple(sorted(all_tickers)),
+                earliest_snap,
+                eval_day,
+                cfg,
+                unseal_final_test_period=unseal_final_test_period,
+            )
+            if clock_admitted_snapshots
+            else pd.DataFrame(columns=["ticker", "session", "open", "close"])
         )
         spy_bars = bars_df.loc[bars_df["ticker"] == "SPY"].sort_values("session").reset_index(drop=True)
         sessions = spy_bars["session"].astype(str).tolist()
@@ -344,17 +384,40 @@ def evaluate_forward_scores(
         spy_open = spy_bars["open"].to_numpy(dtype=np.float64)
         spy_close = spy_bars["close"].to_numpy(dtype=np.float64)
 
-        open_piv = bars_df.pivot(index="session", columns="ticker", values="open").reindex(sessions)
-        close_piv = bars_df.pivot(index="session", columns="ticker", values="close").reindex(sessions)
+        open_piv = bars_df.pivot(index="session", columns="ticker", values="open").reindex(sessions) if len(bars_df) else pd.DataFrame()
+        close_piv = bars_df.pivot(index="session", columns="ticker", values="close").reindex(sessions) if len(bars_df) else pd.DataFrame()
 
         maturation_schedule: list[dict[str, Any]] = []
         per_cell_signals: dict[int, dict[str, list[dict[str, Any]]]] = {}
         per_cell_candidates: dict[int, dict[str, list[dict[str, Any]]]] = {}
         opra_diagnostics: list[dict[str, Any]] = []
 
-        for snap_day, s_df, m_dict in snapshots:
+        for snap_day, s_df, m_dict, aud in snapshots:
             s_iso = snap_day.isoformat()
             eligible_cnt = len(s_df)
+            clock_ok = (
+                (allow_retrospective_replay and aud["record_mode"] == "retrospective_replay")
+                or (aud["record_mode"] != "retrospective_replay" and bool(aud["published_before_entry"]))
+            )
+            if not clock_ok:
+                rej_status = (
+                    "rejected_retrospective_replay"
+                    if aud["record_mode"] == "retrospective_replay"
+                    else f"rejected_{aud['clock_status']}"
+                )
+                for h in horizons:
+                    maturation_schedule.append({
+                        "snapshot_date": s_iso,
+                        "horizon_sessions": h,
+                        "status": rej_status,
+                        "entry_session": aud["next_tradable_session"],
+                        "exit_session": None,
+                        "sessions_remaining": h,
+                        "eligible_scored": eligible_cnt,
+                        "known_outcomes": 0,
+                        "spy_return": None,
+                    })
+                continue
             if s_iso not in sess_to_idx:
                 for h in horizons:
                     maturation_schedule.append({
@@ -527,16 +590,31 @@ def evaluate_forward_scores(
         staging = dest.parent / f".{dest.name}.{uuid4().hex}.partial"
         staging.mkdir(parents=True)
 
+        admission_audits = [aud for _, _, _, aud in snapshots]
+        after_entry_dates = [a["snapshot_date"] for a in admission_audits if a["clock_status"] == "recorded_after_entry"]
+        before_entry_dates = [a["snapshot_date"] for a in admission_audits if bool(a["published_before_entry"])]
+        sec_qualified_dates = [a["snapshot_date"] for a in admission_audits if bool(a["qualifies_for_persisted_sec_model"])]
+
         doc = _json_safe({
+            "evaluation_mode": "retrospective_replay" if allow_retrospective_replay else "prospective",
             "evaluated_at_utc": datetime.now(UTC).isoformat(),
             "evaluated_as_of_date": eval_day.isoformat(),
             "sealed_holdout_window": "2024-05-29..2026-07-08",
             "sealed_holdout_untouched": not unseal_final_test_period,
             "frozen_prospective_candidates": list(FROZEN_PROSPECTIVE_CANDIDATES),
             "snapshots_total": len(snapshots),
-            "snapshot_dates": [d.isoformat() for d, _, _ in snapshots],
+            "snapshot_dates": [d.isoformat() for d, _, _, _ in snapshots],
+            "snapshots_recorded_after_entry_dates": after_entry_dates,
+            "snapshots_published_before_entry_dates": before_entry_dates,
+            "snapshots_qualifying_for_persisted_sec_model_dates": sec_qualified_dates,
+            "snapshot_admission_audit": admission_audits,
             "matured_snapshot_horizon_pairs": sum(1 for r in maturation_schedule if r["status"] == "matured"),
-            "pending_snapshot_horizon_pairs": sum(1 for r in maturation_schedule if r["status"] != "matured"),
+            "pending_snapshot_horizon_pairs": sum(
+                1 for r in maturation_schedule if r["status"] in ("pending_entry_bar", "pending_maturation")
+            ),
+            "rejected_snapshot_horizon_pairs": sum(
+                1 for r in maturation_schedule if str(r["status"]).startswith("rejected_")
+            ),
             "maturation_schedule": maturation_schedule,
             "pooled_signals_by_horizon": pooled_signals,
             "pooled_candidates_by_horizon": pooled_candidates,
@@ -554,10 +632,14 @@ def evaluate_forward_scores(
 
     return {
         "output": paths.identity(out_rel).relative_to(root).as_posix(),
+        "evaluation_mode": doc["evaluation_mode"],
         "evaluated_as_of_date": eval_day.isoformat(),
         "snapshots_total": len(snapshots),
+        "snapshots_recorded_after_entry_dates": after_entry_dates,
+        "snapshots_qualifying_for_persisted_sec_model_dates": sec_qualified_dates,
         "matured_pairs": doc["matured_snapshot_horizon_pairs"],
         "pending_pairs": doc["pending_snapshot_horizon_pairs"],
+        "rejected_pairs": doc["rejected_snapshot_horizon_pairs"],
     }
 
 

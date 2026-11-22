@@ -5,7 +5,7 @@ import json
 from collections.abc import Callable
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import typer
 
@@ -16,6 +16,7 @@ from market_predictor.research_lane.forward_evaluate import evaluate_forward_sco
 from market_predictor.research_lane.forward_record import FORWARD_RECORD_DIRECTORY, record_forward_scores
 from market_predictor.research_lane.free_backfill import BACKFILL_DIRECTORY, collect_free_sp500_backfill
 from market_predictor.research_lane.panel import DEFAULT_DEVELOPMENT_END, PANEL_DIRECTORY
+from market_predictor.research_lane.prospective_contracts import RecordMode
 from market_predictor.research_lane.run import score_wider_beta_neutral_models
 from market_predictor.research_lane.sealed_holdout import SEALED_EXTENSION_DIR, evaluate_sealed_holdout_2024_2026
 from market_predictor.research_lane.sec_catalyst_model import (
@@ -79,6 +80,10 @@ def register_research_lane_commands(app: typer.Typer) -> None:
             help="Persisted Stage-2 SEC Catalyst XGBoost bundle directory scored when present.",
         ),
         live_prospective: bool = typer.Option(False, help="Fetch trailing live Alpaca SIP bars (> 2026-07-08)."),
+        record_mode: str | None = typer.Option(
+            None,
+            help="Explicit 'prospective' or 'retrospective_replay' mode (defaults from --live-prospective).",
+        ),
         include_live_catalysts: bool = typer.Option(
             True, help="Capture live Finviz Elite, Alpaca, and SEC catalysts in live_prospective mode."
         ),
@@ -100,6 +105,14 @@ def register_research_lane_commands(app: typer.Typer) -> None:
                 parsed_day = date.fromisoformat(raw_day)
             except ValueError as err:
                 raise typer.BadParameter(f"expected YYYY-MM-DD or 'latest', got {as_of_date!r}") from err
+        parsed_mode: RecordMode | None = None
+        if record_mode is not None:
+            clean_mode = record_mode.strip().lower()
+            if clean_mode not in ("prospective", "retrospective_replay"):
+                raise typer.BadParameter(
+                    f"expected 'prospective' or 'retrospective_replay', got {record_mode!r}"
+                )
+            parsed_mode = cast(RecordMode, clean_mode)
         _invoke(
             record_forward_scores,
             root=root,
@@ -108,6 +121,7 @@ def register_research_lane_commands(app: typer.Typer) -> None:
             panel=panel,
             sec_model_bundle=sec_model_bundle,
             live_prospective=live_prospective,
+            record_mode=parsed_mode,
             include_live_catalysts=include_live_catalysts,
             include_live_options=include_live_options,
             catalyst_top_k=catalyst_top_k,
@@ -125,9 +139,12 @@ def register_research_lane_commands(app: typer.Typer) -> None:
         data_root: Path | None = typer.Option(None, help="Directory containing the relocated data namespaces."),
         forward_dir: Path = typer.Option(FORWARD_RECORD_DIRECTORY),
         output: Path | None = typer.Option(None),
+        allow_retrospective_replay: bool = typer.Option(
+            False, help="Explicitly evaluate retrospective_replay snapshots in diagnostic replay mode."
+        ),
         unseal_final_test_period: bool = typer.Option(False),
     ) -> None:
-        """Evaluate recorded prospective forward snapshots against matured open[t+1]->close[t+h] returns and SPY."""
+        """Evaluate recorded prospective forward snapshots against matured outcomes and SPY."""
         raw_day = as_of_date.strip()
         if raw_day.lower() == "latest":
             parsed_day: date | None = None
@@ -143,6 +160,7 @@ def register_research_lane_commands(app: typer.Typer) -> None:
             data_root=data_root,
             forward_dir=forward_dir,
             output=output,
+            allow_retrospective_replay=allow_retrospective_replay,
             unseal_final_test_period=unseal_final_test_period,
         )
 

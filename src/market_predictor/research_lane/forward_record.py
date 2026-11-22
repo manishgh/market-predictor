@@ -23,6 +23,7 @@ import os
 import re
 import shutil
 import time as time_mod
+from collections.abc import Callable
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Final, cast
@@ -38,6 +39,7 @@ import requests
 
 from market_predictor.catalysts.issuer_events.classification import classify_event_families
 from market_predictor.config import Settings, get_settings
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.runtime_memory import guard
 from market_predictor.evidence.paths import EvidencePaths
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
@@ -59,6 +61,13 @@ from market_predictor.research_lane.panel import (
     load_research_panel,
 )
 from market_predictor.research_lane.predictors import centered_rank
+from market_predictor.research_lane.prospective_contracts import (
+    FROZEN_PROSPECTIVE_CANDIDATE_SPECS,
+    SNAPSHOT_MANIFEST_SCHEMA,
+    RecordMode,
+    latest_settled_xnys_session,
+    resolve_xnys_session_clock,
+)
 from market_predictor.research_lane.sec_filings import event_rows
 from market_predictor.research_lane.trial_log import git_identity
 from market_predictor.research_lane.wider_universe import WIDER_UNIVERSE_DIRECTORY
@@ -73,25 +82,8 @@ RECORD_FORWARD_COMMAND: Final = "record-forward-research-scores"
 FINVIZ_ELITE_NEWS_URL: Final = "https://elite.finviz.com/news_export.ashx"
 SEC_COMPANY_TICKERS_URL: Final = "https://www.sec.gov/files/company_tickers.json"
 DEFAULT_CATALYST_TOP_K: Final = 100
-FROZEN_PROSPECTIVE_CANDIDATES: Final[tuple[dict[str, Any], ...]] = (
-    {
-        "candidate_id": "mid_small_bn_sec_xgb_opra_10d",
-        "horizon_sessions": 10,
-        "regime_rule": "shift_satellite_to_spy_when_iv_term_30_90_gt_1",
-        "satellite_score_column": "score_mid_small_bn_sec_xgb_opra_10d",
-    },
-    {
-        "candidate_id": "90_10__sp500_tilt_news__R1_backwardation_to_spy",
-        "horizon_sessions": 10,
-        "regime_rule": "shift_satellite_to_spy_when_iv_term_30_90_gt_1",
-        "satellite_score_column": "score_beta_neutral_price_12",
-    },
-    {
-        "candidate_id": "80_20__spy__R2_adaptive_hedge_sec_xgb",
-        "horizon_sessions": 63,
-        "regime_rule": "contango_raw_else_70_beta_neutral_30_skew_vetoed_reversal",
-        "satellite_score_column": "score_r2_opra_conditioned",
-    },
+FROZEN_PROSPECTIVE_CANDIDATES: Final[tuple[dict[str, Any], ...]] = tuple(
+    spec.to_dict() for spec in FROZEN_PROSPECTIVE_CANDIDATE_SPECS
 )
 
 
@@ -498,7 +490,8 @@ def collect_live_prospective_catalysts(
     if sec_model_bundle_dir is not None and (sec_model_bundle_dir / "_manifest.json").is_file():
         loaded_sec_bundle = sec_catalyst_model.verify_and_load_sec_catalyst_bundle(sec_model_bundle_dir)
 
-    cutoff_utc = datetime.combine(scored_day, time(16, 0), tzinfo=ZoneInfo(MARKET_TIMEZONE)).astimezone(UTC)
+    session_clock = resolve_xnys_session_clock(scored_day)
+    cutoff_utc = session_clock.source_cutoff_utc
     window_start_utc = cutoff_utc - timedelta(days=30)
     sec_batch_start_utc = cutoff_utc - timedelta(days=sec_catalyst_model.LIVE_SEC_LOOKBACK_DAYS)
     if not unseal_final_test_period:
@@ -826,10 +819,10 @@ def resolve_latest_completed_session(
     now_utc: datetime | None = None,
     unseal_final_test_period: bool = False,
 ) -> date:
-    """Resolve the latest regular US session whose `16:20 ET` post-close settlement cutoff has passed."""
+    """Resolve the latest `XNYS` session whose post-close settlement cutoff (`close + 20m`) has passed."""
     ts_utc = now_utc.astimezone(UTC) if now_utc is not None else datetime.now(UTC)
-    ts_ny = ts_utc.astimezone(ZoneInfo(MARKET_TIMEZONE))
-    cutoff_day = ts_ny.date() if ts_ny.time() >= POST_CLOSE_SETTLEMENT_ET else (ts_ny.date() - timedelta(days=1))
+    settled_clock = latest_settled_xnys_session(ts_utc)
+    cutoff_day = settled_clock.as_of_date
     if cutoff_day <= HISTORICAL_SEALED_END and not unseal_final_test_period:
         raise SealedPeriodError(
             f"latest completed session {cutoff_day.isoformat()} is inside sealed window <= {HISTORICAL_SEALED_END.isoformat()}"
@@ -857,6 +850,23 @@ def resolve_latest_completed_session(
     return max(spy_days)
 
 
+def _enforce_prospective_prediction_clock(session_clock_date: date, now_utc: datetime) -> None:
+    """Require `session_close_utc <= now_utc < next_tradable_open_utc` before recording prospectively."""
+    clk = resolve_xnys_session_clock(session_clock_date)
+    ts = now_utc.astimezone(UTC) if now_utc.tzinfo is not None else now_utc.replace(tzinfo=UTC)
+    if ts < clk.session_close_utc:
+        raise DataReadinessError(
+            f"prospective recording for session {clk.as_of_date.isoformat()} attempted at {ts.isoformat()} "
+            f"before session close {clk.session_close_utc.isoformat()}"
+        )
+    if ts >= clk.next_tradable_open_utc:
+        raise DataReadinessError(
+            f"prospective recording for session {clk.as_of_date.isoformat()} missed next tradable open "
+            f"{clk.next_tradable_open_utc.isoformat()} on {clk.next_tradable_session.isoformat()} "
+            f"(completed at {ts.isoformat()}); late post-open records cannot be admitted as prospective"
+        )
+
+
 def record_forward_scores(
     *,
     root: Path,
@@ -866,14 +876,22 @@ def record_forward_scores(
     output_parent: Path = FORWARD_RECORD_DIRECTORY,
     sec_model_bundle: Path = sec_catalyst_model.DEFAULT_SEC_MODEL_BUNDLE_DIR,
     live_prospective: bool = False,
+    record_mode: RecordMode | None = None,
     include_live_catalysts: bool = True,
     include_live_options: bool = True,
     catalyst_top_k: int = DEFAULT_CATALYST_TOP_K,
     skip_existing: bool = False,
     unseal_final_test_period: bool = False,
     settings: Settings | None = None,
+    clock_fn: Callable[[], datetime] | None = None,
 ) -> dict[str, Any]:
     """Publish one immutable dated forward-score snapshot (plus live catalysts & OPRA options) and append to log."""
+    effective_mode: RecordMode = (
+        record_mode if record_mode is not None else ("prospective" if live_prospective else "retrospective_replay")
+    )
+    if effective_mode == "prospective" and not live_prospective:
+        raise ValueError("record_mode='prospective' requires live_prospective=True")
+
     if as_of_date is not None:
         if not live_prospective:
             check_development_end(as_of_date, unseal_final_test_period=unseal_final_test_period)
@@ -885,6 +903,7 @@ def record_forward_scores(
     elif not live_prospective:
         raise ValueError("as_of_date=None ('latest') requires live_prospective=True")
 
+    now_fn = clock_fn or (lambda: datetime.now(UTC))
     paths = EvidencePaths(root, data_root)
     root = paths.project_root
     runtime = heavy_job_runtime_dir()
@@ -893,7 +912,11 @@ def record_forward_scores(
         guard("forward score recorder start")
         cfg = settings or get_settings()
         resolved_date = (
-            resolve_latest_completed_session(cfg, unseal_final_test_period=unseal_final_test_period)
+            resolve_latest_completed_session(
+                cfg,
+                now_utc=now_fn(),
+                unseal_final_test_period=unseal_final_test_period,
+            )
             if as_of_date is None
             else as_of_date
         )
@@ -902,6 +925,10 @@ def record_forward_scores(
         if skip_existing and pre_manifest.is_file():
             existing_pre = cast(dict[str, Any], json.loads(pre_manifest.read_text(encoding="utf-8")))
             return {**existing_pre, "status": "already_recorded"}
+
+        session_clock = resolve_xnys_session_clock(resolved_date)
+        if effective_mode == "prospective":
+            _enforce_prospective_prediction_clock(resolved_date, now_fn())
 
         if live_prospective:
             loaded_panel = _fetch_live_prospective_panel(
@@ -918,6 +945,8 @@ def record_forward_scores(
         if scores_df.empty:
             raise ValueError(f"no eligible stocks scored on {resolved_date.isoformat()}")
         scored_session = str(scores_df["session_date"].iloc[0])
+        scored_day = date.fromisoformat(scored_session)
+        scored_clock = resolve_xnys_session_clock(scored_day)
 
         dest_dir = dest_parent / scored_session
         if dest_dir.exists():
@@ -953,22 +982,6 @@ def record_forward_scores(
         dest_parent.mkdir(parents=True, exist_ok=True)
         staging = dest_parent / f".{scored_session}.{uuid4().hex}.partial"
         staging.mkdir(parents=True)
-        manifest: dict[str, Any] = {
-            "status": "recorded",
-            "recorded_at_utc": datetime.now(UTC).isoformat(),
-            "requested_as_of_date": "latest" if as_of_date is None else resolved_date.isoformat(),
-            "resolved_as_of_date": resolved_date.isoformat(),
-            "scored_session": scored_session,
-            "live_prospective": live_prospective,
-            "sealed_holdout_window": "2024-05-29..2026-07-08",
-            "sealed_holdout_untouched": not unseal_final_test_period,
-            "frozen_prospective_candidates": list(FROZEN_PROSPECTIVE_CANDIDATES),
-            "eligible_stocks_scored": len(scores_df),
-            "catalyst_summary": catalyst_summary,
-            "options_summary": options_summary,
-            "code": git_identity(root),
-            "label_notice": "research forward score snapshot (zero future outcomes read)",
-        }
         try:
             cast(Any, pq).write_table(pa.Table.from_pandas(scores_df, preserve_index=False), staging / "scores.parquet")
             if catalysts_df is not None:
@@ -979,6 +992,42 @@ def record_forward_scores(
                 cast(Any, pq).write_table(
                     pa.Table.from_pandas(options_df, preserve_index=False), staging / "options_metrics.parquet",
                 )
+
+            published_at = now_fn().astimezone(UTC)
+            if effective_mode == "prospective":
+                _enforce_prospective_prediction_clock(scored_day, published_at)
+
+            manifest: dict[str, Any] = {
+                "schema": SNAPSHOT_MANIFEST_SCHEMA,
+                "status": "recorded",
+                "record_mode": effective_mode,
+                "as_of_date": scored_session,
+                "source_cutoff_utc": scored_clock.source_cutoff_utc.isoformat(),
+                "session_close_utc": scored_clock.session_close_utc.isoformat(),
+                "is_early_close": scored_clock.is_early_close,
+                "next_tradable_session": scored_clock.next_tradable_session.isoformat(),
+                "next_tradable_open_utc": scored_clock.next_tradable_open_utc.isoformat(),
+                "published_at_utc": published_at.isoformat(),
+                "recorded_at_utc": published_at.isoformat(),
+                "published_before_entry": bool(published_at < scored_clock.next_tradable_open_utc),
+                "requested_as_of_date": "latest" if as_of_date is None else resolved_date.isoformat(),
+                "resolved_as_of_date": resolved_date.isoformat(),
+                "scored_session": scored_session,
+                "session_clock": session_clock.to_dict() if scored_day == resolved_date else scored_clock.to_dict(),
+                "live_prospective": live_prospective,
+                "sealed_holdout_window": "2024-05-29..2026-07-08",
+                "sealed_holdout_untouched": not unseal_final_test_period,
+                "frozen_prospective_candidates": list(FROZEN_PROSPECTIVE_CANDIDATES),
+                "eligible_stocks_scored": len(scores_df),
+                "catalyst_summary": catalyst_summary,
+                "options_summary": options_summary,
+                "code": git_identity(root),
+                "label_notice": (
+                    "research forward score snapshot (zero future outcomes read)"
+                    if effective_mode == "prospective"
+                    else "retrospective replay research snapshot (non-prospective diagnostic)"
+                ),
+            }
             (staging / "_manifest.json").write_text(
                 json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8",
             )
