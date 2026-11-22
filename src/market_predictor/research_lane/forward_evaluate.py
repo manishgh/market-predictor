@@ -32,7 +32,10 @@ from market_predictor.research_lane.forward_record import (
     resolve_latest_completed_session,
 )
 from market_predictor.research_lane.panel import MARKET_TIMEZONE, SealedPeriodError
-from market_predictor.research_lane.prospective_contracts import audit_snapshot_admission
+from market_predictor.research_lane.prospective_contracts import (
+    audit_snapshot_admission,
+    extract_snapshot_opra_regime,
+)
 from market_predictor.research_lane.trial_log import git_identity
 from market_predictor.sources.alpaca import AlpacaSource
 
@@ -446,7 +449,10 @@ def evaluate_forward_scores(
                 tks = [sid.split(":", 1)[1] if ":" in sid else sid for sid in s_df["security_id"].astype(str)]
             opt_sum = m_dict.get("options_summary") or {}
             has_opra = bool(opt_sum.get("opra_enabled"))
-            is_backw = bool(opt_sum.get("opra_backwardation", False))
+            opra_regime, opra_obs_kind = extract_snapshot_opra_regime(m_dict)
+            is_backw: bool | None = (
+                True if opra_regime == "backwardation" else (False if opra_regime == "contango" else None)
+            )
 
             for h in horizons:
                 exit_idx = t_idx + h
@@ -509,10 +515,14 @@ def evaluate_forward_scores(
                         sig_results_here[col] = res_c
                         per_cell_signals.setdefault(h, {}).setdefault(col, []).append({"snapshot_date": s_iso, **res_c})
 
-                # Frozen Prospective Candidate 1: `90% SPY + 10% R1` (`shifts 10% sleeve into SPY when backwardation`)
+                # Frozen Prospective Candidate 1: `90% SPY + 10% R1` (`abstains when OPRA regime is unknown!`)
                 bn_res = sig_results_here.get("score_beta_neutral_price_12")
-                if bn_res is not None:
-                    r1_port = spy_r if is_backw else (0.90 * spy_r + 0.10 * float(bn_res["top10_net_20bps_return"]))
+                if bn_res is not None and opra_regime in ("backwardation", "contango"):
+                    r1_port = (
+                        spy_r
+                        if opra_regime == "backwardation"
+                        else (0.90 * spy_r + 0.10 * float(bn_res["top10_net_20bps_return"]))
+                    )
                     per_cell_candidates.setdefault(h, {}).setdefault(
                         "90_10__spy_core__R1_backwardation_to_spy", []
                     ).append({
@@ -520,12 +530,13 @@ def evaluate_forward_scores(
                         "portfolio_net_20bps": r1_port,
                         "spy_return": spy_r,
                         "net_excess_vs_spy": r1_port - spy_r,
+                        "opra_regime": opra_regime,
                         "opra_backwardation": is_backw,
                     })
 
-                # Frozen Prospective Candidate 2: `80% SPY + 20% R2 OPRA-conditioned` (fallback `score_price_equal_12` if no OPRA)
-                r2_res = sig_results_here.get("score_r2_opra_conditioned") or sig_results_here.get("score_price_equal_12")
-                if r2_res is not None:
+                # Frozen Prospective Candidate 2: `80% SPY + 20% R2 OPRA-conditioned` (`abstains when OPRA regime is unknown!`)
+                r2_res = sig_results_here.get("score_r2_opra_conditioned")
+                if r2_res is not None and opra_regime in ("backwardation", "contango"):
                     r2_port = 0.80 * spy_r + 0.20 * float(r2_res["top10_net_20bps_return"])
                     per_cell_candidates.setdefault(h, {}).setdefault(
                         "80_20__spy_core__R2_opra_adaptive_hedge", []
@@ -534,8 +545,9 @@ def evaluate_forward_scores(
                         "portfolio_net_20bps": r2_port,
                         "spy_return": spy_r,
                         "net_excess_vs_spy": r2_port - spy_r,
+                        "opra_regime": opra_regime,
                         "opra_backwardation": is_backw,
-                        "used_live_opra": "score_r2_opra_conditioned" in sig_results_here,
+                        "used_live_opra": True,
                     })
 
                 if has_opra:
@@ -553,6 +565,8 @@ def evaluate_forward_scores(
                     opra_diagnostics.append({
                         "snapshot_date": s_iso,
                         "horizon_sessions": h,
+                        "opra_regime": opra_regime,
+                        "opra_observation_kind": opra_obs_kind,
                         "opra_backwardation": is_backw,
                         "vetoed_count": int(veto_mask.sum()),
                         "vetoed_mean_excess_vs_spy": (

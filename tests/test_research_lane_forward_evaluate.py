@@ -58,7 +58,14 @@ def _write_snapshot(
         "record_mode": record_mode,
         "published_at_utc": pub,
         "recorded_at_utc": pub,
-        "options_summary": {"opra_enabled": True, "opra_backwardation": backwardation},
+        "options_summary": {
+            "opra_enabled": True,
+            "benchmark_observation_kind": "synchronized_close",
+            "opra_regime": "backwardation" if backwardation else "contango",
+            "opra_backwardation": backwardation,
+            "spy_iv_term_30_90": 1.08 if backwardation else 0.94,
+            "qqq_iv_term_30_90": 1.05 if backwardation else 0.95,
+        },
     }
     (snap_dir / "_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 

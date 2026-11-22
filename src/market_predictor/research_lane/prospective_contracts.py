@@ -16,9 +16,10 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, cast
 
 import exchange_calendars as xcals
+import numpy as np
 import pandas as pd
 
 from market_predictor.core.errors import ArtifactIntegrityError, DataReadinessError
@@ -50,6 +51,51 @@ SNAPSHOT_KNOWN_PARQUET_PAYLOADS: Final[tuple[str, ...]] = (
     "catalysts.parquet",
     "options_metrics.parquet",
 )
+
+
+def resolve_opra_regime(
+    spy_term: float | None,
+    qqq_term: float | None,
+) -> OpraRegimeState:
+    """Evaluate the frozen either-index (`SPY` or `QQQ` `30d/90d > 1.0`) term-structure rule in tri-state logic (`R7`).
+
+    - `"backwardation"` when at least one observed index ratio is strictly `> 1.0` (decisive even if the other is missing).
+    - `"contango"` ONLY when BOTH `SPY` and `QQQ` ratios are observed and `<= 1.0`.
+    - `"unknown"` when both are missing, or when one is `<= 1.0` and the other is missing (indeterminate partial response).
+    """
+    spy_v = float(spy_term) if spy_term is not None and np.isfinite(spy_term) and float(spy_term) > 0.0 else None
+    qqq_v = float(qqq_term) if qqq_term is not None and np.isfinite(qqq_term) and float(qqq_term) > 0.0 else None
+    if (spy_v is not None and spy_v > 1.0) or (qqq_v is not None and qqq_v > 1.0):
+        return "backwardation"
+    if spy_v is not None and qqq_v is not None and spy_v <= 1.0 and qqq_v <= 1.0:
+        return "contango"
+    return "unknown"
+
+
+def _opt_finite_float(val: object) -> float | None:
+    if val is None or isinstance(val, bool):
+        return None
+    try:
+        fv = float(cast(Any, val))
+    except (TypeError, ValueError):
+        return None
+    return fv if np.isfinite(fv) else None
+
+
+def extract_snapshot_opra_regime(manifest: Mapping[str, Any]) -> tuple[OpraRegimeState, str]:
+    """Read tri-state OPRA regime and benchmark observation kind from a snapshot manifest without defaulting to contango (`R7`)."""
+    opt_sum = manifest.get("options_summary")
+    if not isinstance(opt_sum, Mapping) or not bool(opt_sum.get("opra_enabled")):
+        return "unknown", "not_collected"
+    obs_kind = str(opt_sum.get("benchmark_observation_kind") or "legacy_unspecified")
+    explicit = opt_sum.get("opra_regime")
+    if explicit in ("backwardation", "contango", "unknown"):
+        return cast(OpraRegimeState, explicit), obs_kind
+    inferred = resolve_opra_regime(
+        _opt_finite_float(opt_sum.get("spy_iv_term_30_90")),
+        _opt_finite_float(opt_sum.get("qqq_iv_term_30_90")),
+    )
+    return inferred, obs_kind
 
 
 @lru_cache(maxsize=1)
@@ -561,6 +607,13 @@ def audit_snapshot_admission(
                     f"feature_contract_sha256_mismatch:{actual_feat_sha}!={expected.expected_feature_contract_sha256}"
                 )
 
+        if expected.regime_rule != "none":
+            opra_reg, opra_obs_kind = extract_snapshot_opra_regime(manifest)
+            if expected.opra_observation_policy == "synchronized_close_only" and opra_obs_kind != "synchronized_close":
+                reasons.append(f"opra_observation_not_synchronized_close:{opra_obs_kind}")
+            if opra_reg == "unknown" and expected.missing_regime_policy == "abstain":
+                reasons.append("opra_regime_unknown_abstain")
+
         if expected.score_column not in scores_df.columns:
             reasons.append(f"missing_score_column:{expected.score_column}")
         elif int(pd.to_numeric(scores_df[expected.score_column], errors="coerce").notna().sum()) < expected.min_eligible_stocks:
@@ -574,6 +627,7 @@ def audit_snapshot_admission(
             "rejection_reasons": reasons,
         }
 
+    snap_opra_regime, snap_opra_obs_kind = extract_snapshot_opra_regime(manifest)
     sec_primary_admitted = any(
         candidate_admissions[cid]["admitted"]
         for cid in ("mid_small_bn_sec_xgb_10d", "mid_small_bn_sec_xgb_21d", "mid_small_bn_sec_xgb_opra_10d")
@@ -594,6 +648,8 @@ def audit_snapshot_admission(
         "unknown_sector_rows": unknown_sector_rows,
         "sec_model_scored": sec_model_scored,
         "sec_model_manifest_sha256": actual_model_sha or None,
+        "opra_regime": snap_opra_regime,
+        "opra_observation_kind": snap_opra_obs_kind,
         "qualifies_for_persisted_sec_model": sec_primary_admitted,
         "candidate_admissions": candidate_admissions,
     }
@@ -617,9 +673,11 @@ __all__ = [
     "XNYS_CALENDAR_NAME",
     "audit_snapshot_admission",
     "build_payload_artifacts_manifest",
+    "extract_snapshot_opra_regime",
     "get_xnys_calendar",
     "latest_settled_xnys_session",
     "parse_utc_timestamp",
+    "resolve_opra_regime",
     "resolve_xnys_session_clock",
     "verify_snapshot_payload_hashes",
 ]
