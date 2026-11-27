@@ -111,13 +111,16 @@ the next trading open and whether every scored issuer has a verified SEC
 submissions receipt for the decision cutoff. An admitted portfolio can be
 compared with SPY once it reaches its scheduled exit.
 
-At the November 27, 2026 pre-open check, the local research checkout had resolved
-all 91 disputed issuer/ticker spans. Both SEC parsers verified all 762 eligible
-issuers in the rebuilt November 25 cohort. The November 23–25 publications had
-no admitted candidate. The roster and recorder fixes were still uncommitted.
-The November 27 session requires a fresh check at the 18:00 UTC close. Its
-recorder can run after settlement at 19:20 Berlin time, ahead of the November 30
-open at 15:30 Berlin time. See the [active research handoff](docs/reviews/active_edge_rebuild_handoff.md).
+On November 27, 2026, the local research checkout refreshed the issuer roster
+and S&P 500 membership and verified SEC submissions for all 762 scored issuers
+at the 18:00 UTC close. The recorder published at 18:29:13 UTC, before the
+November 30 entry open at 14:30 UTC. This was the first qualifying publication.
+
+The evaluator admitted all three candidates. The 10- and 21-session SEC model
+portfolios each selected 76 stocks. The 10-session OPRA overlay allocated 100%
+to SPY. Both 10-session portfolios are scheduled to exit at the December 14
+open, and the 21-session portfolio at the December 30 open. Step 8 remains open
+pending a matured portfolio comparison with SPY. See the [active research handoff](docs/reviews/active_edge_rebuild_handoff.md).
 
 ## Nightly Monitoring Registration
 
