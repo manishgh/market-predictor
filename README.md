@@ -103,6 +103,22 @@ unreferenced test scratch and one-off debug dumps can be removed after checking
 their consumers. Retired internal packages still used by shared calculations
 need a reference-safe migration before removal.
 
+## Prospective swing research
+
+The research recorder freezes the scores and holdings for a settled XNYS session.
+For the SEC model, the evaluator checks whether the snapshot was published before
+the next trading open and whether every scored issuer has a verified SEC
+submissions receipt for the decision cutoff. An admitted portfolio can be
+compared with SPY once it reaches its scheduled exit.
+
+At the November 27, 2026 pre-open check, the local research checkout had resolved
+all 91 disputed issuer/ticker spans. Both SEC parsers verified all 762 eligible
+issuers in the rebuilt November 25 cohort. The November 23–25 publications had
+no admitted candidate. The roster and recorder fixes were still uncommitted.
+The November 27 session requires a fresh check at the 18:00 UTC close. Its
+recorder can run after settlement at 19:20 Berlin time, ahead of the November 30
+open at 15:30 Berlin time. See the [active research handoff](docs/reviews/active_edge_rebuild_handoff.md).
+
 ## Nightly Monitoring Registration
 
 `market-predictor-prod register-session-predictions --as-of 2026-09-28T22:05:00+00:00`
